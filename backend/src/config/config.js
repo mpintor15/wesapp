@@ -1,9 +1,35 @@
 require('dotenv').config();
 
+const nodeEnv = process.env.NODE_ENV || 'development';
+
+const requireInProduction = (key) => {
+  if (!process.env[key] || String(process.env[key]).trim() === '') {
+    throw new Error(`[CONFIG] Missing required env var in production: ${key}`);
+  }
+};
+
+if (nodeEnv === 'production') {
+  requireInProduction('DB_HOST');
+  requireInProduction('DB_PORT');
+  requireInProduction('DB_NAME');
+  requireInProduction('DB_USER');
+  requireInProduction('DB_PASSWORD');
+  requireInProduction('JWT_SECRET');
+  requireInProduction('CORS_ORIGIN');
+
+  if (process.env.JWT_SECRET === 'default_secret_change_this') {
+    throw new Error('[CONFIG] JWT_SECRET cannot use the insecure default in production');
+  }
+
+  if (process.env.CORS_ORIGIN === '*') {
+    throw new Error('[CONFIG] CORS_ORIGIN cannot be "*" in production');
+  }
+}
+
 module.exports = {
   // Configuración del servidor
   port: process.env.PORT || 3000,
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   
   // Configuración de JWT
   jwt: {

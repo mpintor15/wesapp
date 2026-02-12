@@ -113,8 +113,10 @@ DB_PASSWORD=tu_password
 JWT_SECRET=tu_secreto_generado_arriba
 JWT_EXPIRATION=24h
 
-CORS_ORIGIN=*
+CORS_ORIGIN=https://app.tu-dominio.com
 ```
+
+`CORS_ORIGIN` no debe ser `*` en producción.
 
 ### 4. Configurar Frontend
 
