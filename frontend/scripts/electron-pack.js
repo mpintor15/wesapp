@@ -6,8 +6,8 @@ const path = require('path');
 const target = process.argv[2] || 'mac';
 const targetArgs = {
   mac: ['--mac'],
-  win: ['--win'],
-  all: ['--mac', '--win']
+  win: ['--win', '--x64'],
+  all: ['--mac', '--win', '--x64']
 };
 
 if (!targetArgs[target]) {
