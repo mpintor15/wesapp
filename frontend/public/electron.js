@@ -5,6 +5,8 @@ const isDev = require('electron-is-dev');
 let mainWindow;
 
 function createWindow() {
+  const appIcon = path.join(__dirname, '../build-resources/icon.png');
+
   // Crear la ventana del navegador
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -12,12 +14,14 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 600,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: true
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.js')
     },
     show: false,
-    backgroundColor: '#ffffff'
+    backgroundColor: '#ffffff',
+    icon: appIcon
   });
 
   // Cargar la aplicación

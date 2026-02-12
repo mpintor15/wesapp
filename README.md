@@ -154,7 +154,15 @@ npm start
 ```bash
 cd frontend
 npm run electron-pack
-# Los ejecutables estarán en dist/
+# Build local macOS (recomendado en Mac)
+npm run electron-pack:mac
+
+# Build Windows (recomendado en Windows/CI)
+npm run electron-pack:win
+
+# Build ambos
+npm run electron-pack:all
+# Los artefactos estarán en frontend/dist/
 ```
 
 **Opción 2: Backend en servidor con PM2**
@@ -166,6 +174,18 @@ npm install --production
 pm2 start src/server.js --name wesapp-backend
 pm2 save
 pm2 startup
+```
+
+### Releases automatizados (GitHub Actions)
+
+- Workflow: `.github/workflows/electron-release.yml`
+- Ejecuta builds de Electron para macOS y Windows
+- Sube artefactos en cada ejecución manual
+- Publica release automáticamente cuando haces push de un tag `v*`
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 ---

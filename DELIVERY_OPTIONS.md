@@ -82,13 +82,15 @@
    ```bash
    cd frontend
    npm install
-   npm run electron-pack
+   npm run electron-pack:mac   # desde Mac
+   npm run electron-pack:win   # desde Windows/CI
+   npm run electron-pack:all   # ambos
    ```
 
 2. **Los ejecutables estarán en `frontend/dist/`:**
-   - **Windows**: `WESApp-2.0.0.exe`
-   - **macOS**: `WESApp-2.0.0.dmg`
-   - **Linux**: `WESApp-2.0.0.AppImage`
+   - **Windows**: `WESApp Setup 1.0.0.exe`
+   - **macOS**: `WESApp-1.0.0-arm64.dmg` (y `.zip`)
+   - **Linux**: configurar target Linux si lo necesitas (actualmente no se genera por defecto)
 
 3. **Subir ejecutable apropiado:**
    - Google Drive / Dropbox / WeTransfer
