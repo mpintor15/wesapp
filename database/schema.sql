@@ -44,6 +44,10 @@ CREATE TABLE cuentas (
     cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
     fecha_factura DATE NOT NULL,
     valor_factura NUMERIC(10,2) NOT NULL,
+    incluye_iva BOOLEAN DEFAULT FALSE,
+    incluye_retencion_fuente BOOLEAN DEFAULT FALSE,
+    incluye_retencion_iva BOOLEAN DEFAULT FALSE,
+    cancelada BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -74,7 +78,7 @@ CREATE TABLE ubicaciones (
 
 CREATE TABLE articulos (
     id SERIAL PRIMARY KEY,
-    tipo_articulo VARCHAR(20) NOT NULL CHECK (tipo_articulo IN ('equipo', 'placa_balistica', 'arma')),
+    tipo_articulo VARCHAR(20) NOT NULL CHECK (tipo_articulo IN ('equipo', 'placa_balistica', 'arma', 'radio')),
     nombre_articulo VARCHAR(100),
     cantidad INTEGER DEFAULT 1,
     talla VARCHAR(10),
@@ -83,6 +87,9 @@ CREATE TABLE articulos (
     numero_serie VARCHAR(100) UNIQUE,
     calibre VARCHAR(20),
     fecha_caducidad DATE,
+    codigo_pantalla VARCHAR(50),
+    codigo_radio VARCHAR(50),
+    version VARCHAR(50),
     ubicacion_id INTEGER REFERENCES ubicaciones(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -145,13 +152,12 @@ CREATE INDEX idx_colaboradores_cedula ON colaboradores(cedula);
 -- ============================================
 
 -- Usuarios de prueba
--- Password para todos: "password123" (el hash debe generarse con bcrypt)
--- Por ahora usamos un placeholder, lo actualizaremos después
+-- Password para todos: "password123"
 INSERT INTO usuarios (usuario, password_hash, tipo_usuario, primer_login, activo) VALUES
-('gerente1', '$2b$10$rKvY8Y9xKjVH9xKfXGZ8eOpKzRzVZxZxZxZxZxZxZxZxZxZxZ', 'gerente', FALSE, TRUE),
-('secretario1', '$2b$10$rKvY8Y9xKjVH9xKfXGZ8eOpKzRzVZxZxZxZxZxZxZxZxZxZxZ', 'secretario', FALSE, TRUE),
-('supervisor1', '$2b$10$rKvY8Y9xKjVH9xKfXGZ8eOpKzRzVZxZxZxZxZxZxZxZxZxZxZ', 'supervisor', FALSE, TRUE),
-('contador1', '$2b$10$rKvY8Y9xKjVH9xKfXGZ8eOpKzRzVZxZxZxZxZxZxZxZxZxZxZ', 'contador', FALSE, TRUE);
+('gerente1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'gerente', FALSE, TRUE),
+('secretario1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'secretario', FALSE, TRUE),
+('supervisor1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'supervisor', FALSE, TRUE),
+('contador1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'contador', FALSE, TRUE);
 
 -- Clientes de prueba
 INSERT INTO clientes (nombre, identificacion) VALUES
@@ -162,12 +168,12 @@ INSERT INTO clientes (nombre, identificacion) VALUES
 ('Hospital Metropolitano', '1790012345001');
 
 -- Cuentas (facturas) de prueba
-INSERT INTO cuentas (num_factura, cliente_id, fecha_factura, valor_factura) VALUES
-(1001, 1, '2024-01-15', 5000.00),
-(1002, 2, '2024-01-20', 7500.00),
-(1003, 3, '2024-02-05', 12000.00),
-(1004, 1, '2024-02-10', 3200.00),
-(1005, 4, '2024-02-15', 8900.00);
+INSERT INTO cuentas (num_factura, cliente_id, fecha_factura, valor_factura, incluye_iva, incluye_retencion_fuente, incluye_retencion_iva, cancelada) VALUES
+(1001, 1, '2024-01-15', 5000.00, TRUE, TRUE, TRUE, FALSE),
+(1002, 2, '2024-01-20', 7500.00, TRUE, TRUE, FALSE, FALSE),
+(1003, 3, '2024-02-05', 12000.00, FALSE, TRUE, FALSE, FALSE),
+(1004, 1, '2024-02-10', 3200.00, TRUE, FALSE, FALSE, FALSE),
+(1005, 4, '2024-02-15', 8900.00, FALSE, FALSE, FALSE, FALSE);
 
 -- Retenciones de prueba
 INSERT INTO retenciones (num_retencion, num_factura, fecha_retencion, valor_retencion) VALUES
@@ -233,23 +239,43 @@ INSERT INTO colaboradores (nombres_completos, cedula, fecha_nacimiento, cargo, c
 -- ============================================
 
 -- Vista: Reporte completo de cuentas
+-- Tasas: IVA=15%, Retención Fuente=2.75%, Retención IVA=70% del IVA
 CREATE OR REPLACE VIEW vista_reporte_cuentas AS
-SELECT 
+SELECT
     c.num_factura,
     cl.nombre AS cliente,
     cl.identificacion,
     c.fecha_factura,
-    c.valor_factura,
+    c.cancelada,
+    c.incluye_iva,
+    c.incluye_retencion_fuente,
+    c.incluye_retencion_iva,
+    c.valor_factura AS subtotal,
+    CASE WHEN c.incluye_iva THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END AS iva,
+    CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.0275, 2) ELSE 0 END AS retencion_fuente,
+    CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END AS retencion_iva,
+    (
+        c.valor_factura
+        + CASE WHEN c.incluye_iva THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
+        - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.0275, 2) ELSE 0 END
+        - CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
+    ) AS por_cobrar,
     MAX(r.fecha_retencion) AS fecha_retencion,
     COALESCE(SUM(r.valor_retencion), 0) AS total_retenciones,
-    (c.valor_factura - COALESCE(SUM(r.valor_retencion), 0)) AS por_cobrar,
     COALESCE(SUM(a.valor_abono), 0) AS total_abonos,
-    ((c.valor_factura - COALESCE(SUM(r.valor_retencion), 0)) - COALESCE(SUM(a.valor_abono), 0)) AS saldo_pendiente
+    (
+        c.valor_factura
+        + CASE WHEN c.incluye_iva THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
+        - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.0275, 2) ELSE 0 END
+        - CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
+        - COALESCE(SUM(a.valor_abono), 0)
+    ) AS saldo_pendiente
 FROM cuentas c
 JOIN clientes cl ON c.cliente_id = cl.id
 LEFT JOIN retenciones r ON c.num_factura = r.num_factura
 LEFT JOIN abonos a ON c.num_factura = a.num_factura
-GROUP BY c.num_factura, cl.nombre, cl.identificacion, c.fecha_factura, c.valor_factura
+GROUP BY c.num_factura, cl.nombre, cl.identificacion, c.fecha_factura, c.valor_factura,
+         c.cancelada, c.incluye_iva, c.incluye_retencion_fuente, c.incluye_retencion_iva
 ORDER BY c.num_factura ASC;
 
 -- Vista: Inventario con alertas de caducidad

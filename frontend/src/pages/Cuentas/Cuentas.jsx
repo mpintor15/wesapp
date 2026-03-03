@@ -21,7 +21,7 @@ const Cuentas = () => {
 
   // Submit state management (prevent double-submit)
   const { isSubmitting: isCreatingFactura, withSubmit: withFacturaSubmit } = useSubmitState();
-  const { isSubmitting: isAddingPayment, withSubmit: withPaymentSubmit } = useSubmitState();
+  const { isSubmitting: isSubmittingBatchPayment, withSubmit: withBatchPaymentSubmit } = useSubmitState();
 
   // Data state
   const [clientes, setClientes] = useState([]);
@@ -52,11 +52,14 @@ const Cuentas = () => {
   const [expandedRows, setExpandedRows] = useState({});
   const [abonosData, setAbonosData] = useState({});
 
-  // Payment modal
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedFactura, setSelectedFactura] = useState(null);
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  // Batch payment modal (per customer)
+  const [showBatchPaymentModal, setShowBatchPaymentModal] = useState(false);
+  const [bpCustomerSearch, setBpCustomerSearch] = useState('');
+  const [bpShowDropdown, setBpShowDropdown] = useState(false);
+  const [bpCustomer, setBpCustomer] = useState(null);
+  const [bpTotalCredit, setBpTotalCredit] = useState('');
+  const [bpDate, setBpDate] = useState(new Date().toISOString().split('T')[0]);
+  const [bpSelections, setBpSelections] = useState({});
 
   // Report modal
   const [showReporteModal, setShowReporteModal] = useState(false);
@@ -101,6 +104,17 @@ const Cuentas = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showClienteDropdown]);
+
+  // Close bp cliente dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (bpShowDropdown && !e.target.closest('.bp-cliente-search-container')) {
+        setBpShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [bpShowDropdown]);
 
   // Load initial data
   useEffect(() => {
@@ -228,41 +242,114 @@ const Cuentas = () => {
     }
   };
 
-  const handleAddPayment = withPaymentSubmit(async (e) => {
+  // ============================================
+  // BATCH PAYMENT HANDLERS
+  // ============================================
+
+  const closeBatchPaymentModal = () => {
+    setShowBatchPaymentModal(false);
+    setBpCustomerSearch('');
+    setBpShowDropdown(false);
+    setBpCustomer(null);
+    setBpTotalCredit('');
+    setBpDate(new Date().toISOString().split('T')[0]);
+    setBpSelections({});
+  };
+
+  const handleBpCustomerSelect = (cliente) => {
+    setBpCustomer(cliente);
+    setBpCustomerSearch(cliente.nombre);
+    setBpShowDropdown(false);
+    setBpSelections({});
+  };
+
+  const handleBpCustomerSearchChange = (e) => {
+    const value = e.target.value;
+    setBpCustomerSearch(value);
+    setBpShowDropdown(true);
+    if (!value) {
+      setBpCustomer(null);
+      setBpSelections({});
+    }
+  };
+
+  const handleBpInvoiceToggle = (num_factura) => {
+    setBpSelections(prev => {
+      const current = prev[num_factura] || {};
+      return {
+        ...prev,
+        [num_factura]: { selected: !current.selected, amount: current.selected ? '' : current.amount || '' }
+      };
+    });
+  };
+
+  const handleBpAmountChange = (num_factura, value) => {
+    setBpSelections(prev => ({
+      ...prev,
+      [num_factura]: { ...(prev[num_factura] || {}), selected: true, amount: value }
+    }));
+  };
+
+  const handleBatchPaymentSubmit = withBatchPaymentSubmit(async (e) => {
     e.preventDefault();
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      setMessage({ type: 'error', text: 'Ingresa un monto válido' });
+
+    if (!bpCustomer) {
+      setMessage({ type: 'error', text: 'Selecciona un cliente' });
       return;
     }
 
-    // Validación adicional: verificar que el pago no exceda el saldo pendiente
-    const payment = parseFloat(paymentAmount);
-    const saldo = parseFloat(selectedFactura.saldo_pendiente);
-
-    if (payment > saldo) {
-      const confirm = window.confirm(
-        `El pago de ${formatMoney(payment)} excede el saldo pendiente de ${formatMoney(saldo)}.\n\n` +
-        `Esto generará un saldo a favor del cliente de ${formatMoney(payment - saldo)}.\n\n` +
-        `¿Deseas continuar?`
-      );
-      if (!confirm) return;
+    const totalCredit = parseFloat(bpTotalCredit);
+    if (!bpTotalCredit || isNaN(totalCredit) || totalCredit <= 0) {
+      setMessage({ type: 'error', text: 'Ingresa el valor total del crédito' });
+      return;
     }
 
-    const result = await cuentasService.createAbono({
-      num_factura: selectedFactura.num_factura,
-      fecha_abono: paymentDate,
-      valor_abono: payment
-    });
+    const selectedAbonos = bpInvoices
+      .filter(inv => bpSelections[inv.num_factura]?.selected && bpSelections[inv.num_factura]?.amount)
+      .map(inv => ({
+        num_factura: inv.num_factura,
+        valor_abono: parseFloat(bpSelections[inv.num_factura].amount)
+      }));
+
+    if (selectedAbonos.length === 0) {
+      setMessage({ type: 'error', text: 'Selecciona al menos una factura con monto' });
+      return;
+    }
+
+    for (const abono of selectedAbonos) {
+      if (abono.valor_abono <= 0) {
+        setMessage({ type: 'error', text: 'Todos los montos deben ser mayores a 0' });
+        return;
+      }
+      const invoice = bpInvoices.find(i => i.num_factura === abono.num_factura);
+      if (abono.valor_abono > parseFloat(invoice.por_cobrar)) {
+        setMessage({ type: 'error', text: `El monto de la factura #${abono.num_factura} excede el valor total de la factura (${formatMoney(invoice.por_cobrar)})` });
+        return;
+      }
+      if (abono.valor_abono > parseFloat(invoice.saldo_pendiente)) {
+        setMessage({ type: 'error', text: `El monto de la factura #${abono.num_factura} excede su saldo pendiente de ${formatMoney(invoice.saldo_pendiente)}` });
+        return;
+      }
+    }
+
+    const sumAllocated = selectedAbonos.reduce((s, a) => s + a.valor_abono, 0);
+    if (sumAllocated > totalCredit) {
+      setMessage({ type: 'error', text: 'La suma de los abonos excede el crédito total ingresado' });
+      return;
+    }
+
+    const remaining = Math.round((totalCredit - sumAllocated) * 100) / 100;
+    if (remaining > 0) {
+      setMessage({ type: 'error', text: `El crédito debe distribuirse por completo. Quedan ${formatMoney(remaining)} sin asignar.` });
+      return;
+    }
+
+    const result = await cuentasService.createBatchAbono({ fecha_abono: bpDate, abonos: selectedAbonos });
 
     if (result.success) {
-      setMessage({ type: 'success', text: 'Pago registrado exitosamente' });
-      setPaymentAmount('');
-      setPaymentDate(new Date().toISOString().split('T')[0]);
-      setShowPaymentModal(false);
-      await loadData();
-      if (expandedRows[selectedFactura.num_factura]) {
-        await refreshRowDetails(selectedFactura.num_factura);
-      }
+      setMessage({ type: 'success', text: result.message || 'Pagos registrados exitosamente' });
+      closeBatchPaymentModal();
+      loadData();
     } else {
       setMessage({ type: 'error', text: result.message });
     }
@@ -353,6 +440,30 @@ const Cuentas = () => {
   };
 
   // ============================================
+  // BATCH PAYMENT COMPUTED VALUES
+  // ============================================
+
+  const bpFilteredClientes = clientes.filter(c =>
+    c.nombre.toLowerCase().includes(bpCustomerSearch.toLowerCase()) ||
+    c.identificacion.toLowerCase().includes(bpCustomerSearch.toLowerCase())
+  );
+
+  const bpInvoices = bpCustomer
+    ? reporte.filter(r =>
+        r.identificacion === bpCustomer.identificacion &&
+        !r.cancelada &&
+        parseFloat(r.saldo_pendiente) > 0
+      )
+    : [];
+
+  const bpTotalAllocated = bpInvoices.reduce((sum, inv) => {
+    const sel = bpSelections[inv.num_factura];
+    return sum + (sel?.selected && sel?.amount ? parseFloat(sel.amount) || 0 : 0);
+  }, 0);
+
+  const bpRemaining = parseFloat(bpTotalCredit || 0) - bpTotalAllocated;
+
+  // ============================================
   // SUMMARY TOTALS
   // ============================================
 
@@ -388,6 +499,9 @@ const Cuentas = () => {
           <div className="cuentas-header-actions">
             <button className="btn btn-primary" onClick={() => setShowFacturaModal(true)}>
               Crear factura
+            </button>
+            <button className="btn btn-warning" onClick={() => setShowBatchPaymentModal(true)}>
+              Registrar Pago
             </button>
             <button className="btn btn-success" onClick={() => setShowReporteModal(true)}>
               Generar reporte
@@ -545,28 +659,16 @@ const Cuentas = () => {
                             <td>
                               <div className="action-buttons">
                                 {!row.cancelada && (
-                                  <>
-                                    <button
-                                      className="action-btn action-btn-pay"
-                                      onClick={() => { setSelectedFactura(row); setShowPaymentModal(true); }}
-                                      title="Agregar Pago"
-                                      type="button"
-                                    >
-                                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                    </button>
-                                    <button
-                                      className="action-btn action-btn-cancel"
-                                      onClick={() => handleCancelFactura(row.num_factura)}
-                                      title="Anular Factura"
-                                      type="button"
-                                    >
-                                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                                        <path d="M18 6L6 18M6 6l12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                    </button>
-                                  </>
+                                  <button
+                                    className="action-btn action-btn-cancel"
+                                    onClick={() => handleCancelFactura(row.num_factura)}
+                                    title="Anular Factura"
+                                    type="button"
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                      <path d="M18 6L6 18M6 6l12 12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                  </button>
                                 )}
                                 <button
                                   className="action-btn action-btn-del"
@@ -796,52 +898,122 @@ const Cuentas = () => {
           )}
 
           {/* ============================================ */}
-          {/* PAYMENT MODAL */}
+          {/* BATCH PAYMENT MODAL */}
           {/* ============================================ */}
-          {showPaymentModal && selectedFactura && (
-            <div className="modal-overlay" onClick={() => setShowPaymentModal(false)}>
-              <div className="modal" onClick={e => e.stopPropagation()}>
+          {showBatchPaymentModal && (
+            <div className="modal-overlay" onClick={closeBatchPaymentModal}>
+              <div className="modal modal-batch-payment" onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
-                  <h3>Agregar Pago</h3>
-                  <button className="modal-close" onClick={() => setShowPaymentModal(false)}>×</button>
+                  <h3>Registrar Pago de Cliente</h3>
+                  <button className="modal-close" onClick={closeBatchPaymentModal}>×</button>
                 </div>
-                <div className="modal-context">
-                  <span>Factura <strong>#{selectedFactura.num_factura}</strong></span>
-                  <span>{selectedFactura.cliente}</span>
-                  <span className="modal-context-balance">
-                    Saldo: <strong className={parseFloat(selectedFactura.saldo_pendiente) > 0 ? 'text-danger' : 'text-success'}>
-                      {formatMoney(selectedFactura.saldo_pendiente)}
-                    </strong>
-                  </span>
-                </div>
-                <form onSubmit={handleAddPayment}>
-                  <div className="form-group">
-                    <label>Fecha del Pago</label>
-                    <input
-                      type="date"
-                      value={paymentDate}
-                      onChange={e => setPaymentDate(e.target.value)}
-                      required
-                    />
+                <form onSubmit={handleBatchPaymentSubmit}>
+                  <div className="modal-form-grid">
+                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                      <label>Cliente</label>
+                      <div className="bp-cliente-search-container cliente-search-container">
+                        <input
+                          type="text"
+                          value={bpCustomerSearch}
+                          onChange={handleBpCustomerSearchChange}
+                          onFocus={() => setBpShowDropdown(true)}
+                          placeholder="Buscar cliente..."
+                          autoComplete="off"
+                          autoFocus
+                        />
+                        {bpShowDropdown && bpCustomerSearch && (
+                          <div className="cliente-dropdown">
+                            {bpFilteredClientes.length > 0 ? (
+                              bpFilteredClientes.map(c => (
+                                <div key={c.id} className="cliente-option" onClick={() => handleBpCustomerSelect(c)}>
+                                  <div className="cliente-nombre">{c.nombre}</div>
+                                  <div className="cliente-identificacion">{c.identificacion}</div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="cliente-option-empty">No se encontraron clientes</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Crédito Total</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        value={bpTotalCredit}
+                        onChange={e => setBpTotalCredit(e.target.value)}
+                        placeholder="0.00"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Fecha</label>
+                      <input
+                        type="date"
+                        value={bpDate}
+                        onChange={e => setBpDate(e.target.value)}
+                        required
+                      />
+                    </div>
                   </div>
-                  <div className="form-group">
-                    <label>Monto del Pago</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={paymentAmount}
-                      onChange={e => setPaymentAmount(e.target.value)}
-                      placeholder="0.00"
-                      autoFocus
-                      required
-                    />
-                  </div>
+
+                  {bpCustomer && (
+                    <div className="bp-invoices-section">
+                      <span className="bp-invoices-label">Facturas Pendientes</span>
+                      {bpInvoices.length > 0 ? (
+                        <>
+                          <div className="bp-invoices-list">
+                            {bpInvoices.map(inv => {
+                              const sel = bpSelections[inv.num_factura] || {};
+                              const amtVal = parseFloat(sel.amount || 0);
+                              const exceedsSaldo = sel.selected && sel.amount && (amtVal > parseFloat(inv.saldo_pendiente) || amtVal > parseFloat(inv.por_cobrar));
+                              return (
+                                <div key={inv.num_factura} className={`bp-invoice-row ${sel.selected ? 'selected' : ''}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!sel.selected}
+                                    onChange={() => handleBpInvoiceToggle(inv.num_factura)}
+                                  />
+                                  <div className="bp-invoice-info">
+                                    <span className="bp-invoice-num">#{inv.num_factura}</span>
+                                    <span className="bp-invoice-date">{formatDate(inv.fecha_factura)}</span>
+                                    <span className="bp-invoice-saldo">Saldo: {formatMoney(inv.saldo_pendiente)}</span>
+                                  </div>
+                                  <input
+                                    type="number"
+                                    className={`bp-invoice-amount-input${exceedsSaldo ? ' error' : ''}`}
+                                    value={sel.amount || ''}
+                                    onChange={e => handleBpAmountChange(inv.num_factura, e.target.value)}
+                                    placeholder="0.00"
+                                    min="0.01"
+                                    step="0.01"
+                                    disabled={!sel.selected}
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className={`bp-summary-bar${bpRemaining < 0 ? ' over' : ''}`}>
+                            <span>Asignado: <strong>{formatMoney(bpTotalAllocated)}</strong> / {formatMoney(parseFloat(bpTotalCredit || 0))}</span>
+                            <span className={`bp-remaining${bpRemaining < 0 ? ' negative' : ''}`}>
+                              Restante: {formatMoney(bpRemaining)}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="bp-empty-invoices">Este cliente no tiene facturas con saldo pendiente</div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="modal-buttons">
-                    <button type="submit" className="btn btn-success" disabled={isAddingPayment}>
-                      {isAddingPayment ? 'Guardando...' : 'Guardar Pago'}
+                    <button type="submit" className="btn btn-success" disabled={isSubmittingBatchPayment}>
+                      {isSubmittingBatchPayment ? 'Registrando...' : 'Registrar Pagos'}
                     </button>
-                    <button type="button" className="btn btn-secondary" onClick={() => setShowPaymentModal(false)} disabled={isAddingPayment}>
+                    <button type="button" className="btn btn-secondary" onClick={closeBatchPaymentModal} disabled={isSubmittingBatchPayment}>
                       Cancelar
                     </button>
                   </div>

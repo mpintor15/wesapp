@@ -1,0 +1,17 @@
+{
+  "name": "wesapp",
+  "version": "1.0.0",
+  "description": "WESApp - Sistema de gestión para WES Security (monorepo)",
+  "author": "WES Security",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "install:all": "cd frontend && npm install && cd ../backend && npm install",
+    "start": "node backend/src/server.js",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm start"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}

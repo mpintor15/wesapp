@@ -1,3 +1,16 @@
+/**
+ * authController.js — Controlador de autenticación
+ *
+ * Funciones:
+ *  - login         : Recibe usuario y contraseña, verifica contra la base de
+ *                    datos con bcrypt y, si son correctos, genera un JWT firmado
+ *                    que incluye id, usuario y tipo_usuario. Bloquea usuarios inactivos.
+ *  - changePassword: Permite a un usuario autenticado cambiar su contraseña.
+ *                    Valida coincidencia y longitud mínima, hashea con bcrypt
+ *                    y marca primer_login = FALSE para no forzar el cambio de nuevo.
+ *  - verifyToken   : Refresca los datos del usuario a partir del JWT activo;
+ *                    utilizado al recargar la app para restaurar la sesión.
+ */
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');

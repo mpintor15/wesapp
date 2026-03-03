@@ -1,3 +1,33 @@
+/**
+ * cuentasController.js — Controlador del módulo de Cuentas por Cobrar
+ *
+ * Gestiona tres entidades principales y un reporte:
+ *
+ *  CLIENTES
+ *  - getClientes    : Lista todos los clientes ordenados por nombre.
+ *  - createCliente  : Crea un cliente con nombre e identificación únicos.
+ *  - deleteCliente  : Elimina un cliente solo si no tiene facturas asociadas.
+ *
+ *  FACTURAS
+ *  - createFactura  : Registra una factura con opciones de IVA y retenciones.
+ *                     Calcula los montos en la vista vista_reporte_cuentas.
+ *  - deleteFactura  : Elimina una factura (incluye sus abonos por CASCADE).
+ *  - cancelFactura  : Marca una factura como cancelada (cancelada = TRUE)
+ *                     sin eliminarla del historial.
+ *
+ *  ABONOS (pagos aplicados a facturas)
+ *  - getAbonosByFactura : Lista los abonos de una factura específica.
+ *  - createAbono        : Registra un único abono sobre una factura.
+ *  - createBatchAbono   : Registra múltiples abonos en una sola transacción
+ *                         atómica (todos se guardan o ninguno). Valida que
+ *                         cada num_factura exista y que el monto sea > 0.
+ *
+ *  REPORTE
+ *  - getReporte         : Consulta la vista vista_reporte_cuentas con filtros
+ *                         opcionales de fecha y solo_deudores.
+ *  - exportReporteExcel : Genera y descarga el reporte en formato .xlsx
+ *                         con cabecera azul y formato de moneda.
+ */
 const db = require('../config/database');
 
 // ============================================
@@ -116,28 +146,6 @@ const deleteCliente = async (req, res) => {
 // ============================================
 // FACTURAS (CUENTAS)
 // ============================================
-
-const getFacturas = async (req, res) => {
-  try {
-    const result = await db.query(
-      `SELECT c.num_factura, c.cliente_id, cl.nombre AS cliente, c.fecha_factura, c.valor_factura
-       FROM cuentas c
-       JOIN clientes cl ON c.cliente_id = cl.id
-       ORDER BY c.num_factura ASC`
-    );
-
-    res.json({
-      success: true,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('Error al obtener facturas:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
-  }
-};
 
 const createFactura = async (req, res) => {
   try {
@@ -272,141 +280,8 @@ const cancelFactura = async (req, res) => {
 };
 
 // ============================================
-// RETENCIONES
-// ============================================
-
-const getRetenciones = async (req, res) => {
-  try {
-    const result = await db.query(
-      `SELECT r.num_retencion, r.num_factura, cl.nombre AS cliente, r.fecha_retencion, r.valor_retencion
-       FROM retenciones r
-       JOIN cuentas c ON r.num_factura = c.num_factura
-       JOIN clientes cl ON c.cliente_id = cl.id
-       ORDER BY r.fecha_retencion DESC`
-    );
-
-    res.json({
-      success: true,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('Error al obtener retenciones:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
-  }
-};
-
-const getRetencionesByFactura = async (req, res) => {
-  try {
-    const { num_factura } = req.params;
-
-    const result = await db.query(
-      `SELECT num_retencion, fecha_retencion, valor_retencion
-       FROM retenciones
-       WHERE num_factura = $1
-       ORDER BY fecha_retencion DESC`,
-      [num_factura]
-    );
-
-    res.json({
-      success: true,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('Error al obtener retenciones de factura:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
-  }
-};
-
-const createRetencion = async (req, res) => {
-  try {
-    const { num_retencion, num_factura, fecha_retencion, valor_retencion } = req.body;
-
-    if (!num_retencion || !num_factura || !fecha_retencion || !valor_retencion) {
-      return res.status(400).json({
-        success: false,
-        message: 'Todos los campos son requeridos: num_retencion, num_factura, fecha_retencion, valor_retencion'
-      });
-    }
-
-    if (isNaN(num_retencion) || isNaN(valor_retencion)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Número de retención y valor deben ser numéricos'
-      });
-    }
-
-    if (parseFloat(valor_retencion) <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'El valor de la retención debe ser mayor a 0'
-      });
-    }
-
-    const result = await db.query(
-      `INSERT INTO retenciones (num_retencion, num_factura, fecha_retencion, valor_retencion)
-       VALUES ($1, $2, $3, $4)
-       RETURNING num_retencion, num_factura, fecha_retencion, valor_retencion`,
-      [parseInt(num_retencion), parseInt(num_factura), fecha_retencion, parseFloat(valor_retencion)]
-    );
-
-    res.status(201).json({
-      success: true,
-      message: 'Retención creada exitosamente',
-      data: result.rows[0]
-    });
-  } catch (error) {
-    if (error.code === '23505') {
-      return res.status(400).json({
-        success: false,
-        message: 'Ya existe una retención con ese número'
-      });
-    }
-    if (error.code === '23503') {
-      return res.status(400).json({
-        success: false,
-        message: 'La factura especificada no existe'
-      });
-    }
-    console.error('Error al crear retención:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
-  }
-};
-
-// ============================================
 // ABONOS
 // ============================================
-
-const getAbonos = async (req, res) => {
-  try {
-    const result = await db.query(
-      `SELECT a.id, a.num_factura, cl.nombre AS cliente, a.fecha_abono, a.valor_abono
-       FROM abonos a
-       JOIN cuentas c ON a.num_factura = c.num_factura
-       JOIN clientes cl ON c.cliente_id = cl.id
-       ORDER BY a.fecha_abono DESC`
-    );
-
-    res.json({
-      success: true,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('Error al obtener abonos:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
-  }
-};
 
 const getAbonosByFactura = async (req, res) => {
   try {
@@ -616,20 +491,64 @@ const exportReporteExcel = async (req, res) => {
   }
 };
 
+const createBatchAbono = async (req, res) => {
+  const { fecha_abono, abonos } = req.body;
+
+  if (!fecha_abono || !Array.isArray(abonos) || abonos.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Se requiere fecha_abono y al menos un abono'
+    });
+  }
+
+  for (const abono of abonos) {
+    if (!abono.num_factura || !abono.valor_abono || parseFloat(abono.valor_abono) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cada abono debe tener num_factura y valor_abono mayor a 0'
+      });
+    }
+  }
+
+  try {
+    await db.transaction(async (client) => {
+      for (const abono of abonos) {
+        await client.query(
+          'INSERT INTO abonos (num_factura, fecha_abono, valor_abono) VALUES ($1, $2, $3)',
+          [parseInt(abono.num_factura), fecha_abono, parseFloat(abono.valor_abono)]
+        );
+      }
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `${abonos.length} abono(s) registrado(s) exitosamente`
+    });
+  } catch (error) {
+    if (error.code === '23503') {
+      return res.status(400).json({
+        success: false,
+        message: 'Una o más facturas especificadas no existen'
+      });
+    }
+    console.error('Error al crear abonos en batch:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error en el servidor'
+    });
+  }
+};
+
 module.exports = {
   getClientes,
   createCliente,
   deleteCliente,
-  getFacturas,
   createFactura,
   deleteFactura,
   cancelFactura,
-  getRetenciones,
-  getRetencionesByFactura,
-  createRetencion,
-  getAbonos,
   getAbonosByFactura,
   createAbono,
+  createBatchAbono,
   getReporte,
   exportReporteExcel
 };

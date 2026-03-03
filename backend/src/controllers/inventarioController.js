@@ -1,7 +1,42 @@
+/**
+ * inventarioController.js — Controlador del módulo de Inventario
+ *
+ * Gestiona cuatro entidades y sus exportaciones:
+ *
+ *  UBICACIONES
+ *  - getUbicaciones   : Lista todos los lugares de almacenamiento.
+ *
+ *  ARTÍCULOS (via vista_inventario_alertas)
+ *  - getArticulos     : Lista artículos con filtros de tipo, ubicación, estado y búsqueda.
+ *  - createArticulo   : Crea un artículo (equipo, placa_balistica, arma, radio).
+ *                       Si se proporciona ubicacion_nombre en lugar de ID, crea
+ *                       la ubicación automáticamente si no existe.
+ *  - updateArticulo   : Actualiza campos permitidos de un artículo existente.
+ *  - deleteArticulo   : Para equipos con stock > 1 descuenta cantidad; si el
+ *                       stock queda en 0 hace un soft-delete (activo=FALSE).
+ *                       Para artículos serializados hace soft-delete directamente.
+ *  - exportArticulosExcel : Descarga el inventario filtrado en formato .xlsx.
+ *
+ *  MOVIMIENTOS (traslados entre ubicaciones)
+ *  - getMovimientos        : Lista todos los movimientos con su tipo (entrada/salida/traslado).
+ *  - getMovimientoDetalles : Detalle de artículos incluidos en un movimiento.
+ *  - createMovimiento      : Registra un traslado dentro de una transacción:
+ *                            · Valida origen ≠ destino para cada artículo.
+ *                            · Para equipos con cantidad > 1 permite traslado parcial
+ *                              clonando el artículo con la cantidad trasladada.
+ *                            · Para artículos serializados solo acepta cantidad = 1.
+ *                            · Genera automáticamente un PDF con el acta del traslado.
+ *  - downloadMovimientoPdf : Descarga el PDF de acta generado para un movimiento.
+ *
+ *  PDF
+ *  - generateMovimientoPdf : (interno) Genera el PDF con pdfkit, con tabla de
+ *                            artículos, datos del traslado y casillas de firma.
+ */
 const db = require('../config/database');
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
+const ExcelJS = require('exceljs');
 
 // ============================================
 // UBICACIONES
@@ -91,7 +126,7 @@ const normalizeEmpty = (value) => {
   return value;
 };
 
-const isValidTipo = (tipo) => ['equipo', 'placa_balistica', 'arma'].includes(tipo);
+const isValidTipo = (tipo) => ['equipo', 'placa_balistica', 'arma', 'radio'].includes(tipo);
 
 const createArticulo = async (req, res) => {
   try {
@@ -106,7 +141,10 @@ const createArticulo = async (req, res) => {
       calibre,
       fecha_caducidad,
       ubicacion_id,
-      ubicacion_nombre
+      ubicacion_nombre,
+      codigo_pantalla,
+      codigo_radio,
+      version
     } = req.body;
 
     if (!tipo_articulo || !isValidTipo(tipo_articulo)) {
@@ -153,9 +191,12 @@ const createArticulo = async (req, res) => {
         numero_serie,
         calibre,
         fecha_caducidad,
-        ubicacion_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-      RETURNING id, tipo_articulo, nombre_articulo, cantidad, talla, marca, modelo, numero_serie, calibre, fecha_caducidad, ubicacion_id`,
+        ubicacion_id,
+        codigo_pantalla,
+        codigo_radio,
+        version
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+      RETURNING id, tipo_articulo, nombre_articulo, cantidad, talla, marca, modelo, numero_serie, calibre, fecha_caducidad, ubicacion_id, codigo_pantalla, codigo_radio, version`,
       [
         tipo_articulo,
         normalizeEmpty(nombre_articulo),
@@ -166,7 +207,10 @@ const createArticulo = async (req, res) => {
         normalizeEmpty(numero_serie),
         normalizeEmpty(calibre),
         normalizeEmpty(fecha_caducidad),
-        parseInt(ubicacionId, 10)
+        parseInt(ubicacionId, 10),
+        normalizeEmpty(codigo_pantalla),
+        normalizeEmpty(codigo_radio),
+        normalizeEmpty(version)
       ]
     );
 
@@ -209,7 +253,10 @@ const updateArticulo = async (req, res) => {
       'numero_serie',
       'calibre',
       'fecha_caducidad',
-      'ubicacion_id'
+      'ubicacion_id',
+      'codigo_pantalla',
+      'codigo_radio',
+      'version'
     ];
 
     const updates = [];
@@ -505,7 +552,6 @@ const determineTipoMovimiento = () => 'traslado';
 
 const exportArticulosExcel = async (req, res) => {
   try {
-    const ExcelJS = require('exceljs');
     const { tipo, ubicacion_id, estado, search } = req.query;
 
     let query = 'SELECT * FROM vista_inventario_alertas';
@@ -552,6 +598,7 @@ const exportArticulosExcel = async (req, res) => {
         case 'equipo': return 'Equipo';
         case 'placa_balistica': return 'Placa Balística';
         case 'arma': return 'Arma';
+        case 'radio': return 'Radio';
         default: return tipoValue || '';
       }
     };
@@ -577,6 +624,9 @@ const exportArticulosExcel = async (req, res) => {
       { header: 'Marca', key: 'marca', width: 16 },
       { header: 'Modelo', key: 'modelo', width: 16 },
       { header: 'Calibre', key: 'calibre', width: 12 },
+      { header: 'Cód. Pantalla', key: 'codigo_pantalla', width: 16 },
+      { header: 'Cód. Radio', key: 'codigo_radio', width: 16 },
+      { header: 'Versión', key: 'version', width: 14 },
       { header: 'Caducidad', key: 'caducidad', width: 14 },
       { header: 'Ubicación', key: 'ubicacion', width: 20 },
       { header: 'Estado', key: 'estado', width: 16 }
@@ -599,6 +649,9 @@ const exportArticulosExcel = async (req, res) => {
         marca: row.marca || '',
         modelo: row.modelo || '',
         calibre: row.calibre || '',
+        codigo_pantalla: row.codigo_pantalla || '',
+        codigo_radio: row.codigo_radio || '',
+        version: row.version || '',
         caducidad: row.fecha_caducidad ? new Date(row.fecha_caducidad).toLocaleDateString('es-EC') : '',
         ubicacion: row.ubicacion_nombre || '',
         estado: estadoLabel(row.estado_caducidad)
@@ -715,7 +768,7 @@ const generateMovimientoPdf = async (movimientoId) => {
 const createMovimiento = async (req, res) => {
   const client = await db.getClient();
   try {
-    const { ubicacion_destino_id, ubicacion_destino_nombre, items } = req.body;
+    const { ubicacion_destino_id, ubicacion_destino_nombre, items, fecha_movimiento } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -756,7 +809,7 @@ const createMovimiento = async (req, res) => {
       `INSERT INTO movimientos (usuario_id, fecha_movimiento)
        VALUES ($1, $2)
        RETURNING id, fecha_movimiento`,
-      [req.user.id, new Date()]
+      [req.user.id, fecha_movimiento ? new Date(fecha_movimiento) : new Date()]
     );
 
     const movimientoId = movimientoRes.rows[0].id;

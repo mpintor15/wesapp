@@ -1,3 +1,18 @@
+/**
+ * api.js — Instancia central de Axios para comunicación con el backend
+ *
+ * Configura una instancia de Axios con la URL base del API (variable de
+ * entorno REACT_APP_API_URL o http://localhost:3000/api por defecto).
+ *
+ * Interceptores:
+ *  - Request  : Agrega automáticamente el header Authorization: Bearer <token>
+ *               leyendo el token del localStorage antes de cada petición.
+ *  - Response : Si el backend responde 401 (token expirado o inválido), limpia
+ *               el localStorage y redirige al usuario a /login.
+ *
+ * Todos los servicios del frontend importan esta instancia para realizar
+ * sus llamadas HTTP, garantizando autenticación y manejo de errores uniforme.
+ */
 import axios from 'axios';
 
 // URL base del backend
@@ -46,14 +61,5 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-// Funciones helper para hacer peticiones
-export const apiRequest = {
-  get: (url, config) => api.get(url, config),
-  post: (url, data, config) => api.post(url, data, config),
-  put: (url, data, config) => api.put(url, data, config),
-  delete: (url, config) => api.delete(url, config),
-  patch: (url, data, config) => api.patch(url, data, config),
-};
 
 export default api;

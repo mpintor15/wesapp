@@ -1,3 +1,19 @@
+/**
+ * personalController.js — Controlador del módulo de Personal
+ *
+ * Gestiona el registro de colaboradores de la organización:
+ *
+ *  - getColaboradores      : Lista colaboradores con filtros de búsqueda,
+ *                            estado (activo/inactivo) y cargo.
+ *  - createColaborador     : Registra un nuevo colaborador con sus datos
+ *                            personales, laborales y bancarios. La cédula
+ *                            debe ser única en el sistema.
+ *  - updateColaborador     : Actualiza campos permitidos de un colaborador.
+ *                            Solo modifica los campos que se envían en el body.
+ *  - deleteColaborador     : Elimina permanentemente un colaborador por ID.
+ *  - exportColaboradoresExcel : Genera y descarga la lista de colaboradores
+ *                              (con los mismos filtros) en formato .xlsx.
+ */
 const db = require('../config/database');
 
 // ============================================

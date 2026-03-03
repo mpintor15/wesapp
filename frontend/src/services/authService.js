@@ -1,3 +1,17 @@
+/**
+ * authService.js — Servicio de autenticación del frontend
+ *
+ * Encapsula las llamadas al API de autenticación y la gestión del
+ * token/usuario en localStorage. Es consumido por AuthContext.jsx.
+ *
+ *  - login(usuario, password)               : POST /auth/login. Si tiene éxito
+ *                                             guarda token y datos del usuario.
+ *  - changePassword(nueva, confirmar)       : POST /auth/change-password. Actualiza
+ *                                             el campo primer_login en localStorage.
+ *  - verifyToken()                          : GET /auth/verify. Refresca los datos
+ *                                             del usuario con el token actual.
+ *  - logout()                               : Elimina token y usuario del localStorage.
+ */
 import api from './api';
 
 const authService = {
@@ -84,28 +98,6 @@ const authService = {
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-  },
-
-  /**
-   * Obtener usuario actual
-   */
-  getCurrentUser: () => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      try {
-        return JSON.parse(userStr);
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  },
-
-  /**
-   * Verificar si el usuario está autenticado
-   */
-  isAuthenticated: () => {
-    return !!localStorage.getItem('token');
   }
 };
 

@@ -1,33 +1,20 @@
 {
   "name": "wesapp-frontend",
   "version": "1.0.0",
-  "description": "Frontend Electron + React para WESApp - WES Security",
+  "description": "Frontend React para WESApp - WES Security",
   "author": "WES Security",
-  "main": "public/electron.js",
-  "homepage": "./",
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
-    "electron": "electron .",
-    "electron-dev": "concurrently \"npm start\" \"sh -c 'wait-on http://localhost:${PORT:-3000} && electron .'\"",
-    "electron-pack": "npm run electron-pack:mac",
-    "electron-pack:mac": "node scripts/electron-pack.js mac",
-    "electron-pack:win": "node scripts/electron-pack.js win",
-    "electron-pack:all": "node scripts/electron-pack.js all"
+    "build": "react-scripts build"
   },
   "dependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.20.0",
-    "axios": "^1.6.2",
-    "electron-is-dev": "^2.0.0"
+    "axios": "^1.6.2"
   },
   "devDependencies": {
-    "react-scripts": "5.0.1",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
-    "concurrently": "^8.2.2",
-    "wait-on": "^7.2.0"
+    "react-scripts": "5.0.1"
   },
   "browserslist": {
     "production": [
@@ -40,37 +27,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "build": {
-    "appId": "com.wessecurity.wesapp",
-    "productName": "WESApp",
-    "directories": {
-      "output": "dist",
-      "buildResources": "build-resources"
-    },
-    "files": [
-      "build/**/*",
-      "build-resources/icon.png",
-      "public/electron.js",
-      "public/preload.js",
-      "package.json"
-    ],
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "icon": "build-resources/icon.png"
-    },
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "build-resources/icon.png"
-    },
-    "nsis": {
-      "oneClick": true,
-      "perMachine": false
-    }
   }
 }

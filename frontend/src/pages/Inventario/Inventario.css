@@ -604,6 +604,10 @@
   width: 95%;
 }
 
+.modal-movimiento .form-group + .form-group {
+  margin-top: 16px;
+}
+
 .modal-detalle {
   max-width: 900px;
   width: 95%;

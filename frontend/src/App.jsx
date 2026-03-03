@@ -1,3 +1,21 @@
+/**
+ * App.jsx — Componente raíz y definición de rutas
+ *
+ * Envuelve la aplicación en AuthProvider para que todos los componentes
+ * tengan acceso al contexto de autenticación. Define el árbol de rutas:
+ *
+ *  /login             → Página de inicio de sesión (pública).
+ *  /change-password   → Formulario de cambio de contraseña (primer login).
+ *  /                  → Dashboard principal (requiere autenticación).
+ *  /cuentas           → Módulo Cuentas por Cobrar (permiso: 'cuentas').
+ *  /inventario        → Módulo Inventario (permiso: 'inventario').
+ *  /personal          → Módulo Personal (permiso: 'personal').
+ *  /usuarios          → Módulo Usuarios (permiso: 'usuarios', solo gerente).
+ *  *                  → Redirige al dashboard.
+ *
+ * Cada ruta protegida se envuelve en <ProtectedRoute> que verifica
+ * autenticación, primer_login y permisos antes de renderizar el componente.
+ */
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';

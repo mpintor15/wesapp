@@ -1,3 +1,16 @@
+/**
+ * personalService.js — Servicio del módulo Personal
+ *
+ * Centraliza todas las llamadas HTTP al endpoint /api/personal.
+ * Cada método retorna { success, data?, message? }.
+ *
+ *  - getColaboradores(params)    : GET  /personal/colaboradores
+ *                                  Filtros: search, estado, cargo.
+ *  - createColaborador(data)     : POST /personal/colaboradores
+ *  - updateColaborador(id, data) : PUT  /personal/colaboradores/:id
+ *  - deleteColaborador(id)       : DEL  /personal/colaboradores/:id
+ *  - exportExcel(params)         : GET  /personal/colaboradores/excel → descarga .xlsx
+ */
 import api from './api';
 
 const personalService = {

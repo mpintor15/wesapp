@@ -1,3 +1,21 @@
+/**
+ * config.js — Configuración centralizada de la aplicación
+ *
+ * Carga variables de entorno desde .env y las expone en un objeto tipado.
+ * En producción valida que todas las variables críticas estén definidas
+ * y que JWT_SECRET no use el valor por defecto inseguro.
+ *
+ * Secciones:
+ *  - port / nodeEnv      : Puerto del servidor y entorno de ejecución.
+ *  - jwt                 : Secreto y expiración del token JWT (24h por defecto).
+ *  - cors                : Origen(es) permitidos para peticiones cross-origin.
+ *  - database            : Credenciales de conexión a PostgreSQL.
+ *  - permissions         : Mapa de módulos accesibles por tipo de usuario:
+ *      · gerente    → acceso total (incluye gestión de usuarios).
+ *      · secretario → cuentas, inventario y personal (sin gestión de usuarios).
+ *      · supervisor → inventario y personal (solo lectura/movimientos).
+ *      · contador   → únicamente el módulo de cuentas.
+ */
 require('dotenv').config();
 
 const nodeEnv = process.env.NODE_ENV || 'development';

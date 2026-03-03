@@ -1,3 +1,12 @@
+/**
+ * server.js — Punto de entrada del servidor
+ *
+ * Responsabilidades:
+ *  - Verifica la conexión a PostgreSQL antes de arrancar.
+ *  - Levanta el servidor HTTP en el puerto configurado (default 3000).
+ *  - Maneja señales de sistema (SIGTERM) para un cierre ordenado.
+ *  - Captura promesas no manejadas y termina el proceso con código de error.
+ */
 const app = require('./app');
 const config = require('./config/config');
 const db = require('./config/database');

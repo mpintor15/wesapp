@@ -20,7 +20,6 @@ export const useSubmitState = () => {
     return async (...args) => {
       // Prevenir doble-submit
       if (isSubmitting) {
-        console.warn('⚠️ Intento de doble-submit prevenido');
         return;
       }
 

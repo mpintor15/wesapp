@@ -1,3 +1,18 @@
+/**
+ * usuariosController.js — Controlador del módulo de Usuarios del sistema
+ *
+ * Solo accesible por usuarios con tipo_usuario = 'gerente'.
+ *
+ *  - getUsuarios    : Lista usuarios con filtros de búsqueda, tipo y estado.
+ *                     Nunca devuelve el password_hash.
+ *  - createUsuario  : Crea un usuario con tipo de rol (gerente, secretario,
+ *                     supervisor, contador). Si no se provee contraseña usa
+ *                     'password123' y marca primer_login = TRUE para forzar
+ *                     el cambio en el primer acceso.
+ *  - updateUsuario  : Permite cambiar el tipo de usuario y/o su estado
+ *                     (activo/inactivo). Desactivar un usuario le impide iniciar sesión.
+ *  - deleteUsuario  : Elimina permanentemente un usuario del sistema.
+ */
 const bcrypt = require('bcrypt');
 const db = require('../config/database');
 const config = require('../config/config');

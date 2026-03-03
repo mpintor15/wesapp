@@ -1,3 +1,27 @@
+/**
+ * inventarioService.js — Servicio del módulo Inventario
+ *
+ * Centraliza todas las llamadas HTTP al endpoint /api/inventario.
+ * Cada método retorna { success, data?, message? }.
+ *
+ *  UBICACIONES
+ *  - getUbicaciones()                   : GET /inventario/ubicaciones
+ *
+ *  ARTÍCULOS
+ *  - getArticulos(params)               : GET /inventario/articulos (filtros: tipo, ubicacion_id, estado, search)
+ *  - createArticulo(data)               : POST /inventario/articulos
+ *  - updateArticulo(id, data)           : PUT  /inventario/articulos/:id
+ *  - deleteArticulo(id, cantidad?)      : DEL  /inventario/articulos/:id
+ *                                         Para equipos con stock > 1 recibe la
+ *                                         cantidad a eliminar como query param.
+ *  - exportArticulosExcel(params)       : GET  /inventario/articulos/excel → descarga .xlsx
+ *
+ *  MOVIMIENTOS (traslados)
+ *  - getMovimientos()                   : GET /inventario/movimientos
+ *  - getMovimientoDetalles(id)          : GET /inventario/movimientos/:id
+ *  - createMovimiento(data)             : POST /inventario/movimientos
+ *  - downloadMovimientoPdf(id)          : GET /inventario/movimientos/:id/pdf → descarga .pdf
+ */
 import api from './api';
 
 const inventarioService = {

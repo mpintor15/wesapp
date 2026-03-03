@@ -24,7 +24,7 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     // Log del error para debugging
-    console.error('🔴 Error capturado por ErrorBoundary:', error, errorInfo);
+    console.error('Error capturado por ErrorBoundary:', error, errorInfo);
 
     // Incrementar contador de errores
     this.setState(prevState => ({
@@ -38,10 +38,7 @@ class ErrorBoundary extends React.Component {
   }
 
   logErrorToService = (error, errorInfo) => {
-    // TODO: Integrar con servicio de logging en producción
-    // Ejemplo: Sentry.captureException(error, { extra: errorInfo });
-
-    // Por ahora solo guardar en localStorage para debugging
+    // Guardar en localStorage para debugging
     try {
       const errorLog = {
         timestamp: new Date().toISOString(),

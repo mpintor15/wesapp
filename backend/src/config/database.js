@@ -1,5 +1,27 @@
+/**
+ * database.js — Configuración y helpers del pool de conexiones PostgreSQL
+ *
+ * Funcionalidades expuestas:
+ *  - query(text, params)   : Ejecuta una consulta SQL y devuelve el resultado.
+ *                            En desarrollo registra duración y filas afectadas.
+ *  - transaction(callback) : Ejecuta una función dentro de una transacción
+ *                            BEGIN/COMMIT; hace ROLLBACK automático si hay error.
+ *  - getClient()           : Obtiene un cliente del pool para operaciones manuales.
+ *                            Avisa si el cliente se retiene más de 5 segundos.
+ *  - getPoolStats()        : Retorna métricas del pool (total, idle, waiting).
+ *  - healthCheck()         : Verifica la conectividad y retorna la versión de PG.
+ *  - close()               : Cierra todas las conexiones del pool limpiamente.
+ *
+ * El pool está configurado con mín. 2 y máx. 20 conexiones simultáneas,
+ * reciclando cada conexión tras 7.500 usos para prevenir memory leaks.
+ */
 const { Pool } = require('pg');
 require('dotenv').config();
+
+// SSL: requerido para bases de datos en la nube como Neon (DB_SSL=true en producción)
+const sslConfig = process.env.DB_SSL === 'true'
+  ? { rejectUnauthorized: false } // Neon y proveedores cloud usan certificados válidos
+  : false;                         // Sin SSL para desarrollo local
 
 // Configuración del pool de conexiones PostgreSQL
 const pool = new Pool({
@@ -8,6 +30,7 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
+  ssl: sslConfig,                  // SSL activado solo si DB_SSL=true
   max: parseInt(process.env.DB_POOL_MAX) || 20, // Máximo de conexiones simultáneas
   min: parseInt(process.env.DB_POOL_MIN) || 2, // Mínimo de conexiones mantenidas
   idleTimeoutMillis: 30000, // Cerrar conexiones inactivas después de 30s
@@ -32,8 +55,10 @@ const query = async (text, params) => {
   const start = Date.now();
   try {
     const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    console.log('✅ Query ejecutado', { text, duration, rows: res.rowCount });
+    if (process.env.NODE_ENV === 'development') {
+      const duration = Date.now() - start;
+      console.log('✅ Query ejecutado', { text, duration, rows: res.rowCount });
+    }
     return res;
   } catch (error) {
     console.error('❌ Error en query:', error);

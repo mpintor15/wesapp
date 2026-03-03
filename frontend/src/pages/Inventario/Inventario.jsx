@@ -8,7 +8,8 @@ const INVENTARIO_TIPOS = [
   { value: '', label: 'Todos los tipos' },
   { value: 'equipo', label: 'Equipo' },
   { value: 'placa_balistica', label: 'Placa Balística' },
-  { value: 'arma', label: 'Arma' }
+  { value: 'arma', label: 'Arma' },
+  { value: 'radio', label: 'Radio' }
 ];
 
 const INVENTARIO_ESTADOS = [
@@ -71,7 +72,10 @@ const Inventario = () => {
     numero_serie: '',
     calibre: '',
     fecha_caducidad: '',
-    ubicacion_nombre: ''
+    ubicacion_nombre: '',
+    codigo_pantalla: '',
+    codigo_radio: '',
+    version: ''
   });
   const [filters, setFilters] = useState({
     tipo: '',
@@ -174,7 +178,8 @@ const Inventario = () => {
     setFormData({
       tipo_articulo: '', nombre_articulo: '', cantidad: '', talla: '',
       marca: '', modelo: '', numero_serie: '', calibre: '',
-      fecha_caducidad: '', ubicacion_nombre: '', ...overrides
+      fecha_caducidad: '', ubicacion_nombre: '',
+      codigo_pantalla: '', codigo_radio: '', version: '', ...overrides
     });
   };
 
@@ -188,13 +193,16 @@ const Inventario = () => {
     setFormData(prev => {
       const base = { ...prev, tipo_articulo: nextTipo };
       if (nextTipo === 'equipo') {
-        return { ...base, marca: '', modelo: '', numero_serie: '', calibre: '', fecha_caducidad: '' };
+        return { ...base, marca: '', modelo: '', numero_serie: '', calibre: '', fecha_caducidad: '', codigo_pantalla: '', codigo_radio: '', version: '' };
       }
       if (nextTipo === 'placa_balistica') {
-        return { ...base, cantidad: '', talla: '', marca: '', modelo: '', calibre: '' };
+        return { ...base, nombre_articulo: 'Placa Balística', cantidad: '', talla: '', marca: '', modelo: '', calibre: '', codigo_pantalla: '', codigo_radio: '', version: '' };
       }
       if (nextTipo === 'arma') {
-        return { ...base, cantidad: '', talla: '', fecha_caducidad: '' };
+        return { ...base, cantidad: '', talla: '', fecha_caducidad: '', codigo_pantalla: '', codigo_radio: '', version: '' };
+      }
+      if (nextTipo === 'radio') {
+        return { ...base, nombre_articulo: 'Radio', cantidad: '', talla: '', numero_serie: '', calibre: '', fecha_caducidad: '' };
       }
       return base;
     });
@@ -215,7 +223,7 @@ const Inventario = () => {
     }
 
     let cantidadFinal = formData.cantidad ? parseInt(formData.cantidad, 10) : null;
-    if (!cantidadFinal && (formData.tipo_articulo === 'placa_balistica' || formData.tipo_articulo === 'arma')) {
+    if (!cantidadFinal && (formData.tipo_articulo === 'placa_balistica' || formData.tipo_articulo === 'arma' || formData.tipo_articulo === 'radio')) {
       cantidadFinal = 1;
     }
     const payload = { ...formData, cantidad: cantidadFinal };
@@ -355,6 +363,7 @@ const Inventario = () => {
 
     const payload = {
       ubicacion_destino_nombre: movimientoForm.ubicacion_destino_nombre,
+      fecha_movimiento: movimientoForm.fecha_movimiento,
       items: movimientoForm.items.map(item => ({
         articulo_id: parseInt(item.articulo_id, 10),
         cantidad: item.cantidad ? parseInt(item.cantidad, 10) : 1,
@@ -555,6 +564,9 @@ const Inventario = () => {
                     <th>Marca</th>
                     <th>Modelo</th>
                     <th>Calibre</th>
+                    <th>Cód. Pantalla</th>
+                    <th>Cód. Radio</th>
+                    <th>Versión</th>
                     <th>Caducidad</th>
                     <th>Ubicación</th>
                     <th>Estado</th>
@@ -573,6 +585,9 @@ const Inventario = () => {
                         <td>{articulo.marca || '-'}</td>
                         <td>{articulo.modelo || '-'}</td>
                         <td>{articulo.calibre || '-'}</td>
+                        <td>{articulo.codigo_pantalla || '-'}</td>
+                        <td>{articulo.codigo_radio || '-'}</td>
+                        <td>{articulo.version || '-'}</td>
                         <td>{formatDate(articulo.fecha_caducidad)}</td>
                         <td><span className="ubicacion-tag">{articulo.ubicacion_nombre || '-'}</span></td>
                         <td>
@@ -598,7 +613,7 @@ const Inventario = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={hasPermission('eliminar_articulo') ? 12 : 11} className="text-center">
+                      <td colSpan={hasPermission('eliminar_articulo') ? 15 : 14} className="text-center">
                         {emptyStateText}
                       </td>
                     </tr>
@@ -750,6 +765,31 @@ const Inventario = () => {
                     </>
                   )}
 
+                  {formData.tipo_articulo === 'radio' && (
+                    <>
+                      <div className="form-group">
+                        <label>Código Pantalla</label>
+                        <input type="text" name="codigo_pantalla" value={formData.codigo_pantalla} onChange={handleFormChange} placeholder="Ej: P-001" />
+                      </div>
+                      <div className="form-group">
+                        <label>Código Radio</label>
+                        <input type="text" name="codigo_radio" value={formData.codigo_radio} onChange={handleFormChange} placeholder="Ej: R-001" />
+                      </div>
+                      <div className="form-group">
+                        <label>Versión</label>
+                        <input type="text" name="version" value={formData.version} onChange={handleFormChange} placeholder="Ej: 2.1" />
+                      </div>
+                      <div className="form-group">
+                        <label>Modelo</label>
+                        <input type="text" name="modelo" value={formData.modelo} onChange={handleFormChange} placeholder="Ej: Motorola APX" />
+                      </div>
+                      <div className="form-group">
+                        <label>Marca</label>
+                        <input type="text" name="marca" value={formData.marca} onChange={handleFormChange} placeholder="Ej: Motorola" />
+                      </div>
+                    </>
+                  )}
+
                   <div className="form-group">
                     <label>Ubicación *</label>
                     <input type="text" name="ubicacion_nombre" value={formData.ubicacion_nombre} onChange={handleFormChange} placeholder="Ej: Bodega principal" required />
@@ -781,7 +821,7 @@ const Inventario = () => {
                 <div className="movimiento-items-section">
                   <div className="movimiento-items-header">
                     <h4>Artículos a mover</h4>
-                    <button className="btn btn-sm btn-primary" type="button" onClick={handleAddMovimientoItem}>+ Agregar</button>
+                    <button className="btn btn-sm btn-primary" type="button" onClick={handleAddMovimientoItem}>Agregar</button>
                   </div>
                   {movimientoForm.items.map((item, index) => {
                     const selectedArticulo = catalogArticulos.find(a => String(a.id) === String(item.articulo_id));
@@ -886,6 +926,18 @@ const Inventario = () => {
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Date */}
+                <div className="form-group">
+                  <label>Fecha *</label>
+                  <input
+                    type="date"
+                    name="fecha_movimiento"
+                    value={movimientoForm.fecha_movimiento}
+                    onChange={handleMovimientoFormChange}
+                    required
+                  />
                 </div>
 
                 {/* Destination */}

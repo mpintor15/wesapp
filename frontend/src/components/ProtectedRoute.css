@@ -1,0 +1,23 @@
+.protected-route-loader,
+.protected-route-denied {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.protected-route-denied {
+  flex-direction: column;
+  padding: 20px;
+  text-align: center;
+}
+
+.protected-route-denied button {
+  margin-top: 20px;
+  padding: 10px 20px;
+  background-color: #ff2519;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}

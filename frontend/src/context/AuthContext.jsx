@@ -1,3 +1,25 @@
+/**
+ * AuthContext.jsx — Contexto global de autenticación
+ *
+ * Provee a toda la aplicación el estado de sesión del usuario y las
+ * acciones relacionadas con autenticación. Expuesto vía hook useAuth().
+ *
+ * Estado gestionado:
+ *  - user            : Objeto con id, usuario, tipo_usuario y primer_login.
+ *  - isAuthenticated : Booleano que indica si hay una sesión activa.
+ *  - loading         : Verdadero mientras se verifica el token al iniciar.
+ *
+ * Funciones del contexto:
+ *  - login(usuario, password)               : Autentica y actualiza el estado.
+ *  - logout()                               : Limpia token y estado de sesión.
+ *  - changePassword(nueva, confirmar)       : Cambia la contraseña y desactiva
+ *                                             la bandera de primer_login.
+ *  - hasPermission(modulo)                  : Verifica si el usuario tiene acceso
+ *                                             al módulo indicado según su rol.
+ *
+ * Al montar el provider verifica automáticamente si existe un token
+ * guardado en localStorage para restaurar la sesión sin re-login.
+ */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import authService from '../services/authService';
 
@@ -72,13 +94,6 @@ export const AuthProvider = ({ children }) => {
     return permissions[user.tipo_usuario]?.includes(modulo) || false;
   };
 
-  const isUserType = (tipos) => {
-    if (!user) return false;
-    return Array.isArray(tipos) 
-      ? tipos.includes(user.tipo_usuario)
-      : user.tipo_usuario === tipos;
-  };
-
   const value = {
     user,
     loading,
@@ -86,8 +101,7 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     changePassword,
-    hasPermission,
-    isUserType
+    hasPermission
   };
 
   return (

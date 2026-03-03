@@ -1,3 +1,18 @@
+/**
+ * usuariosService.js — Servicio del módulo Usuarios del sistema
+ *
+ * Centraliza las llamadas HTTP al endpoint /api/usuarios.
+ * Solo accesible por usuarios con rol 'gerente'.
+ * Cada método retorna { success, data?, message? }.
+ *
+ *  - getUsuarios(params)        : GET  /usuarios
+ *                                 Filtros: search, tipo_usuario, activo.
+ *  - createUsuario(data)        : POST /usuarios
+ *                                 Crea usuario con rol y contraseña inicial.
+ *  - updateUsuario(id, data)    : PUT  /usuarios/:id
+ *                                 Permite cambiar tipo_usuario y/o estado activo.
+ *  - deleteUsuario(id)          : DEL  /usuarios/:id
+ */
 import api from './api';
 
 const usuariosService = {
@@ -9,7 +24,6 @@ const usuariosService = {
       return { success: false, message: error.response?.data?.message || 'Error al obtener usuarios' };
     }
   },
-
 
   createUsuario: async (data) => {
     try {

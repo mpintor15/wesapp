@@ -1,7 +1,23 @@
+/**
+ * app.js — Configuración central de la aplicación Express
+ *
+ * Responsabilidades:
+ *  - Aplica middlewares de seguridad: Helmet (cabeceras HTTP seguras),
+ *    CORS (control de orígenes permitidos) y Rate Limiting (máx. 100
+ *    peticiones por IP cada 15 minutos).
+ *  - Parsea cuerpos JSON y URL-encoded en las peticiones.
+ *  - Registra todas las rutas del API bajo el prefijo /api/.
+ *  - Incluye un logger de peticiones en modo desarrollo.
+ *  - Expone un endpoint de salud en GET /health.
+ *  - En producción, sirve el build estático de React y redirige
+ *    todas las rutas no-API a index.html (soporte de React Router).
+ *  - Maneja errores de API (404/500) para rutas bajo /api/.
+ */
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 const config = require('./config/config');
 
 // Importar rutas
@@ -78,19 +94,36 @@ app.use('/api/inventario', inventarioRoutes);
 // Rutas de personal
 app.use('/api/personal', personalRoutes);
 
-// TODO: Agregar más rutas
+// Rutas de usuarios
 app.use('/api/usuarios', usuariosRoutes);
 
 // ======================
-// Manejo de rutas no encontradas
+// 404 para rutas /api/* no encontradas
 // ======================
 
-app.use((req, res) => {
+app.use('/api/*', (req, res) => {
   res.status(404).json({
     success: false,
     message: 'Ruta no encontrada'
   });
 });
+
+// ======================
+// Servir frontend React (producción)
+// ======================
+
+if (config.nodeEnv === 'production') {
+  // Ruta al build de React (relativa a este archivo)
+  const buildPath = path.join(__dirname, '../../frontend/build');
+
+  // Servir archivos estáticos del build (JS, CSS, imágenes, etc.)
+  app.use(express.static(buildPath));
+
+  // Cualquier ruta no-API devuelve index.html para que React Router la maneje
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(buildPath, 'index.html'));
+  });
+}
 
 // ======================
 // Manejo de errores global

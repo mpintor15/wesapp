@@ -37,13 +37,6 @@ router.delete('/clientes/:id', cuentasController.deleteCliente);
 // ============================================
 
 /**
- * @route   GET /api/cuentas/facturas
- * @desc    Obtener todas las facturas
- * @access  Private (cuentas)
- */
-router.get('/facturas', cuentasController.getFacturas);
-
-/**
  * @route   POST /api/cuentas/facturas
  * @desc    Crear una factura
  * @access  Private (cuentas)
@@ -65,40 +58,8 @@ router.delete('/facturas/:num_factura', cuentasController.deleteFactura);
 router.patch('/facturas/:num_factura/cancelar', cuentasController.cancelFactura);
 
 // ============================================
-// RETENCIONES
-// ============================================
-
-/**
- * @route   GET /api/cuentas/retenciones
- * @desc    Obtener todas las retenciones
- * @access  Private (cuentas)
- */
-router.get('/retenciones', cuentasController.getRetenciones);
-
-/**
- * @route   GET /api/cuentas/retenciones/:num_factura
- * @desc    Obtener retenciones de una factura
- * @access  Private (cuentas)
- */
-router.get('/retenciones/:num_factura', cuentasController.getRetencionesByFactura);
-
-/**
- * @route   POST /api/cuentas/retenciones
- * @desc    Crear una retención
- * @access  Private (cuentas)
- */
-router.post('/retenciones', cuentasController.createRetencion);
-
-// ============================================
 // ABONOS
 // ============================================
-
-/**
- * @route   GET /api/cuentas/abonos
- * @desc    Obtener todos los abonos
- * @access  Private (cuentas)
- */
-router.get('/abonos', cuentasController.getAbonos);
 
 /**
  * @route   GET /api/cuentas/abonos/:num_factura
@@ -106,6 +67,13 @@ router.get('/abonos', cuentasController.getAbonos);
  * @access  Private (cuentas)
  */
 router.get('/abonos/:num_factura', cuentasController.getAbonosByFactura);
+
+/**
+ * @route   POST /api/cuentas/abonos/batch
+ * @desc    Registrar múltiples abonos en una transacción (pago por cliente)
+ * @access  Private (cuentas)
+ */
+router.post('/abonos/batch', cuentasController.createBatchAbono);
 
 /**
  * @route   POST /api/cuentas/abonos
@@ -119,17 +87,17 @@ router.post('/abonos', cuentasController.createAbono);
 // ============================================
 
 /**
- * @route   GET /api/cuentas/reporte
- * @desc    Obtener reporte de cuentas por cobrar
- * @access  Private (cuentas)
- */
-router.get('/reporte', cuentasController.getReporte);
-
-/**
  * @route   GET /api/cuentas/reporte/excel
  * @desc    Exportar reporte a Excel
  * @access  Private (cuentas)
  */
 router.get('/reporte/excel', cuentasController.exportReporteExcel);
+
+/**
+ * @route   GET /api/cuentas/reporte
+ * @desc    Obtener reporte de cuentas por cobrar
+ * @access  Private (cuentas)
+ */
+router.get('/reporte', cuentasController.getReporte);
 
 module.exports = router;
