@@ -869,7 +869,7 @@ const Cuentas = () => {
                           checked={formData.incluye_retencion_fuente}
                           onChange={handleFormChange}
                         />
-                        Retención de fuente (3%)
+                        Retención de fuente (2.75%)
                       </label>
                       <label className="checkbox-label">
                         <input
