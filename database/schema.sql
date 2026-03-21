@@ -239,8 +239,7 @@ INSERT INTO colaboradores (nombres_completos, cedula, fecha_nacimiento, cargo, c
 -- ============================================
 
 -- Vista: Reporte completo de cuentas
--- Tasas: IVA=15%, Retención Fuente=2.75%, Retención IVA=70% del IVA
--- NOTA: Retención Fuente pendiente de cambio a 3% cuando se confirme la nueva resolución del SRI
+-- Tasas: IVA=15%, Retención Fuente=3%, Retención IVA=70% del IVA
 CREATE OR REPLACE VIEW vista_reporte_cuentas AS
 SELECT
     c.num_factura,
@@ -253,12 +252,12 @@ SELECT
     c.incluye_retencion_iva,
     c.valor_factura AS subtotal,
     CASE WHEN c.incluye_iva THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END AS iva,
-    CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.0275, 2) ELSE 0 END AS retencion_fuente,
+    CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END AS retencion_fuente,
     CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END AS retencion_iva,
     (
         c.valor_factura
         + CASE WHEN c.incluye_iva THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
-        - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.0275, 2) ELSE 0 END
+        - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
         - CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
     ) AS por_cobrar,
     MAX(r.fecha_retencion) AS fecha_retencion,
@@ -267,7 +266,7 @@ SELECT
     (
         c.valor_factura
         + CASE WHEN c.incluye_iva THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
-        - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.0275, 2) ELSE 0 END
+        - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
         - CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
         - COALESCE(SUM(a.valor_abono), 0)
     ) AS saldo_pendiente
