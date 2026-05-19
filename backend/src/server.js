@@ -17,10 +17,6 @@ const PORT = config.port;
 // Verificar conexión a la base de datos antes de iniciar el servidor
 const startServer = async () => {
   try {
-    // Test de conexión a la base de datos
-    await db.query('SELECT NOW()');
-    console.log('✅ Conexión a PostgreSQL establecida');
-    
     // Iniciar servidor
     app.listen(PORT, () => {
       console.log(`Servidor WESApp corriendo en puerto ${PORT}`);
@@ -28,12 +24,16 @@ const startServer = async () => {
       console.log(`URL: http://localhost:${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/health`);
 
-      ensureSchema(db)
+      db.query('SELECT NOW()')
+        .then(() => {
+          console.log('✅ Conexión a PostgreSQL establecida');
+          return ensureSchema(db);
+        })
         .then(() => {
           console.log('✅ Esquema de base de datos verificado');
         })
         .catch((error) => {
-          console.error('❌ Error al verificar esquema de base de datos:', error);
+          console.error('❌ Error al verificar conexión/esquema de base de datos:', error);
         });
     });
     
