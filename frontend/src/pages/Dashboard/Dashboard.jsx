@@ -42,6 +42,10 @@ const Dashboard = () => {
     contador:   'Contador',
   }[user?.tipo_usuario] ?? user?.tipo_usuario ?? '';
 
+  const displayName = (user?.nombre && user?.apellido)
+    ? `${user.nombre} ${user.apellido}`
+    : displayName ?? '';
+
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
@@ -67,7 +71,7 @@ const Dashboard = () => {
 
       <main className="dashboard-content">
         <div className="dashboard-welcome">
-          <h2>Bienvenido, <span>{user?.usuario}</span></h2>
+          <h2>Bienvenido, <span>{displayName}</span></h2>
           <p>Selecciona un módulo para comenzar</p>
         </div>
 
