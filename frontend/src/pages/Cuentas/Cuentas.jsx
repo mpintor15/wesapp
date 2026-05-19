@@ -50,6 +50,7 @@ const DEFAULT_FACTURA_FILTERS = {
 };
 
 const ROWS_PER_PAGE = 50;
+const PAGOS_ROWS_PER_PAGE = 20;
 
 const DEFAULT_PAGO_FILTERS = {
   search: '',
@@ -910,8 +911,12 @@ const Cuentas = () => {
     });
   }, [pagoFilters, pagoTableSort, pagos]);
 
-  const pagosTotalPages = Math.max(1, Math.ceil(filteredPagos.length / ROWS_PER_PAGE));
-  const paginatedPagos = filteredPagos.slice((pagosCurrentPage - 1) * ROWS_PER_PAGE, pagosCurrentPage * ROWS_PER_PAGE);
+  const pagosTotalPages = Math.max(1, Math.ceil(filteredPagos.length / PAGOS_ROWS_PER_PAGE));
+  const paginatedPagos = filteredPagos.slice((pagosCurrentPage - 1) * PAGOS_ROWS_PER_PAGE, pagosCurrentPage * PAGOS_ROWS_PER_PAGE);
+
+  useEffect(() => {
+    setPagosCurrentPage(page => Math.min(page, pagosTotalPages));
+  }, [pagosTotalPages]);
 
   const handleFacturaTableSort = (field) => {
     setFacturaTableSort(prev => {

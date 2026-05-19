@@ -5,6 +5,25 @@
   flex-direction: column;
 }
 
+.dashboard-loading-screen {
+  min-height: 100vh;
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--color-primary);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.dashboard-loading-spinner {
+  width: 34px;
+  height: 34px;
+  border-width: 3px;
+}
+
 /* ── Header ─────────────────────────────── */
 .dashboard-header {
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-dark-mid) 100%);

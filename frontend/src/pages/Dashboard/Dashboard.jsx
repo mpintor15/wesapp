@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -16,11 +16,36 @@ const MODULE_META = {
   usuarios:   { description: 'Cuentas de acceso y permisos del sistema' },
 };
 
+const DASHBOARD_MODULES = [
+  { key: 'cuentas',    label: 'Cuentas',    icon: iconCuentas,    path: '/cuentas' },
+  { key: 'inventario', label: 'Inventario', icon: iconInventario, path: '/inventario' },
+  { key: 'personal',   label: 'Personal',   icon: iconPersonal,   path: '/personal' },
+  { key: 'usuarios',   label: 'Usuarios',   icon: iconUsuarios,   path: '/usuarios' },
+];
+
+const preloadImage = (src) => new Promise((resolve) => {
+  const image = new Image();
+  image.onload = resolve;
+  image.onerror = resolve;
+  image.src = src;
+});
+
 const Dashboard = () => {
   const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loadingModule, setLoadingModule] = useState(null);
+  const [assetsReady, setAssetsReady] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([logo, ...DASHBOARD_MODULES.map(module => module.icon)].map(preloadImage))
+      .then(() => {
+        if (mounted) setAssetsReady(true);
+      });
+
+    return () => { mounted = false; };
+  }, []);
 
   const handleLogout = () => setShowLogoutConfirm(true);
 
@@ -35,12 +60,7 @@ const Dashboard = () => {
     navigate(module.path);
   };
 
-  const modules = [
-    { key: 'cuentas',    label: 'Cuentas',    icon: iconCuentas,    path: '/cuentas' },
-    { key: 'inventario', label: 'Inventario', icon: iconInventario, path: '/inventario' },
-    { key: 'personal',   label: 'Personal',   icon: iconPersonal,   path: '/personal' },
-    { key: 'usuarios',   label: 'Usuarios',   icon: iconUsuarios,   path: '/usuarios' },
-  ].filter((m) => hasPermission(m.key));
+  const modules = DASHBOARD_MODULES.filter((m) => hasPermission(m.key));
 
   const roleLabel = {
     gerente:    'Gerente',
@@ -52,6 +72,15 @@ const Dashboard = () => {
   const displayName = (user?.nombre && user?.apellido)
     ? `${user.nombre} ${user.apellido}`
     : user?.usuario ?? '';
+
+  if (!assetsReady) {
+    return (
+      <div className="dashboard-loading-screen">
+        <span className="spinner dashboard-loading-spinner" />
+        <span>Cargando inicio…</span>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-container">

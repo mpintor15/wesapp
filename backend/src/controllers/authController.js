@@ -17,6 +17,31 @@ const db = require('../config/database');
 const config = require('../config/config');
 const { createHttpError, handleControllerError } = require('../utils/http');
 
+const tableColumnExists = async (tableName, columnName) => {
+  const result = await db.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = $1
+       AND column_name = $2
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+  return result.rowCount > 0;
+};
+
+const getUserIdentitySelect = async () => {
+  const [hasNombre, hasApellido] = await Promise.all([
+    tableColumnExists('usuarios', 'nombre'),
+    tableColumnExists('usuarios', 'apellido')
+  ]);
+
+  return {
+    nombre: hasNombre ? 'nombre' : 'NULL::varchar AS nombre',
+    apellido: hasApellido ? 'apellido' : 'NULL::varchar AS apellido'
+  };
+};
+
 /**
  * Login de usuario
  */
@@ -34,8 +59,9 @@ const login = async (req, res) => {
     }
     
     // Buscar usuario en la base de datos
+    const identitySelect = await getUserIdentitySelect();
     const result = await db.query(
-      'SELECT id, usuario, tipo_usuario, primer_login, activo, password_hash FROM usuarios WHERE usuario = $1',
+      `SELECT id, usuario, ${identitySelect.nombre}, ${identitySelect.apellido}, tipo_usuario, primer_login, activo, password_hash FROM usuarios WHERE usuario = $1`,
       [usuario]
     );
     
@@ -86,6 +112,8 @@ const login = async (req, res) => {
         user: {
           id: user.id,
           usuario: user.usuario,
+          nombre: user.nombre,
+          apellido: user.apellido,
           tipo_usuario: user.tipo_usuario,
           primer_login: user.primer_login
         }
@@ -184,8 +212,9 @@ const verifyToken = async (req, res) => {
     }
     
     // Obtener datos actualizados del usuario
+    const identitySelect = await getUserIdentitySelect();
     const result = await db.query(
-      'SELECT id, usuario, tipo_usuario, primer_login, activo FROM usuarios WHERE id = $1',
+      `SELECT id, usuario, ${identitySelect.nombre}, ${identitySelect.apellido}, tipo_usuario, primer_login, activo FROM usuarios WHERE id = $1`,
       [userId]
     );
     
@@ -211,6 +240,8 @@ const verifyToken = async (req, res) => {
         user: {
           id: user.id,
           usuario: user.usuario,
+          nombre: user.nombre,
+          apellido: user.apellido,
           tipo_usuario: user.tipo_usuario,
           primer_login: user.primer_login
         }
