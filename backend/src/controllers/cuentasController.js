@@ -873,6 +873,25 @@ const createBatchAbono = async (req, res) => {
   const total = Math.round(abonosNormalizados.reduce((sum, a) => sum + a.valor_abono, 0) * 100) / 100;
 
   try {
+    const pagosTableExists = await tableExists('pagos');
+    const [
+      abonosHasPagoId,
+      pagosHasClienteId,
+      pagosHasFecha,
+      pagosHasMetodoPago,
+      pagosHasReferencia,
+      pagosHasNotas,
+      pagosHasTotal
+    ] = await Promise.all([
+      tableColumnExists('abonos', 'pago_id'),
+      pagosTableExists ? tableColumnExists('pagos', 'cliente_id') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'fecha') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'metodo_pago') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'referencia') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'notas') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false)
+    ]);
+
     await db.transaction(async (client) => {
       const clienteResult = await client.query(
         'SELECT id FROM clientes WHERE id = $1 LIMIT 1',
@@ -931,24 +950,42 @@ const createBatchAbono = async (req, res) => {
         }
       }
 
-      const pagoResult = await client.query(
-        'INSERT INTO pagos (cliente_id, fecha, metodo_pago, referencia, notas, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-        [
-          parsedClienteId,
-          fecha,
-          metodoPagoNormalizado || null,
-          referenciaNormalizada || null,
-          notasNormalizadas || null,
-          total
-        ]
-      );
-      const pago_id = pagoResult.rows[0].id;
+      let pago_id = null;
+      if (pagosTableExists && abonosHasPagoId) {
+        const pagoColumns = [];
+        const pagoValues = [];
+
+        const addPagoValue = (column, value) => {
+          pagoColumns.push(column);
+          pagoValues.push(value);
+        };
+
+        if (pagosHasClienteId) addPagoValue('cliente_id', parsedClienteId);
+        if (pagosHasFecha) addPagoValue('fecha', fecha);
+        if (pagosHasMetodoPago) addPagoValue('metodo_pago', metodoPagoNormalizado || null);
+        if (pagosHasReferencia) addPagoValue('referencia', referenciaNormalizada || null);
+        if (pagosHasNotas) addPagoValue('notas', notasNormalizadas || null);
+        if (pagosHasTotal) addPagoValue('total', total);
+
+        const pagoInsertQuery = pagoColumns.length > 0
+          ? `INSERT INTO pagos (${pagoColumns.join(', ')}) VALUES (${pagoColumns.map((_, index) => `$${index + 1}`).join(', ')}) RETURNING id`
+          : 'INSERT INTO pagos DEFAULT VALUES RETURNING id';
+        const pagoResult = await client.query(pagoInsertQuery, pagoValues);
+        pago_id = pagoResult.rows[0].id;
+      }
 
       for (const abono of abonosNormalizados) {
-        await client.query(
-          'INSERT INTO abonos (pago_id, num_factura, fecha_abono, valor_abono) VALUES ($1, $2, $3, $4)',
-          [pago_id, abono.num_factura, fecha, abono.valor_abono]
-        );
+        if (pago_id && abonosHasPagoId) {
+          await client.query(
+            'INSERT INTO abonos (pago_id, num_factura, fecha_abono, valor_abono) VALUES ($1, $2, $3, $4)',
+            [pago_id, abono.num_factura, fecha, abono.valor_abono]
+          );
+        } else {
+          await client.query(
+            'INSERT INTO abonos (num_factura, fecha_abono, valor_abono) VALUES ($1, $2, $3)',
+            [abono.num_factura, fecha, abono.valor_abono]
+          );
+        }
       }
     });
 
