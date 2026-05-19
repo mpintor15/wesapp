@@ -46,6 +46,11 @@ const tableColumnExists = async (tableName, columnName) => {
   return result.rowCount > 0;
 };
 
+const tableExists = async (tableName) => {
+  const result = await db.query('SELECT to_regclass($1) AS table_name', [`public.${tableName}`]);
+  return Boolean(result.rows[0]?.table_name);
+};
+
 // ============================================
 // CLIENTES
 // ============================================
@@ -430,22 +435,102 @@ const getAbonosByFactura = async (req, res) => {
 
 const getPagos = async (req, res) => {
   try {
-    const pagosHasCreatedAt = await tableColumnExists('pagos', 'created_at');
-    const cuentasHasCancelada = await tableColumnExists('cuentas', 'cancelada');
-    const createdAtSelect = pagosHasCreatedAt ? 'p.created_at' : 'p.fecha';
-    const orderByCreatedAt = pagosHasCreatedAt ? 'p.created_at DESC,' : '';
+    const pagosTableExists = await tableExists('pagos');
+    const [
+      abonosHasPagoId,
+      pagosHasClienteId,
+      pagosHasFecha,
+      pagosHasMetodoPago,
+      pagosHasReferencia,
+      pagosHasNotas,
+      pagosHasTotal,
+      pagosHasCreatedAt,
+      cuentasHasCancelada,
+      cuentasHasIncluyeIva,
+      cuentasHasIncluyeRetencionFuente,
+      cuentasHasIncluyeRetencionIva
+    ] = await Promise.all([
+      tableColumnExists('abonos', 'pago_id'),
+      pagosTableExists ? tableColumnExists('pagos', 'cliente_id') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'fecha') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'metodo_pago') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'referencia') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'notas') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false),
+      pagosTableExists ? tableColumnExists('pagos', 'created_at') : Promise.resolve(false),
+      tableColumnExists('cuentas', 'cancelada'),
+      tableColumnExists('cuentas', 'incluye_iva'),
+      tableColumnExists('cuentas', 'incluye_retencion_fuente'),
+      tableColumnExists('cuentas', 'incluye_retencion_iva')
+    ]);
+
+    if (!pagosTableExists || !abonosHasPagoId) {
+      const legacyResult = await db.query(
+        `SELECT
+           a.id,
+           a.fecha_abono AS fecha,
+           NULL::varchar AS metodo_pago,
+           NULL::varchar AS referencia,
+           NULL::text AS notas,
+           a.valor_abono AS total,
+           a.created_at,
+           cl.id AS cliente_id,
+           cl.nombre AS cliente,
+           cl.identificacion,
+           1::int AS facturas_count,
+           JSON_BUILD_ARRAY(
+             JSON_BUILD_OBJECT(
+               'abono_id', a.id,
+               'num_factura', a.num_factura,
+               'fecha_factura', c.fecha_factura,
+               'valor_factura', c.valor_factura,
+               'valor_abono', a.valor_abono,
+               'cancelada', ${cuentasHasCancelada ? 'c.cancelada' : 'FALSE'},
+               'saldo_pendiente',
+                 (
+                   c.valor_factura
+                   + CASE WHEN ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
+                   - CASE WHEN ${cuentasHasIncluyeRetencionFuente ? 'COALESCE(c.incluye_retencion_fuente, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
+                   - CASE WHEN ${cuentasHasIncluyeRetencionIva ? 'COALESCE(c.incluye_retencion_iva, FALSE)' : 'FALSE'} AND ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
+                   - COALESCE((SELECT SUM(a2.valor_abono) FROM abonos a2 WHERE a2.num_factura = c.num_factura), 0)
+                 )
+             )
+           ) AS facturas
+         FROM abonos a
+         JOIN cuentas c ON c.num_factura = a.num_factura
+         JOIN clientes cl ON cl.id = c.cliente_id
+         ORDER BY a.created_at DESC, a.fecha_abono DESC, a.id DESC`
+      );
+
+      return res.json({
+        success: true,
+        data: legacyResult.rows
+      });
+    }
+
+    const pagoFechaSelect = pagosHasFecha ? 'p.fecha' : 'MIN(a.fecha_abono)';
+    const pagoCreatedAtSelect = pagosHasCreatedAt ? 'p.created_at' : pagoFechaSelect;
+    const pagoMetodoSelect = pagosHasMetodoPago ? 'p.metodo_pago' : 'NULL::varchar';
+    const pagoReferenciaSelect = pagosHasReferencia ? 'p.referencia' : 'NULL::varchar';
+    const pagoNotasSelect = pagosHasNotas ? 'p.notas' : 'NULL::text';
+    const pagoTotalSelect = pagosHasTotal ? 'p.total' : 'COALESCE(SUM(a.valor_abono), 0)';
+    const pagoClienteIdSelect = pagosHasClienteId ? 'COALESCE(p.cliente_id, cl.id)' : 'cl.id';
+    const clienteJoinKey = pagosHasClienteId ? 'COALESCE(p.cliente_id, c.cliente_id)' : 'c.cliente_id';
     const canceladaSelect = cuentasHasCancelada ? 'c.cancelada' : 'FALSE';
+    const incluyeIvaSelect = cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE';
+    const incluyeRetFuenteSelect = cuentasHasIncluyeRetencionFuente ? 'COALESCE(c.incluye_retencion_fuente, FALSE)' : 'FALSE';
+    const incluyeRetIvaSelect = cuentasHasIncluyeRetencionIva ? 'COALESCE(c.incluye_retencion_iva, FALSE)' : 'FALSE';
 
     const result = await db.query(
       `SELECT
          p.id,
-         p.fecha,
-         p.metodo_pago,
-         p.referencia,
-         p.notas,
-         p.total,
-         ${createdAtSelect} AS created_at,
-         cl.id AS cliente_id,
+         ${pagoFechaSelect} AS fecha,
+         ${pagoMetodoSelect} AS metodo_pago,
+         ${pagoReferenciaSelect} AS referencia,
+         ${pagoNotasSelect} AS notas,
+         ${pagoTotalSelect} AS total,
+         ${pagoCreatedAtSelect} AS created_at,
+         ${pagoClienteIdSelect} AS cliente_id,
          cl.nombre AS cliente,
          cl.identificacion,
          COUNT(a.id)::int AS facturas_count,
@@ -463,9 +548,9 @@ const getPagos = async (req, res) => {
                    WHEN c.num_factura IS NULL THEN NULL
                    ELSE (
                      c.valor_factura
-                     + CASE WHEN c.incluye_iva THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
-                     - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
-                     - CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
+                     + CASE WHEN ${incluyeIvaSelect} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
+                     - CASE WHEN ${incluyeRetFuenteSelect} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
+                     - CASE WHEN ${incluyeRetIvaSelect} AND ${incluyeIvaSelect} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
                      - COALESCE((
                          SELECT SUM(a2.valor_abono)
                          FROM abonos a2
@@ -479,11 +564,11 @@ const getPagos = async (req, res) => {
            '[]'::json
          ) AS facturas
        FROM pagos p
-       JOIN clientes cl ON cl.id = p.cliente_id
        LEFT JOIN abonos a ON a.pago_id = p.id
        LEFT JOIN cuentas c ON c.num_factura = a.num_factura
+       LEFT JOIN clientes cl ON cl.id = ${clienteJoinKey}
        GROUP BY p.id, cl.id, cl.nombre, cl.identificacion
-       ORDER BY ${orderByCreatedAt} p.fecha DESC, p.id DESC`
+       ORDER BY created_at DESC, fecha DESC, p.id DESC`
     );
 
     res.json({
