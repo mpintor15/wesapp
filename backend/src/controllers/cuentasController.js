@@ -978,7 +978,12 @@ const createBatchAbono = async (req, res) => {
       pagosHasMetodoPago,
       pagosHasReferencia,
       pagosHasNotas,
-      pagosHasTotal
+      pagosHasTotal,
+      cuentasHasCancelada,
+      cuentasHasIncluyeIva,
+      cuentasHasIncluyeRetencionFuente,
+      cuentasHasIncluyeRetencionIva,
+      reporteViewExists
     ] = await Promise.all([
       tableColumnExists('abonos', 'pago_id'),
       pagosTableExists ? tableColumnExists('pagos', 'cliente_id') : Promise.resolve(false),
@@ -986,8 +991,29 @@ const createBatchAbono = async (req, res) => {
       pagosTableExists ? tableColumnExists('pagos', 'metodo_pago') : Promise.resolve(false),
       pagosTableExists ? tableColumnExists('pagos', 'referencia') : Promise.resolve(false),
       pagosTableExists ? tableColumnExists('pagos', 'notas') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false)
+      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false),
+      tableColumnExists('cuentas', 'cancelada'),
+      tableColumnExists('cuentas', 'incluye_iva'),
+      tableColumnExists('cuentas', 'incluye_retencion_fuente'),
+      tableColumnExists('cuentas', 'incluye_retencion_iva'),
+      tableExists('vista_reporte_cuentas')
     ]);
+    const reporteViewHasSaldoPendiente = reporteViewExists
+      ? await tableColumnExists('vista_reporte_cuentas', 'saldo_pendiente')
+      : false;
+    const canceladaSelect = cuentasHasCancelada ? 'c.cancelada' : 'FALSE';
+    const saldoPendienteSelect = reporteViewHasSaldoPendiente
+      ? 'COALESCE(v.saldo_pendiente, 0)'
+      : `(
+          c.valor_factura
+          + CASE WHEN ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
+          - CASE WHEN ${cuentasHasIncluyeRetencionFuente ? 'COALESCE(c.incluye_retencion_fuente, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
+          - CASE WHEN ${cuentasHasIncluyeRetencionIva ? 'COALESCE(c.incluye_retencion_iva, FALSE)' : 'FALSE'} AND ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
+          - COALESCE((SELECT SUM(a2.valor_abono) FROM abonos a2 WHERE a2.num_factura = c.num_factura), 0)
+        )`;
+    const reporteJoin = reporteViewHasSaldoPendiente
+      ? 'LEFT JOIN vista_reporte_cuentas v ON v.num_factura = c.num_factura'
+      : '';
 
     await db.transaction(async (client) => {
       const clienteResult = await client.query(
@@ -1005,10 +1031,10 @@ const createBatchAbono = async (req, res) => {
         `SELECT
            c.num_factura,
            c.cliente_id,
-           c.cancelada,
-           COALESCE(v.saldo_pendiente, 0) AS saldo_pendiente
+           ${canceladaSelect} AS cancelada,
+           ${saldoPendienteSelect} AS saldo_pendiente
          FROM cuentas c
-         LEFT JOIN vista_reporte_cuentas v ON v.num_factura = c.num_factura
+         ${reporteJoin}
          WHERE c.num_factura = ANY($1::int[])`,
         [abonosNormalizados.map((a) => a.num_factura)]
       );
