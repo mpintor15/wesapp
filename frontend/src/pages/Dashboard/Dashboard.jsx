@@ -20,12 +20,19 @@ const Dashboard = () => {
   const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [loadingModule, setLoadingModule] = useState(null);
 
   const handleLogout = () => setShowLogoutConfirm(true);
 
   const confirmLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleModuleClick = (module) => {
+    if (loadingModule) return;
+    setLoadingModule(module.key);
+    navigate(module.path);
   };
 
   const modules = [
@@ -81,12 +88,16 @@ const Dashboard = () => {
             return (
               <button
                 key={module.key}
-                className="module-card"
-                onClick={() => navigate(module.path)}
+                className={`module-card${loadingModule === module.key ? ' module-card--loading' : ''}`}
+                onClick={() => handleModuleClick(module)}
+                disabled={!!loadingModule}
                 type="button"
               >
                 <div className="module-card-icon-wrap">
-                  <img src={module.icon} alt="" className="module-icon" />
+                  {loadingModule === module.key
+                    ? <span className="spinner" />
+                    : <img src={module.icon} alt="" className="module-icon" />
+                  }
                 </div>
                 <div className="module-card-body">
                   <h3>{module.label}</h3>

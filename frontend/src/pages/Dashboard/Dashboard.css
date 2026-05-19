@@ -124,6 +124,24 @@
   transform: translateY(-1px);
 }
 
+.module-card:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+  box-shadow: var(--shadow-sm);
+  border-color: var(--color-border);
+}
+
+.module-card--loading {
+  opacity: 1 !important;
+  border-color: var(--color-primary) !important;
+  cursor: default;
+}
+
+.module-card--loading .module-card-icon-wrap {
+  background: rgba(232,32,26,0.16);
+}
+
 /* Icon wrapper */
 .module-card-icon-wrap {
   width: 56px;
