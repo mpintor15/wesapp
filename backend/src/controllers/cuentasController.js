@@ -458,7 +458,21 @@ const getPagos = async (req, res) => {
                'valor_factura', c.valor_factura,
                'valor_abono', a.valor_abono,
                'cancelada', ${canceladaSelect},
-               'saldo_pendiente', v.saldo_pendiente
+               'saldo_pendiente',
+                 CASE
+                   WHEN c.num_factura IS NULL THEN NULL
+                   ELSE (
+                     c.valor_factura
+                     + CASE WHEN c.incluye_iva THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
+                     - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
+                     - CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
+                     - COALESCE((
+                         SELECT SUM(a2.valor_abono)
+                         FROM abonos a2
+                         WHERE a2.num_factura = c.num_factura
+                       ), 0)
+                   )
+                 END
              )
              ORDER BY a.num_factura
            ) FILTER (WHERE a.id IS NOT NULL),
@@ -468,7 +482,6 @@ const getPagos = async (req, res) => {
        JOIN clientes cl ON cl.id = p.cliente_id
        LEFT JOIN abonos a ON a.pago_id = p.id
        LEFT JOIN cuentas c ON c.num_factura = a.num_factura
-       LEFT JOIN vista_reporte_cuentas v ON v.num_factura = a.num_factura
        GROUP BY p.id, cl.id, cl.nombre, cl.identificacion
        ORDER BY ${orderByCreatedAt} p.fecha DESC, p.id DESC`
     );
