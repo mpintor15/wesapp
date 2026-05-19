@@ -259,6 +259,10 @@ const Cuentas = () => {
   // ============================================
 
   const openCreateFacturaModal = useCallback(async () => {
+    if (!isGerente) {
+      showToast('Solo un usuario Gerente puede crear facturas', 'error');
+      return;
+    }
     setShowFacturaModal(true);
     const res = await cuentasService.getNextNumFactura();
     if (res.success && res.data?.next_num_factura) {
@@ -268,9 +272,13 @@ const Cuentas = () => {
       }));
       setDebouncedFacturaInputs(prev => ({ ...prev, num_factura: String(res.data.next_num_factura) }));
     }
-  }, []);
+  }, [isGerente, showToast]);
 
   const openEditFacturaModal = useCallback((row) => {
+    if (!isGerente) {
+      showToast('Solo un usuario Gerente puede editar facturas', 'error');
+      return;
+    }
     setEditFacturaData(row);
     setEditFormData({
       cliente_id: String(row.cliente_id || ''),
@@ -282,7 +290,7 @@ const Cuentas = () => {
     });
     setEditFacturaErrors({});
     setShowEditFacturaModal(true);
-  }, []);
+  }, [isGerente, showToast]);
 
   const closeEditFacturaModal = useCallback(() => {
     setShowEditFacturaModal(false);
@@ -303,6 +311,10 @@ const Cuentas = () => {
 
   const handleUpdateFactura = withUpdateFacturaSubmit(async (e) => {
     e.preventDefault();
+    if (!isGerente) {
+      showToast('Solo un usuario Gerente puede editar facturas', 'error');
+      return;
+    }
     if (!editFacturaData) return;
 
     const parsedValor = parseFloat(editFormData.valor_factura);
@@ -452,6 +464,10 @@ const Cuentas = () => {
 
   const handleCreateFactura = withFacturaSubmit(async (e) => {
     e.preventDefault();
+    if (!isGerente) {
+      showToast('Solo un usuario Gerente puede crear facturas', 'error');
+      return;
+    }
     const errors = validateFacturaForm();
     if (Object.keys(errors).length > 0) {
       setFacturaErrors(errors);
@@ -480,10 +496,18 @@ const Cuentas = () => {
   });
 
   const requestDeleteFactura = (row) => {
+    if (!isGerente) {
+      showToast('Solo un usuario Gerente puede eliminar facturas', 'error');
+      return;
+    }
     setFacturaToDelete(row);
   };
 
   const handleDeleteFacturaConfirmed = async () => {
+    if (!isGerente) {
+      showToast('Solo un usuario Gerente puede eliminar facturas', 'error');
+      return;
+    }
     if (!facturaToDelete?.num_factura) return;
     const result = await cuentasService.deleteFactura(facturaToDelete.num_factura);
     if (result.success) {
@@ -496,6 +520,10 @@ const Cuentas = () => {
   };
 
   const openCancelFacturaModal = (row) => {
+    if (!isGerente) {
+      showToast('Solo un usuario Gerente puede anular facturas', 'error');
+      return;
+    }
     setFacturaToCancel(row);
     setCancelDetail('');
     setShowCancelFacturaModal(true);
@@ -529,6 +557,10 @@ const Cuentas = () => {
 
   const handleCancelFactura = withCancelFacturaSubmit(async (e) => {
     e.preventDefault();
+    if (!isGerente) {
+      showToast('Solo un usuario Gerente puede anular facturas', 'error');
+      return;
+    }
 
     if (!facturaToCancel) return;
     if (!cancelDetail.trim()) {
@@ -1098,7 +1130,9 @@ const Cuentas = () => {
         </div>
         {activeTab === 'facturas' && (
           <div className="page-header-actions">
-            <button className="btn btn-ghost btn-sm" onClick={openCreateFacturaModal}>Crear factura</button>
+            {isGerente && (
+              <button className="btn btn-ghost btn-sm" onClick={openCreateFacturaModal}>Crear factura</button>
+            )}
             <button className="btn btn-ghost btn-sm" onClick={() => setShowReporteModal(true)}>Generar reporte</button>
             <button className="btn btn-ghost btn-sm btn-icon-only" onClick={loadData} title="Actualizar datos">↻</button>
           </div>
@@ -1262,13 +1296,13 @@ const Cuentas = () => {
                           </span>
                         </button>
                       </th>
-                      <th className="col-money">Subtotal</th>
+                      <th className="col-money" title="Subtotal">Subt.</th>
                       <th className="col-money">IVA</th>
                       <th className="col-money">Total</th>
-                      <th className="col-money">Ret. Fuente</th>
+                      <th className="col-money" title="Retención fuente">Ret. Fte.</th>
                       <th className="col-money">Ret. IVA</th>
-                      <th className="col-money">X Cobrar</th>
-                      <th className="col-money">Abonos</th>
+                      <th className="col-money" title="Por cobrar">X Cob.</th>
+                      <th className="col-money" title="Abonos">Abon.</th>
                       <th className="col-money">Saldo</th>
                       <th className="col-actions app-col-actions app-col-actions--double"></th>
                     </tr>
@@ -1307,7 +1341,7 @@ const Cuentas = () => {
                                     <line x1="12" y1="12" x2="12" y2="16" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"/>
                                   </svg>
                                 </button>
-                              ) : (
+                              ) : isGerente ? (
                                 <>
                                   <button
                                     className="action-btn action-btn-edit"
@@ -1331,17 +1365,19 @@ const Cuentas = () => {
                                     </svg>
                                   </button>
                                 </>
+                              ) : null}
+                              {isGerente && (
+                                <button
+                                  className="action-btn action-btn-del"
+                                  onClick={() => requestDeleteFactura(row)}
+                                  title="Eliminar Factura"
+                                  type="button"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M6 7h12M9 7v10m6-10v10M9 7h6M10 4h4l1 2H9l1-2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                                  </svg>
+                                </button>
                               )}
-                              <button
-                                className="action-btn action-btn-del"
-                                onClick={() => requestDeleteFactura(row)}
-                                title="Eliminar Factura"
-                                type="button"
-                              >
-                                <svg viewBox="0 0 24 24" aria-hidden="true">
-                                  <path d="M6 7h12M9 7v10m6-10v10M9 7h6M10 4h4l1 2H9l1-2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              </button>
                             </div>
                           </td>
                         </tr>

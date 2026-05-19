@@ -295,7 +295,7 @@
   min-width: 0 !important;
   border-collapse: collapse;
   background-color: white;
-  font-size: 0.86em !important;
+  font-size: 0.8em !important;
   table-layout: fixed !important;
 }
 
@@ -307,20 +307,20 @@
 }
 
 .cuentas-table th {
-  padding: 10px 8px !important;
+  padding: 8px 5px !important;
   text-align: center !important;
   font-weight: 700;
   color: #4a5568;
-  font-size: 0.76em !important;
+  font-size: 0.72em !important;
   text-transform: uppercase;
-  letter-spacing: 0.08em !important;
+  letter-spacing: 0.04em !important;
   white-space: normal !important;
-  line-height: 1.25;
+  line-height: 1.18;
   border-right: 1px solid #dbe2ea;
 }
 
 .cuentas-table td {
-  padding: 12px 8px !important;
+  padding: 9px 5px !important;
   text-align: left !important;
   color: #333;
   overflow: hidden;
@@ -332,31 +332,31 @@
 
 .cuentas-table th:nth-child(1),
 .cuentas-table td:nth-child(1) {
-  width: 6.5% !important;
+  width: 5.7% !important;
   text-align: center !important;
 }
 
 .cuentas-table th:nth-child(2),
-.cuentas-table td:nth-child(2) { width: 9.5% !important; }
+.cuentas-table td:nth-child(2) { width: 7.8% !important; }
 
 .cuentas-table th:nth-child(3),
-.cuentas-table td:nth-child(3) { width: 18% !important; }
+.cuentas-table td:nth-child(3) { width: 20.5% !important; }
 
 .cuentas-table th:nth-child(4),
-.cuentas-table td:nth-child(4) { width: 7.1% !important; }
+.cuentas-table td:nth-child(4) { width: 6.9% !important; }
 
 .cuentas-table th:nth-child(n + 5):nth-child(-n + 11),
 .cuentas-table td:nth-child(n + 5):nth-child(-n + 11) {
-  width: 7.1% !important;
+  width: 6.9% !important;
 }
 
 .cuentas-table th:nth-child(12),
 .cuentas-table td:nth-child(12) {
-  width: 9.3% !important;
-  min-width: 104px !important;
+  width: 7.7% !important;
+  min-width: 0 !important;
   max-width: none !important;
-  padding-left: 8px !important;
-  padding-right: 8px !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
 }
 
 .cuentas-table th:last-child,
@@ -402,7 +402,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 3px;
   width: 100%;
   padding: 0;
   font: inherit;
@@ -423,7 +423,7 @@
 }
 
 .cuentas-table .app-table-actions {
-  gap: 4px !important;
+  gap: 3px !important;
   padding: 0;
 }
 
@@ -433,16 +433,16 @@
 }
 
 .cuentas-table .action-btn {
-  width: 29px;
-  height: 29px;
-  border-radius: 7px;
-  flex: 0 0 29px;
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+  flex: 0 0 25px;
   box-shadow: none;
 }
 
 .cuentas-table .action-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .cuentas-table .action-btn-edit {

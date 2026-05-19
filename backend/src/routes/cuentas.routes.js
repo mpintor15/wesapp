@@ -46,16 +46,16 @@ router.delete('/clientes/:id', cuentasController.deleteCliente);
 /**
  * @route   GET /api/cuentas/facturas/next-number
  * @desc    Obtener el siguiente número de factura disponible
- * @access  Private (cuentas)
+ * @access  Private (gerente)
  */
-router.get('/facturas/next-number', cuentasController.getNextNumFactura);
+router.get('/facturas/next-number', requireRole('gerente'), cuentasController.getNextNumFactura);
 
 /**
  * @route   POST /api/cuentas/facturas
  * @desc    Crear una factura
- * @access  Private (cuentas)
+ * @access  Private (gerente)
  */
-router.post('/facturas', cuentasController.createFactura);
+router.post('/facturas', requireRole('gerente'), cuentasController.createFactura);
 
 /**
  * @route   PATCH /api/cuentas/facturas/:num_factura
@@ -67,16 +67,16 @@ router.patch('/facturas/:num_factura', requireRole('gerente'), cuentasController
 /**
  * @route   DELETE /api/cuentas/facturas/:num_factura
  * @desc    Eliminar una factura (cascada a retenciones y abonos)
- * @access  Private (cuentas)
+ * @access  Private (gerente)
  */
-router.delete('/facturas/:num_factura', cuentasController.deleteFactura);
+router.delete('/facturas/:num_factura', requireRole('gerente'), cuentasController.deleteFactura);
 
 /**
  * @route   PATCH /api/cuentas/facturas/:num_factura/cancelar
  * @desc    Cancelar una factura (mantiene histórico pero no cuenta en totales)
- * @access  Private (cuentas)
+ * @access  Private (gerente)
  */
-router.patch('/facturas/:num_factura/cancelar', cuentasController.cancelFactura);
+router.patch('/facturas/:num_factura/cancelar', requireRole('gerente'), cuentasController.cancelFactura);
 
 // ============================================
 // ABONOS
