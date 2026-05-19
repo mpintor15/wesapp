@@ -44,7 +44,7 @@ const Dashboard = () => {
 
   const displayName = (user?.nombre && user?.apellido)
     ? `${user.nombre} ${user.apellido}`
-    : displayName ?? '';
+    : user?.usuario ?? '';
 
   return (
     <div className="dashboard-container">
