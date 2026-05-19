@@ -399,8 +399,6 @@ describe('updateFactura', () => {
 
 describe('deleteAbono', () => {
   test('retorna 404 si el abono no existe', async () => {
-    db.query.mockResolvedValueOnce({ rowCount: 0, rows: [] });
-
     const req = mockReq({ params: { id: '999' } });
     const res = mockRes();
     await deleteAbono(req, res);
@@ -409,9 +407,21 @@ describe('deleteAbono', () => {
   });
 
   test('elimina el abono y el pago si no quedan más abonos', async () => {
-    db.query.mockResolvedValueOnce({
-      rowCount: 1,
-      rows: [{ id: 5, pago_id: 10, num_factura: 1001, valor_abono: 200 }]
+    db.query.mockImplementation((query) => {
+      const sql = String(query);
+      if (sql.includes('to_regclass')) {
+        return Promise.resolve({ rows: [{ table_name: 'pagos' }], rowCount: 1 });
+      }
+      if (sql.includes('information_schema.columns')) {
+        return Promise.resolve({ rows: [{ exists: 1 }], rowCount: 1 });
+      }
+      if (sql.includes('FROM abonos WHERE id = $1')) {
+        return Promise.resolve({
+          rowCount: 1,
+          rows: [{ id: 5, pago_id: 10, num_factura: 1001, valor_abono: 200 }]
+        });
+      }
+      return Promise.resolve({ rows: [], rowCount: 0 });
     });
 
     db.transaction.mockImplementation(async (callback) => {
@@ -431,5 +441,42 @@ describe('deleteAbono', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ success: true })
     );
+  });
+
+  test('elimina un abono en esquema legacy sin pago_id', async () => {
+    db.query.mockImplementation((query) => {
+      const sql = String(query);
+      if (sql.includes('to_regclass')) {
+        return Promise.resolve({ rows: [{ table_name: null }], rowCount: 1 });
+      }
+      if (sql.includes('information_schema.columns')) {
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      }
+      if (sql.includes('FROM abonos WHERE id = $1')) {
+        return Promise.resolve({
+          rowCount: 1,
+          rows: [{ id: 5, pago_id: null, num_factura: 1001, valor_abono: 200 }]
+        });
+      }
+      return Promise.resolve({ rows: [], rowCount: 0 });
+    });
+
+    let fakeClient;
+    db.transaction.mockImplementation(async (callback) => {
+      fakeClient = {
+        query: jest.fn().mockResolvedValueOnce({ rows: [] })
+      };
+      await callback(fakeClient);
+    });
+
+    const req = mockReq({ params: { id: '5' } });
+    const res = mockRes();
+    await deleteAbono(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: true })
+    );
+    expect(fakeClient.query).toHaveBeenCalledTimes(1);
+    expect(fakeClient.query).toHaveBeenCalledWith('DELETE FROM abonos WHERE id = $1', [5]);
   });
 });
