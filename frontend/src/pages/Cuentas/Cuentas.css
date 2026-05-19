@@ -323,9 +323,11 @@
   padding: 9px 5px !important;
   text-align: left !important;
   color: #333;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: normal;
   vertical-align: middle !important;
   border-right: 1px solid #edf2f7;
 }
@@ -368,6 +370,13 @@
   text-align: center !important;
 }
 
+.cuentas-table td.col-money {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  font-size: 0.94em !important;
+}
+
 .cuentas-table .actions-column {
   width: 10.95%;
 }
@@ -376,6 +385,8 @@
 .cuentas-table .cell-id,
 .cuentas-table .app-cell-date {
   font-variant-numeric: tabular-nums;
+  white-space: nowrap !important;
+  overflow-wrap: normal;
 }
 
 .cuentas-table .cell-factura {
@@ -386,6 +397,8 @@
 
 .cuentas-table .cell-cliente {
   font-weight: 500;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .cuentas-table .cell-id {
