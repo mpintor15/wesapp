@@ -33,6 +33,19 @@ const { createHttpError, handleControllerError } = require('../utils/http');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 
+const tableColumnExists = async (tableName, columnName) => {
+  const result = await db.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = $1
+       AND column_name = $2
+     LIMIT 1`,
+    [tableName, columnName]
+  );
+  return result.rowCount > 0;
+};
+
 // ============================================
 // CLIENTES
 // ============================================
@@ -417,6 +430,12 @@ const getAbonosByFactura = async (req, res) => {
 
 const getPagos = async (req, res) => {
   try {
+    const pagosHasCreatedAt = await tableColumnExists('pagos', 'created_at');
+    const cuentasHasCancelada = await tableColumnExists('cuentas', 'cancelada');
+    const createdAtSelect = pagosHasCreatedAt ? 'p.created_at' : 'p.fecha';
+    const orderByCreatedAt = pagosHasCreatedAt ? 'p.created_at DESC,' : '';
+    const canceladaSelect = cuentasHasCancelada ? 'c.cancelada' : 'FALSE';
+
     const result = await db.query(
       `SELECT
          p.id,
@@ -425,7 +444,7 @@ const getPagos = async (req, res) => {
          p.referencia,
          p.notas,
          p.total,
-         p.created_at,
+         ${createdAtSelect} AS created_at,
          cl.id AS cliente_id,
          cl.nombre AS cliente,
          cl.identificacion,
@@ -438,7 +457,7 @@ const getPagos = async (req, res) => {
                'fecha_factura', c.fecha_factura,
                'valor_factura', c.valor_factura,
                'valor_abono', a.valor_abono,
-               'cancelada', c.cancelada,
+               'cancelada', ${canceladaSelect},
                'saldo_pendiente', v.saldo_pendiente
              )
              ORDER BY a.num_factura
@@ -451,7 +470,7 @@ const getPagos = async (req, res) => {
        LEFT JOIN cuentas c ON c.num_factura = a.num_factura
        LEFT JOIN vista_reporte_cuentas v ON v.num_factura = a.num_factura
        GROUP BY p.id, cl.id, cl.nombre, cl.identificacion
-       ORDER BY p.created_at DESC, p.fecha DESC, p.id DESC`
+       ORDER BY ${orderByCreatedAt} p.fecha DESC, p.id DESC`
     );
 
     res.json({
@@ -538,12 +557,14 @@ const exportPagosExcel = async (req, res) => {
 const getReporte = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente } = req.query;
+    const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
+    const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
 
     let query = `SELECT
       v.*,
       c.cliente_id,
-      c.detalle_anulacion,
-      c.fecha_anulacion
+      ${cuentasHasDetalleAnulacion ? 'c.detalle_anulacion' : 'NULL::text'} AS detalle_anulacion,
+      ${cuentasHasFechaAnulacion ? 'c.fecha_anulacion' : 'NULL::timestamp'} AS fecha_anulacion
     FROM vista_reporte_cuentas v
     JOIN cuentas c ON c.num_factura = v.num_factura`;
     const params = [];
@@ -590,12 +611,14 @@ const getReporte = async (req, res) => {
 const exportReporteExcel = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente } = req.query;
+    const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
+    const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
 
     let query = `SELECT
       v.*,
       c.cliente_id,
-      c.detalle_anulacion,
-      c.fecha_anulacion
+      ${cuentasHasDetalleAnulacion ? 'c.detalle_anulacion' : 'NULL::text'} AS detalle_anulacion,
+      ${cuentasHasFechaAnulacion ? 'c.fecha_anulacion' : 'NULL::timestamp'} AS fecha_anulacion
     FROM vista_reporte_cuentas v
     JOIN cuentas c ON c.num_factura = v.num_factura`;
     const params = [];
