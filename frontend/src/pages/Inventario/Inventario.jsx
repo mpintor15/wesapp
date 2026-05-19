@@ -2,15 +2,23 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import inventarioService from '../../services/inventarioService';
+import { useToast } from '../../context/ToastContext';
+import useSubmitState from '../../hooks/useSubmitState';
 import './Inventario.css';
+
+const ROWS_PER_PAGE = 50;
 
 const INVENTARIO_TIPOS = [
   { value: '', label: 'Todos los tipos' },
   { value: 'equipo', label: 'Equipo' },
   { value: 'placa_balistica', label: 'Placa Balística' },
   { value: 'arma', label: 'Arma' },
-  { value: 'radio', label: 'Radio' }
+  { value: 'radio', label: 'Radio' },
+  { value: 'otro', label: 'Otro' }
 ];
+
+const ARTICULO_TIPOS = INVENTARIO_TIPOS.filter(tipo => tipo.value);
+const isStockTipo = (tipo) => tipo === 'equipo' || tipo === 'otro';
 
 const INVENTARIO_ESTADOS = [
   { value: '', label: 'Todos los estados' },
@@ -20,34 +28,56 @@ const INVENTARIO_ESTADOS = [
   { value: 'vencida', label: 'Vencida' }
 ];
 
+const getTodayLocalISO = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateSafe = (dateStr) => {
+  if (!dateStr) return null;
+  const isoMatch = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const y = Number(isoMatch[1]);
+    const m = Number(isoMatch[2]);
+    const d = Number(isoMatch[3]);
+    return new Date(y, m - 1, d);
+  }
+  const parsed = new Date(dateStr);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const formatDate = (dateStr) => {
-  if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('es-EC');
+  const parsed = parseDateSafe(dateStr);
+  if (!parsed) return '-';
+  return parsed.toLocaleDateString('es-EC');
 };
 
 const Inventario = () => {
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
+  const { showToast } = useToast();
 
-  // Data
   const [articulos, setArticulos] = useState([]);
   const [catalogArticulos, setCatalogArticulos] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
-  const [movimientoDetalles, setMovimientoDetalles] = useState([]);
 
-  // UI state
   const [loading, setLoading] = useState(true);
   const [movimientosLoading, setMovimientosLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const { isSubmitting: isSavingArticulo, withSubmit: withArticuloSubmit } = useSubmitState();
+  const { isSubmitting: isSavingMovimiento, withSubmit: withMovimientoSubmit } = useSubmitState();
+  const { isSubmitting: isExportingArticulos, withSubmit: withArticulosExportSubmit } = useSubmitState();
+  const { isSubmitting: isExportingMovimientos, withSubmit: withMovimientosExportSubmit } = useSubmitState();
   const [activeTab, setActiveTab] = useState('articulos');
 
   // Modals
   const [showArticuloModal, setShowArticuloModal] = useState(false);
   const [showMovimientoModal, setShowMovimientoModal] = useState(false);
-  const [showMovimientoDetalleModal, setShowMovimientoDetalleModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
-  const [selectedMovimiento, setSelectedMovimiento] = useState(null);
+  const [showMovimientosExportModal, setShowMovimientosExportModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteCantidad, setDeleteCantidad] = useState(1);
@@ -56,7 +86,7 @@ const Inventario = () => {
   // Forms
   const [movimientoForm, setMovimientoForm] = useState({
     tipo_movimiento: 'traslado',
-    fecha_movimiento: new Date().toISOString().split('T')[0],
+    fecha_movimiento: getTodayLocalISO(),
     ubicacion_destino_nombre: '',
     items: [{ articulo_id: '', cantidad: 1, talla: '' }]
   });
@@ -77,28 +107,44 @@ const Inventario = () => {
     codigo_radio: '',
     version: ''
   });
+  const [articuloErrors, setArticuloErrors] = useState({});
+  const [movimientoErrors, setMovimientoErrors] = useState({});
   const [filters, setFilters] = useState({
     tipo: '',
     ubicacion_id: '',
     estado: '',
     search: ''
   });
+  const [movimientosFilters, setMovimientosFilters] = useState({
+    search: '',
+    destino_id: '',
+    from: '',
+    to: ''
+  });
+  const [movimientosFiltersDraft, setMovimientosFiltersDraft] = useState({
+    search: '',
+    destino_id: '',
+    from: '',
+    to: ''
+  });
   const [exportFilters, setExportFilters] = useState({
     tipo: '',
     ubicacion_id: '',
     estado: ''
   });
+  const [movimientosExportFilters, setMovimientosExportFilters] = useState({
+    destino_id: '',
+    from: '',
+    to: ''
+  });
+  const [articulosSort, setArticulosSort] = useState({ field: 'tipo_articulo', direction: 'asc' });
+  const [articulosPage, setArticulosPage] = useState(1);
+  const [movimientosPage, setMovimientosPage] = useState(1);
+  const [movimientosSort, setMovimientosSort] = useState({ field: 'fecha_movimiento', direction: 'desc' });
 
-  // ── Auto-dismiss messages ────────────────────────
   const showMessage = useCallback((type, text) => {
-    setMessage({ type, text });
-  }, []);
-
-  useEffect(() => {
-    if (!message.text) return;
-    const timer = setTimeout(() => setMessage({ type: '', text: '' }), 4000);
-    return () => clearTimeout(timer);
-  }, [message]);
+    showToast(text, type);
+  }, [showToast]);
 
   // ── Data loading ─────────────────────────────────
   useEffect(() => {
@@ -161,6 +207,7 @@ const Inventario = () => {
   };
 
   const handleApplyFilters = async () => {
+    setArticulosPage(1);
     setLoading(true);
     await fetchArticulos(getActiveFilterParams());
     setLoading(false);
@@ -168,9 +215,27 @@ const Inventario = () => {
 
   const handleClearFilters = async () => {
     setFilters({ tipo: '', ubicacion_id: '', estado: '', search: '' });
+    setArticulosPage(1);
     setLoading(true);
     await fetchArticulos({}, true);
     setLoading(false);
+  };
+
+  const handleMovimientosDraftChange = (e) => {
+    const { name, value } = e.target;
+    setMovimientosFiltersDraft(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleApplyMovimientosFilters = () => {
+    setMovimientosFilters({ ...movimientosFiltersDraft });
+    setMovimientosPage(1);
+  };
+
+  const handleClearMovimientosFilters = () => {
+    const cleared = { search: '', destino_id: '', from: '', to: '' };
+    setMovimientosFiltersDraft(cleared);
+    setMovimientosFilters(cleared);
+    setMovimientosPage(1);
   };
 
   // ── Artículo CRUD ────────────────────────────────
@@ -185,21 +250,23 @@ const Inventario = () => {
 
   const handleOpenCreate = () => {
     resetFormData();
+    setArticuloErrors({});
     setShowArticuloModal(true);
   };
 
   const handleTipoChange = (e) => {
     const nextTipo = e.target.value;
+    setArticuloErrors(prev => ({ ...prev, tipo_articulo: '', cantidad: '' }));
     setFormData(prev => {
       const base = { ...prev, tipo_articulo: nextTipo };
-      if (nextTipo === 'equipo') {
-        return { ...base, marca: '', modelo: '', numero_serie: '', calibre: '', fecha_caducidad: '', codigo_pantalla: '', codigo_radio: '', version: '' };
+      if (nextTipo === 'equipo' || nextTipo === 'otro') {
+        return { ...base, nombre_articulo: '', marca: '', modelo: '', numero_serie: '', calibre: '', fecha_caducidad: '', codigo_pantalla: '', codigo_radio: '', version: '' };
       }
       if (nextTipo === 'placa_balistica') {
         return { ...base, nombre_articulo: 'Placa Balística', cantidad: '', talla: '', marca: '', modelo: '', calibre: '', codigo_pantalla: '', codigo_radio: '', version: '' };
       }
       if (nextTipo === 'arma') {
-        return { ...base, cantidad: '', talla: '', fecha_caducidad: '', codigo_pantalla: '', codigo_radio: '', version: '' };
+        return { ...base, nombre_articulo: '', cantidad: '', talla: '', fecha_caducidad: '', codigo_pantalla: '', codigo_radio: '', version: '' };
       }
       if (nextTipo === 'radio') {
         return { ...base, nombre_articulo: 'Radio', cantidad: '', talla: '', numero_serie: '', calibre: '', fecha_caducidad: '' };
@@ -211,19 +278,60 @@ const Inventario = () => {
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    setArticuloErrors(prev => ({ ...prev, [name]: '' }));
   };
 
-  const handleSaveArticulo = async (e) => {
+  const handleSaveArticulo = withArticuloSubmit(async (e) => {
     e.preventDefault();
-    if (!formData.tipo_articulo) { showMessage('error', 'Selecciona un tipo de artículo'); return; }
-    if (!formData.nombre_articulo) { showMessage('error', 'El nombre del artículo es requerido'); return; }
-    if (!formData.ubicacion_nombre) { showMessage('error', 'Ingresa la ubicación'); return; }
-    if (formData.tipo_articulo === 'equipo' && !formData.cantidad) {
-      showMessage('error', 'La cantidad es requerida para equipos'); return;
+    const errors = {};
+    if (!formData.tipo_articulo) errors.tipo_articulo = 'Selecciona un tipo de artículo';
+    if (!formData.nombre_articulo.trim()) errors.nombre_articulo = 'Ingresa el nombre del artículo';
+    if (!formData.ubicacion_nombre.trim()) errors.ubicacion_nombre = 'Ingresa la ubicación';
+    if (isStockTipo(formData.tipo_articulo) && !formData.cantidad) {
+      errors.cantidad = 'Ingresa la cantidad';
+    }
+    if (formData.tipo_articulo === 'placa_balistica' && !formData.numero_serie.trim()) {
+      errors.numero_serie = 'Ingresa el número de serie';
+    }
+    if (formData.tipo_articulo === 'placa_balistica' && !formData.fecha_caducidad) {
+      errors.fecha_caducidad = 'Ingresa la fecha de caducidad';
+    }
+    if (formData.tipo_articulo === 'arma' && !formData.marca.trim()) {
+      errors.marca = 'Ingresa la marca';
+    }
+    if (formData.tipo_articulo === 'arma' && !formData.modelo.trim()) {
+      errors.modelo = 'Ingresa el modelo';
+    }
+    if (formData.tipo_articulo === 'arma' && !formData.numero_serie.trim()) {
+      errors.numero_serie = 'Ingresa el número de serie';
+    }
+    if (formData.tipo_articulo === 'arma' && !formData.calibre.trim()) {
+      errors.calibre = 'Ingresa el calibre';
+    }
+    if (formData.tipo_articulo === 'radio' && !formData.codigo_pantalla.trim()) {
+      errors.codigo_pantalla = 'Ingresa el código de pantalla';
+    }
+    if (formData.tipo_articulo === 'radio' && !formData.codigo_radio.trim()) {
+      errors.codigo_radio = 'Ingresa el número de serie';
+    }
+    if (formData.tipo_articulo === 'radio' && !formData.version.trim()) {
+      errors.version = 'Ingresa la versión';
+    }
+    if (formData.tipo_articulo === 'radio' && !formData.modelo.trim()) {
+      errors.modelo = 'Ingresa el modelo';
+    }
+    if (formData.tipo_articulo === 'radio' && !formData.marca.trim()) {
+      errors.marca = 'Ingresa la marca';
     }
 
-    let cantidadFinal = formData.cantidad ? parseInt(formData.cantidad, 10) : null;
-    if (!cantidadFinal && (formData.tipo_articulo === 'placa_balistica' || formData.tipo_articulo === 'arma' || formData.tipo_articulo === 'radio')) {
+    if (Object.keys(errors).length > 0) {
+      setArticuloErrors(errors);
+      showMessage('error', Object.values(errors)[0]);
+      return;
+    }
+
+    let cantidadFinal = formData.cantidad ? Number.parseInt(formData.cantidad, 10) : null;
+    if (!cantidadFinal && !isStockTipo(formData.tipo_articulo)) {
       cantidadFinal = 1;
     }
     const payload = { ...formData, cantidad: cantidadFinal };
@@ -236,10 +344,10 @@ const Inventario = () => {
     } else {
       showMessage('error', result.message);
     }
-  };
+  });
 
   const handleDeleteArticulo = (articulo) => {
-    if (articulo.tipo_articulo === 'equipo' && articulo.cantidad && articulo.cantidad > 1) {
+    if (isStockTipo(articulo.tipo_articulo) && articulo.cantidad && articulo.cantidad > 1) {
       setDeleteTarget(articulo);
       setDeleteCantidad(1);
       setShowDeleteModal(true);
@@ -279,18 +387,20 @@ const Inventario = () => {
   const openMovimientoModal = () => {
     setMovimientoForm({
       tipo_movimiento: 'traslado',
-      fecha_movimiento: new Date().toISOString().split('T')[0],
+      fecha_movimiento: getTodayLocalISO(),
       ubicacion_destino_nombre: '',
       items: [{ articulo_id: '', cantidad: 1, talla: '' }]
     });
     setItemSearchTerms(['']);
     setItemDropdownOpen([false]);
+    setMovimientoErrors({});
     setShowMovimientoModal(true);
   };
 
   const handleMovimientoFormChange = (e) => {
     const { name, value } = e.target;
     setMovimientoForm(prev => ({ ...prev, [name]: value }));
+    setMovimientoErrors(prev => ({ ...prev, [name]: '' }));
   };
 
   const handleMovimientoItemChange = (index, field, value) => {
@@ -345,28 +455,37 @@ const Inventario = () => {
   const getArticuloLabel = (articulo) => {
     const name = articulo.nombre_articulo || 'Artículo';
     const ubicacion = articulo.ubicacion_nombre ? ` (${articulo.ubicacion_nombre})` : '';
-    const serie = articulo.numero_serie ? ` — ${articulo.numero_serie}` : '';
+    const serieValue = articulo.tipo_articulo === 'radio' ? articulo.codigo_radio : articulo.numero_serie;
+    const serie = serieValue ? ` — ${serieValue}` : '';
     const talla = articulo.talla ? ` | Talla: ${articulo.talla}` : '';
-    const cant = articulo.tipo_articulo === 'equipo' && articulo.cantidad ? ` [x${articulo.cantidad}]` : '';
+    const cant = isStockTipo(articulo.tipo_articulo) && articulo.cantidad ? ` [x${articulo.cantidad}]` : '';
     return `${name}${serie}${talla}${cant}${ubicacion}`;
   };
 
-  const handleCreateMovimiento = async (e) => {
+  const handleCreateMovimiento = withMovimientoSubmit(async (e) => {
     e.preventDefault();
-    if (!movimientoForm.tipo_movimiento) { showMessage('error', 'Selecciona un tipo de movimiento'); return; }
+    const errors = {};
+    if (!movimientoForm.tipo_movimiento) errors.tipo_movimiento = 'Selecciona un tipo de movimiento';
+    if (!movimientoForm.fecha_movimiento) errors.fecha_movimiento = 'Selecciona la fecha del movimiento';
     if (movimientoForm.items.some(item => !item.articulo_id)) {
-      showMessage('error', 'Selecciona los artículos del movimiento'); return;
+      errors.items = 'Selecciona los artículos del movimiento';
     }
     if (!movimientoForm.ubicacion_destino_nombre.trim()) {
-      showMessage('error', 'Ingresa la ubicación destino'); return;
+      errors.ubicacion_destino_nombre = 'Ingresa la ubicación destino';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setMovimientoErrors(errors);
+      showMessage('error', Object.values(errors)[0]);
+      return;
     }
 
     const payload = {
       ubicacion_destino_nombre: movimientoForm.ubicacion_destino_nombre,
       fecha_movimiento: movimientoForm.fecha_movimiento,
       items: movimientoForm.items.map(item => ({
-        articulo_id: parseInt(item.articulo_id, 10),
-        cantidad: item.cantidad ? parseInt(item.cantidad, 10) : 1,
+        articulo_id: Number.parseInt(item.articulo_id, 10),
+        cantidad: item.cantidad ? Number.parseInt(item.cantidad, 10) : 1,
         talla: item.talla || ''
       }))
     };
@@ -380,18 +499,7 @@ const Inventario = () => {
     } else {
       showMessage('error', result.message);
     }
-  };
-
-  const handleViewMovimientoDetalles = async (movimiento) => {
-    setSelectedMovimiento(movimiento);
-    const result = await inventarioService.getMovimientoDetalles(movimiento.id);
-    if (result.success) {
-      setMovimientoDetalles(result.data);
-      setShowMovimientoDetalleModal(true);
-    } else {
-      showMessage('error', result.message);
-    }
-  };
+  });
 
   const handleDownloadPdf = async (movimiento) => {
     const result = await inventarioService.downloadMovimientoPdf(movimiento.id);
@@ -409,7 +517,16 @@ const Inventario = () => {
     setShowExportModal(true);
   };
 
-  const handleExport = async () => {
+  const openMovimientosExportModal = () => {
+    setMovimientosExportFilters({
+      destino_id: movimientosFilters.destino_id,
+      from: movimientosFilters.from,
+      to: movimientosFilters.to
+    });
+    setShowMovimientosExportModal(true);
+  };
+
+  const handleExport = withArticulosExportSubmit(async () => {
     const params = {};
     if (exportFilters.tipo) params.tipo = exportFilters.tipo;
     if (exportFilters.ubicacion_id) params.ubicacion_id = exportFilters.ubicacion_id;
@@ -420,22 +537,37 @@ const Inventario = () => {
       showMessage('error', result.message);
     }
     setShowExportModal(false);
-  };
+  });
+
+  const handleMovimientosExport = withMovimientosExportSubmit(async () => {
+    const params = {};
+    if (movimientosExportFilters.destino_id) params.destino_id = movimientosExportFilters.destino_id;
+    if (movimientosExportFilters.from) params.from = movimientosExportFilters.from;
+    if (movimientosExportFilters.to) params.to = movimientosExportFilters.to;
+
+    const result = await inventarioService.exportMovimientosExcel(params);
+    if (!result.success) {
+      showMessage('error', result.message);
+      return;
+    }
+    setShowMovimientosExportModal(false);
+  });
 
   // ── Helpers ──────────────────────────────────────
-  const getEstadoLabel = (estado) => {
-    switch (estado) {
-      case 'vencida': return 'Vencida';
-      case 'proxima_a_vencer': return 'Próxima a vencer';
-      case 'vigente': return 'Vigente';
-      default: return 'Sin alerta';
-    }
-  };
-
   const getTipoLabel = (tipo) => {
     const found = INVENTARIO_TIPOS.find(item => item.value === tipo);
     return found ? found.label : tipo;
   };
+
+  const getCaducidadClass = (estado) => {
+    if (estado === 'vencida') return 'is-expired';
+    if (estado === 'proxima_a_vencer') return 'is-warning';
+    return '';
+  };
+
+  const getSerieDisplay = (articulo) => (
+    articulo.tipo_articulo === 'radio' ? (articulo.codigo_radio || '-') : (articulo.numero_serie || '-')
+  );
 
   const emptyStateText = useMemo(() => {
     if (filters.tipo || filters.ubicacion_id || filters.estado || filters.search) {
@@ -443,6 +575,208 @@ const Inventario = () => {
     }
     return 'No hay artículos registrados en inventario.';
   }, [filters]);
+
+  const sortedArticulos = useMemo(() => {
+    const getString = (value) => String(value || '').trim();
+    const getNumber = (value) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : Number.NaN;
+    };
+    const getDate = (value) => {
+      if (!value) return Number.NaN;
+      const ts = new Date(value).getTime();
+      return Number.isFinite(ts) ? ts : Number.NaN;
+    };
+
+    const rows = [...articulos];
+    rows.sort((a, b) => {
+      const direction = articulosSort.direction === 'asc' ? 1 : -1;
+      const field = articulosSort.field;
+
+      if (field === 'cantidad') {
+        const aNum = getNumber(a.cantidad);
+        const bNum = getNumber(b.cantidad);
+        if (Number.isNaN(aNum) && Number.isNaN(bNum)) return 0;
+        if (Number.isNaN(aNum)) return 1;
+        if (Number.isNaN(bNum)) return -1;
+        return (aNum - bNum) * direction;
+      }
+
+      if (field === 'fecha_caducidad') {
+        const aDate = getDate(a.fecha_caducidad);
+        const bDate = getDate(b.fecha_caducidad);
+        if (Number.isNaN(aDate) && Number.isNaN(bDate)) return 0;
+        if (Number.isNaN(aDate)) return 1;
+        if (Number.isNaN(bDate)) return -1;
+        return (aDate - bDate) * direction;
+      }
+
+      if (field === 'serie') {
+        const aStr = getString(a.tipo_articulo === 'radio' ? a.codigo_radio : a.numero_serie);
+        const bStr = getString(b.tipo_articulo === 'radio' ? b.codigo_radio : b.numero_serie);
+        if (!aStr && !bStr) return 0;
+        if (!aStr) return 1;
+        if (!bStr) return -1;
+        return aStr.localeCompare(bStr, 'es', { sensitivity: 'base', numeric: true }) * direction;
+      }
+
+      const aStr = getString(a[field]);
+      const bStr = getString(b[field]);
+      if (!aStr && !bStr) return 0;
+      if (!aStr) return 1;
+      if (!bStr) return -1;
+      return aStr.localeCompare(bStr, 'es', { sensitivity: 'base', numeric: true }) * direction;
+    });
+    return rows;
+  }, [articulos, articulosSort]);
+
+  const articulosTotalPages = Math.max(1, Math.ceil(sortedArticulos.length / ROWS_PER_PAGE));
+  const paginatedArticulos = sortedArticulos.slice((articulosPage - 1) * ROWS_PER_PAGE, articulosPage * ROWS_PER_PAGE);
+
+  const handleArticulosSort = (field) => {
+    setArticulosSort(prev => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: 'asc' };
+    });
+    setArticulosPage(1);
+  };
+
+  const filteredMovimientos = useMemo(() => {
+    return movimientos.filter((mov) => {
+      const q = movimientosFilters.search.trim().toLowerCase();
+      const searchable = [
+        mov.articulos_movidos,
+        mov.ubicacion_origen,
+        mov.usuario
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      if (q && !searchable.includes(q)) return false;
+
+      if (movimientosFilters.destino_id && String(mov.ubicacion_destino_id || '') !== String(movimientosFilters.destino_id)) {
+        return false;
+      }
+
+      const movDate = parseDateSafe(mov.fecha_movimiento);
+      if (!movDate) return false;
+
+      if (movimientosFilters.from) {
+        const fromDate = parseDateSafe(movimientosFilters.from);
+        if (fromDate && movDate < fromDate) return false;
+      }
+
+      if (movimientosFilters.to) {
+        const toDate = parseDateSafe(movimientosFilters.to);
+        if (toDate && movDate > toDate) return false;
+      }
+
+      return true;
+    });
+  }, [movimientos, movimientosFilters]);
+
+  const sortedMovimientos = useMemo(() => {
+    const rows = [...filteredMovimientos];
+    const direction = movimientosSort.direction === 'asc' ? 1 : -1;
+    const field = movimientosSort.field;
+
+    rows.sort((a, b) => {
+      if (field === 'fecha_movimiento') {
+        const aDate = parseDateSafe(a.fecha_movimiento)?.getTime() ?? Number.NaN;
+        const bDate = parseDateSafe(b.fecha_movimiento)?.getTime() ?? Number.NaN;
+        if (Number.isNaN(aDate) && Number.isNaN(bDate)) return 0;
+        if (Number.isNaN(aDate)) return 1;
+        if (Number.isNaN(bDate)) return -1;
+        return (aDate - bDate) * direction;
+      }
+
+      if (field === 'items') {
+        const aNum = Number(a.items);
+        const bNum = Number(b.items);
+        const aSafe = Number.isFinite(aNum) ? aNum : Number.NaN;
+        const bSafe = Number.isFinite(bNum) ? bNum : Number.NaN;
+        if (Number.isNaN(aSafe) && Number.isNaN(bSafe)) return 0;
+        if (Number.isNaN(aSafe)) return 1;
+        if (Number.isNaN(bSafe)) return -1;
+        return (aSafe - bSafe) * direction;
+      }
+
+      const aStr = String(a[field] || '').trim();
+      const bStr = String(b[field] || '').trim();
+      if (!aStr && !bStr) return 0;
+      if (!aStr) return 1;
+      if (!bStr) return -1;
+      return aStr.localeCompare(bStr, 'es', { sensitivity: 'base', numeric: true }) * direction;
+    });
+
+    return rows;
+  }, [filteredMovimientos, movimientosSort]);
+
+  const movimientosTotalPages = Math.max(1, Math.ceil(sortedMovimientos.length / ROWS_PER_PAGE));
+  const paginatedMovimientos = sortedMovimientos.slice((movimientosPage - 1) * ROWS_PER_PAGE, movimientosPage * ROWS_PER_PAGE);
+  const handleMovimientosSort = (field) => {
+    setMovimientosSort(prev => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: 'asc' };
+    });
+    setMovimientosPage(1);
+  };
+
+  const mobileArticuloCards = useMemo(() => paginatedArticulos.map((articulo) => (
+    <article key={articulo.id} className="inventory-card">
+      <div className="inventory-card-header">
+        <div>
+          <h3>{articulo.nombre_articulo || 'Artículo sin nombre'}</h3>
+          <div className="inventory-card-meta">
+            <span>{getTipoLabel(articulo.tipo_articulo)}</span>
+          </div>
+        </div>
+        <span>{articulo.ubicacion_nombre || '-'}</span>
+      </div>
+      <div className="inventory-card-grid">
+        <div>
+          <strong>Serie</strong>
+          <span>{getSerieDisplay(articulo)}</span>
+        </div>
+        <div>
+          <strong>Cantidad</strong>
+          <span>{articulo.cantidad ?? '-'}</span>
+        </div>
+        <div>
+          <strong>Marca / Modelo</strong>
+          <span>{[articulo.marca, articulo.modelo].filter(Boolean).join(' / ') || '-'}</span>
+        </div>
+        <div>
+          <strong>Talla / Calibre</strong>
+          <span>{[articulo.talla, articulo.calibre].filter(Boolean).join(' / ') || '-'}</span>
+        </div>
+        <div>
+          <strong>Pantalla / Versión</strong>
+          <span>{[articulo.codigo_pantalla, articulo.version].filter(Boolean).join(' / ') || '-'}</span>
+        </div>
+        <div>
+          <strong>Caducidad</strong>
+          <span className={`cell-date ${getCaducidadClass(articulo.estado_caducidad)}`}>{formatDate(articulo.fecha_caducidad)}</span>
+        </div>
+      </div>
+      {hasPermission('eliminar_articulo') && (
+        <div className="inventory-card-actions">
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => handleDeleteArticulo(articulo)}
+            type="button"
+          >
+            Eliminar
+          </button>
+        </div>
+      )}
+    </article>
+  )), [hasPermission, paginatedArticulos]);
 
   const closeOverlay = (e, closeFn) => {
     if (e.target === e.currentTarget) closeFn();
@@ -452,33 +786,34 @@ const Inventario = () => {
   return (
     <div className="inventario-container">
       {/* ── Header ── */}
-      <header className="inventario-header">
-        <div className="inventario-header-left">
-          <button className="btn-back" onClick={() => navigate('/')}>← Volver</button>
-          <div>
-            <h1>Inventario</h1>
-          </div>
+      <header className="page-header">
+        <div className="page-header-left">
+          <button className="btn-back" onClick={() => navigate('/')}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14"><polyline points="15 18 9 12 15 6"/></svg>
+            Volver
+          </button>
+          <h1>Inventario</h1>
         </div>
-        <div className="inventario-header-actions">
+        <div className="page-header-actions">
           {activeTab === 'articulos' && hasPermission('crear_articulo') && (
-            <button className="btn btn-primary" onClick={handleOpenCreate}>Crear artículo</button>
+            <button className="btn btn-ghost btn-sm" onClick={handleOpenCreate}>Crear artículo</button>
           )}
           {activeTab === 'articulos' && hasPermission('exportar') && (
-            <button className="btn btn-success" onClick={openExportModal}>Generar reporte</button>
+            <button className="btn btn-ghost btn-sm" onClick={openExportModal}>Generar reporte</button>
           )}
           {activeTab === 'movimientos' && hasPermission('crear_movimiento') && (
-            <button className="btn btn-primary" onClick={openMovimientoModal}>Crear movimiento</button>
+            <button className="btn btn-ghost btn-sm" onClick={openMovimientoModal}>Crear movimiento</button>
           )}
+          {activeTab === 'movimientos' && hasPermission('exportar') && (
+            <button className="btn btn-ghost btn-sm" onClick={openMovimientosExportModal}>Generar reporte</button>
+          )}
+          <button
+            className="btn btn-ghost btn-sm btn-icon-only"
+            onClick={() => activeTab === 'articulos' ? fetchArticulos({}, true) : loadMovimientos()}
+            title="Actualizar datos"
+          >↻</button>
         </div>
       </header>
-
-      {/* ── Toast Message ── */}
-      {message.text && (
-        <div className={`message message-${message.type}`}>
-          <span>{message.text}</span>
-          <button onClick={() => setMessage({ type: '', text: '' })}>×</button>
-        </div>
-      )}
 
       {/* ── Tabs ── */}
       <div className="inventario-tabs">
@@ -486,13 +821,19 @@ const Inventario = () => {
           className={`tab ${activeTab === 'articulos' ? 'active' : ''}`}
           onClick={() => setActiveTab('articulos')}
         >
-          Artículos ({articulos.length})
+          Artículos
+          {articulos.length > 0 && (
+            <span className="tab-badge">{articulos.length}</span>
+          )}
         </button>
         <button
           className={`tab ${activeTab === 'movimientos' ? 'active' : ''}`}
           onClick={() => setActiveTab('movimientos')}
         >
-          Movimientos ({movimientos.length})
+          Movimientos
+          {movimientos.length > 0 && (
+            <span className="tab-badge">{movimientos.length}</span>
+          )}
         </button>
       </div>
 
@@ -502,46 +843,55 @@ const Inventario = () => {
       {activeTab === 'articulos' && (
         <div className="tab-content">
           {/* Filters */}
-          <div className="inventario-filters">
-            <div className="filter-field">
-              <label>Buscar</label>
-              <input
-                type="text"
-                name="search"
-                value={filters.search}
-                onChange={handleFilterChange}
-                placeholder="Nombre, serie, marca o modelo..."
-                onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
-              />
+          <div className="ff-filter-row inventario-articulos-filter-row">
+            <div className="ff-filter-card inventario-articulos-filter-card">
+              <div className="ff-controls">
+                <div className="ff-search">
+                  <svg className="ff-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                  <input
+                    type="text"
+                    name="search"
+                    value={filters.search}
+                    onChange={handleFilterChange}
+                    placeholder="Nombre, serie, marca o modelo..."
+                    onKeyDown={(e) => e.key === 'Enter' && handleApplyFilters()}
+                  />
+                </div>
+                <div className="ff-state">
+                  <span className="ff-state-label">Tipo</span>
+                  <select name="tipo" value={filters.tipo} onChange={handleFilterChange}>
+                    {INVENTARIO_TIPOS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ff-state">
+                  <span className="ff-state-label">Ubicación</span>
+                  <select name="ubicacion_id" value={filters.ubicacion_id} onChange={handleFilterChange}>
+                    <option value="">Todas</option>
+                    {ubicaciones.map(ub => (
+                      <option key={ub.id} value={ub.id}>{ub.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ff-state">
+                  <span className="ff-state-label">Estado</span>
+                  <select name="estado" value={filters.estado} onChange={handleFilterChange}>
+                    {INVENTARIO_ESTADOS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
-            <div className="filter-field">
-              <label>Tipo</label>
-              <select name="tipo" value={filters.tipo} onChange={handleFilterChange}>
-                {INVENTARIO_TIPOS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-field">
-              <label>Ubicación</label>
-              <select name="ubicacion_id" value={filters.ubicacion_id} onChange={handleFilterChange}>
-                <option value="">Todas las ubicaciones</option>
-                {ubicaciones.map(ub => (
-                  <option key={ub.id} value={ub.id}>{ub.nombre}</option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-field">
-              <label>Estado</label>
-              <select name="estado" value={filters.estado} onChange={handleFilterChange}>
-                {INVENTARIO_ESTADOS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="filter-actions">
-              <button className="btn btn-primary btn-sm" onClick={handleApplyFilters}>Aplicar</button>
-              <button className="btn btn-secondary btn-sm" onClick={handleClearFilters}>Limpiar</button>
+
+            <div className="ff-filter-actions-card inventario-articulos-filter-actions-card">
+              <div className="ff-actions">
+                <button className="btn btn-primary btn-sm" onClick={handleApplyFilters}>Aplicar</button>
+                <button className="ff-clear-btn" onClick={handleClearFilters}>Limpiar</button>
+              </div>
             </div>
           </div>
 
@@ -552,75 +902,180 @@ const Inventario = () => {
               Cargando artículos...
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Tipo</th>
-                    <th>Artículo</th>
-                    <th>Serie</th>
-                    <th>Cantidad</th>
-                    <th>Talla</th>
-                    <th>Marca</th>
-                    <th>Modelo</th>
-                    <th>Calibre</th>
-                    <th>Cód. Pantalla</th>
-                    <th>Cód. Radio</th>
-                    <th>Versión</th>
-                    <th>Caducidad</th>
-                    <th>Ubicación</th>
-                    <th>Estado</th>
-                    {hasPermission('eliminar_articulo') && <th className="col-actions">Acciones</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {articulos.length > 0 ? (
-                    articulos.map((articulo, idx) => (
-                      <tr key={articulo.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
-                        <td><span className={`tipo-badge tipo-${articulo.tipo_articulo}`}>{getTipoLabel(articulo.tipo_articulo)}</span></td>
-                        <td className="cell-articulo">{articulo.nombre_articulo || '-'}</td>
-                        <td className="cell-serie">{articulo.numero_serie || '-'}</td>
-                        <td className="cell-cantidad">{articulo.cantidad ?? '-'}</td>
-                        <td>{articulo.talla || '-'}</td>
-                        <td>{articulo.marca || '-'}</td>
-                        <td>{articulo.modelo || '-'}</td>
-                        <td>{articulo.calibre || '-'}</td>
-                        <td>{articulo.codigo_pantalla || '-'}</td>
-                        <td>{articulo.codigo_radio || '-'}</td>
-                        <td>{articulo.version || '-'}</td>
-                        <td>{formatDate(articulo.fecha_caducidad)}</td>
-                        <td><span className="ubicacion-tag">{articulo.ubicacion_nombre || '-'}</span></td>
-                        <td>
-                          <span className={`estado-badge estado-${articulo.estado_caducidad || 'sin_alerta'}`}>
-                            {getEstadoLabel(articulo.estado_caducidad)}
-                          </span>
-                        </td>
-                        {hasPermission('eliminar_articulo') && (
-                          <td className="col-actions">
-                            <div className="action-buttons">
-                              <button
-                                className="action-btn action-btn-del"
-                                onClick={() => handleDeleteArticulo(articulo)}
-                                title="Eliminar artículo"
-                                type="button"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))
-                  ) : (
+            <>
+              <div className="table-responsive app-table-shell">
+                <table className="app-table articulos-table">
+                  <thead>
                     <tr>
-                      <td colSpan={hasPermission('eliminar_articulo') ? 15 : 14} className="text-center">
-                        {emptyStateText}
-                      </td>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('tipo_articulo')}>
+                          Tipo
+                          <span className={`th-sort-indicator${articulosSort.field === 'tipo_articulo' ? ' active' : ''}`}>
+                            {articulosSort.field === 'tipo_articulo' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('nombre_articulo')}>
+                          Artículo
+                          <span className={`th-sort-indicator${articulosSort.field === 'nombre_articulo' ? ' active' : ''}`}>
+                            {articulosSort.field === 'nombre_articulo' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('serie')}>
+                          Serie
+                          <span className={`th-sort-indicator${articulosSort.field === 'serie' ? ' active' : ''}`}>
+                            {articulosSort.field === 'serie' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('cantidad')}>
+                          Cant.
+                          <span className={`th-sort-indicator${articulosSort.field === 'cantidad' ? ' active' : ''}`}>
+                            {articulosSort.field === 'cantidad' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('talla')}>
+                          Talla
+                          <span className={`th-sort-indicator${articulosSort.field === 'talla' ? ' active' : ''}`}>
+                            {articulosSort.field === 'talla' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('marca')}>
+                          Marca
+                          <span className={`th-sort-indicator${articulosSort.field === 'marca' ? ' active' : ''}`}>
+                            {articulosSort.field === 'marca' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('modelo')}>
+                          Modelo
+                          <span className={`th-sort-indicator${articulosSort.field === 'modelo' ? ' active' : ''}`}>
+                            {articulosSort.field === 'modelo' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('calibre')}>
+                          Calibre
+                          <span className={`th-sort-indicator${articulosSort.field === 'calibre' ? ' active' : ''}`}>
+                            {articulosSort.field === 'calibre' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('codigo_pantalla')}>
+                          Cód. Pant.
+                          <span className={`th-sort-indicator${articulosSort.field === 'codigo_pantalla' ? ' active' : ''}`}>
+                            {articulosSort.field === 'codigo_pantalla' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('version')}>
+                          Versión
+                          <span className={`th-sort-indicator${articulosSort.field === 'version' ? ' active' : ''}`}>
+                            {articulosSort.field === 'version' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('fecha_caducidad')}>
+                          Caducidad
+                          <span className={`th-sort-indicator${articulosSort.field === 'fecha_caducidad' ? ' active' : ''}`}>
+                            {articulosSort.field === 'fecha_caducidad' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleArticulosSort('ubicacion_nombre')}>
+                          Ubicación
+                          <span className={`th-sort-indicator${articulosSort.field === 'ubicacion_nombre' ? ' active' : ''}`}>
+                            {articulosSort.field === 'ubicacion_nombre' && articulosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      {hasPermission('eliminar_articulo') && <th className="col-actions app-col-actions app-col-actions--single"></th>}
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {sortedArticulos.length > 0 ? (
+                      paginatedArticulos.map((articulo, idx) => (
+                        <tr key={articulo.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
+                          <td className="cell-compact">{getTipoLabel(articulo.tipo_articulo)}</td>
+                          <td className="cell-articulo">{articulo.nombre_articulo || '-'}</td>
+                          <td className="cell-serie">{getSerieDisplay(articulo)}</td>
+                          <td className="cell-cantidad app-cell-qty">{articulo.cantidad ?? '-'}</td>
+                          <td className="cell-compact">{articulo.talla || '-'}</td>
+                          <td className="cell-compact">{articulo.marca || '-'}</td>
+                          <td className="cell-compact">{articulo.modelo || '-'}</td>
+                          <td className="cell-compact">{articulo.calibre || '-'}</td>
+                          <td className="cell-code">{articulo.codigo_pantalla || '-'}</td>
+                          <td className="cell-compact">{articulo.version || '-'}</td>
+                          <td className={`cell-date app-cell-date ${getCaducidadClass(articulo.estado_caducidad)}`}>{formatDate(articulo.fecha_caducidad)}</td>
+                          <td>{articulo.ubicacion_nombre || '-'}</td>
+                          {hasPermission('eliminar_articulo') && (
+                            <td className="col-actions app-col-actions app-col-actions--single">
+                              <div className="action-buttons app-table-actions">
+                                <button
+                                  className="action-btn action-btn-del"
+                                  onClick={() => handleDeleteArticulo(articulo)}
+                                  title="Eliminar artículo"
+                                  type="button"
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                    <path d="M10 11v6M14 11v6"/>
+                                    <path d="M9 6V4h6v2"/>
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={hasPermission('eliminar_articulo') ? 13 : 12} className="text-center">
+                          {emptyStateText}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {articulosTotalPages > 1 && (
+                <div className="pagination">
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setArticulosPage(p => Math.max(1, p - 1))}
+                    disabled={articulosPage === 1}
+                  >‹ Anterior</button>
+                  <span className="pagination-info">
+                    Página <span className="pagination-count">{articulosPage}</span> de {articulosTotalPages}
+                  </span>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setArticulosPage(p => Math.min(articulosTotalPages, p + 1))}
+                    disabled={articulosPage === articulosTotalPages}
+                  >Siguiente ›</button>
+                </div>
+              )}
+              {articulos.length > 0 && (
+                <div className="records-mobile">
+                  {mobileArticuloCards}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -636,57 +1091,178 @@ const Inventario = () => {
               Cargando movimientos...
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Artículos</th>
-                    <th>Origen</th>
-                    <th>Destino</th>
-                    <th>Usuario</th>
-                    <th className="col-actions">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {movimientos.length > 0 ? (
-                    movimientos.map((mov, idx) => (
-                      <tr key={mov.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
-                        <td>{formatDate(mov.fecha_movimiento)}</td>
-                        <td>{mov.items}</td>
-                        <td>{mov.ubicacion_origen || '-'}</td>
-                        <td>{mov.ubicacion_destino || '-'}</td>
-                        <td>{mov.usuario || '-'}</td>
-                        <td className="col-actions">
-                          <div className="action-buttons">
-                            <button
-                              className="action-btn action-btn-view"
-                              type="button"
-                              title="Ver detalles"
-                              onClick={() => handleViewMovimientoDetalles(mov)}
-                            >
-                              Ver
-                            </button>
-                            <button
-                              className="action-btn action-btn-pdf"
-                              type="button"
-                              title="Descargar PDF"
-                              onClick={() => handleDownloadPdf(mov)}
-                            >
-                              ↓
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
+            <>
+              <div className="ff-filter-row inventario-movimientos-filter-row">
+                <div className="ff-filter-card inventario-movimientos-filter-card">
+                  <div className="ff-controls">
+                    <div className="ff-search">
+                      <svg className="ff-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                      <input
+                        type="text"
+                        name="search"
+                        value={movimientosFiltersDraft.search}
+                        onChange={handleMovimientosDraftChange}
+                        onKeyDown={(e) => e.key === 'Enter' && handleApplyMovimientosFilters()}
+                        placeholder="Buscar en artículos, origen o usuario..."
+                      />
+                    </div>
+                    <div className="ff-state movimientos-destino-filter">
+                      <span className="ff-state-label">Destino</span>
+                      <select
+                        name="destino_id"
+                        value={movimientosFiltersDraft.destino_id}
+                        onChange={handleMovimientosDraftChange}
+                      >
+                        <option value="">Todos</option>
+                        {ubicaciones.map(ub => (
+                          <option key={ub.id} value={ub.id}>{ub.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="ff-dates">
+                      <div className="ff-date-field">
+                        <span className="ff-date-label">Desde</span>
+                        <input
+                          type="date"
+                          name="from"
+                          value={movimientosFiltersDraft.from}
+                          onChange={handleMovimientosDraftChange}
+                          onKeyDown={(e) => e.key === 'Enter' && handleApplyMovimientosFilters()}
+                        />
+                      </div>
+                      <div className="ff-date-field">
+                        <span className="ff-date-label">Hasta</span>
+                        <input
+                          type="date"
+                          name="to"
+                          value={movimientosFiltersDraft.to}
+                          onChange={handleMovimientosDraftChange}
+                          onKeyDown={(e) => e.key === 'Enter' && handleApplyMovimientosFilters()}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="ff-filter-actions-card inventario-movimientos-filter-actions-card">
+                  <div className="ff-actions">
+                    <button className="btn btn-primary btn-sm" onClick={handleApplyMovimientosFilters}>Aplicar</button>
+                    <button className="ff-clear-btn" onClick={handleClearMovimientosFilters}>Limpiar</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="table-responsive app-table-shell">
+                <table className="app-table movimientos-table">
+                  <thead>
                     <tr>
-                      <td colSpan="6" className="text-center">No hay movimientos registrados.</td>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleMovimientosSort('fecha_movimiento')}>
+                          Fecha
+                          <span className={`th-sort-indicator${movimientosSort.field === 'fecha_movimiento' ? ' active' : ''}`}>
+                            {movimientosSort.field === 'fecha_movimiento' && movimientosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleMovimientosSort('items')}>
+                          Cant. Artículos
+                          <span className={`th-sort-indicator${movimientosSort.field === 'items' ? ' active' : ''}`}>
+                            {movimientosSort.field === 'items' && movimientosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleMovimientosSort('articulos_movidos')}>
+                          Artículos
+                          <span className={`th-sort-indicator${movimientosSort.field === 'articulos_movidos' ? ' active' : ''}`}>
+                            {movimientosSort.field === 'articulos_movidos' && movimientosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleMovimientosSort('ubicacion_origen')}>
+                          Origen
+                          <span className={`th-sort-indicator${movimientosSort.field === 'ubicacion_origen' ? ' active' : ''}`}>
+                            {movimientosSort.field === 'ubicacion_origen' && movimientosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleMovimientosSort('ubicacion_destino')}>
+                          Destino
+                          <span className={`th-sort-indicator${movimientosSort.field === 'ubicacion_destino' ? ' active' : ''}`}>
+                            {movimientosSort.field === 'ubicacion_destino' && movimientosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th>
+                        <button type="button" className="th-sort-btn" onClick={() => handleMovimientosSort('usuario')}>
+                          Usuario
+                          <span className={`th-sort-indicator${movimientosSort.field === 'usuario' ? ' active' : ''}`}>
+                            {movimientosSort.field === 'usuario' && movimientosSort.direction === 'desc' ? '↓' : '↑'}
+                          </span>
+                        </button>
+                      </th>
+                      <th className="col-actions app-col-actions app-col-actions--single"></th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {sortedMovimientos.length > 0 ? (
+                      paginatedMovimientos.map((mov, idx) => (
+                        <tr key={mov.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
+                          <td className="app-cell-date">{formatDate(mov.fecha_movimiento)}</td>
+                          <td className="app-cell-qty">{mov.items}</td>
+                          <td>{mov.articulos_movidos || '-'}</td>
+                          <td>{mov.ubicacion_origen || '-'}</td>
+                          <td>{mov.ubicacion_destino || '-'}</td>
+                          <td>{mov.usuario || '-'}</td>
+                          <td className="col-actions app-col-actions app-col-actions--single">
+                            <div className="action-buttons app-table-actions">
+                              <button
+                                className="action-btn action-btn-pdf"
+                                type="button"
+                                title="Descargar PDF"
+                                onClick={() => handleDownloadPdf(mov)}
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                  <polyline points="7 10 12 15 17 10"/>
+                                  <line x1="12" y1="15" x2="12" y2="3"/>
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="text-center">No hay movimientos registrados.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {movimientosTotalPages > 1 && (
+                <div className="pagination">
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setMovimientosPage(p => Math.max(1, p - 1))}
+                    disabled={movimientosPage === 1}
+                  >‹ Anterior</button>
+                  <span className="pagination-info">
+                    Página <span className="pagination-count">{movimientosPage}</span> de {movimientosTotalPages}
+                  </span>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setMovimientosPage(p => Math.min(movimientosTotalPages, p + 1))}
+                    disabled={movimientosPage === movimientosTotalPages}
+                  >Siguiente ›</button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -701,45 +1277,66 @@ const Inventario = () => {
               <h3>Nuevo Artículo</h3>
               <button className="modal-close" onClick={() => setShowArticuloModal(false)}>×</button>
             </div>
-            <form onSubmit={handleSaveArticulo}>
+            <form onSubmit={handleSaveArticulo} autoComplete="off" data-lpignore="true" data-1p-ignore="true">
               <div className="modal-body">
                 <div className="form-grid">
                   <div className="form-group">
-                    <label>Tipo *</label>
-                    <select name="tipo_articulo" value={formData.tipo_articulo} onChange={handleTipoChange} required>
-                      {INVENTARIO_TIPOS.map(opt => (
+                    <label htmlFor="art-tipo">Tipo</label>
+                    <select
+                      id="art-tipo"
+                      name="tipo_articulo"
+                      value={formData.tipo_articulo}
+                      onChange={handleTipoChange}
+                      className={articuloErrors.tipo_articulo ? 'input-warning' : ''}
+                    >
+                      <option value="">Selecciona un tipo</option>
+                      {ARTICULO_TIPOS.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
+                    {articuloErrors.tipo_articulo ? (
+                      <div className="inventory-field-warning" role="alert">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 9v4m0 4h.01M10.3 4.3 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        <span>{articuloErrors.tipo_articulo}</span>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="form-group">
-                    <label>Nombre del Artículo *</label>
-                    <input type="text" name="nombre_articulo" value={formData.nombre_articulo} onChange={handleFormChange} placeholder="Ej: Chaleco antibalas" required />
+                    <label htmlFor="art-nombre">Nombre del Artículo</label>
+                    <input id="art-nombre" type="text" name="nombre_articulo" value={formData.nombre_articulo} onChange={handleFormChange} placeholder="Ej: Chaleco antibalas" required />
+                    {articuloErrors.nombre_articulo ? <span className="field-error">{articuloErrors.nombre_articulo}</span> : null}
                   </div>
 
-                  {formData.tipo_articulo === 'equipo' && (
+                  {isStockTipo(formData.tipo_articulo) && (
                     <>
                       <div className="form-group">
-                        <label>Cantidad *</label>
-                        <input type="number" name="cantidad" value={formData.cantidad} onChange={handleFormChange} min="1" placeholder="1" required />
+                        <label htmlFor="art-cantidad">Cantidad</label>
+                        <input id="art-cantidad" type="number" name="cantidad" value={formData.cantidad} onChange={handleFormChange} min="1" placeholder="1" required />
+                        {articuloErrors.cantidad ? <span className="field-error">{articuloErrors.cantidad}</span> : null}
                       </div>
-                      <div className="form-group">
-                        <label>Talla</label>
-                        <input type="text" name="talla" value={formData.talla} onChange={handleFormChange} placeholder="S, M, L, XL..." />
-                      </div>
+                      {formData.tipo_articulo === 'equipo' && (
+                        <div className="form-group">
+                          <label htmlFor="art-talla">Talla <span className="label-optional">(opcional)</span></label>
+                          <input id="art-talla" type="text" name="talla" value={formData.talla} onChange={handleFormChange} placeholder="S, M, L, XL..." />
+                        </div>
+                      )}
                     </>
                   )}
 
                   {formData.tipo_articulo === 'placa_balistica' && (
                     <>
                       <div className="form-group">
-                        <label>Número de Serie</label>
-                        <input type="text" name="numero_serie" value={formData.numero_serie} onChange={handleFormChange} placeholder="Ej: PB-001" />
+                        <label htmlFor="art-serie-pb">Número de Serie</label>
+                        <input id="art-serie-pb" type="text" name="numero_serie" value={formData.numero_serie} onChange={handleFormChange} placeholder="Ej: PB-001" required />
+                        {articuloErrors.numero_serie ? <span className="field-error">{articuloErrors.numero_serie}</span> : null}
                       </div>
                       <div className="form-group">
-                        <label>Fecha de Caducidad</label>
-                        <input type="date" name="fecha_caducidad" value={formData.fecha_caducidad} onChange={handleFormChange} />
+                        <label htmlFor="art-caducidad">Fecha de Caducidad</label>
+                        <input id="art-caducidad" type="date" name="fecha_caducidad" value={formData.fecha_caducidad} onChange={handleFormChange} required />
+                        {articuloErrors.fecha_caducidad ? <span className="field-error">{articuloErrors.fecha_caducidad}</span> : null}
                       </div>
                     </>
                   )}
@@ -747,20 +1344,24 @@ const Inventario = () => {
                   {formData.tipo_articulo === 'arma' && (
                     <>
                       <div className="form-group">
-                        <label>Marca</label>
-                        <input type="text" name="marca" value={formData.marca} onChange={handleFormChange} placeholder="Ej: Glock" />
+                        <label htmlFor="art-marca-arma">Marca</label>
+                        <input id="art-marca-arma" type="text" name="marca" value={formData.marca} onChange={handleFormChange} placeholder="Ej: Glock" required />
+                        {articuloErrors.marca ? <span className="field-error">{articuloErrors.marca}</span> : null}
                       </div>
                       <div className="form-group">
-                        <label>Modelo</label>
-                        <input type="text" name="modelo" value={formData.modelo} onChange={handleFormChange} placeholder="Ej: G19" />
+                        <label htmlFor="art-modelo-arma">Modelo</label>
+                        <input id="art-modelo-arma" type="text" name="modelo" value={formData.modelo} onChange={handleFormChange} placeholder="Ej: G19" required />
+                        {articuloErrors.modelo ? <span className="field-error">{articuloErrors.modelo}</span> : null}
                       </div>
                       <div className="form-group">
-                        <label>Número de Serie</label>
-                        <input type="text" name="numero_serie" value={formData.numero_serie} onChange={handleFormChange} placeholder="Ej: ABC123" />
+                        <label htmlFor="art-serie-arma">Número de Serie</label>
+                        <input id="art-serie-arma" type="text" name="numero_serie" value={formData.numero_serie} onChange={handleFormChange} placeholder="Ej: ABC123" required />
+                        {articuloErrors.numero_serie ? <span className="field-error">{articuloErrors.numero_serie}</span> : null}
                       </div>
                       <div className="form-group">
-                        <label>Calibre</label>
-                        <input type="text" name="calibre" value={formData.calibre} onChange={handleFormChange} placeholder="Ej: 9mm" />
+                        <label htmlFor="art-calibre">Calibre</label>
+                        <input id="art-calibre" type="text" name="calibre" value={formData.calibre} onChange={handleFormChange} placeholder="Ej: 9mm" required />
+                        {articuloErrors.calibre ? <span className="field-error">{articuloErrors.calibre}</span> : null}
                       </div>
                     </>
                   )}
@@ -768,37 +1369,45 @@ const Inventario = () => {
                   {formData.tipo_articulo === 'radio' && (
                     <>
                       <div className="form-group">
-                        <label>Código Pantalla</label>
-                        <input type="text" name="codigo_pantalla" value={formData.codigo_pantalla} onChange={handleFormChange} placeholder="Ej: P-001" />
+                        <label htmlFor="art-cod-pantalla">Código Pantalla</label>
+                        <input id="art-cod-pantalla" type="text" name="codigo_pantalla" value={formData.codigo_pantalla} onChange={handleFormChange} placeholder="Ej: P-001" required autoComplete="off" data-lpignore="true" data-1p-ignore="true" />
+                        {articuloErrors.codigo_pantalla ? <span className="field-error">{articuloErrors.codigo_pantalla}</span> : null}
                       </div>
                       <div className="form-group">
-                        <label>Código Radio</label>
-                        <input type="text" name="codigo_radio" value={formData.codigo_radio} onChange={handleFormChange} placeholder="Ej: R-001" />
+                        <label htmlFor="art-cod-radio">Número de Serie</label>
+                        <input id="art-cod-radio" type="text" name="codigo_radio" value={formData.codigo_radio} onChange={handleFormChange} placeholder="Ej: R-001" required autoComplete="off" data-lpignore="true" data-1p-ignore="true" />
+                        {articuloErrors.codigo_radio ? <span className="field-error">{articuloErrors.codigo_radio}</span> : null}
                       </div>
                       <div className="form-group">
-                        <label>Versión</label>
-                        <input type="text" name="version" value={formData.version} onChange={handleFormChange} placeholder="Ej: 2.1" />
+                        <label htmlFor="art-version">Versión</label>
+                        <input id="art-version" type="text" name="version" value={formData.version} onChange={handleFormChange} placeholder="Ej: 2.1" required autoComplete="off" data-lpignore="true" data-1p-ignore="true" />
+                        {articuloErrors.version ? <span className="field-error">{articuloErrors.version}</span> : null}
                       </div>
                       <div className="form-group">
-                        <label>Modelo</label>
-                        <input type="text" name="modelo" value={formData.modelo} onChange={handleFormChange} placeholder="Ej: Motorola APX" />
+                        <label htmlFor="art-marca-radio">Marca</label>
+                        <input id="art-marca-radio" type="text" name="marca" value={formData.marca} onChange={handleFormChange} placeholder="Ej: Motorola" required autoComplete="off" data-lpignore="true" data-1p-ignore="true" />
+                        {articuloErrors.marca ? <span className="field-error">{articuloErrors.marca}</span> : null}
                       </div>
                       <div className="form-group">
-                        <label>Marca</label>
-                        <input type="text" name="marca" value={formData.marca} onChange={handleFormChange} placeholder="Ej: Motorola" />
+                        <label htmlFor="art-modelo-radio">Modelo</label>
+                        <input id="art-modelo-radio" type="text" name="modelo" value={formData.modelo} onChange={handleFormChange} placeholder="Ej: Motorola APX" required autoComplete="off" data-lpignore="true" data-1p-ignore="true" />
+                        {articuloErrors.modelo ? <span className="field-error">{articuloErrors.modelo}</span> : null}
                       </div>
                     </>
                   )}
 
                   <div className="form-group">
-                    <label>Ubicación *</label>
-                    <input type="text" name="ubicacion_nombre" value={formData.ubicacion_nombre} onChange={handleFormChange} placeholder="Ej: Bodega principal" required />
+                    <label htmlFor="art-ubicacion">Ubicación</label>
+                    <input id="art-ubicacion" type="text" name="ubicacion_nombre" value={formData.ubicacion_nombre} onChange={handleFormChange} placeholder="Ej: Bodega principal" required />
+                    {articuloErrors.ubicacion_nombre ? <span className="field-error">{articuloErrors.ubicacion_nombre}</span> : null}
                   </div>
                 </div>
               </div>
               <div className="modal-buttons">
-                <button className="btn btn-secondary" type="button" onClick={() => setShowArticuloModal(false)}>Cancelar</button>
-                <button className="btn btn-primary" type="submit">Crear Artículo</button>
+                <button className="btn btn-primary" type="submit" disabled={isSavingArticulo}>
+                  {isSavingArticulo ? <><span className="spinner spinner--sm" />Guardando…</> : 'Crear Artículo'}
+                </button>
+                <button className="btn btn-modal-clear" type="button" onClick={() => setShowArticuloModal(false)} disabled={isSavingArticulo}>Cancelar</button>
               </div>
             </form>
           </div>
@@ -825,10 +1434,10 @@ const Inventario = () => {
                   </div>
                   {movimientoForm.items.map((item, index) => {
                     const selectedArticulo = catalogArticulos.find(a => String(a.id) === String(item.articulo_id));
-                    const isEquipo = selectedArticulo && selectedArticulo.tipo_articulo === 'equipo';
-                    const disableCantidad = selectedArticulo && !isEquipo;
+                    const isStockArticulo = selectedArticulo && isStockTipo(selectedArticulo.tipo_articulo);
+                    const disableCantidad = selectedArticulo && !isStockArticulo;
                     const hasSize = Boolean(selectedArticulo?.talla);
-                    const maxCantidad = isEquipo && selectedArticulo?.cantidad ? selectedArticulo.cantidad : 1;
+                    const maxCantidad = isStockArticulo && selectedArticulo?.cantidad ? selectedArticulo.cantidad : 1;
                     const searchTerm = itemSearchTerms[index] || '';
                     const isOpen = itemDropdownOpen[index] || false;
                     const filteredList = filterArticulos(searchTerm);
@@ -877,9 +1486,11 @@ const Inventario = () => {
                                 filteredList.map(a => (
                                   <li key={a.id} onMouseDown={() => selectArticuloForItem(index, a)}>
                                     <span className="dropdown-name">{a.nombre_articulo || 'Artículo'}</span>
-                                    {a.numero_serie && <span className="dropdown-serie">{a.numero_serie}</span>}
+                                    {(a.tipo_articulo === 'radio' ? a.codigo_radio : a.numero_serie) && (
+                                      <span className="dropdown-serie">{a.tipo_articulo === 'radio' ? a.codigo_radio : a.numero_serie}</span>
+                                    )}
                                     {a.talla && <span className="dropdown-talla">Talla: {a.talla}</span>}
-                                    {a.tipo_articulo === 'equipo' && a.cantidad && <span className="dropdown-qty">x{a.cantidad}</span>}
+                                    {isStockTipo(a.tipo_articulo) && a.cantidad && <span className="dropdown-qty">x{a.cantidad}</span>}
                                     {a.ubicacion_nombre && <span className="dropdown-ubi">{a.ubicacion_nombre}</span>}
                                   </li>
                                 ))
@@ -897,7 +1508,7 @@ const Inventario = () => {
                             value={item.cantidad}
                             disabled={disableCantidad}
                             onChange={(e) => {
-                              const val = parseInt(e.target.value, 10) || 1;
+                              const val = Number.parseInt(e.target.value, 10) || 1;
                               handleMovimientoItemChange(index, 'cantidad', Math.min(val, maxCantidad));
                             }}
                             placeholder="Cant."
@@ -926,24 +1537,28 @@ const Inventario = () => {
                       </div>
                     );
                   })}
+                  {movimientoErrors.items ? <span className="field-error">{movimientoErrors.items}</span> : null}
                 </div>
 
                 {/* Date */}
                 <div className="form-group">
-                  <label>Fecha *</label>
+                  <label htmlFor="mov-fecha">Fecha</label>
                   <input
+                    id="mov-fecha"
                     type="date"
                     name="fecha_movimiento"
                     value={movimientoForm.fecha_movimiento}
                     onChange={handleMovimientoFormChange}
                     required
                   />
+                  {movimientoErrors.fecha_movimiento ? <span className="field-error">{movimientoErrors.fecha_movimiento}</span> : null}
                 </div>
 
                 {/* Destination */}
                 <div className="form-group">
-                  <label>Ubicación Destino *</label>
+                  <label htmlFor="mov-destino">Ubicación Destino</label>
                   <input
+                    id="mov-destino"
                     type="text"
                     name="ubicacion_destino_nombre"
                     value={movimientoForm.ubicacion_destino_nombre}
@@ -951,87 +1566,16 @@ const Inventario = () => {
                     placeholder="Ej: Puesto Norte"
                     required
                   />
+                  {movimientoErrors.ubicacion_destino_nombre ? <span className="field-error">{movimientoErrors.ubicacion_destino_nombre}</span> : null}
                 </div>
               </div>
               <div className="modal-buttons">
-                <button className="btn btn-secondary" type="button" onClick={() => setShowMovimientoModal(false)}>Cancelar</button>
-                <button className="btn btn-primary" type="submit">Guardar Movimiento</button>
+                <button className="btn btn-primary" type="submit" disabled={isSavingMovimiento}>
+                  {isSavingMovimiento ? <><span className="spinner spinner--sm" />Guardando…</> : 'Guardar Movimiento'}
+                </button>
+                <button className="btn btn-modal-clear" type="button" onClick={() => setShowMovimientoModal(false)} disabled={isSavingMovimiento}>Cancelar</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════════ */}
-      {/*  MODAL: DETALLE MOVIMIENTO                   */}
-      {/* ════════════════════════════════════════════ */}
-      {showMovimientoDetalleModal && (
-        <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowMovimientoDetalleModal(false))}>
-          <div className="modal modal-detalle">
-            <div className="modal-header">
-              <h3>Detalle — Movimiento #{selectedMovimiento?.id}</h3>
-              <button className="modal-close" onClick={() => setShowMovimientoDetalleModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              {/* Movement info summary */}
-              {selectedMovimiento && (
-                <div className="detalle-info">
-                  <div className="detalle-info-item">
-                    <span className="detalle-label">Fecha</span>
-                    <span className="detalle-value">{formatDate(selectedMovimiento.fecha_movimiento)}</span>
-                  </div>
-                  <div className="detalle-info-item">
-                    <span className="detalle-label">Origen</span>
-                    <span className="detalle-value">{selectedMovimiento.ubicacion_origen || '-'}</span>
-                  </div>
-                  <div className="detalle-info-item">
-                    <span className="detalle-label">Destino</span>
-                    <span className="detalle-value">{selectedMovimiento.ubicacion_destino || '-'}</span>
-                  </div>
-                  <div className="detalle-info-item">
-                    <span className="detalle-label">Registrado por</span>
-                    <span className="detalle-value">{selectedMovimiento.usuario || '-'}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Items table */}
-              <div className="table-responsive">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Artículo</th>
-                      <th>Tipo</th>
-                      <th>Serie</th>
-                      <th>Cantidad</th>
-                      <th>Origen</th>
-                      <th>Destino</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {movimientoDetalles.length > 0 ? (
-                      movimientoDetalles.map((detalle, idx) => (
-                        <tr key={detalle.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
-                          <td className="cell-articulo">
-                            {detalle.nombre_articulo || detalle.numero_serie || 'Artículo'}
-                            {detalle.activo === false && <span className="deleted-badge">Eliminado</span>}
-                          </td>
-                          <td><span className={`tipo-badge tipo-${detalle.tipo_articulo}`}>{getTipoLabel(detalle.tipo_articulo)}</span></td>
-                          <td className="cell-serie">{detalle.numero_serie || '-'}</td>
-                          <td className="cell-cantidad">{detalle.cantidad || 1}</td>
-                          <td>{detalle.ubicacion_origen || '-'}</td>
-                          <td>{detalle.ubicacion_destino || '-'}</td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="6" className="text-center">Sin detalles</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -1042,15 +1586,18 @@ const Inventario = () => {
       {showExportModal && (
         <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowExportModal(false))}>
           <div className="modal modal-export" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Exportar inventario</h3>
+            <div className="modal-header export-modal-header">
+              <div className="export-title-wrap">
+                <h3>Generar Reporte de Inventario</h3>
+              </div>
               <button className="modal-close" onClick={() => setShowExportModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              <div className="form-grid">
+              <div className="export-form-grid">
                 <div className="form-group">
-                  <label>Tipo</label>
+                  <label htmlFor="export-tipo">Tipo</label>
                   <select
+                    id="export-tipo"
                     value={exportFilters.tipo}
                     onChange={(e) => setExportFilters(prev => ({ ...prev, tipo: e.target.value }))}
                   >
@@ -1060,8 +1607,9 @@ const Inventario = () => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Ubicación</label>
+                  <label htmlFor="export-ubicacion">Ubicación</label>
                   <select
+                    id="export-ubicacion"
                     value={exportFilters.ubicacion_id}
                     onChange={(e) => setExportFilters(prev => ({ ...prev, ubicacion_id: e.target.value }))}
                   >
@@ -1072,8 +1620,9 @@ const Inventario = () => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Estado</label>
+                  <label htmlFor="export-estado">Estado</label>
                   <select
+                    id="export-estado"
                     value={exportFilters.estado}
                     onChange={(e) => setExportFilters(prev => ({ ...prev, estado: e.target.value }))}
                   >
@@ -1084,16 +1633,75 @@ const Inventario = () => {
                 </div>
               </div>
             </div>
-            <div className="modal-buttons">
-              <button className="btn btn-success" onClick={handleExport}>Descargar reporte</button>
-              <button className="btn btn-secondary" onClick={() => setShowExportModal(false)}>Cancelar</button>
+            <div className="modal-buttons export-modal-actions">
+              <button className="btn btn-primary" onClick={handleExport} disabled={isExportingArticulos}>
+                {isExportingArticulos ? <><span className="spinner spinner--sm" />Generando…</> : 'Exportar reporte'}
+              </button>
+              <button className="btn btn-modal-clear" onClick={() => setShowExportModal(false)} disabled={isExportingArticulos}>Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
       {/* ════════════════════════════════════════════ */}
-      {/*  MODAL: ELIMINAR CANTIDAD (equipos)          */}
+      {/*  MODAL: EXPORTAR MOVIMIENTOS                */}
+      {/* ════════════════════════════════════════════ */}
+      {showMovimientosExportModal && (
+        <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowMovimientosExportModal(false))}>
+          <div className="modal modal-export" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header export-modal-header">
+              <div className="export-title-wrap">
+                <h3>Generar Reporte de Movimientos</h3>
+              </div>
+              <button className="modal-close" onClick={() => setShowMovimientosExportModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="export-form-grid">
+                <div className="form-group">
+                  <label htmlFor="mov-export-destino">Destino</label>
+                  <select
+                    id="mov-export-destino"
+                    value={movimientosExportFilters.destino_id}
+                    onChange={(e) => setMovimientosExportFilters(prev => ({ ...prev, destino_id: e.target.value }))}
+                  >
+                    <option value="">Todos los destinos</option>
+                    {ubicaciones.map(ub => (
+                      <option key={ub.id} value={ub.id}>{ub.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="mov-export-from">Desde</label>
+                  <input
+                    id="mov-export-from"
+                    type="date"
+                    value={movimientosExportFilters.from}
+                    onChange={(e) => setMovimientosExportFilters(prev => ({ ...prev, from: e.target.value }))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="mov-export-to">Hasta</label>
+                  <input
+                    id="mov-export-to"
+                    type="date"
+                    value={movimientosExportFilters.to}
+                    onChange={(e) => setMovimientosExportFilters(prev => ({ ...prev, to: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="modal-buttons export-modal-actions">
+              <button className="btn btn-primary" onClick={handleMovimientosExport} disabled={isExportingMovimientos}>
+                {isExportingMovimientos ? <><span className="spinner spinner--sm" />Generando…</> : 'Exportar reporte'}
+              </button>
+              <button className="btn btn-modal-clear" onClick={() => setShowMovimientosExportModal(false)} disabled={isExportingMovimientos}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════ */}
+      {/*  MODAL: ELIMINAR CANTIDAD (stock)            */}
       {/* ════════════════════════════════════════════ */}
       {showDeleteModal && deleteTarget && (
         <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowDeleteModal(false))}>

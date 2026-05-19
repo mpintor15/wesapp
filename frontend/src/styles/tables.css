@@ -1,0 +1,445 @@
+/* Shared table shell used by Inventario & Cuentas */
+
+.app-table-shell {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+  background: var(--color-surface);
+}
+
+.app-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface);
+  table-layout: auto;
+  font-size: 0.86em !important;
+}
+
+.app-table thead {
+  background: linear-gradient(180deg, #f7f8fc 0%, #eef0f7 100%) !important;
+  border-bottom: 2px solid var(--color-border) !important;
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 1 !important;
+}
+
+.app-table th {
+  padding: 10px 8px !important;
+  text-align: center !important;
+  font-weight: 700 !important;
+  color: #4a5568 !important;
+  font-size: 0.76em !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.08em;
+  white-space: normal !important;
+  line-height: 1.25 !important;
+  border-right: 1px solid #dbe2ea !important;
+}
+
+.app-table td {
+  padding: 12px 8px !important;
+  border-bottom: 1px solid var(--color-border-light) !important;
+  color: #333 !important;
+  font-size: 0.86em !important;
+  vertical-align: middle !important;
+  white-space: nowrap !important;
+  text-align: left !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  border-right: 1px solid #edf2f7 !important;
+}
+
+.app-table th:last-child,
+.app-table td:last-child {
+  border-right: none !important;
+}
+
+.app-table tbody tr:hover { background: #fafbff !important; }
+.app-table tbody tr:last-child td { border-bottom: none !important; }
+.app-table tbody tr.row-even { background-color: #ffffff !important; }
+.app-table tbody tr.row-odd { background-color: #fafbfd !important; }
+
+.app-table .empty-row td {
+  text-align: center !important;
+  padding: 40px !important;
+  color: var(--color-text-muted) !important;
+  font-size: 0.9rem !important;
+}
+
+/* Shared alignment helpers */
+.app-table td.app-cell-qty {
+  text-align: center !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-table td.app-cell-date {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap !important;
+}
+
+.app-table td.app-cell-money,
+.app-table td.col-money,
+.app-table th.col-money {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap !important;
+}
+
+.app-col-actions {
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+
+.app-table td.app-col-actions {
+  padding: 12px 4px !important;
+  overflow: hidden !important;
+  text-overflow: clip !important;
+}
+
+.app-col-actions--single  { width: 42px !important; min-width: 42px !important; max-width: 42px !important; }
+.app-col-actions--double  { width: 76px !important; min-width: 76px !important; max-width: 76px !important; }
+.app-col-actions--text    { width: 94px !important; min-width: 94px !important; max-width: 94px !important; }
+
+.app-table-actions {
+  display: inline-flex !important;
+  gap: 4px !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.app-icon-btn {
+  width: 29px !important;
+  height: 29px !important;
+  border: none !important;
+  border-radius: 7px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.app-icon-btn:hover {
+  transform: scale(1.1) !important;
+  box-shadow: var(--shadow-md) !important;
+}
+
+.app-icon-btn svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* ── Shared sort-button (th-sort-*) ────────────────────── */
+.th-sort-btn {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0;
+  width: 100%;
+}
+
+.th-sort-indicator {
+  opacity: 0.35;
+  font-size: 0.9em;
+  line-height: 1;
+}
+
+.th-sort-indicator.active {
+  opacity: 1;
+  color: var(--color-primary);
+}
+
+/* ── Shared filter bar (ff-*) ───────────────────────────── */
+.ff-filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.ff-filter-card {
+  width: 100%;
+  padding: 14px 18px;
+  background: #ffffff;
+  border: 1px solid #e0e7f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 3px 8px rgba(15, 23, 42, 0.05);
+}
+
+.ff-filter-actions-card {
+  width: auto;
+  border: 1px solid #e0e7f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 10px;
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  justify-self: end;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 3px 8px rgba(15, 23, 42, 0.05);
+}
+
+.ff-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Search */
+.ff-search {
+  position: relative;
+  width: 340px;
+  flex-shrink: 0;
+}
+
+.ff-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: #aab8c8;
+  pointer-events: none;
+}
+
+.ff-search input {
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px 7px 30px;
+  border: 1.5px solid #dde4ef;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  background: #f7f9fc;
+  color: var(--color-text);
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.ff-search input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+  background: #fff;
+}
+
+.ff-search input::placeholder { color: #aab8c8; }
+
+/* Date column */
+.ff-dates {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  flex-shrink: 0;
+  align-items: flex-end;
+}
+
+/* Vertical date field: label above input */
+.ff-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* Horizontal date field: label inline with input */
+.ff-date-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ff-date-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9aa8ba;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.ff-date-row input[type="date"],
+.ff-date-field input[type="date"] {
+  width: 140px;
+  min-height: 40px;
+  padding: 7px 9px;
+  border: 1.5px solid #dde4ef;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  background: #f7f9fc;
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ff-date-row input[type="date"]:focus,
+.ff-date-field input[type="date"]:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+/* State / select field */
+.ff-state {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
+.ff-state-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9aa8ba;
+  line-height: 1;
+  min-height: 14px;
+}
+
+.ff-state select {
+  min-height: 40px;
+  padding: 7px 9px;
+  border: 1.5px solid #dde4ef;
+  border-radius: 9px;
+  font-size: 0.875rem;
+  font-family: inherit;
+  background: #f7f9fc;
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ff-state select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+/* Pill toggles */
+.ff-pills {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  align-self: flex-end;
+  padding-bottom: 1px;
+}
+
+.ff-pill {
+  min-height: 40px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1.5px solid #dde4ef;
+  background: #f7f9fc;
+  color: #5c6e80;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ff-pill:hover { border-color: #c0ccd8; background: #eef2f8; color: #334155; transform: translateY(-1px); }
+.ff-pill.active { background: var(--color-primary); border-color: var(--color-primary); color: white; box-shadow: 0 2px 8px rgba(232,32,26,0.22); }
+.ff-pill.active:hover { background: var(--color-primary-dark); border-color: var(--color-primary-dark); transform: translateY(-1px); }
+.ff-pill:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--color-primary-light); }
+
+/* Actions */
+.ff-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: fit-content;
+  justify-content: center;
+  height: 100%;
+}
+
+.ff-actions .btn,
+.ff-actions .ff-clear-btn {
+  width: 150px;
+  max-width: 150px;
+  min-height: 38px;
+  font-size: 0.875rem;
+  padding: 8px 12px;
+  border-radius: 9px;
+}
+
+.ff-clear-btn {
+  background: #f7f9fc;
+  border: 1.5px solid #dde4ef;
+  color: #4a5568;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+  font-family: inherit;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.ff-clear-btn:hover { color: #1e293b; background: #eef2f8; border-color: #c0ccd8; }
+.ff-clear-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--color-primary-light); }
+
+/* ── Shared pagination ───────────────────────────────────── */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 0 6px;
+}
+
+.pagination .btn {
+  background: var(--color-primary) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  font-weight: 600;
+}
+
+.pagination .btn:hover:not(:disabled) {
+  background: var(--color-primary-dark) !important;
+}
+
+.pagination .btn:disabled {
+  background: #e2e8f0 !important;
+  color: #64748b !important;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  font-size: 0.84em;
+  color: #64748b;
+  min-width: 110px;
+  text-align: center;
+}
+
+.pagination-count {
+  font-weight: 700;
+  color: #1e293b;
+}

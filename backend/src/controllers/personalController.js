@@ -15,6 +15,42 @@
  *                              (con los mismos filtros) en formato .xlsx.
  */
 const db = require('../config/database');
+const { createHttpError, handleControllerError } = require('../utils/http');
+const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
+const ESTADOS_COLABORADOR = new Set(['activo', 'inactivo']);
+
+const buildColaboradoresQuery = ({ search, estado, cargo }) => {
+  let query = 'SELECT * FROM colaboradores';
+  const params = [];
+  const conditions = [];
+
+  if (search) {
+    params.push(`%${search}%`);
+    conditions.push(`(
+      nombres_completos ILIKE $${params.length}
+      OR cedula ILIKE $${params.length}
+      OR celular ILIKE $${params.length}
+      OR numero_cuenta ILIKE $${params.length}
+    )`);
+  }
+
+  if (estado) {
+    params.push(estado);
+    conditions.push(`estado = $${params.length}`);
+  }
+
+  if (cargo) {
+    params.push(cargo);
+    conditions.push(`cargo ILIKE $${params.length}`);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  query += ' ORDER BY nombres_completos ASC';
+  return { query, params };
+};
 
 // ============================================
 // COLABORADORES
@@ -23,30 +59,15 @@ const db = require('../config/database');
 const getColaboradores = async (req, res) => {
   try {
     const { search, estado, cargo } = req.query;
-    let query = 'SELECT * FROM colaboradores';
-    const params = [];
-    const conditions = [];
-
-    if (search) {
-      params.push(`%${search}%`);
-      conditions.push(`(nombres_completos ILIKE $${params.length} OR cedula ILIKE $${params.length})`);
+    const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : '';
+    if (estado && !ESTADOS_COLABORADOR.has(estadoNormalizado)) {
+      throw createHttpError(400, 'El filtro estado debe ser activo o inactivo');
     }
-
-    if (estado) {
-      params.push(estado);
-      conditions.push(`estado = $${params.length}`);
-    }
-
-    if (cargo) {
-      params.push(cargo);
-      conditions.push(`cargo ILIKE $${params.length}`);
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    query += ' ORDER BY nombres_completos ASC';
+    const { query, params } = buildColaboradoresQuery({
+      search,
+      estado: estado ? estadoNormalizado : undefined,
+      cargo
+    });
 
     const result = await db.query(query, params);
     res.json({ success: true, data: result.rows });
@@ -69,12 +90,26 @@ const createColaborador = async (req, res) => {
       sueldo,
       estado
     } = req.body;
+    const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : 'activo';
 
     if (!nombres_completos || !cedula || !fecha_nacimiento || !cargo) {
       return res.status(400).json({
         success: false,
         message: 'Campos requeridos: nombres_completos, cedula, fecha_nacimiento, cargo'
       });
+    }
+
+    if (!ESTADOS_COLABORADOR.has(estadoNormalizado)) {
+      throw createHttpError(400, 'El estado debe ser activo o inactivo');
+    }
+
+    const sueldoNormalizado =
+      sueldo === undefined || sueldo === null || sueldo === ''
+        ? null
+        : Number(sueldo);
+
+    if (sueldoNormalizado !== null && !Number.isFinite(sueldoNormalizado)) {
+      throw createHttpError(400, 'El sueldo no es válido');
     }
 
     const result = await db.query(
@@ -98,8 +133,8 @@ const createColaborador = async (req, res) => {
         celular || null,
         banco || null,
         numero_cuenta || null,
-        sueldo ? parseFloat(sueldo) : null,
-        estado || 'activo'
+        sueldoNormalizado,
+        estadoNormalizado
       ]
     );
 
@@ -115,14 +150,17 @@ const createColaborador = async (req, res) => {
         message: 'La cédula ya está registrada'
       });
     }
-    console.error('Error al crear colaborador:', error);
-    res.status(500).json({ success: false, message: 'Error en el servidor' });
+    return handleControllerError(res, error, 'Error al crear colaborador:');
   }
 };
 
 const updateColaborador = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw createHttpError(400, 'El id del colaborador es inválido');
+    }
+
     const allowedFields = [
       'nombres_completos',
       'cedula',
@@ -142,10 +180,19 @@ const updateColaborador = async (req, res) => {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         let value = req.body[field];
         if (field === 'sueldo' && value !== null && value !== undefined && value !== '') {
-          value = parseFloat(value);
+          value = Number(value);
+          if (!Number.isFinite(value)) {
+            throw createHttpError(400, 'El sueldo no es válido');
+          }
         }
         if (typeof value === 'string') {
           value = value.trim();
+        }
+        if (field === 'estado' && value !== null && value !== undefined && value !== '') {
+          value = String(value).toLowerCase();
+          if (!ESTADOS_COLABORADOR.has(value)) {
+            throw createHttpError(400, 'El estado debe ser activo o inactivo');
+          }
         }
         updates.push(`${field} = $${values.length + 1}`);
         values.push(value);
@@ -184,14 +231,17 @@ const updateColaborador = async (req, res) => {
         message: 'La cédula ya está registrada'
       });
     }
-    console.error('Error al actualizar colaborador:', error);
-    res.status(500).json({ success: false, message: 'Error en el servidor' });
+    return handleControllerError(res, error, 'Error al actualizar colaborador:');
   }
 };
 
 const deleteColaborador = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw createHttpError(400, 'El id del colaborador es inválido');
+    }
+
     const result = await db.query('DELETE FROM colaboradores WHERE id = $1 RETURNING id', [id]);
 
     if (result.rowCount === 0) {
@@ -200,90 +250,54 @@ const deleteColaborador = async (req, res) => {
 
     res.json({ success: true, message: 'Colaborador eliminado exitosamente' });
   } catch (error) {
-    console.error('Error al eliminar colaborador:', error);
-    res.status(500).json({ success: false, message: 'Error en el servidor' });
+    return handleControllerError(res, error, 'Error al eliminar colaborador:');
   }
 };
 
 const exportColaboradoresExcel = async (req, res) => {
   try {
-    const ExcelJS = require('exceljs');
     const { search, estado, cargo } = req.query;
-    let query = 'SELECT * FROM colaboradores';
-    const params = [];
-    const conditions = [];
-
-    if (search) {
-      params.push(`%${search}%`);
-      conditions.push(`(nombres_completos ILIKE $${params.length} OR cedula ILIKE $${params.length})`);
+    const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : '';
+    if (estado && !ESTADOS_COLABORADOR.has(estadoNormalizado)) {
+      throw createHttpError(400, 'El filtro estado debe ser activo o inactivo');
     }
-
-    if (estado) {
-      params.push(estado);
-      conditions.push(`estado = $${params.length}`);
-    }
-
-    if (cargo) {
-      params.push(cargo);
-      conditions.push(`cargo ILIKE $${params.length}`);
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    query += ' ORDER BY nombres_completos ASC';
-
-    const result = await db.query(query, params);
-    const data = result.rows;
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Colaboradores');
-
-    worksheet.columns = [
-      { header: 'Nombres', key: 'nombres_completos', width: 30 },
-      { header: 'Cédula', key: 'cedula', width: 15 },
-      { header: 'Fecha Nacimiento', key: 'fecha_nacimiento', width: 15 },
-      { header: 'Cargo', key: 'cargo', width: 20 },
-      { header: 'Celular', key: 'celular', width: 15 },
-      { header: 'Banco', key: 'banco', width: 20 },
-      { header: 'Cuenta', key: 'numero_cuenta', width: 20 },
-      { header: 'Sueldo', key: 'sueldo', width: 12 },
-      { header: 'Estado', key: 'estado', width: 12 }
-    ];
-
-    worksheet.getRow(1).font = { bold: true };
-    worksheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FF1E3A8A' }
-    };
-    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-
-    data.forEach(row => {
-      worksheet.addRow({
-        nombres_completos: row.nombres_completos,
-        cedula: row.cedula,
-        fecha_nacimiento: row.fecha_nacimiento ? new Date(row.fecha_nacimiento).toLocaleDateString('es-EC') : '',
-        cargo: row.cargo,
-        celular: row.celular || '',
-        banco: row.banco || '',
-        numero_cuenta: row.numero_cuenta || '',
-        sueldo: row.sueldo ? parseFloat(row.sueldo) : '',
-        estado: row.estado
-      });
+    const { query, params } = buildColaboradoresQuery({
+      search,
+      estado: estado ? estadoNormalizado : undefined,
+      cargo,
     });
 
-    worksheet.getColumn('H').numFmt = '$#,##0.00';
+    const result = await db.query(query, params);
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=colaboradores.xlsx');
+    const { workbook, worksheet } = createWorkbook('Colaboradores', [
+      { header: 'Nombres',          key: 'nombres_completos', width: 30 },
+      { header: 'Cédula',           key: 'cedula',            width: 15 },
+      { header: 'Fecha Nacimiento', key: 'fecha_nacimiento',  width: 16 },
+      { header: 'Cargo',            key: 'cargo',             width: 20 },
+      { header: 'Celular',          key: 'celular',           width: 15 },
+      { header: 'Banco',            key: 'banco',             width: 20 },
+      { header: 'Cuenta',           key: 'numero_cuenta',     width: 20 },
+      { header: 'Sueldo',           key: 'sueldo',            width: 14, numFmt: '$#,##0.00' },
+      { header: 'Estado',           key: 'estado',            width: 12 },
+    ]);
 
-    await workbook.xlsx.write(res);
-    res.end();
+    result.rows.forEach((row) => worksheet.addRow({
+      nombres_completos: row.nombres_completos,
+      cedula:            row.cedula,
+      fecha_nacimiento:  row.fecha_nacimiento ? new Date(row.fecha_nacimiento).toLocaleDateString('es-EC') : '',
+      cargo:             row.cargo,
+      celular:           row.celular || '',
+      banco:             row.banco || '',
+      numero_cuenta:     row.numero_cuenta || '',
+      sueldo:            row.sueldo ? Number.parseFloat(row.sueldo) : '',
+      estado:            row.estado,
+    }));
+
+    worksheet.getColumn('sueldo').numFmt = '$#,##0.00';
+    styleDataRows(worksheet);
+    await sendExcel(workbook, res, 'colaboradores.xlsx');
   } catch (error) {
-    console.error('Error al exportar colaboradores:', error);
-    res.status(500).json({ success: false, message: 'Error al exportar Excel' });
+    return handleControllerError(res, error, 'Error al exportar colaboradores:');
   }
 };
 

@@ -12,6 +12,11 @@
  *  - exportExcel(params)         : GET  /personal/colaboradores/excel → descarga .xlsx
  */
 import api from './api';
+import {
+  extractError,
+  getFilenameFromDisposition,
+  saveBlobWithPickerOrDownload
+} from './serviceUtils';
 
 const personalService = {
   getColaboradores: async (params = {}) => {
@@ -24,7 +29,7 @@ const personalService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al obtener colaboradores'
+        message: extractError(error, 'Error al obtener colaboradores')
       };
     }
   },
@@ -40,7 +45,7 @@ const personalService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al crear colaborador'
+        message: extractError(error, 'Error al crear colaborador')
       };
     }
   },
@@ -56,7 +61,7 @@ const personalService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al actualizar colaborador'
+        message: extractError(error, 'Error al actualizar colaborador')
       };
     }
   },
@@ -71,7 +76,7 @@ const personalService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al eliminar colaborador'
+        message: extractError(error, 'Error al eliminar colaborador')
       };
     }
   },
@@ -82,19 +87,16 @@ const personalService = {
         params,
         responseType: 'blob'
       });
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'colaboradores.xlsx');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      return { success: true };
+      const fileName = getFilenameFromDisposition(
+        response.headers?.['content-disposition'],
+        'colaboradores.xlsx'
+      );
+      return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
+        description: 'Excel',
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+      });
     } catch (error) {
-      return { success: false, message: 'Error al exportar Excel' };
+      return { success: false, message: extractError(error, 'Error al exportar Excel') };
     }
   }
 };

@@ -17,7 +17,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
+const path = require('node:path');
 const config = require('./config/config');
 
 // Importar rutas
@@ -33,6 +33,16 @@ const app = express();
 // Middlewares de seguridad
 // ======================
 
+// Redirigir HTTP → HTTPS en producción (Railway pone x-forwarded-proto)
+if (config.nodeEnv === 'production') {
+  app.use((req, res, next) => {
+    if (req.headers['x-forwarded-proto'] !== 'https') {
+      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+    }
+    next();
+  });
+}
+
 // Helmet para seguridad HTTP
 app.use(helmet());
 
@@ -40,10 +50,20 @@ app.use(helmet());
 app.use(cors(config.cors));
 
 // Rate limiting (limitar peticiones por IP)
+// Development: 2000 req/15 min to avoid false positives from hot-reloads and tooling
+// Production : 300 req/15 min per IP
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // máximo 100 requests por windowMs
-  message: 'Demasiadas peticiones desde esta IP, intenta de nuevo más tarde'
+  windowMs: 15 * 60 * 1000,
+  max: config.nodeEnv === 'production' ? 300 : 2000,
+  standardHeaders: true,  // Return rate limit info in RateLimit-* headers
+  legacyHeaders: false,
+  // Always return JSON so the frontend can read the message correctly
+  handler: (req, res) => {
+    res.status(429).json({
+      success: false,
+      message: 'Demasiadas peticiones. Espera unos minutos e intenta de nuevo.',
+    });
+  },
 });
 
 app.use('/api/', limiter);
@@ -52,11 +72,11 @@ app.use('/api/', limiter);
 // Middlewares de parsing
 // ======================
 
-// Parse JSON bodies
-app.use(express.json());
+// Parse JSON bodies (1 MB limit to prevent oversized payloads)
+app.use(express.json({ limit: '1mb' }));
 
 // Parse URL-encoded bodies
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ======================
 // Logger simple (en desarrollo)

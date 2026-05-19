@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 const personalController = require('../controllers/personalController');
 const { verifyToken } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/permissions');
+const { requireActive, requirePermission } = require('../middleware/permissions');
 
-router.use(verifyToken, requirePermission('personal'));
+router.use(verifyToken, requireActive, requirePermission('personal'));
 
 /**
  * @route   GET /api/personal/colaboradores
@@ -34,6 +34,6 @@ router.delete('/colaboradores/:id', personalController.deleteColaborador);
  * @route   GET /api/personal/colaboradores/excel
  * @desc    Exportar colaboradores a Excel
  */
-router.get('/colaboradores/excel', personalController.exportColaboradoresExcel);
+router.get('/colaboradores/excel', requirePermission('exportar'), personalController.exportColaboradoresExcel);
 
 module.exports = router;

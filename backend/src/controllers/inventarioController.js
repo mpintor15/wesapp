@@ -8,7 +8,7 @@
  *
  *  ARTÍCULOS (via vista_inventario_alertas)
  *  - getArticulos     : Lista artículos con filtros de tipo, ubicación, estado y búsqueda.
- *  - createArticulo   : Crea un artículo (equipo, placa_balistica, arma, radio).
+ *  - createArticulo   : Crea un artículo (equipo, placa_balistica, arma, radio, otro).
  *                       Si se proporciona ubicacion_nombre en lugar de ID, crea
  *                       la ubicación automáticamente si no existe.
  *  - updateArticulo   : Actualiza campos permitidos de un artículo existente.
@@ -19,7 +19,6 @@
  *
  *  MOVIMIENTOS (traslados entre ubicaciones)
  *  - getMovimientos        : Lista todos los movimientos con su tipo (entrada/salida/traslado).
- *  - getMovimientoDetalles : Detalle de artículos incluidos en un movimiento.
  *  - createMovimiento      : Registra un traslado dentro de una transacción:
  *                            · Valida origen ≠ destino para cada artículo.
  *                            · Para equipos con cantidad > 1 permite traslado parcial
@@ -36,7 +35,51 @@ const db = require('../config/database');
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
-const ExcelJS = require('exceljs');
+const { createHttpError, isConstraintOrInputError } = require('../utils/http');
+const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
+const ALERTA_ESTADOS = new Set(['vencida', 'proxima_a_vencer', 'vigente']);
+
+const buildInventarioAlertasQuery = ({ tipo, ubicacion_id, estado, search }) => {
+  let query = 'SELECT * FROM vista_inventario_alertas';
+  const params = [];
+  const conditions = [];
+
+  if (tipo) {
+    params.push(tipo);
+    conditions.push(`tipo_articulo = $${params.length}`);
+  }
+
+  if (ubicacion_id) {
+    params.push(ubicacion_id);
+    conditions.push(`ubicacion_id = $${params.length}`);
+  }
+
+  if (estado) {
+    params.push(estado);
+    conditions.push(`estado_caducidad = $${params.length}`);
+  }
+
+  if (search) {
+    params.push(`%${search}%`);
+    conditions.push(`(
+      nombre_articulo ILIKE $${params.length} OR
+      numero_serie ILIKE $${params.length} OR
+      marca ILIKE $${params.length} OR
+      modelo ILIKE $${params.length} OR
+      calibre ILIKE $${params.length} OR
+      codigo_pantalla ILIKE $${params.length} OR
+      codigo_radio ILIKE $${params.length} OR
+      version ILIKE $${params.length}
+    )`);
+  }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  query += ' ORDER BY created_at DESC';
+  return { query, params };
+};
 
 // ============================================
 // UBICACIONES
@@ -68,42 +111,16 @@ const getUbicaciones = async (req, res) => {
 const getArticulos = async (req, res) => {
   try {
     const { tipo, ubicacion_id, estado, search } = req.query;
-
-    let query = 'SELECT * FROM vista_inventario_alertas';
-    const params = [];
-    const conditions = [];
-
-    if (tipo) {
-      params.push(tipo);
-      conditions.push(`tipo_articulo = $${params.length}`);
+    const normalizedEstado = estado ? String(estado).trim().toLowerCase() : '';
+    if (estado && !ALERTA_ESTADOS.has(normalizedEstado)) {
+      throw createHttpError(400, 'El filtro estado no es válido');
     }
-
-    if (ubicacion_id) {
-      params.push(ubicacion_id);
-      conditions.push(`ubicacion_id = $${params.length}`);
-    }
-
-    if (estado) {
-      params.push(estado);
-      conditions.push(`estado_caducidad = $${params.length}`);
-    }
-
-    if (search) {
-      params.push(`%${search}%`);
-      conditions.push(`(
-        nombre_articulo ILIKE $${params.length} OR
-        numero_serie ILIKE $${params.length} OR
-        marca ILIKE $${params.length} OR
-        modelo ILIKE $${params.length} OR
-        calibre ILIKE $${params.length}
-      )`);
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    query += ' ORDER BY created_at DESC';
+    const { query, params } = buildInventarioAlertasQuery({
+      tipo,
+      ubicacion_id,
+      estado: estado ? normalizedEstado : undefined,
+      search
+    });
 
     const result = await db.query(query, params);
 
@@ -126,7 +143,26 @@ const normalizeEmpty = (value) => {
   return value;
 };
 
-const isValidTipo = (tipo) => ['equipo', 'placa_balistica', 'arma', 'radio'].includes(tipo);
+const isValidTipo = (tipo) => ['equipo', 'placa_balistica', 'arma', 'radio', 'otro'].includes(tipo);
+const isStockTipo = (tipo) => tipo === 'equipo' || tipo === 'otro';
+const getArticuloSerie = (articulo) => (
+  articulo?.tipo_articulo === 'radio' ? articulo.codigo_radio : articulo?.numero_serie
+);
+
+const getUniqueArticuloMessage = (error) => {
+  const constraint = error.constraint || '';
+  const detail = error.detail || '';
+  if (constraint.includes('codigo_pantalla') || detail.includes('codigo_pantalla')) {
+    return 'Ya existe un artículo con ese código de pantalla';
+  }
+  if (constraint.includes('codigo_radio') || detail.includes('codigo_radio')) {
+    return 'Ya existe un artículo con ese número de serie';
+  }
+  if (constraint.includes('version') || detail.includes('(version)')) {
+    return 'Ya existe un artículo con esa versión';
+  }
+  return 'Ya existe un artículo con ese número de serie';
+};
 
 const createArticulo = async (req, res) => {
   try {
@@ -152,6 +188,23 @@ const createArticulo = async (req, res) => {
         success: false,
         message: 'Tipo de articulo inválido'
       });
+    }
+
+    if (!nombre_articulo || !String(nombre_articulo).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'El nombre del artículo es requerido'
+      });
+    }
+
+    if (isStockTipo(tipo_articulo)) {
+      const parsedCantidad = Number(cantidad);
+      if (!Number.isInteger(parsedCantidad) || parsedCantidad <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'La cantidad debe ser un entero mayor a 0'
+        });
+      }
     }
 
     let ubicacionId = ubicacion_id;
@@ -200,11 +253,11 @@ const createArticulo = async (req, res) => {
       [
         tipo_articulo,
         normalizeEmpty(nombre_articulo),
-        cantidad ? parseInt(cantidad, 10) : (tipo_articulo !== 'equipo' ? 1 : null),
+        cantidad ? parseInt(cantidad, 10) : (!isStockTipo(tipo_articulo) ? 1 : null),
         normalizeEmpty(talla),
         normalizeEmpty(marca),
         normalizeEmpty(modelo),
-        normalizeEmpty(numero_serie),
+        tipo_articulo === 'radio' ? null : normalizeEmpty(numero_serie),
         normalizeEmpty(calibre),
         normalizeEmpty(fecha_caducidad),
         parseInt(ubicacionId, 10),
@@ -223,7 +276,7 @@ const createArticulo = async (req, res) => {
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe un artículo con ese número de serie'
+        message: getUniqueArticuloMessage(error)
       });
     }
     if (error.code === '23503') {
@@ -317,7 +370,7 @@ const updateArticulo = async (req, res) => {
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe un artículo con ese número de serie'
+        message: getUniqueArticuloMessage(error)
       });
     }
     if (error.code === '23503') {
@@ -357,7 +410,7 @@ const deleteArticulo = async (req, res) => {
 
     const articulo = articuloRes.rows[0];
 
-    if (articulo.tipo_articulo === 'equipo' && articulo.cantidad && articulo.cantidad > 1) {
+    if (isStockTipo(articulo.tipo_articulo) && articulo.cantidad && articulo.cantidad > 1) {
       if (!cantidadParam || cantidadParam <= 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({
@@ -430,22 +483,29 @@ const getMovimientos = async (req, res) => {
         m.fecha_movimiento,
         m.pdf_path,
         u.usuario,
-        COUNT(d.id) AS items,
+        COALESCE(SUM(d.cantidad), 0)::INT AS items,
+        STRING_AGG(
+          DISTINCT COALESCE(NULLIF(a.nombre_articulo, ''), NULLIF(a.numero_serie, ''), 'Artículo')
+          , ', '
+          ORDER BY COALESCE(NULLIF(a.nombre_articulo, ''), NULLIF(a.numero_serie, ''), 'Artículo')
+        ) AS articulos_movidos,
         CASE
           WHEN BOOL_AND(d.ubicacion_origen_id IS NULL) THEN 'entrada'
           WHEN BOOL_AND(d.ubicacion_destino_id IS NULL) THEN 'salida'
           ELSE 'traslado'
         END AS tipo_movimiento,
-        CASE
-          WHEN COUNT(DISTINCT d.ubicacion_origen_id) = 1 THEN MAX(ao.nombre)
-          ELSE NULL
-        END AS ubicacion_origen,
+        STRING_AGG(DISTINCT ao.nombre, ', ' ORDER BY ao.nombre) AS ubicacion_origen,
         CASE
           WHEN COUNT(DISTINCT d.ubicacion_destino_id) = 1 THEN MAX(ad.nombre)
           ELSE NULL
-        END AS ubicacion_destino
+        END AS ubicacion_destino,
+        CASE
+          WHEN COUNT(DISTINCT d.ubicacion_destino_id) = 1 THEN MAX(d.ubicacion_destino_id)
+          ELSE NULL
+        END AS ubicacion_destino_id
       FROM movimientos m
       LEFT JOIN detalle_movimientos d ON d.movimiento_id = m.id
+      LEFT JOIN articulos a ON d.articulo_id = a.id
       LEFT JOIN usuarios u ON m.usuario_id = u.id
       LEFT JOIN ubicaciones ao ON d.ubicacion_origen_id = ao.id
       LEFT JOIN ubicaciones ad ON d.ubicacion_destino_id = ad.id
@@ -466,53 +526,55 @@ const getMovimientos = async (req, res) => {
   }
 };
 
-const getMovimientoDetalles = async (req, res) => {
-  try {
-    const { id } = req.params;
+const buildMovimientosReporteQuery = ({ from, to, destino_id }) => {
+  const params = [];
+  const conditions = [];
 
-    const hasActivoColumn = await db.query(
-      `SELECT 1
-       FROM information_schema.columns
-       WHERE table_name = 'articulos' AND column_name = 'activo'
-       LIMIT 1`
-    );
+  if (from) {
+    params.push(from);
+    conditions.push(`m.fecha_movimiento::date >= $${params.length}::date`);
+  }
 
-    const activoSelect = hasActivoColumn.rowCount > 0 ? 'a.activo' : 'TRUE AS activo';
+  if (to) {
+    params.push(to);
+    conditions.push(`m.fecha_movimiento::date <= $${params.length}::date`);
+  }
 
-    const result = await db.query(
-      `SELECT 
-        d.id,
-        d.cantidad,
-        a.id AS articulo_id,
-        a.tipo_articulo,
-        a.nombre_articulo,
-        a.numero_serie,
-        a.marca,
-        a.modelo,
-        a.calibre,
-        ${activoSelect},
-        ao.nombre AS ubicacion_origen,
-        ad.nombre AS ubicacion_destino
-      FROM detalle_movimientos d
-      JOIN articulos a ON d.articulo_id = a.id
+  if (destino_id) {
+    params.push(destino_id);
+    conditions.push(`d.ubicacion_destino_id = $${params.length}`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  return {
+    params,
+    query: `
+      SELECT
+        m.id,
+        m.fecha_movimiento,
+        u.usuario,
+        COALESCE(SUM(d.cantidad), 0)::INT AS items,
+        STRING_AGG(
+          DISTINCT COALESCE(NULLIF(a.nombre_articulo, ''), NULLIF(a.numero_serie, ''), 'Artículo'),
+          ', '
+          ORDER BY COALESCE(NULLIF(a.nombre_articulo, ''), NULLIF(a.numero_serie, ''), 'Artículo')
+        ) AS articulos_movidos,
+        STRING_AGG(DISTINCT ao.nombre, ', ' ORDER BY ao.nombre) AS ubicacion_origen,
+        CASE
+          WHEN COUNT(DISTINCT d.ubicacion_destino_id) = 1 THEN MAX(ad.nombre)
+          ELSE NULL
+        END AS ubicacion_destino
+      FROM movimientos m
+      LEFT JOIN detalle_movimientos d ON d.movimiento_id = m.id
+      LEFT JOIN articulos a ON d.articulo_id = a.id
+      LEFT JOIN usuarios u ON m.usuario_id = u.id
       LEFT JOIN ubicaciones ao ON d.ubicacion_origen_id = ao.id
       LEFT JOIN ubicaciones ad ON d.ubicacion_destino_id = ad.id
-      WHERE d.movimiento_id = $1
-      ORDER BY d.id ASC`,
-      [id]
-    );
-
-    res.json({
-      success: true,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('Error al obtener detalles del movimiento:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
-  }
+      ${where}
+      GROUP BY m.id, u.usuario
+      ORDER BY m.fecha_movimiento DESC`
+  };
 };
 
 const getMovimientoDataForPdf = async (movimientoId) => {
@@ -525,6 +587,7 @@ const getMovimientoDataForPdf = async (movimientoId) => {
       a.tipo_articulo,
       a.nombre_articulo,
       a.numero_serie,
+      a.codigo_radio,
       a.marca,
       a.modelo,
       a.calibre,
@@ -544,127 +607,101 @@ const getMovimientoDataForPdf = async (movimientoId) => {
   return result.rows;
 };
 
-const determineTipoMovimiento = () => 'traslado';
-
 // ============================================
 // EXPORTAR INVENTARIO (EXCEL)
 // ============================================
 
+const TIPO_LABELS = {
+  equipo: 'Equipo', placa_balistica: 'Placa Balística',
+  arma: 'Arma', radio: 'Radio', otro: 'Otro',
+};
+const ESTADO_LABELS = {
+  vencida: 'Vencida', proxima_a_vencer: 'Próxima a vencer', vigente: 'Vigente',
+};
+
 const exportArticulosExcel = async (req, res) => {
   try {
     const { tipo, ubicacion_id, estado, search } = req.query;
-
-    let query = 'SELECT * FROM vista_inventario_alertas';
-    const params = [];
-    const conditions = [];
-
-    if (tipo) {
-      params.push(tipo);
-      conditions.push(`tipo_articulo = $${params.length}`);
+    const normalizedEstado = estado ? String(estado).trim().toLowerCase() : '';
+    if (estado && !ALERTA_ESTADOS.has(normalizedEstado)) {
+      throw createHttpError(400, 'El filtro estado no es válido');
     }
-
-    if (ubicacion_id) {
-      params.push(ubicacion_id);
-      conditions.push(`ubicacion_id = $${params.length}`);
-    }
-
-    if (estado) {
-      params.push(estado);
-      conditions.push(`estado_caducidad = $${params.length}`);
-    }
-
-    if (search) {
-      params.push(`%${search}%`);
-      conditions.push(`(
-        nombre_articulo ILIKE $${params.length} OR
-        numero_serie ILIKE $${params.length} OR
-        marca ILIKE $${params.length} OR
-        modelo ILIKE $${params.length} OR
-        calibre ILIKE $${params.length}
-      )`);
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    query += ' ORDER BY created_at DESC';
-
-    const result = await db.query(query, params);
-    const data = result.rows;
-
-    const tipoLabel = (tipoValue) => {
-      switch (tipoValue) {
-        case 'equipo': return 'Equipo';
-        case 'placa_balistica': return 'Placa Balística';
-        case 'arma': return 'Arma';
-        case 'radio': return 'Radio';
-        default: return tipoValue || '';
-      }
-    };
-
-    const estadoLabel = (estadoValue) => {
-      switch (estadoValue) {
-        case 'vencida': return 'Vencida';
-        case 'proxima_a_vencer': return 'Próxima a vencer';
-        case 'vigente': return 'Vigente';
-        default: return 'Sin alerta';
-      }
-    };
-
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Inventario');
-
-    worksheet.columns = [
-      { header: 'Tipo', key: 'tipo', width: 16 },
-      { header: 'Artículo', key: 'nombre', width: 28 },
-      { header: 'Serie', key: 'serie', width: 18 },
-      { header: 'Cantidad', key: 'cantidad', width: 10 },
-      { header: 'Talla', key: 'talla', width: 10 },
-      { header: 'Marca', key: 'marca', width: 16 },
-      { header: 'Modelo', key: 'modelo', width: 16 },
-      { header: 'Calibre', key: 'calibre', width: 12 },
-      { header: 'Cód. Pantalla', key: 'codigo_pantalla', width: 16 },
-      { header: 'Cód. Radio', key: 'codigo_radio', width: 16 },
-      { header: 'Versión', key: 'version', width: 14 },
-      { header: 'Caducidad', key: 'caducidad', width: 14 },
-      { header: 'Ubicación', key: 'ubicacion', width: 20 },
-      { header: 'Estado', key: 'estado', width: 16 }
-    ];
-
-    worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    worksheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFFF2519' }
-    };
-
-    data.forEach(row => {
-      worksheet.addRow({
-        tipo: tipoLabel(row.tipo_articulo),
-        nombre: row.nombre_articulo || '',
-        serie: row.numero_serie || '',
-        cantidad: row.cantidad || '',
-        talla: row.talla || '',
-        marca: row.marca || '',
-        modelo: row.modelo || '',
-        calibre: row.calibre || '',
-        codigo_pantalla: row.codigo_pantalla || '',
-        codigo_radio: row.codigo_radio || '',
-        version: row.version || '',
-        caducidad: row.fecha_caducidad ? new Date(row.fecha_caducidad).toLocaleDateString('es-EC') : '',
-        ubicacion: row.ubicacion_nombre || '',
-        estado: estadoLabel(row.estado_caducidad)
-      });
+    const { query, params } = buildInventarioAlertasQuery({
+      tipo, ubicacion_id, search,
+      estado: estado ? normalizedEstado : undefined,
     });
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=inventario.xlsx');
-    await workbook.xlsx.write(res);
-    res.end();
+    const result = await db.query(query, params);
+
+    const { workbook, worksheet } = createWorkbook('Inventario', [
+      { header: 'Tipo',          key: 'tipo',            width: 16 },
+      { header: 'Artículo',      key: 'nombre',          width: 28 },
+      { header: 'Serie',         key: 'serie',           width: 18 },
+      { header: 'Cantidad',      key: 'cantidad',        width: 10 },
+      { header: 'Talla',         key: 'talla',           width: 10 },
+      { header: 'Marca',         key: 'marca',           width: 16 },
+      { header: 'Modelo',        key: 'modelo',          width: 16 },
+      { header: 'Calibre',       key: 'calibre',         width: 12 },
+      { header: 'Cód. Pantalla', key: 'codigo_pantalla', width: 16 },
+      { header: 'Versión',       key: 'version',         width: 14 },
+      { header: 'Caducidad',     key: 'caducidad',       width: 14 },
+      { header: 'Ubicación',     key: 'ubicacion',       width: 20 },
+      { header: 'Estado',        key: 'estado',          width: 16 },
+    ]);
+
+    result.rows.forEach((row) => worksheet.addRow({
+      tipo:            TIPO_LABELS[row.tipo_articulo] ?? row.tipo_articulo ?? '',
+      nombre:          row.nombre_articulo || '',
+      serie:           getArticuloSerie(row) || '',
+      cantidad:        row.cantidad || '',
+      talla:           row.talla || '',
+      marca:           row.marca || '',
+      modelo:          row.modelo || '',
+      calibre:         row.calibre || '',
+      codigo_pantalla: row.codigo_pantalla || '',
+      version:         row.version || '',
+      caducidad:       row.fecha_caducidad ? new Date(row.fecha_caducidad).toLocaleDateString('es-EC') : '',
+      ubicacion:       row.ubicacion_nombre || '',
+      estado:          ESTADO_LABELS[row.estado_caducidad] ?? 'Sin alerta',
+    }));
+
+    styleDataRows(worksheet);
+    await sendExcel(workbook, res, 'inventario.xlsx');
   } catch (error) {
     console.error('Error al exportar inventario:', error);
     res.status(500).json({ success: false, message: 'Error al exportar Excel' });
+  }
+};
+
+const exportMovimientosExcel = async (req, res) => {
+  try {
+    const { from, to, destino_id } = req.query;
+    const { query, params } = buildMovimientosReporteQuery({ from, to, destino_id });
+    const result = await db.query(query, params);
+
+    const { workbook, worksheet } = createWorkbook('Movimientos', [
+      { header: 'Fecha',          key: 'fecha',     width: 14 },
+      { header: 'Cant. Artíc.',   key: 'items',     width: 14 },
+      { header: 'Artículos',      key: 'articulos', width: 40 },
+      { header: 'Origen',         key: 'origen',    width: 24 },
+      { header: 'Destino',        key: 'destino',   width: 24 },
+      { header: 'Usuario',        key: 'usuario',   width: 18 },
+    ]);
+
+    result.rows.forEach((row) => worksheet.addRow({
+      fecha:     row.fecha_movimiento ? new Date(row.fecha_movimiento).toLocaleDateString('es-EC') : '',
+      items:     row.items || 0,
+      articulos: row.articulos_movidos || '',
+      origen:    row.ubicacion_origen || '',
+      destino:   row.ubicacion_destino || '',
+      usuario:   row.usuario || '',
+    }));
+
+    styleDataRows(worksheet);
+    await sendExcel(workbook, res, 'movimientos-inventario.xlsx');
+  } catch (error) {
+    console.error('Error al exportar movimientos:', error);
+    res.status(500).json({ success: false, message: 'Error al exportar movimientos' });
   }
 };
 
@@ -722,7 +759,7 @@ const generateMovimientoPdf = async (movimientoId) => {
   detalles.forEach((item) => {
     const qty = item.cantidad || 1;
     const name = item.nombre_articulo || 'Artículo';
-    const serial = item.numero_serie || '-';
+    const serial = getArticuloSerie(item) || '-';
     const origin = item.ubicacion_origen || '-';
     doc.text(String(qty), colQty, rowY);
     doc.text(name, colItem, rowY, { width: 240 });
@@ -767,6 +804,7 @@ const generateMovimientoPdf = async (movimientoId) => {
 
 const createMovimiento = async (req, res) => {
   const client = await db.getClient();
+  let transactionStarted = false;
   try {
     const { ubicacion_destino_id, ubicacion_destino_nombre, items, fecha_movimiento } = req.body;
 
@@ -803,21 +841,27 @@ const createMovimiento = async (req, res) => {
       });
     }
 
+    destinoId = Number(destinoId);
+    if (!Number.isInteger(destinoId) || destinoId <= 0) {
+      throw createHttpError(400, 'La ubicación destino es inválida');
+    }
+
     await client.query('BEGIN');
+    transactionStarted = true;
 
     const movimientoRes = await client.query(
       `INSERT INTO movimientos (usuario_id, fecha_movimiento)
-       VALUES ($1, $2)
+       VALUES ($1, COALESCE($2::date, CURRENT_DATE))
        RETURNING id, fecha_movimiento`,
-      [req.user.id, fecha_movimiento ? new Date(fecha_movimiento) : new Date()]
+      [req.user.id, fecha_movimiento || null]
     );
 
     const movimientoId = movimientoRes.rows[0].id;
 
     for (const item of items) {
-      const articuloId = item.articulo_id;
-      if (!articuloId) {
-        throw new Error('Artículo inválido');
+      const articuloId = Number(item?.articulo_id);
+      if (!Number.isInteger(articuloId) || articuloId <= 0) {
+        throw createHttpError(400, 'Artículo inválido');
       }
 
       const articuloRes = await client.query(
@@ -826,43 +870,43 @@ const createMovimiento = async (req, res) => {
       );
 
       if (articuloRes.rowCount === 0) {
-        throw new Error('Artículo no encontrado');
+        throw createHttpError(400, `Artículo #${articuloId} no encontrado`);
       }
 
       const articulo = articuloRes.rows[0];
-      let cantidad = item.cantidad ? parseInt(item.cantidad, 10) : 1;
+      const cantidad = item.cantidad === undefined ? 1 : Number(item.cantidad);
       const tallaMovimiento = item.talla ? String(item.talla).trim() : '';
-      if (!cantidad || cantidad <= 0) {
-        throw new Error('Cantidad inválida');
+      if (!Number.isInteger(cantidad) || cantidad <= 0) {
+        throw createHttpError(400, 'Cantidad inválida');
       }
 
-      if (articulo.tipo_articulo !== 'equipo' && cantidad > 1) {
-        throw new Error('La cantidad debe ser 1 para artículos serializados');
+      if (!isStockTipo(articulo.tipo_articulo) && cantidad > 1) {
+        throw createHttpError(400, 'La cantidad debe ser 1 para artículos serializados');
       }
 
       const origenArticuloId = articulo.ubicacion_id;
       if (!origenArticuloId) {
-        throw new Error('El artículo no tiene ubicación origen');
+        throw createHttpError(400, 'El artículo no tiene ubicación origen');
       }
       if (String(origenArticuloId) === String(destinoId)) {
-        throw new Error('El destino no puede ser igual al origen del artículo');
+        throw createHttpError(400, 'El destino no puede ser igual al origen del artículo');
       }
 
       let movedArticuloId = articulo.id;
 
-      if (articulo.tipo_articulo === 'equipo') {
+      if (isStockTipo(articulo.tipo_articulo)) {
         if (articulo.talla && !tallaMovimiento) {
-          throw new Error('Debes indicar la talla del artículo');
+          throw createHttpError(400, 'Debes indicar la talla del artículo');
         }
         if (articulo.talla && tallaMovimiento && articulo.talla !== tallaMovimiento) {
-          throw new Error('La talla indicada no coincide con el artículo');
+          throw createHttpError(400, 'La talla indicada no coincide con el artículo');
         }
         const actual = articulo.cantidad || 0;
         if (cantidad > actual) {
-          throw new Error('Cantidad supera el stock disponible');
+          throw createHttpError(400, 'Cantidad supera el stock disponible');
         }
         if (cantidad < actual && articulo.numero_serie) {
-          throw new Error('No se puede fraccionar un artículo con número de serie');
+          throw createHttpError(400, 'No se puede fraccionar un artículo con número de serie');
         }
         if (cantidad < actual) {
           const tallaFinal = tallaMovimiento || articulo.talla || null;
@@ -906,7 +950,7 @@ const createMovimiento = async (req, res) => {
         }
       } else {
         if (cantidad !== 1) {
-          throw new Error('La cantidad debe ser 1 para artículos serializados');
+          throw createHttpError(400, 'La cantidad debe ser 1 para artículos serializados');
         }
         await client.query(
           'UPDATE articulos SET ubicacion_id = $1 WHERE id = $2',
@@ -933,6 +977,7 @@ const createMovimiento = async (req, res) => {
     }
 
     await client.query('COMMIT');
+    transactionStarted = false;
 
     const pdfResult = await generateMovimientoPdf(movimientoId);
     if (pdfResult) {
@@ -951,10 +996,19 @@ const createMovimiento = async (req, res) => {
       }
     });
   } catch (error) {
-    await client.query('ROLLBACK');
-    const message = error.message || 'Error en el servidor';
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Error al hacer rollback de createMovimiento:', rollbackError);
+      }
+    }
+
+    const status = error.status || (isConstraintOrInputError(error) ? 400 : 500);
+    const message = status >= 500 ? 'Error en el servidor' : (error.message || 'Solicitud inválida');
     console.error('Error al crear movimiento:', error);
-    res.status(400).json({
+
+    res.status(status).json({
       success: false,
       message
     });
@@ -1010,8 +1064,8 @@ module.exports = {
   updateArticulo,
   deleteArticulo,
   getMovimientos,
-  getMovimientoDetalles,
   createMovimiento,
   downloadMovimientoPdf,
-  exportArticulosExcel
+  exportArticulosExcel,
+  exportMovimientosExcel
 };

@@ -1,48 +1,43 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 import './ChangePassword.css';
 
 const ChangePassword = () => {
   const [nuevaPassword, setNuevaPassword] = useState('');
   const [confirmarPassword, setConfirmarPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
+
   const { changePassword, user } = useAuth();
+  const { showToast } = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    
-    // Validaciones
+
     if (!nuevaPassword || !confirmarPassword) {
-      setError('Ambas contraseñas son requeridas');
+      showToast('Ambas contraseñas son requeridas', 'error');
       return;
     }
-    
-    if (nuevaPassword.length < 6) {
-      setError('La contraseña debe tener al menos 6 caracteres');
+    if (nuevaPassword.length < 8) {
+      showToast('La contraseña debe tener al menos 8 caracteres', 'error');
       return;
     }
-    
     if (nuevaPassword !== confirmarPassword) {
-      setError('Las contraseñas no coinciden');
+      showToast('Las contraseñas no coinciden', 'error');
       return;
     }
-    
+
     setLoading(true);
-    
     const result = await changePassword(nuevaPassword, confirmarPassword);
-    
     setLoading(false);
-    
+
     if (result.success) {
-      alert('Contraseña actualizada exitosamente');
+      showToast('Contraseña actualizada exitosamente', 'success');
       navigate('/');
     } else {
-      setError(result.message || 'Error al cambiar contraseña');
+      showToast(result.message || 'Error al cambiar contraseña', 'error');
     }
   };
 
@@ -56,7 +51,7 @@ const ChangePassword = () => {
             Por seguridad, debes cambiar tu contraseña en el primer inicio de sesión.
           </p>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="change-password-form">
           <div className="form-group">
             <label htmlFor="nueva-password">Nueva Contraseña</label>
@@ -69,7 +64,7 @@ const ChangePassword = () => {
               disabled={loading}
             />
           </div>
-          
+
           <div className="form-group">
             <label htmlFor="confirmar-password">Confirmar Contraseña</label>
             <input
@@ -81,18 +76,8 @@ const ChangePassword = () => {
               disabled={loading}
             />
           </div>
-          
-          {error && (
-            <div className="error-message">
-              {error}
-            </div>
-          )}
-          
-          <button 
-            type="submit" 
-            className="btn-change-password"
-            disabled={loading}
-          >
+
+          <button type="submit" className="btn-change-password" disabled={loading}>
             {loading ? 'Actualizando...' : 'Actualizar Contraseña'}
           </button>
         </form>

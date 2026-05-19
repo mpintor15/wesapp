@@ -18,11 +18,16 @@
  *
  *  MOVIMIENTOS (traslados)
  *  - getMovimientos()                   : GET /inventario/movimientos
- *  - getMovimientoDetalles(id)          : GET /inventario/movimientos/:id
  *  - createMovimiento(data)             : POST /inventario/movimientos
  *  - downloadMovimientoPdf(id)          : GET /inventario/movimientos/:id/pdf → descarga .pdf
+ *  - exportMovimientosExcel(params)     : GET /inventario/movimientos/excel → descarga .xlsx
  */
 import api from './api';
+import {
+  extractError,
+  getFilenameFromDisposition,
+  saveBlobWithPickerOrDownload
+} from './serviceUtils';
 
 const inventarioService = {
   getUbicaciones: async () => {
@@ -35,7 +40,7 @@ const inventarioService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al obtener ubicaciones'
+        message: extractError(error, 'Error al obtener ubicaciones')
       };
     }
   },
@@ -50,7 +55,7 @@ const inventarioService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al obtener articulos'
+        message: extractError(error, 'Error al obtener articulos')
       };
     }
   },
@@ -66,7 +71,7 @@ const inventarioService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al crear artículo'
+        message: extractError(error, 'Error al crear artículo')
       };
     }
   },
@@ -82,7 +87,7 @@ const inventarioService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al actualizar artículo'
+        message: extractError(error, 'Error al actualizar artículo')
       };
     }
   },
@@ -99,7 +104,7 @@ const inventarioService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al eliminar artículo'
+        message: extractError(error, 'Error al eliminar artículo')
       };
     }
   },
@@ -114,22 +119,7 @@ const inventarioService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al obtener movimientos'
-      };
-    }
-  },
-
-  getMovimientoDetalles: async (id) => {
-    try {
-      const response = await api.get(`/inventario/movimientos/${id}`);
-      return {
-        success: response.data.success,
-        data: response.data.data || []
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: error.response?.data?.message || 'Error al obtener detalles'
+        message: extractError(error, 'Error al obtener movimientos')
       };
     }
   },
@@ -145,7 +135,7 @@ const inventarioService = {
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al crear movimiento'
+        message: extractError(error, 'Error al crear movimiento')
       };
     }
   },
@@ -155,21 +145,18 @@ const inventarioService = {
       const response = await api.get(`/inventario/movimientos/${id}/pdf`, {
         responseType: 'blob'
       });
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `movimiento-${id}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      return { success: true };
+      const fileName = getFilenameFromDisposition(
+        response.headers?.['content-disposition'],
+        `movimiento-${id}.pdf`
+      );
+      return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
+        description: 'PDF',
+        accept: { 'application/pdf': ['.pdf'] }
+      });
     } catch (error) {
       return {
         success: false,
-        message: 'Error al descargar PDF'
+        message: extractError(error, 'Error al descargar PDF')
       };
     }
   },
@@ -180,21 +167,40 @@ const inventarioService = {
         params,
         responseType: 'blob'
       });
-
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'inventario.xlsx');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      return { success: true };
+      const fileName = getFilenameFromDisposition(
+        response.headers?.['content-disposition'],
+        'inventario.xlsx'
+      );
+      return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
+        description: 'Excel',
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+      });
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || 'Error al exportar Excel'
+        message: extractError(error, 'Error al exportar Excel')
+      };
+    }
+  },
+
+  exportMovimientosExcel: async (params = {}) => {
+    try {
+      const response = await api.get('/inventario/movimientos/excel', {
+        params,
+        responseType: 'blob'
+      });
+      const fileName = getFilenameFromDisposition(
+        response.headers?.['content-disposition'],
+        'movimientos-inventario.xlsx'
+      );
+      return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
+        description: 'Excel',
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+      });
+    } catch (error) {
+      return {
+        success: false,
+        message: extractError(error, 'Error al exportar movimientos')
       };
     }
   }

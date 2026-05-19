@@ -15,13 +15,15 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 const config = require('../config/config');
+const { createHttpError, handleControllerError } = require('../utils/http');
 
 /**
  * Login de usuario
  */
 const login = async (req, res) => {
   try {
-    const { usuario, password } = req.body;
+    const usuario = typeof req.body?.usuario === 'string' ? req.body.usuario.trim() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
     
     // Validar datos
     if (!usuario || !password) {
@@ -33,7 +35,7 @@ const login = async (req, res) => {
     
     // Buscar usuario en la base de datos
     const result = await db.query(
-      'SELECT * FROM usuarios WHERE usuario = $1',
+      'SELECT id, usuario, tipo_usuario, primer_login, activo, password_hash FROM usuarios WHERE usuario = $1',
       [usuario]
     );
     
@@ -91,11 +93,7 @@ const login = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error en login:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
+    return handleControllerError(res, error, 'Error en login:');
   }
 };
 
@@ -104,11 +102,16 @@ const login = async (req, res) => {
  */
 const changePassword = async (req, res) => {
   try {
-    const { nueva_password, confirmar_password } = req.body;
-    const userId = req.user.id;
+    const nuevaPassword = typeof req.body?.nueva_password === 'string' ? req.body.nueva_password : '';
+    const confirmarPassword = typeof req.body?.confirmar_password === 'string' ? req.body.confirmar_password : '';
+    const userId = Number(req.user?.id);
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw createHttpError(401, 'Token inválido');
+    }
     
     // Validar datos
-    if (!nueva_password || !confirmar_password) {
+    if (!nuevaPassword || !confirmarPassword) {
       return res.status(400).json({
         success: false,
         message: 'Ambas contraseñas son requeridas'
@@ -116,7 +119,7 @@ const changePassword = async (req, res) => {
     }
     
     // Verificar que las contraseñas coincidan
-    if (nueva_password !== confirmar_password) {
+    if (nuevaPassword !== confirmarPassword) {
       return res.status(400).json({
         success: false,
         message: 'Las contraseñas no coinciden'
@@ -124,22 +127,41 @@ const changePassword = async (req, res) => {
     }
     
     // Validar longitud mínima
-    if (nueva_password.length < 6) {
+    if (nuevaPassword.length < 8) {
       return res.status(400).json({
         success: false,
-        message: 'La contraseña debe tener al menos 6 caracteres'
+        message: 'La contraseña debe tener al menos 8 caracteres'
       });
+    }
+
+    const currentPasswordResult = await db.query(
+      'SELECT password_hash FROM usuarios WHERE id = $1',
+      [userId]
+    );
+
+    if (currentPasswordResult.rowCount === 0) {
+      throw createHttpError(404, 'Usuario no encontrado');
+    }
+
+    const currentPasswordHash = currentPasswordResult.rows[0].password_hash;
+    const isSamePassword = await bcrypt.compare(nuevaPassword, currentPasswordHash);
+    if (isSamePassword) {
+      throw createHttpError(400, 'La nueva contraseña debe ser diferente a la actual');
     }
     
     // Hashear nueva contraseña
     const saltRounds = 10;
-    const password_hash = await bcrypt.hash(nueva_password, saltRounds);
+    const password_hash = await bcrypt.hash(nuevaPassword, saltRounds);
     
     // Actualizar contraseña y marcar primer_login como false
-    await db.query(
-      'UPDATE usuarios SET password_hash = $1, primer_login = FALSE WHERE id = $2',
+    const result = await db.query(
+      'UPDATE usuarios SET password_hash = $1, primer_login = FALSE WHERE id = $2 RETURNING id',
       [password_hash, userId]
     );
+
+    if (result.rowCount === 0) {
+      throw createHttpError(404, 'Usuario no encontrado');
+    }
     
     res.json({
       success: true,
@@ -147,11 +169,7 @@ const changePassword = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error al cambiar contraseña:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
+    return handleControllerError(res, error, 'Error al cambiar contraseña:');
   }
 };
 
@@ -160,7 +178,10 @@ const changePassword = async (req, res) => {
  */
 const verifyToken = async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = Number(req.user?.id);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      throw createHttpError(401, 'Token inválido');
+    }
     
     // Obtener datos actualizados del usuario
     const result = await db.query(
@@ -197,11 +218,7 @@ const verifyToken = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error al verificar token:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor'
-    });
+    return handleControllerError(res, error, 'Error al verificar token:');
   }
 };
 

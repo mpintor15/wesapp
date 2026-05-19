@@ -16,12 +16,18 @@
  * reciclando cada conexión tras 7.500 usos para prevenir memory leaks.
  */
 const { Pool } = require('pg');
-require('dotenv').config();
+const path = require('path');
+const dotenv = require('dotenv');
+
+const envTarget = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+dotenv.config({
+  path: path.resolve(__dirname, `../../.env.${envTarget}`)
+});
 
 // SSL: requerido para bases de datos en la nube como Neon (DB_SSL=true en producción)
 const sslConfig = process.env.DB_SSL === 'true'
-  ? { rejectUnauthorized: false } // Neon y proveedores cloud usan certificados válidos
-  : false;                         // Sin SSL para desarrollo local
+  ? { rejectUnauthorized: true } // Neon usa certificados públicos válidos — validar siempre
+  : false;                        // Sin SSL para desarrollo local
 
 // Configuración del pool de conexiones PostgreSQL
 const pool = new Pool({

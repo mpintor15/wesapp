@@ -53,11 +53,19 @@ const requirePermission = (modulo) => {
  */
 const requireActive = async (req, res, next) => {
   const db = require('../config/database');
+  const userId = Number(req.user?.id);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(401).json({
+      success: false,
+      message: 'Token inválido'
+    });
+  }
 
   try {
     const result = await db.query(
       'SELECT activo FROM usuarios WHERE id = $1',
-      [req.user.id]
+      [userId]
     );
 
     if (result.rows.length === 0) {
@@ -76,6 +84,7 @@ const requireActive = async (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error('Error en requireActive:', error);
     return res.status(500).json({
       success: false,
       message: 'Error al verificar estado del usuario'
@@ -83,4 +92,20 @@ const requireActive = async (req, res, next) => {
   }
 };
 
-module.exports = { requirePermission, requireActive };
+/**
+ * Middleware para restringir a uno o más roles específicos.
+ * Uso: requireRole('gerente') o requireRole('gerente', 'secretario')
+ */
+const requireRole = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user?.tipo_usuario || !roles.includes(req.user.tipo_usuario)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Acceso denegado. No tienes permisos para realizar esta acción'
+      });
+    }
+    next();
+  };
+};
+
+module.exports = { requirePermission, requireRole, requireActive };

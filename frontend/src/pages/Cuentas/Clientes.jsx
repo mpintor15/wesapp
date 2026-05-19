@@ -1,73 +1,152 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import cuentasService from '../../services/cuentasService';
+import { useToast } from '../../context/ToastContext';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
-const Clientes = ({
-  clientes,
-  onClienteCreated,
-  onClienteDeleted,
-  message,
-  setMessage,
-  showClienteForm,
-  setShowClienteForm
-}) => {
+const ROWS_PER_PAGE = 50;
+
+const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteForm, setShowClienteForm }) => {
+  const { showToast } = useToast();
   const [newClienteName, setNewClienteName] = useState('');
   const [newClienteId, setNewClienteId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [clienteErrors, setClienteErrors] = useState({});
+  const [search, setSearch] = useState('');
+  const [confirmTarget, setConfirmTarget] = useState(null);
+  const [clientesSort, setClientesSort] = useState({ field: 'nombre', direction: 'asc' });
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return clientes;
+    const q = search.trim().toLowerCase();
+    return clientes.filter(c =>
+      c.nombre?.toLowerCase().includes(q) ||
+      c.identificacion?.toLowerCase().includes(q)
+    );
+  }, [clientes, search]);
+
+  const sortedFiltered = useMemo(() => {
+    if (!clientesSort.field) return filtered;
+    const direction = clientesSort.direction === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (clientesSort.field === 'nombre') {
+        return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', {
+          sensitivity: 'base',
+          numeric: true
+        }) * direction;
+      }
+      if (clientesSort.field === 'identificacion') {
+        return String(a.identificacion || '').localeCompare(String(b.identificacion || ''), 'es', {
+          sensitivity: 'base',
+          numeric: true
+        }) * direction;
+      }
+      return 0;
+    });
+  }, [filtered, clientesSort]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / ROWS_PER_PAGE));
+  const paginatedClientes = sortedFiltered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+
+  const handleSearch = (e) => {
+    setSearch(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleClientesSort = (field) => {
+    setClientesSort(prev => {
+      if (prev.field === field) {
+        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { field, direction: 'asc' };
+    });
+    setCurrentPage(1);
+  };
 
   const handleCreateCliente = async (e) => {
     e.preventDefault();
     setLoading(true);
+    const errors = {};
 
-    if (!newClienteName.trim()) {
-      setMessage({ type: 'error', text: 'El nombre del cliente es requerido' });
-      setLoading(false);
-      return;
-    }
+    if (!newClienteName.trim()) errors.nombre = 'Ingresa el nombre del cliente';
+    if (!newClienteId.trim()) errors.identificacion = 'Ingresa la identificación del cliente';
 
-    if (!newClienteId.trim()) {
-      setMessage({ type: 'error', text: 'La identificación del cliente es requerida' });
+    if (Object.keys(errors).length > 0) {
+      setClienteErrors(errors);
+      showToast(Object.values(errors)[0], 'error');
       setLoading(false);
       return;
     }
 
     const result = await cuentasService.createCliente(newClienteName, newClienteId);
-
     if (result.success) {
-      setMessage({ type: 'success', text: 'Cliente creado exitosamente' });
+      showToast('Cliente creado exitosamente', 'success');
       setNewClienteName('');
       setNewClienteId('');
+      setClienteErrors({});
       setShowClienteForm(false);
       onClienteCreated();
     } else {
-      setMessage({ type: 'error', text: result.message });
+      showToast(result.message, 'error');
     }
     setLoading(false);
   };
 
-  const handleDeleteCliente = async (id) => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar este cliente?')) {
-      const result = await cuentasService.deleteCliente(id);
-
-      if (result.success) {
-        setMessage({ type: 'success', text: 'Cliente eliminado exitosamente' });
-        onClienteDeleted();
-      } else {
-        setMessage({ type: 'error', text: result.message });
-      }
+  const handleDeleteConfirmed = async () => {
+    if (!confirmTarget) return;
+    const result = await cuentasService.deleteCliente(confirmTarget.id);
+    if (result.success) {
+      showToast('Cliente eliminado exitosamente', 'success');
+      onClienteDeleted();
+    } else {
+      showToast(result.message, 'error');
     }
+    setConfirmTarget(null);
   };
 
   return (
     <div className="clientes-module">
-      <div className="clientes-header">
-        <h3>Gestión de Clientes</h3>
+
+      {/* Search filter */}
+      <div className="ff-filter-row clientes-filters-row">
+        <div className="ff-filter-card clientes-filter-card">
+          <div className="ff-controls">
+            <div className="ff-search">
+              <svg className="ff-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={handleSearch}
+                placeholder="Buscar por nombre o identificación..."
+              />
+            </div>
+          </div>
+        </div>
+        <div className="ff-filter-actions-card clientes-filter-actions-card">
+          <div className="ff-actions clientes-filter-actions">
+            <button
+              className="ff-clear-btn"
+              type="button"
+              onClick={() => {
+                setSearch('');
+                setCurrentPage(1);
+              }}
+              disabled={!search.trim()}
+            >
+              Limpiar
+            </button>
+          </div>
+        </div>
       </div>
 
+      {/* Create modal */}
       {showClienteForm && (
         <div className="modal-overlay" onClick={() => setShowClienteForm(false)}>
           <div className="modal modal-cliente" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Crear cliente</h3>
+              <h3>Crear Cliente</h3>
               <button className="modal-close" onClick={() => setShowClienteForm(false)}>×</button>
             </div>
             <form className="modal-body" onSubmit={handleCreateCliente}>
@@ -76,28 +155,35 @@ const Clientes = ({
                 <input
                   type="text"
                   value={newClienteName}
-                  onChange={(e) => setNewClienteName(e.target.value)}
+                  onChange={(e) => {
+                    setNewClienteName(e.target.value);
+                    setClienteErrors(prev => ({ ...prev, nombre: '' }));
+                  }}
                   placeholder="Ingresa el nombre del cliente"
                   disabled={loading}
-                  required
+                  autoFocus
                 />
+                {clienteErrors.nombre ? <span className="field-error">{clienteErrors.nombre}</span> : null}
               </div>
               <div className="form-group">
                 <label>Identificación (CI o RUC)</label>
                 <input
                   type="text"
                   value={newClienteId}
-                  onChange={(e) => setNewClienteId(e.target.value)}
+                  onChange={(e) => {
+                    setNewClienteId(e.target.value);
+                    setClienteErrors(prev => ({ ...prev, identificacion: '' }));
+                  }}
                   placeholder="Ej: 1790012345001"
                   disabled={loading}
-                  required
                 />
+                {clienteErrors.identificacion ? <span className="field-error">{clienteErrors.identificacion}</span> : null}
               </div>
               <div className="modal-buttons">
-                <button type="submit" className="btn btn-success" disabled={loading}>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? 'Creando...' : 'Crear cliente'}
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={() => setShowClienteForm(false)}>
+                <button type="button" className="btn btn-modal-clear" onClick={() => setShowClienteForm(false)}>
                   Cancelar
                 </button>
               </div>
@@ -106,45 +192,99 @@ const Clientes = ({
         </div>
       )}
 
-      {clientes && clientes.length > 0 && (
-        <div className="clientes-list">
-          <h4>Clientes Registrados ({clientes.length})</h4>
-          <div className="table-responsive">
-            <table className="data-table clientes-table">
-              <thead>
-                <tr>
-                  <th>Cliente</th>
-                  <th>Identificación</th>
-                  <th className="col-actions">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clientes.map(cliente => (
-                  <tr key={cliente.id}>
-                    <td>{cliente.nombre}</td>
-                    <td>{cliente.identificacion || '-'}</td>
-                    <td className="col-actions">
+      {/* Table */}
+      <div className="table-responsive app-table-shell">
+        <table className="app-table clientes-table">
+          <thead>
+            <tr>
+              <th>
+                <button type="button" className="th-sort-btn" onClick={() => handleClientesSort('nombre')}>
+                  Cliente<span className={`th-sort-indicator${clientesSort.field === 'nombre' ? ' active' : ''}`}>{clientesSort.field === 'nombre' && clientesSort.direction === 'desc' ? '↓' : '↑'}</span>
+                </button>
+              </th>
+              <th>
+                <button type="button" className="th-sort-btn" onClick={() => handleClientesSort('identificacion')}>
+                  Identificación<span className={`th-sort-indicator${clientesSort.field === 'identificacion' ? ' active' : ''}`}>{clientesSort.field === 'identificacion' && clientesSort.direction === 'desc' ? '↓' : '↑'}</span>
+                </button>
+              </th>
+              <th className="app-col-actions app-col-actions--single"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginatedClientes.length > 0 ? (
+              paginatedClientes.map((cliente, idx) => (
+                <tr key={cliente.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
+                  <td className="clientes-cell-name" title={cliente.nombre}>{cliente.nombre}</td>
+                  <td className="clientes-cell-id">{cliente.identificacion || '-'}</td>
+                  <td className="app-col-actions app-col-actions--single">
+                    <div className="action-buttons app-table-actions">
                       <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleDeleteCliente(cliente.id)}
+                        className="action-btn action-btn-del"
+                        onClick={() => setConfirmTarget(cliente)}
+                        title="Eliminar cliente"
+                        type="button"
                         disabled={loading}
                       >
-                        Eliminar
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M6 7h12M9 7v10m6-10v10M9 7h6M10 4h4l1 2H9l1-2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr className="empty-row">
+                <td colSpan="3">
+                  {search.trim() ? 'No se encontraron clientes con ese criterio.' : 'No hay clientes registrados. Crea uno para empezar.'}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="pagination">
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+          >
+            ‹ Anterior
+          </button>
+          <span className="pagination-info">
+            Página <span className="pagination-count">{currentPage}</span> de {totalPages}
+          </span>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+          >
+            Siguiente ›
+          </button>
         </div>
       )}
 
-      {(!clientes || clientes.length === 0) && !showClienteForm && (
-        <div className="empty-state">
-          <p>No hay clientes registrados. Crea uno para empezar.</p>
-        </div>
-      )}
+      <ConfirmDialog
+        isOpen={!!confirmTarget}
+        title="Eliminar cliente"
+        message={confirmTarget ? (
+          <div className="delete-invoice-confirm">
+            <p>
+              Vas a eliminar permanentemente a <strong>{confirmTarget.nombre}</strong>.
+            </p>
+            <p>
+              Esta acción solo se completará si el cliente no tiene facturas asociadas.
+            </p>
+          </div>
+        ) : ''}
+        confirmText="Eliminar"
+        cancelText="Cancelar"
+        variant="danger"
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setConfirmTarget(null)}
+      />
     </div>
   );
 };

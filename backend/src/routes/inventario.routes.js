@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const inventarioController = require('../controllers/inventarioController');
 const { verifyToken } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/permissions');
+const { requireActive, requirePermission } = require('../middleware/permissions');
 
 // All routes require authentication + inventario permission
-router.use(verifyToken, requirePermission('inventario'));
+router.use(verifyToken, requireActive, requirePermission('inventario'));
 
 // ============================================
 // UBICACIONES
@@ -85,11 +85,15 @@ router.delete(
 router.get('/movimientos', inventarioController.getMovimientos);
 
 /**
- * @route   GET /api/inventario/movimientos/:id
- * @desc    Obtener detalles de un movimiento
- * @access  Private (inventario)
+ * @route   GET /api/inventario/movimientos/excel
+ * @desc    Exportar movimientos a Excel
+ * @access  Private (exportar)
  */
-router.get('/movimientos/:id', inventarioController.getMovimientoDetalles);
+router.get(
+  '/movimientos/excel',
+  requirePermission('exportar'),
+  inventarioController.exportMovimientosExcel
+);
 
 /**
  * @route   GET /api/inventario/movimientos/:id/pdf

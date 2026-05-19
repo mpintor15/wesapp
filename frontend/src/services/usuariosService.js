@@ -14,6 +14,7 @@
  *  - deleteUsuario(id)          : DEL  /usuarios/:id
  */
 import api from './api';
+import { extractError } from './serviceUtils';
 
 const usuariosService = {
   getUsuarios: async (params = {}) => {
@@ -21,7 +22,7 @@ const usuariosService = {
       const response = await api.get('/usuarios', { params });
       return { success: response.data.success, data: response.data.data || [] };
     } catch (error) {
-      return { success: false, message: error.response?.data?.message || 'Error al obtener usuarios' };
+      return { success: false, message: extractError(error, 'Error al obtener usuarios') };
     }
   },
 
@@ -30,7 +31,7 @@ const usuariosService = {
       const response = await api.post('/usuarios', data);
       return { success: response.data.success, message: response.data.message, data: response.data.data };
     } catch (error) {
-      return { success: false, message: error.response?.data?.message || 'Error al crear usuario' };
+      return { success: false, message: extractError(error, 'Error al crear usuario') };
     }
   },
 
@@ -39,7 +40,7 @@ const usuariosService = {
       const response = await api.put(`/usuarios/${id}`, data);
       return { success: response.data.success, message: response.data.message, data: response.data.data };
     } catch (error) {
-      return { success: false, message: error.response?.data?.message || 'Error al actualizar usuario' };
+      return { success: false, message: extractError(error, 'Error al actualizar usuario') };
     }
   },
 
@@ -48,7 +49,7 @@ const usuariosService = {
       const response = await api.delete(`/usuarios/${id}`);
       return { success: response.data.success, message: response.data.message };
     } catch (error) {
-      return { success: false, message: error.response?.data?.message || 'Error al eliminar usuario' };
+      return { success: false, message: extractError(error, 'Error al eliminar usuario') };
     }
   }
 };

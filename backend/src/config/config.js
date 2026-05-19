@@ -16,9 +16,53 @@
  *      · supervisor → inventario y personal (solo lectura/movimientos).
  *      · contador   → únicamente el módulo de cuentas.
  */
-require('dotenv').config();
+const path = require('path');
+const dotenv = require('dotenv');
+
+const envTarget = process.env.NODE_ENV === 'production' ? 'production' : 'development';
+dotenv.config({
+  path: path.resolve(__dirname, `../../.env.${envTarget}`)
+});
 
 const nodeEnv = process.env.NODE_ENV || 'development';
+const parseCorsOrigin = (value) => {
+  if (nodeEnv === 'development') {
+    return (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      const isLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+      if (isLocalhost) {
+        callback(null, true);
+        return;
+      }
+
+      const allowedOrigins = (value || '')
+        .split(',')
+        .map((originValue) => originValue.trim())
+        .filter(Boolean);
+
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS origin not allowed: ${origin}`));
+    };
+  }
+
+  if (!value) return '*';
+  if (value === '*') return '*';
+
+  const origins = value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return origins.length <= 1 ? origins[0] || '*' : origins;
+};
 
 const requireInProduction = (key) => {
   if (!process.env[key] || String(process.env[key]).trim() === '') {
@@ -57,7 +101,7 @@ module.exports = {
   
   // Configuración de CORS
   cors: {
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: parseCorsOrigin(process.env.CORS_ORIGIN),
     credentials: true,
   },
   
@@ -92,13 +136,16 @@ module.exports = {
       'exportar'
     ],
     supervisor: [
-      'inventario', 
-      'personal', 
-      'crear_movimiento', 
+      'inventario',
+      'personal',
+      'crear_articulo',
+      'eliminar_articulo',
+      'crear_movimiento',
       'exportar'
     ],
     contador: [
-      'cuentas'
+      'cuentas',
+      'exportar'
     ]
   }
 };

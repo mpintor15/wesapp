@@ -2,8 +2,15 @@
 -- WESApp - Base de Datos PostgreSQL
 -- Empresa: WES Security
 -- ============================================
+--
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+-- ⚠️  PELIGRO — NO EJECUTAR EN LA BASE DE DATOS DE PRODUCCIÓN ⚠️
+-- Este script elimina TODAS las tablas y sus datos con CASCADE.
+-- Solo debe usarse para crear una base de datos LOCAL desde cero.
+-- Para cambios en producción usa los archivos en /migrations/
+-- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
--- Limpiar tablas existentes (CUIDADO: esto borra todos los datos)
+-- Limpiar tablas existentes (SOLO PARA DESARROLLO LOCAL)
 DROP TABLE IF EXISTS detalle_movimientos CASCADE;
 DROP TABLE IF EXISTS movimientos CASCADE;
 DROP TABLE IF EXISTS articulos CASCADE;
@@ -22,6 +29,8 @@ CREATE TABLE usuarios (
     id SERIAL PRIMARY KEY,
     usuario VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    nombre VARCHAR(100),
+    apellido VARCHAR(100),
     tipo_usuario VARCHAR(20) NOT NULL CHECK (tipo_usuario IN ('gerente', 'secretario', 'supervisor', 'contador')),
     primer_login BOOLEAN DEFAULT TRUE,
     activo BOOLEAN DEFAULT TRUE,
@@ -48,6 +57,8 @@ CREATE TABLE cuentas (
     incluye_retencion_fuente BOOLEAN DEFAULT FALSE,
     incluye_retencion_iva BOOLEAN DEFAULT FALSE,
     cancelada BOOLEAN DEFAULT FALSE,
+    detalle_anulacion TEXT,
+    fecha_anulacion TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -59,12 +70,24 @@ CREATE TABLE retenciones (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE pagos (
+    id          SERIAL PRIMARY KEY,
+    cliente_id  INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+    fecha       DATE NOT NULL,
+    metodo_pago VARCHAR(50),
+    referencia  VARCHAR(100),
+    notas       TEXT,
+    total       NUMERIC(10,2) NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE abonos (
-    id SERIAL PRIMARY KEY,
+    id          SERIAL PRIMARY KEY,
+    pago_id     INTEGER REFERENCES pagos(id) ON DELETE CASCADE,
     num_factura INTEGER REFERENCES cuentas(num_factura) ON DELETE CASCADE,
     fecha_abono DATE NOT NULL,
     valor_abono NUMERIC(10,2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================
@@ -78,7 +101,7 @@ CREATE TABLE ubicaciones (
 
 CREATE TABLE articulos (
     id SERIAL PRIMARY KEY,
-    tipo_articulo VARCHAR(20) NOT NULL CHECK (tipo_articulo IN ('equipo', 'placa_balistica', 'arma', 'radio')),
+    tipo_articulo VARCHAR(20) NOT NULL CHECK (tipo_articulo IN ('equipo', 'placa_balistica', 'arma', 'radio', 'otro')),
     nombre_articulo VARCHAR(100),
     cantidad INTEGER DEFAULT 1,
     talla VARCHAR(10),
@@ -143,6 +166,9 @@ CREATE INDEX idx_abonos_factura ON abonos(num_factura);
 CREATE INDEX idx_articulos_tipo ON articulos(tipo_articulo);
 CREATE INDEX idx_articulos_ubicacion ON articulos(ubicacion_id);
 CREATE INDEX idx_articulos_serie ON articulos(numero_serie);
+CREATE UNIQUE INDEX uq_articulos_codigo_pantalla ON articulos(codigo_pantalla) WHERE codigo_pantalla IS NOT NULL;
+CREATE UNIQUE INDEX uq_articulos_codigo_radio ON articulos(codigo_radio) WHERE codigo_radio IS NOT NULL;
+CREATE UNIQUE INDEX uq_articulos_version ON articulos(version) WHERE version IS NOT NULL;
 CREATE INDEX idx_movimientos_fecha ON movimientos(fecha_movimiento);
 CREATE INDEX idx_colaboradores_estado ON colaboradores(estado);
 CREATE INDEX idx_colaboradores_cedula ON colaboradores(cedula);
@@ -247,6 +273,8 @@ SELECT
     cl.identificacion,
     c.fecha_factura,
     c.cancelada,
+    c.detalle_anulacion,
+    c.fecha_anulacion,
     c.incluye_iva,
     c.incluye_retencion_fuente,
     c.incluye_retencion_iva,
@@ -275,15 +303,32 @@ JOIN clientes cl ON c.cliente_id = cl.id
 LEFT JOIN retenciones r ON c.num_factura = r.num_factura
 LEFT JOIN abonos a ON c.num_factura = a.num_factura
 GROUP BY c.num_factura, cl.nombre, cl.identificacion, c.fecha_factura, c.valor_factura,
-         c.cancelada, c.incluye_iva, c.incluye_retencion_fuente, c.incluye_retencion_iva
+         c.cancelada, c.detalle_anulacion, c.fecha_anulacion,
+         c.incluye_iva, c.incluye_retencion_fuente, c.incluye_retencion_iva
 ORDER BY c.num_factura ASC;
 
 -- Vista: Inventario con alertas de caducidad
 CREATE OR REPLACE VIEW vista_inventario_alertas AS
-SELECT 
-    a.*,
+SELECT
+    a.id,
+    a.tipo_articulo,
+    a.nombre_articulo,
+    a.cantidad,
+    a.talla,
+    a.marca,
+    a.modelo,
+    a.numero_serie,
+    a.calibre,
+    a.fecha_caducidad,
+    a.codigo_pantalla,
+    a.codigo_radio,
+    a.version,
+    a.ubicacion_id,
+    a.created_at,
+    a.updated_at,
+    a.activo,
     u.nombre AS ubicacion_nombre,
-    CASE 
+    CASE
         WHEN a.fecha_caducidad IS NULL THEN 'sin_alerta'
         WHEN a.fecha_caducidad < CURRENT_DATE THEN 'vencida'
         WHEN a.fecha_caducidad <= CURRENT_DATE + INTERVAL '30 days' THEN 'proxima_a_vencer'

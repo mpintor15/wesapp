@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 const usuariosController = require('../controllers/usuariosController');
 const { verifyToken } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/permissions');
+const { requireActive, requirePermission } = require('../middleware/permissions');
 
-router.use(verifyToken, requirePermission('usuarios'));
+router.use(verifyToken, requireActive, requirePermission('usuarios'));
 
 // Listado
 router.get('/', usuariosController.getUsuarios);

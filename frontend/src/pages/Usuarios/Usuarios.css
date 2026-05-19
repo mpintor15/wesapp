@@ -1,380 +1,253 @@
-.usuarios-container {
-  padding: 20px;
-  background-color: #f5f5f5;
-  min-height: 100vh;
-  max-width: 1400px;
-  margin: 0 auto;
-}
+/* Usuarios-specific overrides — shared utilities come from index.css */
 
-.usuarios-header {
-  background: linear-gradient(135deg, #ff2519 0%, #2b2b2b 100%);
-  color: white;
-  padding: 16px 24px;
-  border-radius: 10px;
-  margin-bottom: 20px;
+/* ── Filter bar ────────────────────────────────────────────── */
+.usuarios-filter-card .ff-controls {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 15px;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.usuarios-header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.usuarios-header h1 {
-  margin: 0;
-  font-size: 1.5em;
-  font-weight: 700;
-}
-
-.usuarios-header-actions {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.btn-back {
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: white;
-  padding: 8px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.9em;
-  font-weight: 600;
-  transition: background 0.2s;
-  white-space: nowrap;
-}
-
-.btn-back:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.usuarios-filters {
-  display: flex;
-  gap: 16px;
+  flex-wrap: nowrap;
   align-items: flex-end;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
-  padding: 16px;
-  background: #f8f9ff;
-  border-radius: 8px;
-  border: 1px solid #e8ecf4;
-}
-
-.filter-field {
-  flex: 1;
-  min-width: 160px;
-}
-
-.filter-field label {
-  display: block;
-  margin-bottom: 6px;
-  font-weight: 600;
-  color: #444;
-  font-size: 0.85em;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-
-.filter-field input,
-.filter-field select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 0.95em;
-  font-family: inherit;
-  background: white;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.filter-field input:focus,
-.filter-field select:focus {
-  outline: none;
-  border-color: #ff2519;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
-}
-
-.filter-actions {
-  display: flex;
   gap: 8px;
-  align-items: center;
+  width: 100%;
 }
 
-.btn {
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.95em;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.usuarios-filter-card .ff-search {
+  flex: 1 1 280px;
+  min-width: 200px;
+  max-width: none;
+}
+
+.usuarios-filter-card .ff-search input {
+  min-height: 44px;
+}
+
+.usuarios-filter-card .ff-state {
+  width: 160px;
+  flex: 0 0 160px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   gap: 6px;
 }
 
-.btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+.usuarios-filter-card .ff-state-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 16px;
+  margin: 0;
+  line-height: 1;
 }
 
-.btn-primary {
-  background-color: #ff2519;
-  color: white;
+.usuarios-filter-card .ff-state select {
+  min-height: 44px;
 }
 
-.btn-primary:hover {
-  background-color: #e01f15;
+.usuarios-filter-actions-card .ff-actions .btn,
+.usuarios-filter-actions-card .ff-actions .ff-clear-btn {
+  width: 130px !important;
+  max-width: 130px;
+  min-height: 38px;
+  font-size: 0.9em;
+  padding: 8px 10px;
 }
 
-.btn-secondary {
-  background-color: #718096;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background-color: #5a6475;
-}
-
-
-.btn-edit {
-  background-color: #2b2b2b;
-  color: white;
-}
-
-.btn-edit:hover {
-  background-color: #1f1f1f;
-}
-
-.table-responsive {
-  overflow-x: auto;
-  border-radius: 10px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-
-.data-table {
+/* ── Table ────────────────────────────────────────────────── */
+.usuarios-table-shell {
   width: 100%;
-  border-collapse: collapse;
-  background-color: white;
 }
 
-.data-table thead {
-  background-color: #f3f4f6;
-  border-bottom: 2px solid #e5e7eb;
+.usuarios-table {
+  width: 100% !important;
+  min-width: 100% !important;
 }
 
-.data-table th {
-  padding: 12px;
-  text-align: left;
+.usuarios-table th:last-child,
+.usuarios-table td:last-child {
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  text-align: center !important;
+}
+
+.usuarios-table .app-table-actions {
+  gap: 6px !important;
+}
+
+.usuarios-table .cell-fullname {
   font-weight: 600;
-  color: #374151;
-  font-size: 0.95em;
 }
 
-.data-table td {
-  padding: 12px;
-  border-bottom: 1px solid #e5e7eb;
+.usuarios-table .cell-username {
+  color: var(--color-text-secondary);
+  font-size: 0.82em;
+}
+
+/* ── Modals ───────────────────────────────────────────────── */
+.usuarios-modal {
+  width: min(94vw, 560px);
+  max-width: 560px;
+}
+
+.usuarios-modal--sm {
+  width: min(92vw, 400px);
+  max-width: 400px;
+}
+
+.usuarios-invitation-modal {
+  width: min(94vw, 580px);
+  max-width: 580px;
+}
+
+.usuarios-modal em {
+  font-style: normal;
+  color: var(--color-primary);
+}
+
+.usuarios-modal .modal-header {
+  padding: 16px 20px;
+}
+
+.usuarios-modal .modal-body {
+  padding: 16px 20px;
+}
+
+/* ── Form grid ────────────────────────────────────────────── */
+.usuarios-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+/* ── Modal action buttons ─────────────────────────────────── */
+.usuarios-modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 20px 18px;
+}
+
+.usuarios-modal-actions .btn {
+  flex: 0 0 auto;
+  width: 170px;
+  max-width: 170px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 10px;
   font-size: 0.9em;
 }
 
-.data-table tbody tr:hover {
-  background-color: #f9fafb;
+.usuarios-modal-actions .btn-modal-clear {
+  width: 130px;
+  max-width: 130px;
+  background: #fff;
+  border: 1.5px solid #b8c4d4;
+  color: #334155;
+  box-shadow: inset 0 0 0 1px rgba(184, 196, 212, 0.25);
 }
 
-.data-table tbody tr:last-child td {
-  border-bottom: none;
+.usuarios-modal-actions .btn-modal-clear:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #1e293b;
 }
 
-.action-buttons {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: flex-start;
-}
-
-.col-actions {
-  text-align: left;
-}
-
-.action-btn {
-  border: none;
-  border-radius: 6px;
-  width: 32px;
-  height: 32px;
-  font-size: 0.85em;
-  font-weight: 700;
-  cursor: pointer;
+.invitation-copy-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  color: white;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  gap: 6px;
 }
 
-.action-btn svg {
-  width: 16px;
-  height: 16px;
-  stroke: #fff;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2;
+/* ── Invitation message ───────────────────────────────────── */
+.invitation-intro {
+  font-size: 0.88rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.5;
 }
 
-.action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-
-.message {
+.invitation-message {
+  font-family: 'Menlo', 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  background: #f8fafc;
+  border: 1px solid #e0e7f0;
+  border-radius: 10px;
   padding: 14px 16px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  animation: slideIn 0.3s ease;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #334155;
+  max-height: 320px;
+  overflow-y: auto;
 }
 
-.message-success {
-  background-color: #c6f6d5;
-  color: #22543d;
-  border: 1px solid #9ae6b4;
+/* ── Required field indicator ─────────────────────────────── */
+.required {
+  color: var(--color-danger);
+  font-weight: 700;
 }
 
-.message-error {
-  background-color: #fed7d7;
-  color: #742a2a;
-  border: 1px solid #fc8181;
-}
-
-.message button {
-  background: none;
-  border: none;
-  font-size: 1.3em;
-  cursor: pointer;
-  color: inherit;
-  padding: 0;
-  margin-left: 10px;
-}
-
-.loading {
-  text-align: center;
-  padding: 40px;
-  color: #ff2519;
-  font-size: 1.1em;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(15, 23, 42, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.usuarios-modal {
-  background: white;
-  padding: 28px;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  max-width: 640px;
-  width: 95%;
-}
-
-.reset-modal {
-  max-width: 420px;
-}
-
-.usuarios-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.usuarios-form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-}
-
-.usuarios-form .form-group label {
+/* ── Mobile card username ─────────────────────────────────── */
+.card-username {
   display: block;
-  margin-bottom: 6px;
-  font-weight: 600;
-  color: #374151;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-weight: 400;
+  margin-top: 2px;
 }
 
-.usuarios-form .form-group input,
-.usuarios-form .form-group select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 0.95em;
-  font-family: inherit;
+/* ── Focus ring inside modals ─────────────────────────────── */
+.usuarios-modal .form-group input:focus,
+.usuarios-modal .form-group select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
-.usuarios-form .form-group input:focus,
-.usuarios-form .form-group select:focus {
-  outline: none;
-  border-color: #ff2519;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
-}
-
-.modal-buttons {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  margin-top: 4px;
-}
-
+/* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .usuarios-header {
-    flex-direction: column;
-    align-items: flex-start;
+  .usuarios-filter-row {
+    grid-template-columns: 1fr;
   }
 
-  .filter-actions {
-    flex-direction: column;
-    align-items: stretch;
+  .usuarios-filter-card .ff-controls {
+    flex-wrap: wrap;
+    gap: 10px;
   }
 
-  .filter-actions .btn {
+  .usuarios-filter-card .ff-search,
+  .usuarios-filter-card .ff-state {
     width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
   }
 
-  .modal-buttons {
-    flex-direction: column;
-    align-items: stretch;
+  .usuarios-filter-actions-card {
+    width: 100%;
+    justify-self: stretch;
   }
-}
 
-@keyframes slideIn {
-  from {
-    transform: translateY(-8px);
-    opacity: 0;
+  .usuarios-filter-actions-card .ff-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
-  to {
-    transform: translateY(0);
-    opacity: 1;
+
+  .usuarios-filter-actions-card .ff-actions .btn,
+  .usuarios-filter-actions-card .ff-actions .ff-clear-btn {
+    width: 130px !important;
+  }
+
+  .usuarios-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .usuarios-modal-actions {
+    flex-wrap: wrap;
+  }
+
+  .usuarios-modal-actions .btn,
+  .usuarios-modal-actions .btn-modal-clear {
+    width: 140px;
+    max-width: 140px;
+  }
+
+  .invitation-message {
+    font-size: 0.72rem;
+    max-height: 240px;
   }
 }

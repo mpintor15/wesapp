@@ -1,19 +1,23 @@
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import PropTypes from 'prop-types';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import logo from '../assets/icons/wes-logo.png';
 import './ProtectedRoute.css';
 
-/**
- * Componente para proteger rutas que requieren autenticación
- */
 const ProtectedRoute = ({ children, requiredPermission }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { isAuthenticated, user, loading, hasPermission } = useAuth();
 
-  // Mostrar loader mientras verifica autenticación
   if (loading) {
     return (
-      <div className="protected-route-loader">
-        <p>Cargando...</p>
+      <div className="app-splash">
+        <div className="app-splash-card">
+          <img src={logo} alt="WES Security" className="app-splash-logo" />
+          <span className="spinner app-splash-spinner" />
+          <p className="app-splash-text">Verificando sesión…</p>
+        </div>
       </div>
     );
   }
@@ -24,7 +28,7 @@ const ProtectedRoute = ({ children, requiredPermission }) => {
   }
 
   // Si es primer login, redirigir a cambiar contraseña
-  if (user?.primer_login && window.location.pathname !== '/change-password') {
+  if (user?.primer_login && location.pathname !== '/change-password') {
     return <Navigate to="/change-password" replace />;
   }
 
@@ -34,12 +38,21 @@ const ProtectedRoute = ({ children, requiredPermission }) => {
       <div className="protected-route-denied">
         <h1>Acceso Denegado</h1>
         <p>No tienes permisos para acceder a esta sección.</p>
-        <button onClick={() => window.history.back()}>Volver</button>
+        <button onClick={() => navigate(-1)}>Volver</button>
       </div>
     );
   }
 
   return children;
+};
+
+ProtectedRoute.propTypes = {
+  children: PropTypes.node.isRequired,
+  requiredPermission: PropTypes.string,
+};
+
+ProtectedRoute.defaultProps = {
+  requiredPermission: undefined,
 };
 
 export default ProtectedRoute;
