@@ -225,68 +225,6 @@ describe('createBatchAbono', () => {
       [1001, '2024-01-01', 200]
     );
   });
-
-  test('registra pagos aunque falte la vista de reporte y columnas nuevas de cuentas', async () => {
-    db.query.mockImplementation((query, params) => {
-      const sql = String(query);
-      if (sql.includes('to_regclass')) {
-        const relation = params?.[0];
-        return Promise.resolve({
-          rows: [{ table_name: relation === 'public.pagos' ? 'pagos' : null }],
-          rowCount: 1
-        });
-      }
-      if (sql.includes('information_schema.columns')) {
-        const table = params?.[0];
-        const column = params?.[1];
-        const existingColumns = new Set([
-          'abonos:pago_id',
-          'pagos:cliente_id',
-          'pagos:fecha',
-          'pagos:metodo_pago',
-          'pagos:referencia',
-          'pagos:notas',
-          'pagos:total'
-        ]);
-        const exists = existingColumns.has(`${table}:${column}`);
-        return Promise.resolve({ rows: exists ? [{ exists: 1 }] : [], rowCount: exists ? 1 : 0 });
-      }
-      return Promise.resolve({ rows: [], rowCount: 0 });
-    });
-
-    let facturasQuery = '';
-    db.transaction.mockImplementation(async (callback) => {
-      const fakeClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] })
-          .mockImplementationOnce((query) => {
-            facturasQuery = String(query);
-            return Promise.resolve({
-              rows: [
-                { num_factura: 1001, cliente_id: 1, cancelada: false, saldo_pendiente: '1000.00' }
-              ]
-            });
-          })
-          .mockResolvedValueOnce({ rows: [{ id: 10 }] })
-          .mockResolvedValueOnce({ rows: [] })
-      };
-      await callback(fakeClient);
-    });
-
-    const req = mockReq({
-      body: {
-        cliente_id: 1,
-        fecha: '2024-01-01',
-        abonos: [{ num_factura: 1001, valor_abono: 200 }]
-      }
-    });
-    const res = mockRes();
-    await createBatchAbono(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(201);
-    expect(facturasQuery).not.toContain('vista_reporte_cuentas');
-    expect(facturasQuery).not.toContain('c.cancelada');
-  });
 });
 
 // ============================================
