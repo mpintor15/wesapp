@@ -398,65 +398,17 @@ const getAbonosByFactura = async (req, res) => {
       throw createHttpError(400, 'El número de factura es inválido');
     }
 
-    const pagosTableExists = await tableExists('pagos');
-    const [
-      abonosHasPagoId,
-      pagosHasFecha,
-      pagosHasMetodoPago,
-      pagosHasReferencia,
-      pagosHasNotas,
-      pagosHasTotal
-    ] = await Promise.all([
-      tableColumnExists('abonos', 'pago_id'),
-      pagosTableExists ? tableColumnExists('pagos', 'fecha') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'metodo_pago') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'referencia') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'notas') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false)
-    ]);
-
-    if (!pagosTableExists || !abonosHasPagoId) {
-      const legacyResult = await db.query(
-        `SELECT
-           a.id,
-           NULL::integer AS pago_id,
-           a.fecha_abono,
-           a.valor_abono,
-           a.fecha_abono AS fecha_pago,
-           NULL::varchar AS metodo_pago,
-           NULL::varchar AS referencia,
-           NULL::text AS notas,
-           a.valor_abono AS pago_total,
-           1::int AS pago_facturas_count
-         FROM abonos a
-         WHERE a.num_factura = $1
-         ORDER BY a.fecha_abono DESC, a.id DESC`,
-        [parsedNumFactura]
-      );
-
-      return res.json({
-        success: true,
-        data: legacyResult.rows
-      });
-    }
-
-    const pagoFechaSelect = pagosHasFecha ? 'p.fecha' : 'a.fecha_abono';
-    const pagoMetodoSelect = pagosHasMetodoPago ? 'p.metodo_pago' : 'NULL::varchar';
-    const pagoReferenciaSelect = pagosHasReferencia ? 'p.referencia' : 'NULL::varchar';
-    const pagoNotasSelect = pagosHasNotas ? 'p.notas' : 'NULL::text';
-    const pagoTotalSelect = pagosHasTotal ? 'p.total' : 'a.valor_abono';
-
     const result = await db.query(
       `SELECT
          a.id,
          a.pago_id,
          a.fecha_abono,
          a.valor_abono,
-         ${pagoFechaSelect} AS fecha_pago,
-         ${pagoMetodoSelect} AS metodo_pago,
-         ${pagoReferenciaSelect} AS referencia,
-         ${pagoNotasSelect} AS notas,
-         ${pagoTotalSelect} AS pago_total,
+         p.fecha AS fecha_pago,
+         p.metodo_pago,
+         p.referencia,
+         p.notas,
+         p.total AS pago_total,
          CASE
            WHEN a.pago_id IS NULL THEN 1
            ELSE (
@@ -631,90 +583,41 @@ const getPagos = async (req, res) => {
 const exportPagosExcel = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, metodo_pago } = req.query;
-    const pagosTableExists = await tableExists('pagos');
-    const [
-      abonosHasPagoId,
-      pagosHasClienteId,
-      pagosHasFecha,
-      pagosHasMetodoPago,
-      pagosHasNotas,
-      pagosHasTotal
-    ] = await Promise.all([
-      tableColumnExists('abonos', 'pago_id'),
-      pagosTableExists ? tableColumnExists('pagos', 'cliente_id') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'fecha') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'metodo_pago') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'notas') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false)
-    ]);
 
     const conditions = [];
     const params = [];
 
-    let query;
-    if (!pagosTableExists || !abonosHasPagoId) {
-      if (fecha_inicio && fecha_fin) {
-        params.push(fecha_inicio, fecha_fin);
-        conditions.push(`a.fecha_abono BETWEEN $${params.length - 1} AND $${params.length}`);
-      }
-      if (metodo_pago) {
-        params.push(metodo_pago.toLowerCase());
-        conditions.push(`LOWER('') = $${params.length}`);
-      }
+    if (fecha_inicio && fecha_fin) {
+      params.push(fecha_inicio, fecha_fin);
+      conditions.push(`p.fecha BETWEEN $${params.length - 1} AND $${params.length}`);
+    }
+    if (metodo_pago) {
+      params.push(metodo_pago.toLowerCase());
+      conditions.push(`LOWER(COALESCE(p.metodo_pago, '')) = $${params.length}`);
+    }
 
-      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-      query = `SELECT
-         a.id,
-         a.fecha_abono AS fecha,
-         COALESCE(cl.nombre, '-') AS cliente,
-         '-' AS metodo_pago,
-         '' AS notas,
-         a.valor_abono AS total,
-         '#' || a.num_factura::text || ' (' || TO_CHAR(a.valor_abono, 'FM999999990.00') || ')' AS facturas
-       FROM abonos a
-       JOIN cuentas c ON c.num_factura = a.num_factura
-       JOIN clientes cl ON cl.id = c.cliente_id
-       ${where}
-       ORDER BY a.fecha_abono DESC, a.id DESC`;
-    } else {
-      const dateFilterExpr = pagosHasFecha ? 'COALESCE(p.fecha, a.fecha_abono)' : 'a.fecha_abono';
-      if (fecha_inicio && fecha_fin) {
-        params.push(fecha_inicio, fecha_fin);
-        conditions.push(`${dateFilterExpr} BETWEEN $${params.length - 1} AND $${params.length}`);
-      }
-      if (metodo_pago) {
-        params.push(metodo_pago.toLowerCase());
-        conditions.push(pagosHasMetodoPago ? `LOWER(COALESCE(p.metodo_pago, '')) = $${params.length}` : `LOWER('') = $${params.length}`);
-      }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-      const pagoFechaSelect = pagosHasFecha ? 'COALESCE(p.fecha, MIN(a.fecha_abono))' : 'MIN(a.fecha_abono)';
-      const pagoMetodoSelect = pagosHasMetodoPago ? "COALESCE(p.metodo_pago, '-')" : "'-'";
-      const pagoNotasSelect = pagosHasNotas ? "COALESCE(p.notas, '')" : "''";
-      const pagoTotalSelect = pagosHasTotal ? 'p.total' : 'COALESCE(SUM(a.valor_abono), 0)';
-      const clienteJoinKey = pagosHasClienteId ? 'COALESCE(p.cliente_id, c.cliente_id)' : 'c.cliente_id';
-
-      query = `SELECT
+    const result = await db.query(
+      `SELECT
          p.id,
-         ${pagoFechaSelect} AS fecha,
+         p.fecha,
          COALESCE(cl.nombre, '-') AS cliente,
-         ${pagoMetodoSelect} AS metodo_pago,
-         ${pagoNotasSelect} AS notas,
-         ${pagoTotalSelect} AS total,
+         COALESCE(p.metodo_pago, '-') AS metodo_pago,
+         COALESCE(p.notas, '') AS notas,
+         p.total,
          STRING_AGG(
            '#' || a.num_factura::text || ' (' || TO_CHAR(a.valor_abono, 'FM999999990.00') || ')',
            ', ' ORDER BY a.num_factura
          ) AS facturas
        FROM pagos p
+       JOIN clientes cl ON cl.id = p.cliente_id
        LEFT JOIN abonos a ON a.pago_id = p.id
-       LEFT JOIN cuentas c ON c.num_factura = a.num_factura
-       LEFT JOIN clientes cl ON cl.id = ${clienteJoinKey}
        ${where}
        GROUP BY p.id, cl.nombre
-       ORDER BY fecha DESC, p.id DESC`;
-    }
-
-    const result = await db.query(query, params);
+       ORDER BY p.fecha DESC, p.id DESC`,
+      params
+    );
 
     const { workbook, worksheet } = createWorkbook('Pagos', [
       { header: 'Pago',           key: 'id',          width: 12 },
@@ -1224,32 +1127,6 @@ const deletePago = async (req, res) => {
       throw createHttpError(400, 'El id del pago es inválido');
     }
 
-    const pagosTableExists = await tableExists('pagos');
-    const abonosHasPagoId = await tableColumnExists('abonos', 'pago_id');
-
-    if (!pagosTableExists || !abonosHasPagoId) {
-      const currentLegacy = await db.query(
-        'SELECT id, num_factura, fecha_abono, valor_abono FROM abonos WHERE id = $1',
-        [id]
-      );
-
-      if (currentLegacy.rowCount === 0) {
-        return res.status(404).json({ success: false, message: 'Pago no encontrado' });
-      }
-
-      await db.query('DELETE FROM abonos WHERE id = $1', [id]);
-
-      await logAudit(db, {
-        tabla: 'abonos',
-        operacion: 'DELETE',
-        registro_id: String(id),
-        datos_anteriores: currentLegacy.rows[0],
-        ...auditFromReq(req)
-      });
-
-      return res.json({ success: true, message: 'Pago eliminado exitosamente' });
-    }
-
     const current = await db.query(
       `SELECT
          p.id,
@@ -1305,16 +1182,8 @@ const deleteAbono = async (req, res) => {
       throw createHttpError(400, 'El id del abono es inválido');
     }
 
-    const pagosTableExists = await tableExists('pagos');
-    const [abonosHasPagoId, pagosHasTotal] = await Promise.all([
-      tableColumnExists('abonos', 'pago_id'),
-      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false)
-    ]);
-    const currentSelect = abonosHasPagoId
-      ? 'SELECT id, pago_id, num_factura, valor_abono FROM abonos WHERE id = $1'
-      : 'SELECT id, NULL::integer AS pago_id, num_factura, valor_abono FROM abonos WHERE id = $1';
     const current = await db.query(
-      currentSelect,
+      'SELECT id, pago_id, num_factura, valor_abono FROM abonos WHERE id = $1',
       [id]
     );
 
@@ -1327,14 +1196,14 @@ const deleteAbono = async (req, res) => {
     await db.transaction(async (client) => {
       await client.query('DELETE FROM abonos WHERE id = $1', [id]);
 
-      if (pagosTableExists && abonosHasPagoId && abono.pago_id) {
+      if (abono.pago_id) {
         const remaining = await client.query(
           'SELECT COUNT(*) AS cnt FROM abonos WHERE pago_id = $1',
           [abono.pago_id]
         );
         if (Number(remaining.rows[0].cnt) === 0) {
           await client.query('DELETE FROM pagos WHERE id = $1', [abono.pago_id]);
-        } else if (pagosHasTotal) {
+        } else {
           await client.query(
             'UPDATE pagos SET total = (SELECT COALESCE(SUM(valor_abono), 0) FROM abonos WHERE pago_id = $1) WHERE id = $1',
             [abono.pago_id]
