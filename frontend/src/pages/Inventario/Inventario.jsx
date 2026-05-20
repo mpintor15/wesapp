@@ -299,9 +299,6 @@ const Inventario = () => {
     if (formData.tipo_articulo === 'arma' && !formData.marca.trim()) {
       errors.marca = 'Ingresa la marca';
     }
-    if (formData.tipo_articulo === 'arma' && !formData.modelo.trim()) {
-      errors.modelo = 'Ingresa el modelo';
-    }
     if (formData.tipo_articulo === 'arma' && !formData.numero_serie.trim()) {
       errors.numero_serie = 'Ingresa el número de serie';
     }
@@ -1350,7 +1347,7 @@ const Inventario = () => {
                       </div>
                       <div className="form-group">
                         <label htmlFor="art-modelo-arma">Modelo</label>
-                        <input id="art-modelo-arma" type="text" name="modelo" value={formData.modelo} onChange={handleFormChange} placeholder="Ej: G19" required />
+                        <input id="art-modelo-arma" type="text" name="modelo" value={formData.modelo} onChange={handleFormChange} placeholder="Ej: G19" />
                         {articuloErrors.modelo ? <span className="field-error">{articuloErrors.modelo}</span> : null}
                       </div>
                       <div className="form-group">
