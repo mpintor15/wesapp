@@ -20,6 +20,9 @@ const startServer = async () => {
     // Test de conexión a la base de datos
     await db.query('SELECT NOW()');
     console.log('✅ Conexión a PostgreSQL establecida');
+
+    await ensureSchema(db);
+    console.log('✅ Esquema de base de datos verificado');
     
     // Iniciar servidor
     app.listen(PORT, () => {
@@ -27,14 +30,6 @@ const startServer = async () => {
       console.log(`Ambiente: ${config.nodeEnv}`);
       console.log(`URL: http://localhost:${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/health`);
-
-      ensureSchema(db)
-        .then(() => {
-          console.log('✅ Esquema de base de datos verificado');
-        })
-        .catch((error) => {
-          console.error('❌ Error al verificar esquema de base de datos:', error);
-        });
     });
     
   } catch (error) {
