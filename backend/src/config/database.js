@@ -53,6 +53,7 @@ pool.on('connect', () => {
 // Evento de error
 pool.on('error', (err) => {
   console.error('❌ Error inesperado en el cliente de PostgreSQL', err);
+  process.exit(-1);
 });
 
 // Función helper para ejecutar queries
