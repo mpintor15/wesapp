@@ -10,7 +10,6 @@
 const app = require('./app');
 const config = require('./config/config');
 const db = require('./config/database');
-const { ensureSchema } = require('./config/ensureSchema');
 
 const PORT = config.port;
 
@@ -20,9 +19,6 @@ const startServer = async () => {
     // Test de conexión a la base de datos
     await db.query('SELECT NOW()');
     console.log('✅ Conexión a PostgreSQL establecida');
-
-    await ensureSchema(db);
-    console.log('✅ Esquema de base de datos verificado');
     
     // Iniciar servidor
     app.listen(PORT, () => {
