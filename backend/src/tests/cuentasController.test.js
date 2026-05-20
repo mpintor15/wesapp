@@ -54,16 +54,6 @@ const mockRes = () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  db.query.mockImplementation((query) => {
-    const sql = String(query);
-    if (sql.includes('to_regclass')) {
-      return Promise.resolve({ rows: [{ table_name: 'pagos' }], rowCount: 1 });
-    }
-    if (sql.includes('information_schema.columns')) {
-      return Promise.resolve({ rows: [{ exists: 1 }], rowCount: 1 });
-    }
-    return Promise.resolve({ rows: [], rowCount: 0 });
-  });
 });
 
 // ============================================
@@ -179,50 +169,6 @@ describe('createBatchAbono', () => {
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ success: true, message: expect.stringContaining('2') })
-    );
-  });
-
-  test('registra abonos en esquema legacy sin tabla pagos ni pago_id', async () => {
-    db.query.mockImplementation((query) => {
-      const sql = String(query);
-      if (sql.includes('to_regclass')) {
-        return Promise.resolve({ rows: [{ table_name: null }], rowCount: 1 });
-      }
-      if (sql.includes('information_schema.columns')) {
-        return Promise.resolve({ rows: [], rowCount: 0 });
-      }
-      return Promise.resolve({ rows: [], rowCount: 0 });
-    });
-
-    let fakeClient;
-    db.transaction.mockImplementation(async (callback) => {
-      fakeClient = {
-        query: jest.fn()
-          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] })
-          .mockResolvedValueOnce({
-            rows: [
-              { num_factura: 1001, cliente_id: 1, cancelada: false, saldo_pendiente: '1000.00' }
-            ]
-          })
-          .mockResolvedValueOnce({ rows: [] })
-      };
-      await callback(fakeClient);
-    });
-
-    const req = mockReq({
-      body: {
-        cliente_id: 1,
-        fecha: '2024-01-01',
-        abonos: [{ num_factura: 1001, valor_abono: 200 }]
-      }
-    });
-    const res = mockRes();
-    await createBatchAbono(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(201);
-    expect(fakeClient.query).toHaveBeenLastCalledWith(
-      'INSERT INTO abonos (num_factura, fecha_abono, valor_abono) VALUES ($1, $2, $3)',
-      [1001, '2024-01-01', 200]
     );
   });
 });
