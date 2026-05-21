@@ -13,6 +13,10 @@
  * protegida: verifyToken → requireActive → requirePermission('modulo').
  */
 const config = require('../config/config');
+const db = require('../config/database');
+
+const ACTIVE_CACHE_TTL_MS = Number.parseInt(process.env.ACTIVE_USER_CACHE_TTL_MS, 10) || 30000;
+const activeUserCache = new Map();
 
 /**
  * Middleware para verificar si el usuario tiene permiso para acceder a un módulo
@@ -52,7 +56,6 @@ const requirePermission = (modulo) => {
  * Middleware para verificar si el usuario está activo
  */
 const requireActive = async (req, res, next) => {
-  const db = require('../config/database');
   const userId = Number(req.user?.id);
 
   if (!Number.isInteger(userId) || userId <= 0) {
@@ -63,6 +66,17 @@ const requireActive = async (req, res, next) => {
   }
 
   try {
+    const cached = activeUserCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      if (!cached.active) {
+        return res.status(403).json({
+          success: false,
+          message: 'Usuario desactivado. Contacta al administrador'
+        });
+      }
+      return next();
+    }
+
     const result = await db.query(
       'SELECT activo FROM usuarios WHERE id = $1',
       [userId]
@@ -75,7 +89,13 @@ const requireActive = async (req, res, next) => {
       });
     }
 
-    if (!result.rows[0].activo) {
+    const active = Boolean(result.rows[0].activo);
+    activeUserCache.set(userId, {
+      active,
+      expiresAt: Date.now() + ACTIVE_CACHE_TTL_MS
+    });
+
+    if (!active) {
       return res.status(403).json({
         success: false,
         message: 'Usuario desactivado. Contacta al administrador'
@@ -108,4 +128,12 @@ const requireRole = (...roles) => {
   };
 };
 
-module.exports = { requirePermission, requireRole, requireActive };
+const clearActiveCache = (userId) => {
+  if (userId) {
+    activeUserCache.delete(Number(userId));
+    return;
+  }
+  activeUserCache.clear();
+};
+
+module.exports = { requirePermission, requireRole, requireActive, clearActiveCache };

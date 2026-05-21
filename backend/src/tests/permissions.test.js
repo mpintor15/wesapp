@@ -60,8 +60,16 @@ describe('requirePermission', () => {
     expect(next).toHaveBeenCalled();
   });
 
-  test('supervisor puede eliminar artículo', () => {
+  test('supervisor NO puede eliminar artículo', () => {
     const middleware = requirePermission('eliminar_articulo');
+    const res = mockRes();
+    middleware(mockReq('supervisor'), res, next);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('supervisor puede dar de baja artículo', () => {
+    const middleware = requirePermission('dar_baja_articulo');
     middleware(mockReq('supervisor'), mockRes(), next);
     expect(next).toHaveBeenCalled();
   });

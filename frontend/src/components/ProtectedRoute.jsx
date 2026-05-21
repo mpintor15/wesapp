@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import logo from '../assets/icons/wes-logo.png';
 import './ProtectedRoute.css';
 
-const ProtectedRoute = ({ children, requiredPermission }) => {
+const ProtectedRoute = ({ children, requiredPermission = undefined }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, user, loading, hasPermission } = useAuth();
@@ -49,10 +49,6 @@ const ProtectedRoute = ({ children, requiredPermission }) => {
 ProtectedRoute.propTypes = {
   children: PropTypes.node.isRequired,
   requiredPermission: PropTypes.string,
-};
-
-ProtectedRoute.defaultProps = {
-  requiredPermission: undefined,
 };
 
 export default ProtectedRoute;

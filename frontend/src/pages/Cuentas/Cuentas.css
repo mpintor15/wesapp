@@ -851,8 +851,11 @@
 }
 
 .report-body .ff-filter-card {
-  box-shadow: none;
   background: #f7f9fc;
+  border: 1.5px solid #dde4ef;
+  border-radius: 9px;
+  box-shadow: none;
+  padding: 16px;
 }
 
 .pagos-report-filters {

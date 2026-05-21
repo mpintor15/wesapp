@@ -123,6 +123,7 @@ module.exports = {
       'usuarios', 
       'crear_articulo', 
       'eliminar_articulo', 
+      'dar_baja_articulo',
       'crear_movimiento', 
       'exportar'
     ],
@@ -131,7 +132,7 @@ module.exports = {
       'inventario', 
       'personal', 
       'crear_articulo', 
-      'eliminar_articulo', 
+      'dar_baja_articulo',
       'crear_movimiento', 
       'exportar'
     ],
@@ -139,7 +140,7 @@ module.exports = {
       'inventario',
       'personal',
       'crear_articulo',
-      'eliminar_articulo',
+      'dar_baja_articulo',
       'crear_movimiento',
       'exportar'
     ],

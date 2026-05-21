@@ -12,8 +12,8 @@
  *  - healthCheck()         : Verifica la conectividad y retorna la versión de PG.
  *  - close()               : Cierra todas las conexiones del pool limpiamente.
  *
- * El pool está configurado con mín. 2 y máx. 20 conexiones simultáneas,
- * reciclando cada conexión tras 7.500 usos para prevenir memory leaks.
+ * En producción el pool usa valores conservadores para no agotar límites de
+ * Railway/PostgreSQL cuando hay reinicios, health checks o varias réplicas.
  */
 const { Pool } = require('pg');
 const path = require('path');
@@ -29,6 +29,18 @@ const sslConfig = process.env.DB_SSL === 'true'
   ? { rejectUnauthorized: true } // Neon usa certificados públicos válidos — validar siempre
   : false;                        // Sin SSL para desarrollo local
 
+const parsePoolInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const isProduction = process.env.NODE_ENV === 'production';
+const poolMax = parsePoolInt(process.env.DB_POOL_MAX, isProduction ? 5 : 10);
+const poolMin = parsePoolInt(process.env.DB_POOL_MIN, 0);
+const connectionTimeoutMillis = parsePoolInt(process.env.DB_CONNECTION_TIMEOUT_MS, 5000);
+const idleTimeoutMillis = parsePoolInt(process.env.DB_IDLE_TIMEOUT_MS, isProduction ? 10000 : 30000);
+const slowQueryThresholdMs = parsePoolInt(process.env.DB_SLOW_QUERY_MS, isProduction ? 1000 : 300);
+
 // Configuración del pool de conexiones PostgreSQL
 const pool = new Pool({
   host: process.env.DB_HOST,
@@ -37,23 +49,29 @@ const pool = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   ssl: sslConfig,                  // SSL activado solo si DB_SSL=true
-  max: parseInt(process.env.DB_POOL_MAX) || 20, // Máximo de conexiones simultáneas
-  min: parseInt(process.env.DB_POOL_MIN) || 2, // Mínimo de conexiones mantenidas
-  idleTimeoutMillis: 30000, // Cerrar conexiones inactivas después de 30s
-  connectionTimeoutMillis: 2000, // Timeout para obtener conexión del pool
+  max: Math.max(poolMax, 1), // Máximo de conexiones simultáneas
+  min: Math.min(poolMin, Math.max(poolMax, 1)), // No mantener conexiones si Railway las recicla
+  idleTimeoutMillis,
+  connectionTimeoutMillis,
   maxUses: 7500, // Reciclar conexión después de 7500 usos (previene memory leaks)
-  allowExitOnIdle: false, // No cerrar el proceso si todas las conexiones están idle
+  allowExitOnIdle: false,
 });
 
 // Evento cuando se conecta
 pool.on('connect', () => {
-  console.log('✅ Conectado a la base de datos PostgreSQL');
+  if (!isProduction) {
+    console.log('✅ Conectado a la base de datos PostgreSQL');
+  }
 });
 
 // Evento de error
 pool.on('error', (err) => {
-  console.error('❌ Error inesperado en el cliente de PostgreSQL', err);
-  process.exit(-1);
+  // pg ya retira del pool el cliente idle que falló. En Railway/DBaaS esto puede
+  // pasar durante reinicios breves; matar el proceso entero provoca caídas visibles.
+  console.error('❌ Error inesperado en un cliente idle de PostgreSQL', {
+    message: err.message,
+    code: err.code
+  });
 });
 
 // Función helper para ejecutar queries
@@ -61,13 +79,18 @@ const query = async (text, params) => {
   const start = Date.now();
   try {
     const res = await pool.query(text, params);
-    if (process.env.NODE_ENV === 'development') {
-      const duration = Date.now() - start;
+    const duration = Date.now() - start;
+    if (!isProduction && duration >= slowQueryThresholdMs) {
       console.log('✅ Query ejecutado', { text, duration, rows: res.rowCount });
     }
     return res;
   } catch (error) {
-    console.error('❌ Error en query:', error);
+    console.error('❌ Error en query:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      pool: getPoolStats()
+    });
     throw error;
   }
 };
@@ -119,6 +142,7 @@ const getPoolStats = () => {
     total: pool.totalCount,
     idle: pool.idleCount,
     waiting: pool.waitingCount,
+    max: Math.max(poolMax, 1),
   };
 };
 

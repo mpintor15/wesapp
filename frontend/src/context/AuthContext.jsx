@@ -6,9 +6,9 @@ import { AUTH_EXPIRED_EVENT } from '../services/api';
 const AuthContext = createContext(null);
 
 const ROLE_PERMISSIONS = {
-  gerente:       ['cuentas', 'inventario', 'personal', 'usuarios', 'crear_articulo', 'eliminar_articulo', 'crear_movimiento', 'exportar'],
-  secretario:    ['cuentas', 'inventario', 'personal', 'crear_articulo', 'eliminar_articulo', 'crear_movimiento', 'exportar'],
-  supervisor:    ['inventario', 'personal', 'crear_articulo', 'eliminar_articulo', 'crear_movimiento', 'exportar'],
+  gerente:       ['cuentas', 'inventario', 'personal', 'usuarios', 'crear_articulo', 'eliminar_articulo', 'dar_baja_articulo', 'crear_movimiento', 'exportar'],
+  secretario:    ['cuentas', 'inventario', 'personal', 'crear_articulo', 'dar_baja_articulo', 'crear_movimiento', 'exportar'],
+  supervisor:    ['inventario', 'personal', 'crear_articulo', 'dar_baja_articulo', 'crear_movimiento', 'exportar'],
   contador:      ['cuentas', 'exportar'],
 };
 

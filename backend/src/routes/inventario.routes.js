@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const inventarioController = require('../controllers/inventarioController');
 const { verifyToken } = require('../middleware/auth');
-const { requireActive, requirePermission } = require('../middleware/permissions');
+const { requireActive, requirePermission, requireRole } = require('../middleware/permissions');
 
 // All routes require authentication + inventario permission
 router.use(verifyToken, requireActive, requirePermission('inventario'));
@@ -28,6 +28,24 @@ router.get('/ubicaciones', inventarioController.getUbicaciones);
  * @access  Private (inventario)
  */
 router.get('/articulos', inventarioController.getArticulos);
+
+/**
+ * @route   GET /api/inventario/articulos/bajas
+ * @desc    Obtener historial de bajas de artículos
+ * @access  Private (inventario)
+ */
+router.get('/articulos/bajas', inventarioController.getBajasArticulos);
+
+/**
+ * @route   GET /api/inventario/articulos/bajas/excel
+ * @desc    Exportar historial de bajas a Excel
+ * @access  Private (exportar)
+ */
+router.get(
+  '/articulos/bajas/excel',
+  requirePermission('exportar'),
+  inventarioController.exportBajasArticulosExcel
+);
 
 /**
  * @route   GET /api/inventario/articulos/excel
@@ -63,13 +81,25 @@ router.put(
 );
 
 /**
+ * @route   POST /api/inventario/articulos/:id/baja
+ * @desc    Dar de baja total o parcialmente un artículo
+ * @access  Private (dar_baja_articulo)
+ */
+router.post(
+  '/articulos/:id/baja',
+  requirePermission('dar_baja_articulo'),
+  inventarioController.darBajaArticulo
+);
+
+/**
  * @route   DELETE /api/inventario/articulos/:id
  * @desc    Eliminar articulo
- * @access  Private (eliminar_articulo)
+ * @access  Private (gerente + eliminar_articulo)
  */
 router.delete(
   '/articulos/:id',
   requirePermission('eliminar_articulo'),
+  requireRole('gerente'),
   inventarioController.deleteArticulo
 );
 

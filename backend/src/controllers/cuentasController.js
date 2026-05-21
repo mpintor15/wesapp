@@ -33,7 +33,13 @@ const { createHttpError, handleControllerError } = require('../utils/http');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 
+// Cache de introspección de esquema — se llena en el primer request y se reutiliza.
+// El servidor se reinicia con cada deploy, así que no hay riesgo de valores obsoletos.
+const _schemaCache = {};
+
 const tableColumnExists = async (tableName, columnName) => {
+  const key = `${tableName}.${columnName}`;
+  if (key in _schemaCache) return _schemaCache[key];
   const result = await db.query(
     `SELECT 1
      FROM information_schema.columns
@@ -43,12 +49,16 @@ const tableColumnExists = async (tableName, columnName) => {
      LIMIT 1`,
     [tableName, columnName]
   );
-  return result.rowCount > 0;
+  _schemaCache[key] = result.rowCount > 0;
+  return _schemaCache[key];
 };
 
 const tableExists = async (tableName) => {
+  const key = `table::${tableName}`;
+  if (key in _schemaCache) return _schemaCache[key];
   const result = await db.query('SELECT to_regclass($1) AS table_name', [`public.${tableName}`]);
-  return Boolean(result.rows[0]?.table_name);
+  _schemaCache[key] = Boolean(result.rows[0]?.table_name);
+  return _schemaCache[key];
 };
 
 // ============================================
@@ -466,7 +476,12 @@ const getPagos = async (req, res) => {
 
     if (!pagosTableExists || !abonosHasPagoId) {
       const legacyResult = await db.query(
-        `SELECT
+        `WITH totales_abonos AS (
+           SELECT num_factura, SUM(valor_abono) AS total_abonos
+           FROM abonos
+           GROUP BY num_factura
+         )
+         SELECT
            a.id,
            a.fecha_abono AS fecha,
            NULL::varchar AS metodo_pago,
@@ -492,13 +507,14 @@ const getPagos = async (req, res) => {
                    + CASE WHEN ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
                    - CASE WHEN ${cuentasHasIncluyeRetencionFuente ? 'COALESCE(c.incluye_retencion_fuente, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
                    - CASE WHEN ${cuentasHasIncluyeRetencionIva ? 'COALESCE(c.incluye_retencion_iva, FALSE)' : 'FALSE'} AND ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
-                   - COALESCE((SELECT SUM(a2.valor_abono) FROM abonos a2 WHERE a2.num_factura = c.num_factura), 0)
+                   - COALESCE(ta.total_abonos, 0)
                  )
              )
            ) AS facturas
          FROM abonos a
          JOIN cuentas c ON c.num_factura = a.num_factura
          JOIN clientes cl ON cl.id = c.cliente_id
+         LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura
          ORDER BY a.created_at DESC, a.fecha_abono DESC, a.id DESC`
       );
 
@@ -522,7 +538,12 @@ const getPagos = async (req, res) => {
     const incluyeRetIvaSelect = cuentasHasIncluyeRetencionIva ? 'COALESCE(c.incluye_retencion_iva, FALSE)' : 'FALSE';
 
     const result = await db.query(
-      `SELECT
+      `WITH totales_abonos AS (
+         SELECT num_factura, SUM(valor_abono) AS total_abonos
+         FROM abonos
+         GROUP BY num_factura
+       )
+       SELECT
          p.id,
          ${pagoFechaSelect} AS fecha,
          ${pagoMetodoSelect} AS metodo_pago,
@@ -551,11 +572,7 @@ const getPagos = async (req, res) => {
                      + CASE WHEN ${incluyeIvaSelect} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
                      - CASE WHEN ${incluyeRetFuenteSelect} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
                      - CASE WHEN ${incluyeRetIvaSelect} AND ${incluyeIvaSelect} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
-                     - COALESCE((
-                         SELECT SUM(a2.valor_abono)
-                         FROM abonos a2
-                         WHERE a2.num_factura = c.num_factura
-                       ), 0)
+                     - COALESCE(ta.total_abonos, 0)
                    )
                  END
              )
@@ -566,6 +583,7 @@ const getPagos = async (req, res) => {
        FROM pagos p
        LEFT JOIN abonos a ON a.pago_id = p.id
        LEFT JOIN cuentas c ON c.num_factura = a.num_factura
+       LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura
        LEFT JOIN clientes cl ON cl.id = ${clienteJoinKey}
        GROUP BY p.id, cl.id, cl.nombre, cl.identificacion
        ORDER BY created_at DESC, fecha DESC, p.id DESC`

@@ -81,6 +81,66 @@ const buildInventarioAlertasQuery = ({ tipo, ubicacion_id, estado, search }) => 
   return { query, params };
 };
 
+const buildBajasArticulosQuery = ({ search, from, to }) => {
+  const params = [];
+  const conditions = [];
+  let query = `SELECT
+      b.id,
+      b.articulo_id,
+      b.cantidad,
+      b.motivo,
+      b.fecha_baja,
+      b.tipo_articulo,
+      b.nombre_articulo,
+      b.talla,
+      b.marca,
+      b.modelo,
+      b.numero_serie,
+      b.calibre,
+      b.codigo_pantalla,
+      b.codigo_radio,
+      b.version,
+      b.ubicacion_id,
+      b.ubicacion_nombre,
+      u.usuario
+    FROM articulos_bajas b
+    LEFT JOIN usuarios u ON u.id = b.usuario_id`;
+
+  if (search) {
+    params.push(`%${String(search).trim()}%`);
+    conditions.push(`(
+      b.nombre_articulo ILIKE $${params.length} OR
+      b.numero_serie ILIKE $${params.length} OR
+      b.codigo_radio ILIKE $${params.length} OR
+      b.marca ILIKE $${params.length} OR
+      b.modelo ILIKE $${params.length} OR
+      b.calibre ILIKE $${params.length} OR
+      b.codigo_pantalla ILIKE $${params.length} OR
+      b.version ILIKE $${params.length} OR
+      b.ubicacion_nombre ILIKE $${params.length} OR
+      b.motivo ILIKE $${params.length} OR
+      u.usuario ILIKE $${params.length}
+    )`);
+  }
+
+  if (from) {
+    params.push(from);
+    conditions.push(`b.fecha_baja::date >= $${params.length}::date`);
+  }
+
+  if (to) {
+    params.push(to);
+    conditions.push(`b.fecha_baja::date <= $${params.length}::date`);
+  }
+
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
+  }
+
+  query += ' ORDER BY b.fecha_baja DESC, b.id DESC';
+  return { query, params };
+};
+
 // ============================================
 // UBICACIONES
 // ============================================
@@ -471,6 +531,162 @@ const deleteArticulo = async (req, res) => {
   }
 };
 
+const getBajasArticulos = async (req, res) => {
+  try {
+    const { search, from, to } = req.query;
+    const { query, params } = buildBajasArticulosQuery({ search, from, to });
+    const result = await db.query(query, params);
+
+    res.json({
+      success: true,
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error al obtener bajas de artículos:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error en el servidor'
+    });
+  }
+};
+
+const darBajaArticulo = async (req, res) => {
+  const client = await db.getClient();
+  try {
+    const { id } = req.params;
+    const motivo = req.body?.motivo ? String(req.body.motivo).trim() : '';
+    const cantidadSolicitada = Number.parseInt(req.body?.cantidad, 10);
+
+    if (!motivo) {
+      return res.status(400).json({
+        success: false,
+        message: 'El motivo de la baja es requerido'
+      });
+    }
+
+    await client.query('BEGIN');
+
+    const articuloRes = await client.query(
+      `SELECT
+        a.id,
+        a.tipo_articulo,
+        a.nombre_articulo,
+        a.cantidad,
+        a.talla,
+        a.marca,
+        a.modelo,
+        a.numero_serie,
+        a.calibre,
+        a.codigo_pantalla,
+        a.codigo_radio,
+        a.version,
+        a.ubicacion_id,
+        u.nombre AS ubicacion_nombre
+       FROM articulos a
+       LEFT JOIN ubicaciones u ON u.id = a.ubicacion_id
+       WHERE a.id = $1 AND a.activo = TRUE
+       FOR UPDATE OF a`,
+      [id]
+    );
+
+    if (articuloRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({
+        success: false,
+        message: 'Artículo no encontrado'
+      });
+    }
+
+    const articulo = articuloRes.rows[0];
+    const cantidadActual = Number.parseInt(articulo.cantidad, 10) || 1;
+    const cantidadBaja = isStockTipo(articulo.tipo_articulo) ? cantidadSolicitada : 1;
+
+    if (!Number.isInteger(cantidadBaja) || cantidadBaja <= 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'La cantidad a dar de baja debe ser mayor a 0'
+      });
+    }
+
+    if (cantidadBaja > cantidadActual) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        message: 'La cantidad a dar de baja supera el stock disponible'
+      });
+    }
+
+    await client.query(
+      `INSERT INTO articulos_bajas (
+        articulo_id,
+        usuario_id,
+        cantidad,
+        motivo,
+        tipo_articulo,
+        nombre_articulo,
+        talla,
+        marca,
+        modelo,
+        numero_serie,
+        calibre,
+        codigo_pantalla,
+        codigo_radio,
+        version,
+        ubicacion_id,
+        ubicacion_nombre
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+      [
+        articulo.id,
+        req.user?.id || null,
+        cantidadBaja,
+        motivo,
+        articulo.tipo_articulo,
+        articulo.nombre_articulo,
+        articulo.talla,
+        articulo.marca,
+        articulo.modelo,
+        articulo.numero_serie,
+        articulo.calibre,
+        articulo.codigo_pantalla,
+        articulo.codigo_radio,
+        articulo.version,
+        articulo.ubicacion_id,
+        articulo.ubicacion_nombre
+      ]
+    );
+
+    const restante = cantidadActual - cantidadBaja;
+    if (restante > 0) {
+      await client.query(
+        'UPDATE articulos SET cantidad = $1 WHERE id = $2',
+        [restante, articulo.id]
+      );
+    } else {
+      await client.query(
+        'UPDATE articulos SET cantidad = 0, activo = FALSE WHERE id = $1',
+        [articulo.id]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: restante > 0 ? 'Cantidad dada de baja exitosamente' : 'Artículo dado de baja exitosamente'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error al dar de baja artículo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error en el servidor'
+    });
+  } finally {
+    client.release();
+  }
+};
+
 // ============================================
 // MOVIMIENTOS
 // ============================================
@@ -702,6 +918,48 @@ const exportMovimientosExcel = async (req, res) => {
   } catch (error) {
     console.error('Error al exportar movimientos:', error);
     res.status(500).json({ success: false, message: 'Error al exportar movimientos' });
+  }
+};
+
+const exportBajasArticulosExcel = async (req, res) => {
+  try {
+    const { search, from, to } = req.query;
+    const { query, params } = buildBajasArticulosQuery({ search, from, to });
+    const result = await db.query(query, params);
+
+    const { workbook, worksheet } = createWorkbook('Dados de baja', [
+      { header: 'Fecha',      key: 'fecha',     width: 14 },
+      { header: 'Tipo',       key: 'tipo',      width: 16 },
+      { header: 'Artículo',   key: 'articulo',  width: 28 },
+      { header: 'Serie',      key: 'serie',     width: 22 },
+      { header: 'Cantidad',   key: 'cantidad',  width: 10 },
+      { header: 'Marca',      key: 'marca',     width: 16 },
+      { header: 'Modelo',     key: 'modelo',    width: 18 },
+      { header: 'Calibre',    key: 'calibre',   width: 12 },
+      { header: 'Ubicación',  key: 'ubicacion', width: 24 },
+      { header: 'Usuario',    key: 'usuario',   width: 18 },
+      { header: 'Motivo',     key: 'motivo',    width: 42 },
+    ]);
+
+    result.rows.forEach((row) => worksheet.addRow({
+      fecha:     row.fecha_baja ? new Date(row.fecha_baja).toLocaleDateString('es-EC') : '',
+      tipo:      TIPO_LABELS[row.tipo_articulo] ?? row.tipo_articulo ?? '',
+      articulo:  row.nombre_articulo || '',
+      serie:     getArticuloSerie(row) || '',
+      cantidad:  row.cantidad || '',
+      marca:     row.marca || '',
+      modelo:    row.modelo || '',
+      calibre:   row.calibre || '',
+      ubicacion: row.ubicacion_nombre || '',
+      usuario:   row.usuario || '',
+      motivo:    row.motivo || '',
+    }));
+
+    styleDataRows(worksheet);
+    await sendExcel(workbook, res, 'articulos-dados-de-baja.xlsx');
+  } catch (error) {
+    console.error('Error al exportar bajas de artículos:', error);
+    res.status(500).json({ success: false, message: 'Error al exportar bajas de artículos' });
   }
 };
 
@@ -1063,9 +1321,12 @@ module.exports = {
   createArticulo,
   updateArticulo,
   deleteArticulo,
+  getBajasArticulos,
+  darBajaArticulo,
   getMovimientos,
   createMovimiento,
   downloadMovimientoPdf,
   exportArticulosExcel,
+  exportBajasArticulosExcel,
   exportMovimientosExcel
 };

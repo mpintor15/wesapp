@@ -64,12 +64,16 @@ const Inventario = () => {
   const [catalogArticulos, setCatalogArticulos] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
+  const [bajas, setBajas] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [movimientosLoading, setMovimientosLoading] = useState(false);
+  const [bajasLoading, setBajasLoading] = useState(false);
   const { isSubmitting: isSavingArticulo, withSubmit: withArticuloSubmit } = useSubmitState();
   const { isSubmitting: isSavingMovimiento, withSubmit: withMovimientoSubmit } = useSubmitState();
+  const { isSubmitting: isSavingBaja, withSubmit: withBajaSubmit } = useSubmitState();
   const { isSubmitting: isExportingArticulos, withSubmit: withArticulosExportSubmit } = useSubmitState();
+  const { isSubmitting: isExportingBajas, withSubmit: withBajasExportSubmit } = useSubmitState();
   const { isSubmitting: isExportingMovimientos, withSubmit: withMovimientosExportSubmit } = useSubmitState();
   const [activeTab, setActiveTab] = useState('articulos');
 
@@ -82,6 +86,9 @@ const Inventario = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteCantidad, setDeleteCantidad] = useState(1);
   const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false);
+  const [showBajaModal, setShowBajaModal] = useState(false);
+  const [bajaTarget, setBajaTarget] = useState(null);
+  const [bajaForm, setBajaForm] = useState({ cantidad: 1, motivo: '' });
 
   // Forms
   const [movimientoForm, setMovimientoForm] = useState({
@@ -127,6 +134,16 @@ const Inventario = () => {
     from: '',
     to: ''
   });
+  const [bajasFilters, setBajasFilters] = useState({
+    search: '',
+    from: '',
+    to: ''
+  });
+  const [bajasFiltersDraft, setBajasFiltersDraft] = useState({
+    search: '',
+    from: '',
+    to: ''
+  });
   const [exportFilters, setExportFilters] = useState({
     tipo: '',
     ubicacion_id: '',
@@ -146,10 +163,18 @@ const Inventario = () => {
     showToast(text, type);
   }, [showToast]);
 
+  const canDeleteArticulo = hasPermission('eliminar_articulo');
+  const canDarBajaArticulo = hasPermission('dar_baja_articulo');
+  const showArticuloActions = canDeleteArticulo || canDarBajaArticulo;
+  const articuloActionsClass = canDeleteArticulo && canDarBajaArticulo
+    ? 'app-col-actions--double'
+    : 'app-col-actions--single';
+
   // ── Data loading ─────────────────────────────────
   useEffect(() => {
     loadInitialData();
     loadMovimientos();
+    loadBajas();
   }, []);
 
   const loadInitialData = async () => {
@@ -189,6 +214,25 @@ const Inventario = () => {
       showMessage('error', res.message);
     }
     setMovimientosLoading(false);
+  };
+
+  const getActiveBajasFilterParams = (source = bajasFilters) => {
+    const params = {};
+    if (source.search) params.search = source.search;
+    if (source.from) params.from = source.from;
+    if (source.to) params.to = source.to;
+    return params;
+  };
+
+  const loadBajas = async (params = getActiveBajasFilterParams()) => {
+    setBajasLoading(true);
+    const res = await inventarioService.getBajasArticulos(params);
+    if (res.success) {
+      setBajas(res.data);
+    } else {
+      showMessage('error', res.message);
+    }
+    setBajasLoading(false);
   };
 
   // ── Filters ──────────────────────────────────────
@@ -236,6 +280,24 @@ const Inventario = () => {
     setMovimientosFiltersDraft(cleared);
     setMovimientosFilters(cleared);
     setMovimientosPage(1);
+  };
+
+  const handleBajasDraftChange = (e) => {
+    const { name, value } = e.target;
+    setBajasFiltersDraft(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleApplyBajasFilters = async () => {
+    const nextFilters = { ...bajasFiltersDraft };
+    setBajasFilters(nextFilters);
+    await loadBajas(getActiveBajasFilterParams(nextFilters));
+  };
+
+  const handleClearBajasFilters = async () => {
+    const cleared = { search: '', from: '', to: '' };
+    setBajasFiltersDraft(cleared);
+    setBajasFilters(cleared);
+    await loadBajas({});
   };
 
   // ── Artículo CRUD ────────────────────────────────
@@ -353,6 +415,49 @@ const Inventario = () => {
     setDeleteTarget(articulo);
     setShowConfirmDeleteModal(true);
   };
+
+  const handleOpenBaja = (articulo) => {
+    setBajaTarget(articulo);
+    setBajaForm({
+      cantidad: isStockTipo(articulo.tipo_articulo) ? 1 : 1,
+      motivo: ''
+    });
+    setShowBajaModal(true);
+  };
+
+  const handleConfirmBaja = withBajaSubmit(async () => {
+    if (!bajaTarget) return;
+    const cantidad = isStockTipo(bajaTarget.tipo_articulo)
+      ? Number.parseInt(bajaForm.cantidad, 10)
+      : 1;
+    const motivo = bajaForm.motivo.trim();
+
+    if (!motivo) {
+      showMessage('error', 'Ingresa el motivo de la baja');
+      return;
+    }
+    if (!Number.isInteger(cantidad) || cantidad <= 0) {
+      showMessage('error', 'Ingresa una cantidad válida');
+      return;
+    }
+    if (isStockTipo(bajaTarget.tipo_articulo) && cantidad > Number(bajaTarget.cantidad || 0)) {
+      showMessage('error', 'La cantidad supera el stock disponible');
+      return;
+    }
+
+    const result = await inventarioService.darBajaArticulo(bajaTarget.id, { cantidad, motivo });
+    if (result.success) {
+      showMessage('success', result.message || 'Artículo dado de baja');
+      setShowBajaModal(false);
+      setBajaTarget(null);
+      await Promise.all([
+        fetchArticulos(getActiveFilterParams(), true),
+        loadBajas()
+      ]);
+    } else {
+      showMessage('error', result.message);
+    }
+  });
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
@@ -548,6 +653,13 @@ const Inventario = () => {
       return;
     }
     setShowMovimientosExportModal(false);
+  });
+
+  const handleBajasExport = withBajasExportSubmit(async () => {
+    const result = await inventarioService.exportBajasArticulosExcel(getActiveBajasFilterParams());
+    if (!result.success) {
+      showMessage('error', result.message);
+    }
   });
 
   // ── Helpers ──────────────────────────────────────
@@ -761,19 +873,30 @@ const Inventario = () => {
           <span className={`cell-date ${getCaducidadClass(articulo.estado_caducidad)}`}>{formatDate(articulo.fecha_caducidad)}</span>
         </div>
       </div>
-      {hasPermission('eliminar_articulo') && (
+      {showArticuloActions && (
         <div className="inventory-card-actions">
-          <button
-            className="btn btn-danger btn-sm"
-            onClick={() => handleDeleteArticulo(articulo)}
-            type="button"
-          >
-            Eliminar
-          </button>
+          {canDarBajaArticulo && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => handleOpenBaja(articulo)}
+              type="button"
+            >
+              Dar de baja
+            </button>
+          )}
+          {canDeleteArticulo && (
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => handleDeleteArticulo(articulo)}
+              type="button"
+            >
+              Eliminar
+            </button>
+          )}
         </div>
       )}
     </article>
-  )), [hasPermission, paginatedArticulos]);
+  )), [canDarBajaArticulo, canDeleteArticulo, paginatedArticulos, showArticuloActions]);
 
   const closeOverlay = (e, closeFn) => {
     if (e.target === e.currentTarget) closeFn();
@@ -804,9 +927,18 @@ const Inventario = () => {
           {activeTab === 'movimientos' && hasPermission('exportar') && (
             <button className="btn btn-ghost btn-sm" onClick={openMovimientosExportModal}>Generar reporte</button>
           )}
+          {activeTab === 'bajas' && hasPermission('exportar') && (
+            <button className="btn btn-ghost btn-sm" onClick={handleBajasExport} disabled={isExportingBajas}>
+              {isExportingBajas ? 'Generando...' : 'Generar reporte'}
+            </button>
+          )}
           <button
             className="btn btn-ghost btn-sm btn-icon-only"
-            onClick={() => activeTab === 'articulos' ? fetchArticulos({}, true) : loadMovimientos()}
+            onClick={() => {
+              if (activeTab === 'articulos') return fetchArticulos({}, true);
+              if (activeTab === 'movimientos') return loadMovimientos();
+              return loadBajas(getActiveBajasFilterParams());
+            }}
             title="Actualizar datos"
           >↻</button>
         </div>
@@ -830,6 +962,15 @@ const Inventario = () => {
           Movimientos
           {movimientos.length > 0 && (
             <span className="tab-badge">{movimientos.length}</span>
+          )}
+        </button>
+        <button
+          className={`tab ${activeTab === 'bajas' ? 'active' : ''}`}
+          onClick={() => setActiveTab('bajas')}
+        >
+          Dados de baja
+          {bajas.length > 0 && (
+            <span className="tab-badge">{bajas.length}</span>
           )}
         </button>
       </div>
@@ -1000,7 +1141,7 @@ const Inventario = () => {
                           </span>
                         </button>
                       </th>
-                      {hasPermission('eliminar_articulo') && <th className="col-actions app-col-actions app-col-actions--single"></th>}
+                      {showArticuloActions && <th className={`col-actions app-col-actions ${articuloActionsClass}`}></th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -1019,22 +1160,37 @@ const Inventario = () => {
                           <td className="cell-compact">{articulo.version || '-'}</td>
                           <td className={`cell-date app-cell-date ${getCaducidadClass(articulo.estado_caducidad)}`}>{formatDate(articulo.fecha_caducidad)}</td>
                           <td>{articulo.ubicacion_nombre || '-'}</td>
-                          {hasPermission('eliminar_articulo') && (
-                            <td className="col-actions app-col-actions app-col-actions--single">
+                          {showArticuloActions && (
+                            <td className={`col-actions app-col-actions ${articuloActionsClass}`}>
                               <div className="action-buttons app-table-actions">
-                                <button
-                                  className="action-btn action-btn-del"
-                                  onClick={() => handleDeleteArticulo(articulo)}
-                                  title="Eliminar artículo"
-                                  type="button"
-                                >
-                                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
-                                    <polyline points="3 6 5 6 21 6"/>
-                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                                    <path d="M10 11v6M14 11v6"/>
-                                    <path d="M9 6V4h6v2"/>
-                                  </svg>
-                                </button>
+                                {canDarBajaArticulo && (
+                                  <button
+                                    className="action-btn action-btn-baja"
+                                    onClick={() => handleOpenBaja(articulo)}
+                                    title="Dar de baja"
+                                    type="button"
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                                      <circle cx="12" cy="12" r="8"/>
+                                      <path d="M8 12h8"/>
+                                    </svg>
+                                  </button>
+                                )}
+                                {canDeleteArticulo && (
+                                  <button
+                                    className="action-btn action-btn-del"
+                                    onClick={() => handleDeleteArticulo(articulo)}
+                                    title="Eliminar artículo"
+                                    type="button"
+                                  >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                                      <polyline points="3 6 5 6 21 6"/>
+                                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                      <path d="M10 11v6M14 11v6"/>
+                                      <path d="M9 6V4h6v2"/>
+                                    </svg>
+                                  </button>
+                                )}
                               </div>
                             </td>
                           )}
@@ -1042,7 +1198,7 @@ const Inventario = () => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={hasPermission('eliminar_articulo') ? 13 : 12} className="text-center">
+                        <td colSpan={showArticuloActions ? 13 : 12} className="text-center">
                           {emptyStateText}
                         </td>
                       </tr>
@@ -1073,6 +1229,114 @@ const Inventario = () => {
                 </div>
               )}
             </>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════ */}
+      {/*  TAB: DADOS DE BAJA                          */}
+      {/* ════════════════════════════════════════════ */}
+      {activeTab === 'bajas' && (
+        <div className="tab-content">
+          <div className="ff-filter-row inventario-bajas-filter-row">
+            <div className="ff-filter-card inventario-bajas-filter-card">
+              <div className="ff-controls">
+                <div className="ff-search">
+                  <svg className="ff-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    name="search"
+                    value={bajasFiltersDraft.search}
+                    onChange={handleBajasDraftChange}
+                    onKeyDown={(e) => e.key === 'Enter' && handleApplyBajasFilters()}
+                    placeholder="Buscar artículo, serie, motivo, ubicación o usuario..."
+                  />
+                </div>
+                <div className="ff-dates">
+                  <div className="ff-date-field">
+                    <span className="ff-date-label">Desde</span>
+                    <input
+                      type="date"
+                      name="from"
+                      value={bajasFiltersDraft.from}
+                      onChange={handleBajasDraftChange}
+                      onKeyDown={(e) => e.key === 'Enter' && handleApplyBajasFilters()}
+                    />
+                  </div>
+                  <div className="ff-date-field">
+                    <span className="ff-date-label">Hasta</span>
+                    <input
+                      type="date"
+                      name="to"
+                      value={bajasFiltersDraft.to}
+                      onChange={handleBajasDraftChange}
+                      onKeyDown={(e) => e.key === 'Enter' && handleApplyBajasFilters()}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="ff-filter-actions-card inventario-bajas-filter-actions-card">
+              <div className="ff-actions">
+                <button className="btn btn-primary btn-sm" onClick={handleApplyBajasFilters}>Aplicar</button>
+                <button className="ff-clear-btn" onClick={handleClearBajasFilters}>Limpiar</button>
+              </div>
+            </div>
+          </div>
+
+          {bajasLoading ? (
+            <div className="loading">
+              <div className="loading-spinner"></div>
+              Cargando artículos dados de baja...
+            </div>
+          ) : (
+            <div className="table-responsive app-table-shell">
+              <table className="app-table bajas-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Artículo</th>
+                    <th>Serie</th>
+                    <th>Cantidad</th>
+                    <th>Marca</th>
+                    <th>Modelo</th>
+                    <th>Ubicación</th>
+                    <th>Usuario</th>
+                    <th className="cell-motivo-heading">Motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bajas.length > 0 ? (
+                    bajas.map((baja, idx) => (
+                      <tr key={baja.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
+                        <td className="app-cell-date">{formatDate(baja.fecha_baja)}</td>
+                        <td className="cell-compact">{getTipoLabel(baja.tipo_articulo)}</td>
+                        <td className="cell-articulo">{baja.nombre_articulo || '-'}</td>
+                        <td className="cell-serie">{getSerieDisplay(baja)}</td>
+                        <td className="app-cell-qty">{baja.cantidad ?? '-'}</td>
+                        <td className="cell-compact">{baja.marca || '-'}</td>
+                        <td className="cell-compact">{baja.modelo || '-'}</td>
+                        <td>{baja.ubicacion_nombre || '-'}</td>
+                        <td>{baja.usuario || '-'}</td>
+                        <td className="cell-motivo">
+                          <span className="cell-motivo-text" title={baja.motivo || '-'}>
+                            {baja.motivo || '-'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="10" className="text-center">No hay artículos dados de baja.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -1271,7 +1535,7 @@ const Inventario = () => {
         <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowArticuloModal(false))}>
           <div className="modal modal-articulo">
             <div className="modal-header">
-              <h3>Nuevo Artículo</h3>
+              <h3>Nuevo artículo</h3>
               <button className="modal-close" onClick={() => setShowArticuloModal(false)}>×</button>
             </div>
             <form onSubmit={handleSaveArticulo} autoComplete="off" data-lpignore="true" data-1p-ignore="true">
@@ -1418,7 +1682,7 @@ const Inventario = () => {
         <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowMovimientoModal(false))}>
           <div className="modal modal-movimiento">
             <div className="modal-header">
-              <h3>Nuevo Movimiento</h3>
+              <h3>Nuevo movimiento</h3>
               <button className="modal-close" onClick={() => setShowMovimientoModal(false)}>×</button>
             </div>
             <form onSubmit={handleCreateMovimiento}>
@@ -1583,10 +1847,8 @@ const Inventario = () => {
       {showExportModal && (
         <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowExportModal(false))}>
           <div className="modal modal-export" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header export-modal-header">
-              <div className="export-title-wrap">
-                <h3>Generar Reporte de Inventario</h3>
-              </div>
+            <div className="modal-header">
+              <h3>Reporte de inventario</h3>
               <button className="modal-close" onClick={() => setShowExportModal(false)}>×</button>
             </div>
             <div className="modal-body">
@@ -1646,10 +1908,8 @@ const Inventario = () => {
       {showMovimientosExportModal && (
         <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowMovimientosExportModal(false))}>
           <div className="modal modal-export" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header export-modal-header">
-              <div className="export-title-wrap">
-                <h3>Generar Reporte de Movimientos</h3>
-              </div>
+            <div className="modal-header">
+              <h3>Reporte de movimientos</h3>
               <button className="modal-close" onClick={() => setShowMovimientosExportModal(false)}>×</button>
             </div>
             <div className="modal-body">
@@ -1698,13 +1958,80 @@ const Inventario = () => {
       )}
 
       {/* ════════════════════════════════════════════ */}
+      {/*  MODAL: DAR DE BAJA                          */}
+      {/* ════════════════════════════════════════════ */}
+      {showBajaModal && bajaTarget && (
+        <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowBajaModal(false))}>
+          <div className="modal modal-baja" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Dar de baja artículo</h3>
+              <button className="modal-close" onClick={() => setShowBajaModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="baja-summary">
+                <div>
+                  <span>Artículo</span>
+                  <strong>{bajaTarget.nombre_articulo || getSerieDisplay(bajaTarget) || bajaTarget.id}</strong>
+                </div>
+                <div>
+                  <span>Tipo</span>
+                  <strong>{getTipoLabel(bajaTarget.tipo_articulo)}</strong>
+                </div>
+                <div>
+                  <span>Serie</span>
+                  <strong>{getSerieDisplay(bajaTarget)}</strong>
+                </div>
+                <div>
+                  <span>Ubicación</span>
+                  <strong>{bajaTarget.ubicacion_nombre || '-'}</strong>
+                </div>
+              </div>
+              {isStockTipo(bajaTarget.tipo_articulo) ? (
+                <div className="form-group">
+                  <label htmlFor="baja-cantidad">Cantidad a dar de baja</label>
+                  <input
+                    id="baja-cantidad"
+                    type="number"
+                    min="1"
+                    max={bajaTarget.cantidad}
+                    value={bajaForm.cantidad}
+                    onChange={(e) => setBajaForm(prev => ({ ...prev, cantidad: e.target.value }))}
+                  />
+                  <p className="delete-hint">Disponible: {bajaTarget.cantidad} unidades</p>
+                </div>
+              ) : (
+                <div className="baja-notice">Este artículo se dará de baja por completo.</div>
+              )}
+              <div className="form-group">
+                <label htmlFor="baja-motivo">Motivo de la baja</label>
+                <textarea
+                  id="baja-motivo"
+                  rows="4"
+                  value={bajaForm.motivo}
+                  onChange={(e) => setBajaForm(prev => ({ ...prev, motivo: e.target.value }))}
+                  placeholder="Describe por qué se da de baja este artículo"
+                  required
+                />
+              </div>
+            </div>
+            <div className="modal-buttons">
+              <button className="btn btn-modal-clear" onClick={() => setShowBajaModal(false)} disabled={isSavingBaja}>Cancelar</button>
+              <button className="btn btn-danger" onClick={handleConfirmBaja} disabled={isSavingBaja}>
+                {isSavingBaja ? <><span className="spinner spinner--sm" />Guardando…</> : 'Dar de baja'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════════ */}
       {/*  MODAL: ELIMINAR CANTIDAD (stock)            */}
       {/* ════════════════════════════════════════════ */}
       {showDeleteModal && deleteTarget && (
         <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowDeleteModal(false))}>
           <div className="modal modal-delete">
             <div className="modal-header">
-              <h3>Eliminar Cantidad</h3>
+              <h3>Eliminar cantidad</h3>
               <button className="modal-close" onClick={() => setShowDeleteModal(false)}>×</button>
             </div>
             <div className="modal-body">
@@ -1724,7 +2051,7 @@ const Inventario = () => {
               <p className="delete-hint">Disponible: {deleteTarget.cantidad} unidades</p>
             </div>
             <div className="modal-buttons">
-              <button className="btn btn-secondary" onClick={() => setShowDeleteModal(false)}>Cancelar</button>
+              <button className="btn btn-modal-clear" onClick={() => setShowDeleteModal(false)}>Cancelar</button>
               <button className="btn btn-danger" onClick={handleConfirmDelete}>Eliminar</button>
             </div>
           </div>
@@ -1738,7 +2065,7 @@ const Inventario = () => {
         <div className="modal-overlay" onClick={(e) => closeOverlay(e, () => setShowConfirmDeleteModal(false))}>
           <div className="modal modal-delete">
             <div className="modal-header">
-              <h3>Confirmar Eliminación</h3>
+              <h3>Confirmar eliminación</h3>
               <button className="modal-close" onClick={() => setShowConfirmDeleteModal(false)}>×</button>
             </div>
             <div className="modal-body">
@@ -1748,7 +2075,7 @@ const Inventario = () => {
               <p className="delete-warning">Esta acción no se puede deshacer.</p>
             </div>
             <div className="modal-buttons">
-              <button className="btn btn-secondary" onClick={() => setShowConfirmDeleteModal(false)}>Cancelar</button>
+              <button className="btn btn-modal-clear" onClick={() => setShowConfirmDeleteModal(false)}>Cancelar</button>
               <button className="btn btn-danger" onClick={handleConfirmSimpleDelete}>Eliminar</button>
             </div>
           </div>

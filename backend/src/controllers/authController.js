@@ -17,7 +17,12 @@ const db = require('../config/database');
 const config = require('../config/config');
 const { createHttpError, handleControllerError } = require('../utils/http');
 
+const schemaCache = {};
+
 const tableColumnExists = async (tableName, columnName) => {
+  const key = `${tableName}.${columnName}`;
+  if (key in schemaCache) return schemaCache[key];
+
   const result = await db.query(
     `SELECT 1
      FROM information_schema.columns
@@ -27,7 +32,8 @@ const tableColumnExists = async (tableName, columnName) => {
      LIMIT 1`,
     [tableName, columnName]
   );
-  return result.rowCount > 0;
+  schemaCache[key] = result.rowCount > 0;
+  return schemaCache[key];
 };
 
 const getUserIdentitySelect = async () => {

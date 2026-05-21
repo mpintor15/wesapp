@@ -2,6 +2,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('node:crypto');
 const db = require('../config/database');
 const { createHttpError, handleControllerError } = require('../utils/http');
+const { clearActiveCache } = require('../middleware/permissions');
 
 const ALLOWED_TYPES = new Set(['gerente', 'secretario', 'supervisor', 'contador']);
 const ROLE_GERENTE = 'gerente';
@@ -186,6 +187,7 @@ const updateUsuario = async (req, res) => {
       values
     );
 
+    clearActiveCache(id);
     res.json({ success: true, message: 'Usuario actualizado exitosamente', data: result.rows[0] });
   } catch (error) {
     return handleControllerError(res, error, 'Error al actualizar usuario:');
@@ -211,6 +213,7 @@ const deleteUsuario = async (req, res) => {
 
     const result = await db.query('DELETE FROM usuarios WHERE id = $1 RETURNING id', [id]);
     if (result.rowCount === 0) throw createHttpError(404, 'Usuario no encontrado');
+    clearActiveCache(id);
     res.json({ success: true, message: 'Usuario eliminado exitosamente' });
   } catch (error) {
     return handleControllerError(res, error, 'Error al eliminar usuario:');

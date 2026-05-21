@@ -9,12 +9,15 @@
  *
  *  ARTÍCULOS
  *  - getArticulos(params)               : GET /inventario/articulos (filtros: tipo, ubicacion_id, estado, search)
+ *  - getBajasArticulos(params)          : GET /inventario/articulos/bajas (filtros: search, from, to)
  *  - createArticulo(data)               : POST /inventario/articulos
  *  - updateArticulo(id, data)           : PUT  /inventario/articulos/:id
+ *  - darBajaArticulo(id, data)          : POST /inventario/articulos/:id/baja
  *  - deleteArticulo(id, cantidad?)      : DEL  /inventario/articulos/:id
  *                                         Para equipos con stock > 1 recibe la
  *                                         cantidad a eliminar como query param.
  *  - exportArticulosExcel(params)       : GET  /inventario/articulos/excel → descarga .xlsx
+ *  - exportBajasArticulosExcel(params)  : GET  /inventario/articulos/bajas/excel → descarga .xlsx
  *
  *  MOVIMIENTOS (traslados)
  *  - getMovimientos()                   : GET /inventario/movimientos
@@ -72,6 +75,36 @@ const inventarioService = {
       return {
         success: false,
         message: extractError(error, 'Error al crear artículo')
+      };
+    }
+  },
+
+  getBajasArticulos: async (params = {}) => {
+    try {
+      const response = await api.get('/inventario/articulos/bajas', { params });
+      return {
+        success: response.data.success,
+        data: response.data.data || []
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: extractError(error, 'Error al obtener artículos dados de baja')
+      };
+    }
+  },
+
+  darBajaArticulo: async (id, data) => {
+    try {
+      const response = await api.post(`/inventario/articulos/${id}/baja`, data);
+      return {
+        success: response.data.success,
+        message: response.data.message
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: extractError(error, 'Error al dar de baja artículo')
       };
     }
   },
@@ -179,6 +212,28 @@ const inventarioService = {
       return {
         success: false,
         message: extractError(error, 'Error al exportar Excel')
+      };
+    }
+  },
+
+  exportBajasArticulosExcel: async (params = {}) => {
+    try {
+      const response = await api.get('/inventario/articulos/bajas/excel', {
+        params,
+        responseType: 'blob'
+      });
+      const fileName = getFilenameFromDisposition(
+        response.headers?.['content-disposition'],
+        'articulos-dados-de-baja.xlsx'
+      );
+      return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
+        description: 'Excel',
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+      });
+    } catch (error) {
+      return {
+        success: false,
+        message: extractError(error, 'Error al exportar bajas')
       };
     }
   },
