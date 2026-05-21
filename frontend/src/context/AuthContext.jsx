@@ -23,10 +23,21 @@ const parseStoredUser = () => {
   }
 };
 
+const getInitialAuthState = () => {
+  const token = localStorage.getItem('token');
+  const storedUser = parseStoredUser();
+  return {
+    user: storedUser,
+    isAuthenticated: Boolean(token),
+    loading: Boolean(token && !storedUser)
+  };
+};
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(parseStoredUser);
-  const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(localStorage.getItem('token')));
+  const [initialAuthState] = useState(getInitialAuthState);
+  const [user, setUser] = useState(initialAuthState.user);
+  const [loading, setLoading] = useState(initialAuthState.loading);
+  const [isAuthenticated, setIsAuthenticated] = useState(initialAuthState.isAuthenticated);
 
   const clearSession = useCallback(() => {
     authService.logout();

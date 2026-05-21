@@ -69,6 +69,8 @@ const Inventario = () => {
   const [loading, setLoading] = useState(true);
   const [movimientosLoading, setMovimientosLoading] = useState(false);
   const [bajasLoading, setBajasLoading] = useState(false);
+  const [movimientosLoaded, setMovimientosLoaded] = useState(false);
+  const [bajasLoaded, setBajasLoaded] = useState(false);
   const { isSubmitting: isSavingArticulo, withSubmit: withArticuloSubmit } = useSubmitState();
   const { isSubmitting: isSavingMovimiento, withSubmit: withMovimientoSubmit } = useSubmitState();
   const { isSubmitting: isSavingBaja, withSubmit: withBajaSubmit } = useSubmitState();
@@ -173,8 +175,6 @@ const Inventario = () => {
   // ── Data loading ─────────────────────────────────
   useEffect(() => {
     loadInitialData();
-    loadMovimientos();
-    loadBajas();
   }, []);
 
   const loadInitialData = async () => {
@@ -210,6 +210,7 @@ const Inventario = () => {
     const res = await inventarioService.getMovimientos();
     if (res.success) {
       setMovimientos(res.data);
+      setMovimientosLoaded(true);
     } else {
       showMessage('error', res.message);
     }
@@ -229,6 +230,7 @@ const Inventario = () => {
     const res = await inventarioService.getBajasArticulos(params);
     if (res.success) {
       setBajas(res.data);
+      setBajasLoaded(true);
     } else {
       showMessage('error', res.message);
     }
@@ -902,6 +904,16 @@ const Inventario = () => {
     if (e.target === e.currentTarget) closeFn();
   };
 
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'movimientos' && !movimientosLoaded && !movimientosLoading) {
+      loadMovimientos();
+    }
+    if (tab === 'bajas' && !bajasLoaded && !bajasLoading) {
+      loadBajas();
+    }
+  };
+
   // ── Render ───────────────────────────────────────
   return (
     <div className="inventario-container">
@@ -948,7 +960,7 @@ const Inventario = () => {
       <div className="inventario-tabs">
         <button
           className={`tab ${activeTab === 'articulos' ? 'active' : ''}`}
-          onClick={() => setActiveTab('articulos')}
+          onClick={() => handleTabChange('articulos')}
         >
           Artículos
           {articulos.length > 0 && (
@@ -957,7 +969,7 @@ const Inventario = () => {
         </button>
         <button
           className={`tab ${activeTab === 'movimientos' ? 'active' : ''}`}
-          onClick={() => setActiveTab('movimientos')}
+          onClick={() => handleTabChange('movimientos')}
         >
           Movimientos
           {movimientos.length > 0 && (
@@ -966,7 +978,7 @@ const Inventario = () => {
         </button>
         <button
           className={`tab ${activeTab === 'bajas' ? 'active' : ''}`}
-          onClick={() => setActiveTab('bajas')}
+          onClick={() => handleTabChange('bajas')}
         >
           Dados de baja
           {bajas.length > 0 && (
