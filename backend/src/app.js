@@ -29,6 +29,9 @@ const usuariosRoutes = require('./routes/usuarios.routes');
 
 const app = express();
 
+// Trust the first proxy (Railway / nginx sets X-Forwarded-For)
+app.set('trust proxy', 1);
+
 // ======================
 // Middlewares de seguridad
 // ======================
