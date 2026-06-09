@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const db = require('../config/database');
 const { createHttpError, handleControllerError } = require('../utils/http');
 const { clearActiveCache } = require('../middleware/permissions');
+const { logAudit, auditFromReq } = require('../utils/audit');
 
 const ALLOWED_TYPES = new Set(['gerente', 'secretario', 'supervisor', 'contador']);
 const ROLE_GERENTE = 'gerente';
@@ -117,6 +118,14 @@ const createUsuario = async (req, res) => {
       [usuario, password_hash, nombre, apellido, tipoUsuario]
     );
 
+    await logAudit(db, {
+      tabla: 'usuarios',
+      operacion: 'INSERT',
+      registro_id: String(result.rows[0].id),
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
+
     res.status(201).json({
       success: true,
       message: 'Usuario creado exitosamente',
@@ -187,6 +196,15 @@ const updateUsuario = async (req, res) => {
       values
     );
 
+    await logAudit(db, {
+      tabla: 'usuarios',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_anteriores: currentUser,
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
+
     clearActiveCache(id);
     res.json({ success: true, message: 'Usuario actualizado exitosamente', data: result.rows[0] });
   } catch (error) {
@@ -213,6 +231,15 @@ const deleteUsuario = async (req, res) => {
 
     const result = await db.query('DELETE FROM usuarios WHERE id = $1 RETURNING id', [id]);
     if (result.rowCount === 0) throw createHttpError(404, 'Usuario no encontrado');
+
+    await logAudit(db, {
+      tabla: 'usuarios',
+      operacion: 'DELETE',
+      registro_id: String(id),
+      datos_anteriores: userToDelete,
+      ...auditFromReq(req)
+    });
+
     clearActiveCache(id);
     res.json({ success: true, message: 'Usuario eliminado exitosamente' });
   } catch (error) {

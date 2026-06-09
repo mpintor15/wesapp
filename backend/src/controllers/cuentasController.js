@@ -130,6 +130,14 @@ const createCliente = async (req, res) => {
       [nombre.trim(), identificacion.trim()]
     );
 
+    await logAudit(db, {
+      tabla: 'clientes',
+      operacion: 'INSERT',
+      registro_id: String(result.rows[0].id),
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
+
     res.status(201).json({
       success: true,
       message: 'Cliente creado exitosamente',
@@ -170,7 +178,7 @@ const deleteCliente = async (req, res) => {
     }
 
     const result = await db.query(
-      'DELETE FROM clientes WHERE id = $1 RETURNING id',
+      'DELETE FROM clientes WHERE id = $1 RETURNING id, nombre, identificacion',
       [id]
     );
 
@@ -180,6 +188,14 @@ const deleteCliente = async (req, res) => {
         message: 'Cliente no encontrado'
       });
     }
+
+    await logAudit(db, {
+      tabla: 'clientes',
+      operacion: 'DELETE',
+      registro_id: String(id),
+      datos_anteriores: result.rows[0],
+      ...auditFromReq(req)
+    });
 
     res.json({
       success: true,
@@ -290,6 +306,14 @@ const createFactura = async (req, res) => {
       ]
     );
 
+    await logAudit(db, {
+      tabla: 'cuentas',
+      operacion: 'INSERT',
+      registro_id: String(result.rows[0].num_factura),
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
+
     res.status(201).json({
       success: true,
       message: 'Factura creada exitosamente',
@@ -324,7 +348,11 @@ const deleteFactura = async (req, res) => {
     }
 
     const result = await db.query(
-      'DELETE FROM cuentas WHERE num_factura = $1 RETURNING num_factura',
+      `DELETE FROM cuentas
+       WHERE num_factura = $1
+       RETURNING num_factura, cliente_id, fecha_factura, valor_factura,
+                 incluye_iva, incluye_retencion_fuente, incluye_retencion_iva,
+                 cancelada, detalle_anulacion, fecha_anulacion`,
       [parsedNumFactura]
     );
 
@@ -334,6 +362,14 @@ const deleteFactura = async (req, res) => {
         message: 'Factura no encontrada'
       });
     }
+
+    await logAudit(db, {
+      tabla: 'cuentas',
+      operacion: 'DELETE',
+      registro_id: String(parsedNumFactura),
+      datos_anteriores: result.rows[0],
+      ...auditFromReq(req)
+    });
 
     res.json({
       success: true,
@@ -365,8 +401,8 @@ const cancelFactura = async (req, res) => {
        SET cancelada = TRUE,
            detalle_anulacion = $2,
            fecha_anulacion = CURRENT_TIMESTAMP
-       WHERE num_factura = $1
-       RETURNING num_factura, detalle_anulacion, fecha_anulacion`,
+      WHERE num_factura = $1
+       RETURNING num_factura, cancelada, detalle_anulacion, fecha_anulacion`,
       [parsedNumFactura, detalle_anulacion.trim()]
     );
 
@@ -376,6 +412,14 @@ const cancelFactura = async (req, res) => {
         message: 'Factura no encontrada'
       });
     }
+
+    await logAudit(db, {
+      tabla: 'cuentas',
+      operacion: 'UPDATE',
+      registro_id: String(parsedNumFactura),
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
 
     res.json({
       success: true,
@@ -890,6 +934,7 @@ const createBatchAbono = async (req, res) => {
 
   const total = Math.round(abonosNormalizados.reduce((sum, a) => sum + a.valor_abono, 0) * 100) / 100;
 
+  let createdPago = null;
   try {
     await db.transaction(async (client) => {
       const clienteResult = await client.query(
@@ -903,6 +948,15 @@ const createBatchAbono = async (req, res) => {
         throw err;
       }
 
+      const facturaIds = abonosNormalizados.map((a) => a.num_factura);
+      await client.query(
+        `SELECT num_factura
+         FROM cuentas
+         WHERE num_factura = ANY($1::int[])
+         FOR UPDATE`,
+        [facturaIds]
+      );
+
       const facturasResult = await client.query(
         `SELECT
            c.num_factura,
@@ -912,7 +966,7 @@ const createBatchAbono = async (req, res) => {
          FROM cuentas c
          LEFT JOIN vista_reporte_cuentas v ON v.num_factura = c.num_factura
          WHERE c.num_factura = ANY($1::int[])`,
-        [abonosNormalizados.map((a) => a.num_factura)]
+        [facturaIds]
       );
 
       const facturasMap = new Map(facturasResult.rows.map((r) => [Number(r.num_factura), r]));
@@ -961,6 +1015,16 @@ const createBatchAbono = async (req, res) => {
         ]
       );
       const pago_id = pagoResult.rows[0].id;
+      createdPago = {
+        id: pago_id,
+        cliente_id: parsedClienteId,
+        fecha,
+        metodo_pago: metodoPagoNormalizado || null,
+        referencia: referenciaNormalizada || null,
+        notas: notasNormalizadas || null,
+        total,
+        abonos: abonosNormalizados
+      };
 
       for (const abono of abonosNormalizados) {
         await client.query(
@@ -968,6 +1032,14 @@ const createBatchAbono = async (req, res) => {
           [pago_id, abono.num_factura, fecha, abono.valor_abono]
         );
       }
+    });
+
+    await logAudit(db, {
+      tabla: 'pagos',
+      operacion: 'INSERT',
+      registro_id: String(createdPago.id),
+      datos_nuevos: createdPago,
+      ...auditFromReq(req)
     });
 
     res.status(201).json({

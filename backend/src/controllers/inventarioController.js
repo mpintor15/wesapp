@@ -37,6 +37,7 @@ const path = require('path');
 const PDFDocument = require('pdfkit');
 const { createHttpError, isConstraintOrInputError } = require('../utils/http');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
+const { logAudit, auditFromReq } = require('../utils/audit');
 const ALERTA_ESTADOS = new Set(['vencida', 'proxima_a_vencer', 'vigente']);
 
 const buildInventarioAlertasQuery = ({ tipo, ubicacion_id, estado, search }) => {
@@ -327,6 +328,14 @@ const createArticulo = async (req, res) => {
       ]
     );
 
+    await logAudit(db, {
+      tabla: 'articulos',
+      operacion: 'INSERT',
+      registro_id: String(result.rows[0].id),
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
+
     res.status(201).json({
       success: true,
       message: 'Artículo creado exitosamente',
@@ -421,6 +430,14 @@ const updateArticulo = async (req, res) => {
       });
     }
 
+    await logAudit(db, {
+      tabla: 'articulos',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
+
     res.json({
       success: true,
       message: 'Artículo actualizado exitosamente',
@@ -492,6 +509,14 @@ const deleteArticulo = async (req, res) => {
           'UPDATE articulos SET cantidad = $1 WHERE id = $2',
           [restante, articulo.id]
         );
+        await logAudit(client, {
+          tabla: 'articulos',
+          operacion: 'UPDATE',
+          registro_id: String(articulo.id),
+          datos_anteriores: articulo,
+          datos_nuevos: { cantidad: restante },
+          ...auditFromReq(req)
+        });
         await client.query('COMMIT');
         return res.json({
           success: true,
@@ -512,6 +537,15 @@ const deleteArticulo = async (req, res) => {
         message: 'Artículo no encontrado'
       });
     }
+
+    await logAudit(client, {
+      tabla: 'articulos',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_anteriores: articulo,
+      datos_nuevos: { activo: false, cantidad: 0, ubicacion_id: null },
+      ...auditFromReq(req)
+    });
 
     await client.query('COMMIT');
 
@@ -668,6 +702,14 @@ const darBajaArticulo = async (req, res) => {
         [articulo.id]
       );
     }
+
+    await logAudit(client, {
+      tabla: 'articulos_bajas',
+      operacion: 'INSERT',
+      registro_id: String(articulo.id),
+      datos_nuevos: { articulo_id: articulo.id, cantidad: cantidadBaja, motivo, restante },
+      ...auditFromReq(req)
+    });
 
     await client.query('COMMIT');
 
@@ -1244,6 +1286,14 @@ const createMovimiento = async (req, res) => {
         [pdfResult.relativePath, movimientoId]
       );
     }
+
+    await logAudit(db, {
+      tabla: 'movimientos',
+      operacion: 'INSERT',
+      registro_id: String(movimientoId),
+      datos_nuevos: { id: movimientoId, items, ubicacion_destino_id: destinoId },
+      ...auditFromReq(req)
+    });
 
     res.status(201).json({
       success: true,

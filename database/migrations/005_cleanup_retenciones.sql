@@ -43,3 +43,7 @@ ORDER BY c.num_factura ASC;
 
 -- 2. Drop retenciones table (only if it exists and has no dependent objects)
 DROP TABLE IF EXISTS retenciones CASCADE;
+
+INSERT INTO schema_version (version, description)
+VALUES (5, 'Remove obsolete retenciones table')
+ON CONFLICT (version) DO NOTHING;

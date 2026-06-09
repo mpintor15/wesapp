@@ -16,10 +16,14 @@ DROP TABLE IF EXISTS movimientos CASCADE;
 DROP TABLE IF EXISTS articulos CASCADE;
 DROP TABLE IF EXISTS ubicaciones CASCADE;
 DROP TABLE IF EXISTS colaboradores CASCADE;
+DROP TABLE IF EXISTS articulos_bajas CASCADE;
 DROP TABLE IF EXISTS abonos CASCADE;
 DROP TABLE IF EXISTS retenciones CASCADE;
+DROP TABLE IF EXISTS pagos CASCADE;
 DROP TABLE IF EXISTS cuentas CASCADE;
 DROP TABLE IF EXISTS clientes CASCADE;
+DROP TABLE IF EXISTS audit_log CASCADE;
+DROP TABLE IF EXISTS schema_version CASCADE;
 DROP TABLE IF EXISTS usuarios CASCADE;
 
 -- ============================================
@@ -45,29 +49,23 @@ CREATE TABLE clientes (
     id SERIAL PRIMARY KEY,
     nombre TEXT UNIQUE NOT NULL,
     identificacion TEXT UNIQUE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE cuentas (
     num_factura INTEGER PRIMARY KEY,
     cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
     fecha_factura DATE NOT NULL,
-    valor_factura NUMERIC(10,2) NOT NULL,
+    valor_factura NUMERIC(10,2) NOT NULL CHECK (valor_factura > 0),
     incluye_iva BOOLEAN DEFAULT FALSE,
     incluye_retencion_fuente BOOLEAN DEFAULT FALSE,
     incluye_retencion_iva BOOLEAN DEFAULT FALSE,
     cancelada BOOLEAN DEFAULT FALSE,
     detalle_anulacion TEXT,
     fecha_anulacion TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE retenciones (
-    num_retencion INTEGER PRIMARY KEY,
-    num_factura INTEGER REFERENCES cuentas(num_factura) ON DELETE CASCADE,
-    fecha_retencion DATE NOT NULL,
-    valor_retencion NUMERIC(10,2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE pagos (
@@ -84,9 +82,9 @@ CREATE TABLE pagos (
 CREATE TABLE abonos (
     id          SERIAL PRIMARY KEY,
     pago_id     INTEGER REFERENCES pagos(id) ON DELETE CASCADE,
-    num_factura INTEGER REFERENCES cuentas(num_factura) ON DELETE CASCADE,
+    num_factura INTEGER REFERENCES cuentas(num_factura) ON UPDATE CASCADE ON DELETE CASCADE,
     fecha_abono DATE NOT NULL,
-    valor_abono NUMERIC(10,2) NOT NULL,
+    valor_abono NUMERIC(10,2) NOT NULL CHECK (valor_abono > 0),
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -136,6 +134,27 @@ CREATE TABLE detalle_movimientos (
     CHECK (ubicacion_origen_id != ubicacion_destino_id)
 );
 
+CREATE TABLE articulos_bajas (
+    id SERIAL PRIMARY KEY,
+    articulo_id INTEGER REFERENCES articulos(id) ON DELETE SET NULL,
+    usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    cantidad INTEGER NOT NULL CHECK (cantidad > 0),
+    motivo TEXT NOT NULL CHECK (length(trim(motivo)) > 0),
+    fecha_baja TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    tipo_articulo VARCHAR(20),
+    nombre_articulo VARCHAR(100),
+    talla VARCHAR(10),
+    marca VARCHAR(50),
+    modelo VARCHAR(50),
+    numero_serie VARCHAR(100),
+    calibre VARCHAR(20),
+    codigo_pantalla VARCHAR(50),
+    codigo_radio VARCHAR(50),
+    version VARCHAR(50),
+    ubicacion_id INTEGER REFERENCES ubicaciones(id) ON DELETE SET NULL,
+    ubicacion_nombre VARCHAR(100)
+);
+
 -- ============================================
 -- MÓDULO: PERSONAL
 -- ============================================
@@ -154,6 +173,26 @@ CREATE TABLE colaboradores (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE audit_log (
+    id SERIAL PRIMARY KEY,
+    tabla VARCHAR(50) NOT NULL,
+    operacion VARCHAR(10) NOT NULL,
+    registro_id VARCHAR(100),
+    usuario_id INTEGER,
+    usuario_nombre VARCHAR(100),
+    datos_anteriores JSONB,
+    datos_nuevos JSONB,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE schema_version (
+    version INTEGER PRIMARY KEY,
+    description TEXT NOT NULL,
+    applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ============================================
 -- ÍNDICES PARA OPTIMIZACIÓN
 -- ============================================
@@ -161,8 +200,12 @@ CREATE INDEX idx_usuarios_tipo ON usuarios(tipo_usuario);
 CREATE INDEX idx_usuarios_activo ON usuarios(activo);
 CREATE INDEX idx_cuentas_cliente ON cuentas(cliente_id);
 CREATE INDEX idx_cuentas_fecha ON cuentas(fecha_factura);
-CREATE INDEX idx_retenciones_factura ON retenciones(num_factura);
+CREATE INDEX idx_cuentas_cancelada ON cuentas(cancelada) WHERE cancelada = FALSE;
+CREATE INDEX idx_cuentas_fecha_cancelada ON cuentas(fecha_factura, cancelada);
 CREATE INDEX idx_abonos_factura ON abonos(num_factura);
+CREATE INDEX idx_abonos_pago ON abonos(pago_id);
+CREATE INDEX idx_pagos_cliente ON pagos(cliente_id);
+CREATE INDEX idx_pagos_fecha ON pagos(fecha);
 CREATE INDEX idx_articulos_tipo ON articulos(tipo_articulo);
 CREATE INDEX idx_articulos_ubicacion ON articulos(ubicacion_id);
 CREATE INDEX idx_articulos_serie ON articulos(numero_serie);
@@ -170,8 +213,14 @@ CREATE UNIQUE INDEX uq_articulos_codigo_pantalla ON articulos(codigo_pantalla) W
 CREATE UNIQUE INDEX uq_articulos_codigo_radio ON articulos(codigo_radio) WHERE codigo_radio IS NOT NULL;
 CREATE UNIQUE INDEX uq_articulos_version ON articulos(version) WHERE version IS NOT NULL;
 CREATE INDEX idx_movimientos_fecha ON movimientos(fecha_movimiento);
+CREATE INDEX idx_articulos_bajas_fecha ON articulos_bajas(fecha_baja);
+CREATE INDEX idx_articulos_bajas_articulo ON articulos_bajas(articulo_id);
+CREATE INDEX idx_articulos_bajas_usuario ON articulos_bajas(usuario_id);
 CREATE INDEX idx_colaboradores_estado ON colaboradores(estado);
 CREATE INDEX idx_colaboradores_cedula ON colaboradores(cedula);
+CREATE INDEX idx_audit_tabla ON audit_log(tabla);
+CREATE INDEX idx_audit_fecha ON audit_log(created_at);
+CREATE INDEX idx_audit_usuario ON audit_log(usuario_id);
 
 -- ============================================
 -- DATOS DE PRUEBA
@@ -200,12 +249,6 @@ INSERT INTO cuentas (num_factura, cliente_id, fecha_factura, valor_factura, incl
 (1003, 3, '2024-02-05', 12000.00, FALSE, TRUE, FALSE, FALSE),
 (1004, 1, '2024-02-10', 3200.00, TRUE, FALSE, FALSE, FALSE),
 (1005, 4, '2024-02-15', 8900.00, FALSE, FALSE, FALSE, FALSE);
-
--- Retenciones de prueba
-INSERT INTO retenciones (num_retencion, num_factura, fecha_retencion, valor_retencion) VALUES
-(5001, 1001, '2024-01-16', 50.00),
-(5002, 1002, '2024-01-21', 75.00),
-(5003, 1003, '2024-02-06', 120.00);
 
 -- Abonos de prueba
 INSERT INTO abonos (num_factura, fecha_abono, valor_abono) VALUES
@@ -269,6 +312,7 @@ INSERT INTO colaboradores (nombres_completos, cedula, fecha_nacimiento, cargo, c
 CREATE OR REPLACE VIEW vista_reporte_cuentas AS
 SELECT
     c.num_factura,
+    c.cliente_id,
     cl.nombre AS cliente,
     cl.identificacion,
     c.fecha_factura,
@@ -288,8 +332,6 @@ SELECT
         - CASE WHEN c.incluye_retencion_fuente THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
         - CASE WHEN c.incluye_retencion_iva AND c.incluye_iva THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
     ) AS por_cobrar,
-    MAX(r.fecha_retencion) AS fecha_retencion,
-    COALESCE(SUM(r.valor_retencion), 0) AS total_retenciones,
     COALESCE(SUM(a.valor_abono), 0) AS total_abonos,
     (
         c.valor_factura
@@ -300,9 +342,8 @@ SELECT
     ) AS saldo_pendiente
 FROM cuentas c
 JOIN clientes cl ON c.cliente_id = cl.id
-LEFT JOIN retenciones r ON c.num_factura = r.num_factura
 LEFT JOIN abonos a ON c.num_factura = a.num_factura
-GROUP BY c.num_factura, cl.nombre, cl.identificacion, c.fecha_factura, c.valor_factura,
+GROUP BY c.num_factura, c.cliente_id, cl.nombre, cl.identificacion, c.fecha_factura, c.valor_factura,
          c.cancelada, c.detalle_anulacion, c.fecha_anulacion,
          c.incluye_iva, c.incluye_retencion_fuente, c.incluye_retencion_iva
 ORDER BY c.num_factura ASC;
@@ -354,11 +395,31 @@ $$ language 'plpgsql';
 CREATE TRIGGER update_usuarios_updated_at BEFORE UPDATE ON usuarios
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_clientes_updated_at BEFORE UPDATE ON clientes
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_cuentas_updated_at BEFORE UPDATE ON cuentas
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_articulos_updated_at BEFORE UPDATE ON articulos
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_colaboradores_updated_at BEFORE UPDATE ON colaboradores
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+INSERT INTO schema_version (version, description) VALUES
+(2, 'Performance indexes, audit logging, and data integrity constraints'),
+(3, 'Add pagos table as payment header; link abonos via pago_id'),
+(4, 'Detalle de anulacion de facturas'),
+(5, 'Remove obsolete retenciones table'),
+(6, 'Add otro type to inventory article type constraint'),
+(7, 'Expose radio fields in inventory alerts view'),
+(8, 'Campos de radio unicos en inventario'),
+(9, 'Add nombre and apellido columns to usuarios'),
+(10, 'Ensure production columns for cuentas and pagos'),
+(11, 'Historial de bajas de articulos'),
+(12, 'Index on abonos(pago_id) for getPagos join performance'),
+(13, 'Reconcile production schema, constraints, triggers and indexes');
 
 -- ============================================
 -- FINALIZADO

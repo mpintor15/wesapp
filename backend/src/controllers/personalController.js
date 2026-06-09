@@ -17,6 +17,7 @@
 const db = require('../config/database');
 const { createHttpError, handleControllerError } = require('../utils/http');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
+const { logAudit, auditFromReq } = require('../utils/audit');
 const ESTADOS_COLABORADOR = new Set(['activo', 'inactivo']);
 
 const buildColaboradoresQuery = ({ search, estado, cargo }) => {
@@ -138,6 +139,14 @@ const createColaborador = async (req, res) => {
       ]
     );
 
+    await logAudit(db, {
+      tabla: 'colaboradores',
+      operacion: 'INSERT',
+      registro_id: String(result.rows[0].id),
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
+
     res.status(201).json({
       success: true,
       message: 'Colaborador creado exitosamente',
@@ -219,6 +228,14 @@ const updateColaborador = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Colaborador no encontrado' });
     }
 
+    await logAudit(db, {
+      tabla: 'colaboradores',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_nuevos: result.rows[0],
+      ...auditFromReq(req)
+    });
+
     res.json({
       success: true,
       message: 'Colaborador actualizado exitosamente',
@@ -242,11 +259,19 @@ const deleteColaborador = async (req, res) => {
       throw createHttpError(400, 'El id del colaborador es inválido');
     }
 
-    const result = await db.query('DELETE FROM colaboradores WHERE id = $1 RETURNING id', [id]);
+    const result = await db.query('DELETE FROM colaboradores WHERE id = $1 RETURNING *', [id]);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Colaborador no encontrado' });
     }
+
+    await logAudit(db, {
+      tabla: 'colaboradores',
+      operacion: 'DELETE',
+      registro_id: String(id),
+      datos_anteriores: result.rows[0],
+      ...auditFromReq(req)
+    });
 
     res.json({ success: true, message: 'Colaborador eliminado exitosamente' });
   } catch (error) {

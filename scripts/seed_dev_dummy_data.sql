@@ -132,30 +132,6 @@ BEGIN
 END $$;
 
 -- ============================================
--- Retenciones de prueba
--- ============================================
-WITH max_ret AS (
-  SELECT COALESCE(MAX(num_retencion), 15000) AS max_num FROM retenciones
-),
-cand AS (
-  SELECT
-    c.num_factura,
-    ROW_NUMBER() OVER (ORDER BY c.num_factura) AS rn
-  FROM cuentas c
-  WHERE c.incluye_retencion_fuente = TRUE OR c.incluye_retencion_iva = TRUE
-  ORDER BY c.num_factura DESC
-  LIMIT 45
-)
-INSERT INTO retenciones (num_retencion, num_factura, fecha_retencion, valor_retencion)
-SELECT
-  max_ret.max_num + cand.rn,
-  cand.num_factura,
-  (CURRENT_DATE - ((random() * 120)::int))::date,
-  ROUND((12 + random() * 180)::numeric, 2)
-FROM cand
-CROSS JOIN max_ret;
-
--- ============================================
 -- Pagos batch + abonos de prueba
 -- ============================================
 DO $$

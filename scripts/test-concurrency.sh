@@ -108,7 +108,7 @@ SELECT
   indexname,
   indexdef
 FROM pg_indexes
-WHERE tablename IN ('cuentas', 'abonos', 'retenciones', 'clientes')
+WHERE tablename IN ('cuentas', 'abonos', 'pagos', 'clientes')
 ORDER BY tablename, indexname;
 " 2>/dev/null || echo -e "${YELLOW}⚠ No se pudo conectar a PostgreSQL directamente${NC}"
 

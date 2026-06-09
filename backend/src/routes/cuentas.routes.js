@@ -66,7 +66,7 @@ router.patch('/facturas/:num_factura', requireRole('gerente'), cuentasController
 
 /**
  * @route   DELETE /api/cuentas/facturas/:num_factura
- * @desc    Eliminar una factura (cascada a retenciones y abonos)
+ * @desc    Eliminar una factura (cascada a abonos)
  * @access  Private (gerente)
  */
 router.delete('/facturas/:num_factura', requireRole('gerente'), cuentasController.deleteFactura);

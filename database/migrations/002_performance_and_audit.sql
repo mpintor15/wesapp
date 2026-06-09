@@ -5,7 +5,6 @@
 
 -- Add performance indexes
 CREATE INDEX IF NOT EXISTS idx_abonos_factura ON abonos(num_factura);
-CREATE INDEX IF NOT EXISTS idx_retenciones_factura ON retenciones(num_factura);
 CREATE INDEX IF NOT EXISTS idx_cuentas_cancelada ON cuentas(cancelada) WHERE cancelada = FALSE;
 CREATE INDEX IF NOT EXISTS idx_cuentas_fecha_cancelada ON cuentas(fecha_factura, cancelada);
 
@@ -14,18 +13,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
   id SERIAL PRIMARY KEY,
   tabla VARCHAR(50) NOT NULL,
   operacion VARCHAR(10) NOT NULL, -- INSERT, UPDATE, DELETE
-  registro_id INTEGER,
+  registro_id VARCHAR(100),
   usuario_id INTEGER,
   usuario_nombre VARCHAR(100),
   datos_anteriores JSONB,
   datos_nuevos JSONB,
-  fecha_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   ip_address VARCHAR(45),
-  user_agent TEXT
+  user_agent TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_tabla ON audit_log(tabla);
-CREATE INDEX IF NOT EXISTS idx_audit_fecha ON audit_log(fecha_hora);
+CREATE INDEX IF NOT EXISTS idx_audit_fecha ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_usuario ON audit_log(usuario_id);
 
 -- Add updated_at column to key tables for tracking changes
@@ -62,32 +61,6 @@ ALTER TABLE cuentas
 ALTER TABLE abonos
   ADD CONSTRAINT chk_valor_abono_positive
   CHECK (valor_abono > 0);
-
-ALTER TABLE retenciones
-  ADD CONSTRAINT chk_valor_retencion_positive
-  CHECK (valor_retencion > 0);
-
--- Add materialized view for faster reporting (optional - for large datasets)
-CREATE MATERIALIZED VIEW IF NOT EXISTS mv_resumen_cuentas AS
-SELECT
-  DATE_TRUNC('month', fecha_factura) as mes,
-  COUNT(*) as total_facturas,
-  SUM(valor_factura) as total_facturado,
-  SUM(CASE WHEN cancelada THEN 1 ELSE 0 END) as facturas_canceladas,
-  COUNT(DISTINCT cliente_id) as clientes_activos
-FROM cuentas
-GROUP BY DATE_TRUNC('month', fecha_factura)
-ORDER BY mes DESC;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_resumen_mes ON mv_resumen_cuentas(mes);
-
--- Function to refresh materialized view
-CREATE OR REPLACE FUNCTION refresh_resumen_cuentas()
-RETURNS void AS $$
-BEGIN
-  REFRESH MATERIALIZED VIEW CONCURRENTLY mv_resumen_cuentas;
-END;
-$$ LANGUAGE plpgsql;
 
 -- Add version tracking
 CREATE TABLE IF NOT EXISTS schema_version (

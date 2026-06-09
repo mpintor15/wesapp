@@ -84,6 +84,7 @@ describe('createBatchAbono', () => {
       const fakeClient = {
         query: jest.fn()
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
+          .mockResolvedValueOnce({ rowCount: 1, rows: [{ num_factura: 1001 }] }) // bloqueo
           .mockResolvedValueOnce({
             rows: [{ num_factura: 1001, cliente_id: 1, cancelada: true, saldo_pendiente: '500.00' }]
           }) // facturas
@@ -112,6 +113,7 @@ describe('createBatchAbono', () => {
       const fakeClient = {
         query: jest.fn()
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
+          .mockResolvedValueOnce({ rowCount: 1, rows: [{ num_factura: 1001 }] }) // bloqueo
           .mockResolvedValueOnce({
             rows: [{ num_factura: 1001, cliente_id: 1, cancelada: false, saldo_pendiente: '100.00' }]
           })
@@ -140,6 +142,10 @@ describe('createBatchAbono', () => {
       const fakeClient = {
         query: jest.fn()
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
+          .mockResolvedValueOnce({
+            rowCount: 2,
+            rows: [{ num_factura: 1001 }, { num_factura: 1002 }]
+          }) // bloqueo
           .mockResolvedValueOnce({
             rows: [
               { num_factura: 1001, cliente_id: 1, cancelada: false, saldo_pendiente: '1000.00' },
