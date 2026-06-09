@@ -83,6 +83,8 @@ const Cuentas = () => {
   const [reporte, setReporte] = useState([]);
   const [pagos, setPagos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [pagosLoading, setPagosLoading] = useState(false);
+  const [pagosLoaded, setPagosLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [activeTab, setActiveTab] = useState('facturas');
 
@@ -209,30 +211,82 @@ const Cuentas = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [bpShowDropdown]);
 
-  // Load initial data
+  const loadPagos = useCallback(async () => {
+    setPagosLoading(true);
+    const pagosRes = await cuentasService.getPagos();
+
+    if (pagosRes.success) {
+      setPagos(pagosRes.data);
+      setPagosLoaded(true);
+    } else {
+      const message = pagosRes.message || 'Error al cargar pagos';
+      setLoadError(message);
+      showToast(message, 'error');
+    }
+    setPagosLoading(false);
+  }, [showToast]);
+
+  // Refresh all data after writes or when the user explicitly requests it.
   const loadData = useCallback(async () => {
     setLoading(true);
     setLoadError('');
-    const [clientesRes, reporteRes, pagosRes] = await Promise.all([
+    const requests = [
       cuentasService.getClientes(),
-      cuentasService.getReporte(),
-      cuentasService.getPagos()
-    ]);
+      cuentasService.getReporte()
+    ];
+    if (pagosLoaded) requests.push(cuentasService.getPagos());
+
+    const [clientesRes, reporteRes, pagosRes] = await Promise.all(requests);
 
     if (clientesRes.success) setClientes(clientesRes.data);
     if (reporteRes.success) setReporte(reporteRes.data);
-    if (pagosRes.success) setPagos(pagosRes.data);
-    if (!clientesRes.success || !reporteRes.success || !pagosRes.success) {
-      const message = clientesRes.message || reporteRes.message || pagosRes.message || 'Error al cargar cuentas';
+    if (pagosRes?.success) {
+      setPagos(pagosRes.data);
+      setPagosLoaded(true);
+    }
+    if (!clientesRes.success || !reporteRes.success || (pagosRes && !pagosRes.success)) {
+      const message = clientesRes.message || reporteRes.message || pagosRes?.message || 'Error al cargar cuentas';
       setLoadError(message);
       showToast(message, 'error');
     }
     setLoading(false);
+  }, [pagosLoaded, showToast]);
+
+  // The initial screen only needs invoices and customers. Payments are loaded
+  // on demand because their endpoint builds the full invoice detail per payment.
+  useEffect(() => {
+    let active = true;
+
+    const loadInitialData = async () => {
+      setLoading(true);
+      setLoadError('');
+      const [clientesRes, reporteRes] = await Promise.all([
+        cuentasService.getClientes(),
+        cuentasService.getReporte()
+      ]);
+
+      if (!active) return;
+      if (clientesRes.success) setClientes(clientesRes.data);
+      if (reporteRes.success) setReporte(reporteRes.data);
+      if (!clientesRes.success || !reporteRes.success) {
+        const message = clientesRes.message || reporteRes.message || 'Error al cargar cuentas';
+        setLoadError(message);
+        showToast(message, 'error');
+      }
+      setLoading(false);
+    };
+
+    loadInitialData();
+    return () => {
+      active = false;
+    };
   }, [showToast]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (activeTab === 'pagos' && !pagosLoaded && !pagosLoading) {
+      loadPagos();
+    }
+  }, [activeTab, loadPagos, pagosLoaded, pagosLoading]);
 
   useEffect(() => {
     if (!showFacturaModal) return;
@@ -1524,7 +1578,13 @@ const Cuentas = () => {
 	                    </tr>
 	                  </thead>
                   <tbody>
-                    {paginatedPagos.length > 0 ? (
+                    {pagosLoading ? (
+                      <tr>
+                        <td colSpan={isGerente ? 6 : 5} className="text-center">
+                          <span className="spinner spinner--sm" /> Cargando pagos…
+                        </td>
+                      </tr>
+                    ) : paginatedPagos.length > 0 ? (
                       paginatedPagos.map((pago, idx) => (
                         <tr
                           key={pago.id}
@@ -1581,7 +1641,7 @@ const Cuentas = () => {
                   </tbody>
                 </table>
               </div>
-              {pagosTotalPages > 1 && (
+              {!pagosLoading && pagosTotalPages > 1 && (
                 <div className="pagination">
                   <button
                     className="btn btn-ghost btn-sm"
@@ -2151,7 +2211,7 @@ const Cuentas = () => {
                   Vas a eliminar permanentemente la factura <strong>#{facturaToDelete.num_factura}</strong>.
                 </p>
                 <p>
-                  También se eliminarán sus retenciones y abonos asociados. Esta acción no se puede deshacer.
+                  También se eliminarán sus abonos asociados. Esta acción no se puede deshacer.
                 </p>
               </div>
             ) : ''}
