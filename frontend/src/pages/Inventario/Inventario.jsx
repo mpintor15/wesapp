@@ -452,10 +452,9 @@ const Inventario = () => {
       showMessage('success', result.message || 'Artículo dado de baja');
       setShowBajaModal(false);
       setBajaTarget(null);
-      await Promise.all([
-        fetchArticulos(getActiveFilterParams(), true),
-        loadBajas()
-      ]);
+      const requests = [fetchArticulos(getActiveFilterParams(), true)];
+      if (bajasLoaded) requests.push(loadBajas());
+      await Promise.all(requests);
     } else {
       showMessage('error', result.message);
     }

@@ -10,6 +10,8 @@
 -- - Crea indices faltantes para cuentas y audit_log.
 -- - Registra migraciones cuyo efecto ya existe en produccion.
 
+BEGIN;
+
 -- Bloquear escrituras en las tablas afectadas mientras se valida y ajusta el esquema.
 LOCK TABLE cuentas, abonos, clientes, audit_log IN SHARE ROW EXCLUSIVE MODE;
 
@@ -116,3 +118,5 @@ VALUES
   (12, 'Reconciled: abonos pago index already present'),
   (13, 'Reconcile production schema, constraints, triggers and indexes')
 ON CONFLICT (version) DO NOTHING;
+
+COMMIT;

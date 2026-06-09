@@ -83,6 +83,8 @@ const Cuentas = () => {
   const [reporte, setReporte] = useState([]);
   const [pagos, setPagos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [clientesLoading, setClientesLoading] = useState(false);
+  const [clientesLoaded, setClientesLoaded] = useState(false);
   const [pagosLoading, setPagosLoading] = useState(false);
   const [pagosLoaded, setPagosLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
@@ -226,67 +228,60 @@ const Cuentas = () => {
     setPagosLoading(false);
   }, [showToast]);
 
-  // Refresh all data after writes or when the user explicitly requests it.
-  const loadData = useCallback(async () => {
+  const loadClientes = useCallback(async () => {
+    setClientesLoading(true);
+    const clientesRes = await cuentasService.getClientes();
+
+    if (clientesRes.success) {
+      setClientes(clientesRes.data);
+      setClientesLoaded(true);
+    } else {
+      const message = clientesRes.message || 'Error al cargar clientes';
+      setLoadError(message);
+      showToast(message, 'error');
+    }
+    setClientesLoading(false);
+    return clientesRes.success;
+  }, [showToast]);
+
+  const loadReporte = useCallback(async () => {
     setLoading(true);
     setLoadError('');
-    const requests = [
-      cuentasService.getClientes(),
-      cuentasService.getReporte()
-    ];
-    if (pagosLoaded) requests.push(cuentasService.getPagos());
-
-    const [clientesRes, reporteRes, pagosRes] = await Promise.all(requests);
-
-    if (clientesRes.success) setClientes(clientesRes.data);
+    const reporteRes = await cuentasService.getReporte();
     if (reporteRes.success) setReporte(reporteRes.data);
-    if (pagosRes?.success) {
-      setPagos(pagosRes.data);
-      setPagosLoaded(true);
-    }
-    if (!clientesRes.success || !reporteRes.success || (pagosRes && !pagosRes.success)) {
-      const message = clientesRes.message || reporteRes.message || pagosRes?.message || 'Error al cargar cuentas';
+    if (!reporteRes.success) {
+      const message = reporteRes.message || 'Error al cargar facturas';
       setLoadError(message);
       showToast(message, 'error');
     }
     setLoading(false);
-  }, [pagosLoaded, showToast]);
-
-  // The initial screen only needs invoices and customers. Payments are loaded
-  // on demand because their endpoint builds the full invoice detail per payment.
-  useEffect(() => {
-    let active = true;
-
-    const loadInitialData = async () => {
-      setLoading(true);
-      setLoadError('');
-      const [clientesRes, reporteRes] = await Promise.all([
-        cuentasService.getClientes(),
-        cuentasService.getReporte()
-      ]);
-
-      if (!active) return;
-      if (clientesRes.success) setClientes(clientesRes.data);
-      if (reporteRes.success) setReporte(reporteRes.data);
-      if (!clientesRes.success || !reporteRes.success) {
-        const message = clientesRes.message || reporteRes.message || 'Error al cargar cuentas';
-        setLoadError(message);
-        showToast(message, 'error');
-      }
-      setLoading(false);
-    };
-
-    loadInitialData();
-    return () => {
-      active = false;
-    };
   }, [showToast]);
+
+  const refreshFinancialData = useCallback(async () => {
+    const requests = [loadReporte()];
+    if (pagosLoaded) requests.push(loadPagos());
+    await Promise.all(requests);
+  }, [loadPagos, loadReporte, pagosLoaded]);
+
+  const refreshActiveTab = useCallback(() => {
+    if (activeTab === 'pagos') return loadPagos();
+    if (activeTab === 'clientes') return loadClientes();
+    return loadReporte();
+  }, [activeTab, loadClientes, loadPagos, loadReporte]);
+
+  // Each table loads independently. The initial screen only needs invoices.
+  useEffect(() => {
+    loadReporte();
+  }, [loadReporte]);
 
   useEffect(() => {
     if (activeTab === 'pagos' && !pagosLoaded && !pagosLoading) {
       loadPagos();
     }
-  }, [activeTab, loadPagos, pagosLoaded, pagosLoading]);
+    if (activeTab === 'clientes' && !clientesLoaded && !clientesLoading) {
+      loadClientes();
+    }
+  }, [activeTab, clientesLoaded, clientesLoading, loadClientes, loadPagos, pagosLoaded, pagosLoading]);
 
   useEffect(() => {
     if (!showFacturaModal) return;
@@ -317,15 +312,16 @@ const Cuentas = () => {
   // HANDLERS
   // ============================================
 
-  const openCreateFacturaModal = useCallback(() => {
+  const openCreateFacturaModal = useCallback(async () => {
     if (!isGerente) {
       showToast('Solo un usuario Gerente puede crear facturas', 'error');
       return;
     }
+    if (!clientesLoaded && !(await loadClientes())) return;
     setFormData(getInitialFacturaForm());
     setDebouncedFacturaInputs({ num_factura: '', valor_factura: '' });
     setShowFacturaModal(true);
-  }, [isGerente, showToast]);
+  }, [clientesLoaded, isGerente, loadClientes, showToast]);
 
   const openEditFacturaModal = useCallback((row) => {
     if (!isGerente) {
@@ -392,7 +388,7 @@ const Cuentas = () => {
     if (result.success) {
       showToast('Factura actualizada exitosamente', 'success');
       closeEditFacturaModal();
-      loadData();
+      refreshFinancialData();
     } else {
       showToast(result.message, 'error');
     }
@@ -542,7 +538,7 @@ const Cuentas = () => {
     if (result.success) {
       showToast('Factura creada exitosamente', 'success');
       closeFacturaModal();
-      loadData();
+      refreshFinancialData();
     } else {
       showToast(result.message, 'error');
     }
@@ -565,7 +561,7 @@ const Cuentas = () => {
     const result = await cuentasService.deleteFactura(facturaToDelete.num_factura);
     if (result.success) {
       showToast('Factura eliminada', 'success');
-      loadData();
+      refreshFinancialData();
     } else {
       showToast(result.message, 'error');
     }
@@ -602,7 +598,7 @@ const Cuentas = () => {
     if (result.success) {
       showToast('Pago eliminado exitosamente', 'success');
       setPagoToDelete(null);
-      await loadData();
+      await refreshFinancialData();
     } else {
       showToast(result.message, 'error');
     }
@@ -628,7 +624,7 @@ const Cuentas = () => {
     if (result.success) {
       showToast('Factura anulada exitosamente', 'success');
       closeCancelFacturaModal();
-      loadData();
+      refreshFinancialData();
     } else {
       showToast(result.message, 'error');
     }
@@ -657,6 +653,11 @@ const Cuentas = () => {
     setBpMetodoPago('efectivo');
     setBpNotas('');
     setBpErrors({});
+  };
+
+  const openBatchPaymentModal = async () => {
+    if (!clientesLoaded && !(await loadClientes())) return;
+    setShowBatchPaymentModal(true);
   };
 
   const handleBpCustomerSelect = (cliente) => {
@@ -812,7 +813,7 @@ const Cuentas = () => {
     if (result.success) {
       showToast(result.message || 'Pagos registrados exitosamente', 'success');
       closeBatchPaymentModal();
-      await loadData();
+      await refreshFinancialData();
     } else {
       showToast(result.message, 'error');
     }
@@ -1187,14 +1188,14 @@ const Cuentas = () => {
               <button className="btn btn-ghost btn-sm" onClick={openCreateFacturaModal}>Crear factura</button>
             )}
             <button className="btn btn-ghost btn-sm" onClick={() => setShowReporteModal(true)}>Generar reporte</button>
-            <button className="btn btn-ghost btn-sm btn-icon-only" onClick={loadData} title="Actualizar datos">↻</button>
+            <button className="btn btn-ghost btn-sm btn-icon-only" onClick={loadReporte} title="Actualizar datos">↻</button>
           </div>
         )}
         {activeTab === 'pagos' && (
           <div className="page-header-actions">
-            <button className="btn btn-ghost btn-sm" onClick={() => setShowBatchPaymentModal(true)}>Registrar pago</button>
+            <button className="btn btn-ghost btn-sm" onClick={openBatchPaymentModal}>Registrar pago</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowPagosReporteModal(true)}>Generar reporte</button>
-            <button className="btn btn-ghost btn-sm btn-icon-only" onClick={loadData} title="Actualizar datos">↻</button>
+            <button className="btn btn-ghost btn-sm btn-icon-only" onClick={loadPagos} title="Actualizar datos">↻</button>
           </div>
         )}
         {activeTab === 'clientes' && (
@@ -1205,7 +1206,7 @@ const Cuentas = () => {
             <button className="btn btn-ghost btn-sm" onClick={() => setShowClientesReporteConfirm(true)}>
               Generar reporte
             </button>
-            <button className="btn btn-ghost btn-sm btn-icon-only" onClick={loadData} title="Actualizar datos">↻</button>
+            <button className="btn btn-ghost btn-sm btn-icon-only" onClick={loadClientes} title="Actualizar datos">↻</button>
           </div>
         )}
       </header>
@@ -1224,7 +1225,7 @@ const Cuentas = () => {
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
               <span>{loadError}</span>
-              <button className="btn btn-danger btn-sm" onClick={loadData} type="button">
+              <button className="btn btn-danger btn-sm" onClick={refreshActiveTab} type="button">
                 Reintentar
               </button>
             </div>
@@ -1668,13 +1669,20 @@ const Cuentas = () => {
           {/* CLIENTES TAB */}
           {activeTab === 'clientes' && (
             <div className="tab-content">
-              <Clientes
-                clientes={clientes}
-                onClienteCreated={loadData}
-                onClienteDeleted={loadData}
-                showClienteForm={showClienteForm}
-                setShowClienteForm={setShowClienteForm}
-              />
+              {clientesLoading ? (
+                <div className="loading-spinner-wrap">
+                  <span className="spinner" />
+                  <span>Cargando clientes…</span>
+                </div>
+              ) : (
+                <Clientes
+                  clientes={clientes}
+                  onClienteCreated={loadClientes}
+                  onClienteDeleted={loadClientes}
+                  showClienteForm={showClienteForm}
+                  setShowClienteForm={setShowClienteForm}
+                />
+              )}
             </div>
           )}
 
