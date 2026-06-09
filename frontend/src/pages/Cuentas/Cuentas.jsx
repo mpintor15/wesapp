@@ -16,6 +16,11 @@ const formatMoney = (value) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
+  const dateOnlyMatch = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString('es-EC');
+  }
   return new Date(dateStr).toLocaleDateString('es-EC');
 };
 
@@ -258,20 +263,14 @@ const Cuentas = () => {
   // HANDLERS
   // ============================================
 
-  const openCreateFacturaModal = useCallback(async () => {
+  const openCreateFacturaModal = useCallback(() => {
     if (!isGerente) {
       showToast('Solo un usuario Gerente puede crear facturas', 'error');
       return;
     }
+    setFormData(getInitialFacturaForm());
+    setDebouncedFacturaInputs({ num_factura: '', valor_factura: '' });
     setShowFacturaModal(true);
-    const res = await cuentasService.getNextNumFactura();
-    if (res.success && res.data?.next_num_factura) {
-      setFormData(prev => ({
-        ...prev,
-        num_factura: String(res.data.next_num_factura)
-      }));
-      setDebouncedFacturaInputs(prev => ({ ...prev, num_factura: String(res.data.next_num_factura) }));
-    }
   }, [isGerente, showToast]);
 
   const openEditFacturaModal = useCallback((row) => {
