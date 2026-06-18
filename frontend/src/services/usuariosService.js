@@ -11,6 +11,8 @@
  *                                 Crea usuario con rol y contraseña inicial.
  *  - updateUsuario(id, data)    : PUT  /usuarios/:id
  *                                 Permite cambiar tipo_usuario y/o estado activo.
+ *  - reenviarInvitacion(id)     : POST /usuarios/:id/invitacion
+ *                                 Regenera contraseña temporal para usuarios pendientes.
  *  - deleteUsuario(id)          : DEL  /usuarios/:id
  */
 import api from './api';
@@ -29,7 +31,11 @@ const usuariosService = {
   createUsuario: async (data) => {
     try {
       const response = await api.post('/usuarios', data);
-      return { success: response.data.success, message: response.data.message, data: response.data.data };
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al crear usuario') };
     }
@@ -38,9 +44,26 @@ const usuariosService = {
   updateUsuario: async (id, data) => {
     try {
       const response = await api.put(`/usuarios/${id}`, data);
-      return { success: response.data.success, message: response.data.message, data: response.data.data };
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al actualizar usuario') };
+    }
+  },
+
+  reenviarInvitacion: async (id) => {
+    try {
+      const response = await api.post(`/usuarios/${id}/invitacion`);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return { success: false, message: extractError(error, 'Error al reenviar invitación') };
     }
   },
 
@@ -51,7 +74,7 @@ const usuariosService = {
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al eliminar usuario') };
     }
-  }
+  },
 };
 
 export default usuariosService;

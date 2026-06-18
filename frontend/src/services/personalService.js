@@ -15,7 +15,7 @@ import api from './api';
 import {
   extractError,
   getFilenameFromDisposition,
-  saveBlobWithPickerOrDownload
+  saveBlobWithPickerOrDownload,
 } from './serviceUtils';
 
 const personalService = {
@@ -24,12 +24,12 @@ const personalService = {
       const response = await api.get('/personal/colaboradores', { params });
       return {
         success: response.data.success,
-        data: response.data.data || []
+        data: response.data.data || [],
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al obtener colaboradores')
+        message: extractError(error, 'Error al obtener colaboradores'),
       };
     }
   },
@@ -40,12 +40,12 @@ const personalService = {
       return {
         success: response.data.success,
         message: response.data.message,
-        data: response.data.data
+        data: response.data.data,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al crear colaborador')
+        message: extractError(error, 'Error al crear colaborador'),
       };
     }
   },
@@ -56,12 +56,12 @@ const personalService = {
       return {
         success: response.data.success,
         message: response.data.message,
-        data: response.data.data
+        data: response.data.data,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al actualizar colaborador')
+        message: extractError(error, 'Error al actualizar colaborador'),
       };
     }
   },
@@ -71,12 +71,12 @@ const personalService = {
       const response = await api.delete(`/personal/colaboradores/${id}`);
       return {
         success: response.data.success,
-        message: response.data.message
+        message: response.data.message,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al eliminar colaborador')
+        message: extractError(error, 'Error al eliminar colaborador'),
       };
     }
   },
@@ -85,7 +85,7 @@ const personalService = {
     try {
       const response = await api.get('/personal/colaboradores/excel', {
         params,
-        responseType: 'blob'
+        responseType: 'blob',
       });
       const fileName = getFilenameFromDisposition(
         response.headers?.['content-disposition'],
@@ -93,12 +93,12 @@ const personalService = {
       );
       return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
         description: 'Excel',
-        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al exportar Excel') };
     }
-  }
+  },
 };
 
 export default personalService;

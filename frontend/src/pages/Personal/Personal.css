@@ -68,9 +68,11 @@
 
 .personal-modal-actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 8px;
-  padding: 0 20px 18px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
 .personal-modal-actions .btn {
@@ -129,8 +131,7 @@
 
 .personal-table {
   width: 100% !important;
-  min-width: 0 !important;
-  max-width: 100% !important;
+  min-width: 900px !important;
   table-layout: fixed;
 }
 
@@ -142,22 +143,34 @@
 }
 
 .personal-table th:nth-child(1),
-.personal-table td:nth-child(1) { width: 24%; }
+.personal-table td:nth-child(1) {
+  width: 22%;
+}
 
 .personal-table th:nth-child(2),
-.personal-table td:nth-child(2) { width: 11%; }
+.personal-table td:nth-child(2) {
+  width: 11%;
+}
 
 .personal-table th:nth-child(3),
-.personal-table td:nth-child(3) { width: 14%; }
+.personal-table td:nth-child(3) {
+  width: 14%;
+}
 
 .personal-table th:nth-child(4),
-.personal-table td:nth-child(4) { width: 8%; }
+.personal-table td:nth-child(4) {
+  width: 10%;
+}
 
 .personal-table th:nth-child(5),
-.personal-table td:nth-child(5) { width: 11%; }
+.personal-table td:nth-child(5) {
+  width: 11%;
+}
 
 .personal-table th:nth-child(6),
-.personal-table td:nth-child(6) { width: 17%; }
+.personal-table td:nth-child(6) {
+  width: 17%;
+}
 
 .personal-table th:nth-child(7),
 .personal-table td:nth-child(7) {
@@ -168,15 +181,16 @@
 
 .personal-table th:nth-child(8),
 .personal-table td:nth-child(8) {
-  width: 4%;
+  width: 88px;
 }
 
 .personal-table th.col-actions,
 .personal-table td.col-actions {
-  width: 70px !important;
-  min-width: 70px !important;
-  max-width: 70px !important;
-  padding: 0 !important;
+  width: 88px !important;
+  min-width: 88px !important;
+  max-width: 88px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
   text-align: center !important;
   vertical-align: middle;
 }
@@ -207,6 +221,17 @@
 .personal-table .cell-nowrap,
 .personal-table td:nth-child(7) {
   white-space: nowrap;
+}
+
+.personal-table td.cell-status {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  text-align: center !important;
+}
+
+.personal-table td.cell-status .badge {
+  max-width: none;
+  line-height: 1.15;
 }
 
 .bank-cell {
@@ -254,7 +279,6 @@
   background: #f8fafc;
 }
 
-
 @media (max-width: 768px) {
   .personal-filter-row {
     grid-template-columns: 1fr;
@@ -301,7 +325,8 @@
 
   .personal-modal-actions .btn,
   .personal-modal-actions .btn-modal-clear {
-    width: 150px;
-    max-width: 150px;
+    flex: 1 1 140px;
+    width: auto;
+    max-width: none;
   }
 }
