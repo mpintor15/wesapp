@@ -29,6 +29,7 @@
  *                         con cabecera azul y formato de moneda.
  */
 const db = require('../config/database');
+const logger = require('../config/logger');
 const { createHttpError, handleControllerError } = require('../utils/http');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
@@ -37,9 +38,19 @@ const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 // El servidor se reinicia con cada deploy, así que no hay riesgo de valores obsoletos.
 const _schemaCache = {};
 
+const logControllerError = (message, error) => {
+  logger.error(message, {
+    message: error.message,
+    stack: error.stack,
+    code: error.code,
+  });
+};
+
 const tableColumnExists = async (tableName, columnName) => {
   const key = `${tableName}.${columnName}`;
-  if (key in _schemaCache) return _schemaCache[key];
+  if (key in _schemaCache) {
+    return _schemaCache[key];
+  }
   const result = await db.query(
     `SELECT 1
      FROM information_schema.columns
@@ -55,7 +66,9 @@ const tableColumnExists = async (tableName, columnName) => {
 
 const tableExists = async (tableName) => {
   const key = `table::${tableName}`;
-  if (key in _schemaCache) return _schemaCache[key];
+  if (key in _schemaCache) {
+    return _schemaCache[key];
+  }
   const result = await db.query('SELECT to_regclass($1) AS table_name', [`public.${tableName}`]);
   _schemaCache[key] = Boolean(result.rows[0]?.table_name);
   return _schemaCache[key];
@@ -73,13 +86,13 @@ const getClientes = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
   } catch (error) {
-    console.error('Error al obtener clientes:', error);
+    logControllerError('Error al obtener clientes:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -91,14 +104,16 @@ const exportClientesExcel = async (req, res) => {
     );
 
     const { workbook, worksheet } = createWorkbook('Clientes', [
-      { header: 'Cliente',        key: 'cliente',        width: 40 },
+      { header: 'Cliente', key: 'cliente', width: 40 },
       { header: 'Identificación', key: 'identificacion', width: 24 },
     ]);
 
-    result.rows.forEach((row) => worksheet.addRow({
-      cliente:        row.nombre,
-      identificacion: row.identificacion,
-    }));
+    result.rows.forEach((row) =>
+      worksheet.addRow({
+        cliente: row.nombre,
+        identificacion: row.identificacion,
+      })
+    );
 
     styleDataRows(worksheet);
     await sendExcel(workbook, res, 'clientes.xlsx');
@@ -114,14 +129,14 @@ const createCliente = async (req, res) => {
     if (!nombre || !nombre.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'El nombre del cliente es requerido'
+        message: 'El nombre del cliente es requerido',
       });
     }
 
     if (!identificacion || !identificacion.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'La identificación del cliente es requerida'
+        message: 'La identificación del cliente es requerida',
       });
     }
 
@@ -135,25 +150,25 @@ const createCliente = async (req, res) => {
       operacion: 'INSERT',
       registro_id: String(result.rows[0].id),
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.status(201).json({
       success: true,
       message: 'Cliente creado exitosamente',
-      data: result.rows[0]
+      data: result.rows[0],
     });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe un cliente con ese nombre o identificación'
+        message: 'Ya existe un cliente con ese nombre o identificación',
       });
     }
-    console.error('Error al crear cliente:', error);
+    logControllerError('Error al crear cliente:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -165,15 +180,12 @@ const deleteCliente = async (req, res) => {
       throw createHttpError(400, 'El id del cliente es inválido');
     }
 
-    const hasFacturas = await db.query(
-      'SELECT 1 FROM cuentas WHERE cliente_id = $1 LIMIT 1',
-      [id]
-    );
+    const hasFacturas = await db.query('SELECT 1 FROM cuentas WHERE cliente_id = $1 LIMIT 1', [id]);
 
     if (hasFacturas.rowCount > 0) {
       return res.status(400).json({
         success: false,
-        message: 'No se puede eliminar el cliente porque tiene facturas asociadas'
+        message: 'No se puede eliminar el cliente porque tiene facturas asociadas',
       });
     }
 
@@ -185,7 +197,7 @@ const deleteCliente = async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Cliente no encontrado'
+        message: 'Cliente no encontrado',
       });
     }
 
@@ -194,24 +206,24 @@ const deleteCliente = async (req, res) => {
       operacion: 'DELETE',
       registro_id: String(id),
       datos_anteriores: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({
       success: true,
-      message: 'Cliente eliminado exitosamente'
+      message: 'Cliente eliminado exitosamente',
     });
   } catch (error) {
     if (error.code === '23503') {
       return res.status(400).json({
         success: false,
-        message: 'No se puede eliminar el cliente porque tiene facturas asociadas'
+        message: 'No se puede eliminar el cliente porque tiene facturas asociadas',
       });
     }
-    console.error('Error al eliminar cliente:', error);
+    logControllerError('Error al eliminar cliente:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -229,13 +241,14 @@ const createFactura = async (req, res) => {
       valor_factura,
       incluye_iva,
       incluye_retencion_fuente,
-      incluye_retencion_iva
+      incluye_retencion_iva,
     } = req.body;
 
     if (!num_factura || !cliente_id || !fecha_factura || !valor_factura) {
       return res.status(400).json({
         success: false,
-        message: 'Todos los campos son requeridos: num_factura, cliente_id, fecha_factura, valor_factura'
+        message:
+          'Todos los campos son requeridos: num_factura, cliente_id, fecha_factura, valor_factura',
       });
     }
 
@@ -247,47 +260,46 @@ const createFactura = async (req, res) => {
     if (!Number.isInteger(parsedNumFactura) || parsedNumFactura <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'El número de factura debe ser un entero mayor a 0'
+        message: 'El número de factura debe ser un entero mayor a 0',
       });
     }
 
     if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'El cliente especificado no es válido'
+        message: 'El cliente especificado no es válido',
       });
     }
 
     if (!Number.isFinite(parsedValorFactura) || parsedValorFactura <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'El valor de la factura debe ser mayor a 0'
+        message: 'El valor de la factura debe ser mayor a 0',
       });
     }
 
     if (Number.isNaN(parsedFecha.getTime())) {
       return res.status(400).json({
         success: false,
-        message: 'La fecha de factura no es válida'
+        message: 'La fecha de factura no es válida',
       });
     }
 
     if (incluye_retencion_iva && !incluye_iva) {
       return res.status(400).json({
         success: false,
-        message: 'La retención de IVA requiere que IVA esté habilitado'
+        message: 'La retención de IVA requiere que IVA esté habilitado',
       });
     }
 
-    const clienteExists = await db.query(
-      'SELECT id FROM clientes WHERE id = $1 LIMIT 1',
-      [parsedClienteId]
-    );
+    const clienteExists = await db.query('SELECT id FROM clientes WHERE id = $1 LIMIT 1', [
+      parsedClienteId,
+    ]);
 
     if (clienteExists.rowCount === 0) {
       return res.status(400).json({
         success: false,
-        message: 'El cliente especificado no existe'
+        message: 'El cliente especificado no existe',
       });
     }
 
@@ -302,7 +314,7 @@ const createFactura = async (req, res) => {
         parsedValorFactura,
         !!incluye_iva,
         !!incluye_retencion_fuente,
-        !!incluye_retencion_iva
+        !!incluye_retencion_iva,
       ]
     );
 
@@ -311,31 +323,31 @@ const createFactura = async (req, res) => {
       operacion: 'INSERT',
       registro_id: String(result.rows[0].num_factura),
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.status(201).json({
       success: true,
       message: 'Factura creada exitosamente',
-      data: result.rows[0]
+      data: result.rows[0],
     });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
-        message: 'Ya existe una factura con ese número'
+        message: 'Ya existe una factura con ese número',
       });
     }
     if (error.code === '23503') {
       return res.status(400).json({
         success: false,
-        message: 'El cliente especificado no existe'
+        message: 'El cliente especificado no existe',
       });
     }
-    console.error('Error al crear factura:', error);
+    logControllerError('Error al crear factura:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -359,7 +371,7 @@ const deleteFactura = async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Factura no encontrada'
+        message: 'Factura no encontrada',
       });
     }
 
@@ -368,12 +380,12 @@ const deleteFactura = async (req, res) => {
       operacion: 'DELETE',
       registro_id: String(parsedNumFactura),
       datos_anteriores: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({
       success: true,
-      message: 'Factura eliminada exitosamente'
+      message: 'Factura eliminada exitosamente',
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al eliminar factura:');
@@ -392,7 +404,7 @@ const cancelFactura = async (req, res) => {
     if (!detalle_anulacion || !detalle_anulacion.trim()) {
       return res.status(400).json({
         success: false,
-        message: 'El detalle de anulación es obligatorio'
+        message: 'El detalle de anulación es obligatorio',
       });
     }
 
@@ -409,7 +421,7 @@ const cancelFactura = async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Factura no encontrada'
+        message: 'Factura no encontrada',
       });
     }
 
@@ -418,7 +430,7 @@ const cancelFactura = async (req, res) => {
       operacion: 'UPDATE',
       registro_id: String(parsedNumFactura),
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({
@@ -427,14 +439,14 @@ const cancelFactura = async (req, res) => {
       data: {
         num_factura: result.rows[0].num_factura,
         detalle_anulacion: result.rows[0].detalle_anulacion,
-        fecha_anulacion: result.rows[0].fecha_anulacion
-      }
+        fecha_anulacion: result.rows[0].fecha_anulacion,
+      },
     });
   } catch (error) {
     if (error.code === '42703') {
       return res.status(500).json({
         success: false,
-        message: 'Configuración incompleta de base de datos: faltan columnas de anulación'
+        message: 'Configuración incompleta de base de datos: faltan columnas de anulación',
       });
     }
     return handleControllerError(res, error, 'Error al cancelar factura:');
@@ -480,7 +492,7 @@ const getAbonosByFactura = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener abonos de factura:');
@@ -502,7 +514,7 @@ const getPagos = async (req, res) => {
       cuentasHasCancelada,
       cuentasHasIncluyeIva,
       cuentasHasIncluyeRetencionFuente,
-      cuentasHasIncluyeRetencionIva
+      cuentasHasIncluyeRetencionIva,
     ] = await Promise.all([
       tableColumnExists('abonos', 'pago_id'),
       pagosTableExists ? tableColumnExists('pagos', 'cliente_id') : Promise.resolve(false),
@@ -515,7 +527,7 @@ const getPagos = async (req, res) => {
       tableColumnExists('cuentas', 'cancelada'),
       tableColumnExists('cuentas', 'incluye_iva'),
       tableColumnExists('cuentas', 'incluye_retencion_fuente'),
-      tableColumnExists('cuentas', 'incluye_retencion_iva')
+      tableColumnExists('cuentas', 'incluye_retencion_iva'),
     ]);
 
     if (!pagosTableExists || !abonosHasPagoId) {
@@ -564,7 +576,7 @@ const getPagos = async (req, res) => {
 
       return res.json({
         success: true,
-        data: legacyResult.rows
+        data: legacyResult.rows,
       });
     }
 
@@ -575,11 +587,17 @@ const getPagos = async (req, res) => {
     const pagoNotasSelect = pagosHasNotas ? 'p.notas' : 'NULL::text';
     const pagoTotalSelect = pagosHasTotal ? 'p.total' : 'COALESCE(SUM(a.valor_abono), 0)';
     const pagoClienteIdSelect = pagosHasClienteId ? 'COALESCE(p.cliente_id, cl.id)' : 'cl.id';
-    const clienteJoinKey = pagosHasClienteId ? 'COALESCE(p.cliente_id, c.cliente_id)' : 'c.cliente_id';
+    const clienteJoinKey = pagosHasClienteId
+      ? 'COALESCE(p.cliente_id, c.cliente_id)'
+      : 'c.cliente_id';
     const canceladaSelect = cuentasHasCancelada ? 'c.cancelada' : 'FALSE';
     const incluyeIvaSelect = cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE';
-    const incluyeRetFuenteSelect = cuentasHasIncluyeRetencionFuente ? 'COALESCE(c.incluye_retencion_fuente, FALSE)' : 'FALSE';
-    const incluyeRetIvaSelect = cuentasHasIncluyeRetencionIva ? 'COALESCE(c.incluye_retencion_iva, FALSE)' : 'FALSE';
+    const incluyeRetFuenteSelect = cuentasHasIncluyeRetencionFuente
+      ? 'COALESCE(c.incluye_retencion_fuente, FALSE)'
+      : 'FALSE';
+    const incluyeRetIvaSelect = cuentasHasIncluyeRetencionIva
+      ? 'COALESCE(c.incluye_retencion_iva, FALSE)'
+      : 'FALSE';
 
     const result = await db.query(
       `WITH totales_abonos AS (
@@ -635,7 +653,7 @@ const getPagos = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener pagos:');
@@ -682,24 +700,26 @@ const exportPagosExcel = async (req, res) => {
     );
 
     const { workbook, worksheet } = createWorkbook('Pagos', [
-      { header: 'Pago',           key: 'id',          width: 12 },
-      { header: 'Fecha',          key: 'fecha',        width: 14 },
-      { header: 'Cliente',        key: 'cliente',      width: 36 },
-      { header: 'Método de pago', key: 'metodo_pago',  width: 18 },
-      { header: 'Valor',          key: 'total',        width: 16, numFmt: '$#,##0.00' },
-      { header: 'Facturas',       key: 'facturas',     width: 50 },
-      { header: 'Notas',          key: 'notas',        width: 40 },
+      { header: 'Pago', key: 'id', width: 12 },
+      { header: 'Fecha', key: 'fecha', width: 14 },
+      { header: 'Cliente', key: 'cliente', width: 36 },
+      { header: 'Método de pago', key: 'metodo_pago', width: 18 },
+      { header: 'Valor', key: 'total', width: 16, numFmt: '$#,##0.00' },
+      { header: 'Facturas', key: 'facturas', width: 50 },
+      { header: 'Notas', key: 'notas', width: 40 },
     ]);
 
-    result.rows.forEach((row) => worksheet.addRow({
-      id:          row.id,
-      fecha:       row.fecha ? new Date(row.fecha).toLocaleDateString('es-EC') : '-',
-      cliente:     row.cliente,
-      metodo_pago: row.metodo_pago,
-      total:       Number(row.total || 0),
-      facturas:    row.facturas || '-',
-      notas:       row.notas,
-    }));
+    result.rows.forEach((row) =>
+      worksheet.addRow({
+        id: row.id,
+        fecha: row.fecha ? new Date(row.fecha).toLocaleDateString('es-EC') : '-',
+        cliente: row.cliente,
+        metodo_pago: row.metodo_pago,
+        total: Number(row.total || 0),
+        facturas: row.facturas || '-',
+        notas: row.notas,
+      })
+    );
 
     worksheet.getColumn('total').numFmt = '$#,##0.00';
     styleDataRows(worksheet);
@@ -708,7 +728,6 @@ const exportPagosExcel = async (req, res) => {
     return handleControllerError(res, error, 'Error al exportar pagos:');
   }
 };
-
 
 // ============================================
 // REPORTE
@@ -761,7 +780,7 @@ const getReporte = async (req, res) => {
 
     res.json({
       success: true,
-      data
+      data,
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al generar reporte:');
@@ -815,35 +834,48 @@ const exportReporteExcel = async (req, res) => {
 
     const MONEY = '$#,##0.00';
     const { workbook, worksheet } = createWorkbook('Cuentas por Cobrar', [
-      { header: 'N° Factura',       key: 'num_factura',      width: 14 },
-      { header: 'Cliente',          key: 'cliente',          width: 30 },
-      { header: 'Identificación',   key: 'identificacion',   width: 18 },
-      { header: 'Fecha',            key: 'fecha_factura',    width: 14 },
-      { header: 'Subtotal',         key: 'subtotal',         width: 14, numFmt: MONEY },
-      { header: 'IVA',              key: 'iva',              width: 13, numFmt: MONEY },
-      { header: 'Ret. Fuente',      key: 'retencion_fuente', width: 14, numFmt: MONEY },
-      { header: 'Ret. IVA',         key: 'retencion_iva',    width: 13, numFmt: MONEY },
-      { header: 'Por Cobrar',       key: 'por_cobrar',       width: 14, numFmt: MONEY },
-      { header: 'Total Abonos',     key: 'total_abonos',     width: 14, numFmt: MONEY },
-      { header: 'Saldo Pendiente',  key: 'saldo_pendiente',  width: 16, numFmt: MONEY },
+      { header: 'N° Factura', key: 'num_factura', width: 14 },
+      { header: 'Cliente', key: 'cliente', width: 30 },
+      { header: 'Identificación', key: 'identificacion', width: 18 },
+      { header: 'Fecha', key: 'fecha_factura', width: 14 },
+      { header: 'Subtotal', key: 'subtotal', width: 14, numFmt: MONEY },
+      { header: 'IVA', key: 'iva', width: 13, numFmt: MONEY },
+      { header: 'Ret. Fuente', key: 'retencion_fuente', width: 14, numFmt: MONEY },
+      { header: 'Ret. IVA', key: 'retencion_iva', width: 13, numFmt: MONEY },
+      { header: 'Por Cobrar', key: 'por_cobrar', width: 14, numFmt: MONEY },
+      { header: 'Total Abonos', key: 'total_abonos', width: 14, numFmt: MONEY },
+      { header: 'Saldo Pendiente', key: 'saldo_pendiente', width: 16, numFmt: MONEY },
     ]);
 
-    data.forEach((row) => worksheet.addRow({
-      num_factura:      row.num_factura,
-      cliente:          row.cliente,
-      identificacion:   row.identificacion,
-      fecha_factura:    row.fecha_factura ? new Date(row.fecha_factura).toLocaleDateString('es-EC') : '',
-      subtotal:         Number.parseFloat(row.subtotal),
-      iva:              Number.parseFloat(row.iva),
-      retencion_fuente: Number.parseFloat(row.retencion_fuente),
-      retencion_iva:    Number.parseFloat(row.retencion_iva),
-      por_cobrar:       Number.parseFloat(row.por_cobrar),
-      total_abonos:     Number.parseFloat(row.total_abonos),
-      saldo_pendiente:  Number.parseFloat(row.saldo_pendiente),
-    }));
+    data.forEach((row) =>
+      worksheet.addRow({
+        num_factura: row.num_factura,
+        cliente: row.cliente,
+        identificacion: row.identificacion,
+        fecha_factura: row.fecha_factura
+          ? new Date(row.fecha_factura).toLocaleDateString('es-EC')
+          : '',
+        subtotal: Number.parseFloat(row.subtotal),
+        iva: Number.parseFloat(row.iva),
+        retencion_fuente: Number.parseFloat(row.retencion_fuente),
+        retencion_iva: Number.parseFloat(row.retencion_iva),
+        por_cobrar: Number.parseFloat(row.por_cobrar),
+        total_abonos: Number.parseFloat(row.total_abonos),
+        saldo_pendiente: Number.parseFloat(row.saldo_pendiente),
+      })
+    );
 
-    ['subtotal', 'iva', 'retencion_fuente', 'retencion_iva', 'por_cobrar', 'total_abonos', 'saldo_pendiente']
-      .forEach((key) => { worksheet.getColumn(key).numFmt = MONEY; });
+    [
+      'subtotal',
+      'iva',
+      'retencion_fuente',
+      'retencion_iva',
+      'por_cobrar',
+      'total_abonos',
+      'saldo_pendiente',
+    ].forEach((key) => {
+      worksheet.getColumn(key).numFmt = MONEY;
+    });
 
     styleDataRows(worksheet);
     await sendExcel(workbook, res, 'reporte_cuentas.xlsx');
@@ -865,42 +897,42 @@ const createBatchAbono = async (req, res) => {
   if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
     return res.status(400).json({
       success: false,
-      message: 'Se requiere un cliente válido para registrar el pago'
+      message: 'Se requiere un cliente válido para registrar el pago',
     });
   }
 
   if (!fecha || Number.isNaN(parsedFecha?.getTime())) {
     return res.status(400).json({
       success: false,
-      message: 'La fecha del pago es obligatoria y debe ser válida'
+      message: 'La fecha del pago es obligatoria y debe ser válida',
     });
   }
 
   if (metodoPagoNormalizado && !metodosPermitidos.has(metodoPagoNormalizado)) {
     return res.status(400).json({
       success: false,
-      message: 'El método de pago no es válido'
+      message: 'El método de pago no es válido',
     });
   }
 
   if (referenciaNormalizada && referenciaNormalizada.length > 100) {
     return res.status(400).json({
       success: false,
-      message: 'La referencia no puede superar los 100 caracteres'
+      message: 'La referencia no puede superar los 100 caracteres',
     });
   }
 
   if (notasNormalizadas && notasNormalizadas.length > 500) {
     return res.status(400).json({
       success: false,
-      message: 'Las notas no pueden superar los 500 caracteres'
+      message: 'Las notas no pueden superar los 500 caracteres',
     });
   }
 
   if (!Array.isArray(abonos) || abonos.length === 0) {
     return res.status(400).json({
       success: false,
-      message: 'Debes seleccionar al menos una factura con monto'
+      message: 'Debes seleccionar al menos una factura con monto',
     });
   }
 
@@ -911,36 +943,41 @@ const createBatchAbono = async (req, res) => {
     const numFactura = Number(item?.num_factura);
     const valorAbono = Number(item?.valor_abono);
 
-    if (!Number.isInteger(numFactura) || numFactura <= 0 || !Number.isFinite(valorAbono) || valorAbono <= 0) {
+    if (
+      !Number.isInteger(numFactura) ||
+      numFactura <= 0 ||
+      !Number.isFinite(valorAbono) ||
+      valorAbono <= 0
+    ) {
       return res.status(400).json({
         success: false,
-        message: 'Cada abono debe tener num_factura y valor_abono mayor a 0'
+        message: 'Cada abono debe tener num_factura y valor_abono mayor a 0',
       });
     }
 
     if (seenFacturas.has(numFactura)) {
       return res.status(400).json({
         success: false,
-        message: `La factura #${numFactura} está repetida en la distribución`
+        message: `La factura #${numFactura} está repetida en la distribución`,
       });
     }
 
     seenFacturas.add(numFactura);
     abonosNormalizados.push({
       num_factura: numFactura,
-      valor_abono: Math.round(valorAbono * 100) / 100
+      valor_abono: Math.round(valorAbono * 100) / 100,
     });
   }
 
-  const total = Math.round(abonosNormalizados.reduce((sum, a) => sum + a.valor_abono, 0) * 100) / 100;
+  const total =
+    Math.round(abonosNormalizados.reduce((sum, a) => sum + a.valor_abono, 0) * 100) / 100;
 
   let createdPago = null;
   try {
     await db.transaction(async (client) => {
-      const clienteResult = await client.query(
-        'SELECT id FROM clientes WHERE id = $1 LIMIT 1',
-        [parsedClienteId]
-      );
+      const clienteResult = await client.query('SELECT id FROM clientes WHERE id = $1 LIMIT 1', [
+        parsedClienteId,
+      ]);
 
       if (clienteResult.rowCount === 0) {
         const err = new Error('CLIENTE_NO_EXISTE');
@@ -1011,7 +1048,7 @@ const createBatchAbono = async (req, res) => {
           metodoPagoNormalizado || null,
           referenciaNormalizada || null,
           notasNormalizadas || null,
-          total
+          total,
         ]
       );
       const pago_id = pagoResult.rows[0].id;
@@ -1023,7 +1060,7 @@ const createBatchAbono = async (req, res) => {
         referencia: referenciaNormalizada || null,
         notas: notasNormalizadas || null,
         total,
-        abonos: abonosNormalizados
+        abonos: abonosNormalizados,
       };
 
       for (const abono of abonosNormalizados) {
@@ -1039,54 +1076,54 @@ const createBatchAbono = async (req, res) => {
       operacion: 'INSERT',
       registro_id: String(createdPago.id),
       datos_nuevos: createdPago,
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.status(201).json({
       success: true,
-      message: `${abonosNormalizados.length} abono(s) registrado(s) exitosamente`
+      message: `${abonosNormalizados.length} abono(s) registrado(s) exitosamente`,
     });
   } catch (error) {
     if (error.code === 'CLIENTE_NO_EXISTE') {
       return res.status(400).json({
         success: false,
-        message: 'El cliente seleccionado no existe'
+        message: 'El cliente seleccionado no existe',
       });
     }
     if (error.code === 'FACTURA_NO_EXISTE') {
       return res.status(400).json({
         success: false,
-        message: `La factura #${error.num_factura} no existe`
+        message: `La factura #${error.num_factura} no existe`,
       });
     }
     if (error.code === 'FACTURA_CLIENTE_INVALIDO') {
       return res.status(400).json({
         success: false,
-        message: `La factura #${error.num_factura} no pertenece al cliente seleccionado`
+        message: `La factura #${error.num_factura} no pertenece al cliente seleccionado`,
       });
     }
     if (error.code === 'FACTURA_CANCELADA') {
       return res.status(400).json({
         success: false,
-        message: `La factura #${error.num_factura} está anulada y no admite pagos`
+        message: `La factura #${error.num_factura} está anulada y no admite pagos`,
       });
     }
     if (error.code === 'ABONO_EXCEDE_SALDO') {
       return res.status(400).json({
         success: false,
-        message: `El abono de la factura #${error.num_factura} excede su saldo pendiente (${error.saldo.toFixed(2)})`
+        message: `El abono de la factura #${error.num_factura} excede su saldo pendiente (${error.saldo.toFixed(2)})`,
       });
     }
     if (error.code === '23503') {
       return res.status(400).json({
         success: false,
-        message: 'Una o más facturas especificadas no existen'
+        message: 'Una o más facturas especificadas no existen',
       });
     }
-    console.error('Error al crear abonos en batch:', error);
+    logControllerError('Error al crear abonos en batch:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -1098,7 +1135,7 @@ const getNextNumFactura = async (req, res) => {
     );
     res.json({
       success: true,
-      data: { next_num_factura: result.rows[0].next_num }
+      data: { next_num_factura: result.rows[0].next_num },
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener siguiente número de factura:');
@@ -1112,7 +1149,14 @@ const updateFactura = async (req, res) => {
       throw createHttpError(400, 'El número de factura es inválido');
     }
 
-    const { cliente_id, fecha_factura, valor_factura, incluye_iva, incluye_retencion_fuente, incluye_retencion_iva } = req.body;
+    const {
+      cliente_id,
+      fecha_factura,
+      valor_factura,
+      incluye_iva,
+      incluye_retencion_fuente,
+      incluye_retencion_iva,
+    } = req.body;
 
     if (!cliente_id || !fecha_factura || !valor_factura) {
       throw createHttpError(400, 'Campos requeridos: cliente_id, fecha_factura, valor_factura');
@@ -1139,7 +1183,9 @@ const updateFactura = async (req, res) => {
     }
 
     if (current.rows[0].cancelada) {
-      return res.status(400).json({ success: false, message: 'No se puede editar una factura anulada' });
+      return res
+        .status(400)
+        .json({ success: false, message: 'No se puede editar una factura anulada' });
     }
 
     const ivaFinal = !!incluye_iva;
@@ -1151,7 +1197,15 @@ const updateFactura = async (req, res) => {
            incluye_iva = $5, incluye_retencion_fuente = $6, incluye_retencion_iva = $7
        WHERE num_factura = $1
        RETURNING num_factura, cliente_id, fecha_factura, valor_factura, incluye_iva, incluye_retencion_fuente, incluye_retencion_iva`,
-      [parsedNumFactura, parsedClienteId, fecha_factura, parsedValorFactura, ivaFinal, !!incluye_retencion_fuente, retencionIvaFinal]
+      [
+        parsedNumFactura,
+        parsedClienteId,
+        fecha_factura,
+        parsedValorFactura,
+        ivaFinal,
+        !!incluye_retencion_fuente,
+        retencionIvaFinal,
+      ]
     );
 
     await logAudit(db, {
@@ -1160,13 +1214,13 @@ const updateFactura = async (req, res) => {
       registro_id: String(parsedNumFactura),
       datos_anteriores: current.rows[0],
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({
       success: true,
       message: 'Factura actualizada exitosamente',
-      data: result.rows[0]
+      data: result.rows[0],
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al actualizar factura:');
@@ -1219,7 +1273,7 @@ const deletePago = async (req, res) => {
       operacion: 'DELETE',
       registro_id: String(id),
       datos_anteriores: current.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({ success: true, message: 'Pago eliminado exitosamente' });
@@ -1270,7 +1324,7 @@ const deleteAbono = async (req, res) => {
       operacion: 'DELETE',
       registro_id: String(id),
       datos_anteriores: abono,
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({ success: true, message: 'Abono eliminado exitosamente' });
@@ -1296,5 +1350,5 @@ module.exports = {
   getNextNumFactura,
   updateFactura,
   deletePago,
-  deleteAbono
+  deleteAbono,
 };

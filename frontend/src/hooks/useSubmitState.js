@@ -16,24 +16,25 @@ import { useState, useCallback } from 'react';
 export const useSubmitState = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const withSubmit = useCallback((asyncFn) => {
-    return async (...args) => {
-      // Prevenir doble-submit
-      if (isSubmitting) {
-        return;
-      }
+  const withSubmit = useCallback(
+    (asyncFn) => {
+      return async (...args) => {
+        // Prevenir doble-submit
+        if (isSubmitting) {
+          return;
+        }
 
-      setIsSubmitting(true);
-      try {
-        const result = await asyncFn(...args);
-        return result;
-      } catch (error) {
-        throw error;
-      } finally {
-        setIsSubmitting(false);
-      }
-    };
-  }, [isSubmitting]);
+        setIsSubmitting(true);
+        try {
+          const result = await asyncFn(...args);
+          return result;
+        } finally {
+          setIsSubmitting(false);
+        }
+      };
+    },
+    [isSubmitting]
+  );
 
   return { isSubmitting, withSubmit };
 };

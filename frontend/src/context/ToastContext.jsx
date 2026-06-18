@@ -7,14 +7,14 @@ export const ToastProvider = ({ children }) => {
 
   const showToast = useCallback((text, type = 'info', duration = 4000) => {
     const id = Date.now() + Math.random();
-    setToasts(prev => [...prev, { id, text, type }]);
+    setToasts((prev) => [...prev, { id, text, type }]);
     setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
+      setToasts((prev) => prev.filter((t) => t.id !== id));
     }, duration);
   }, []);
 
   const dismiss = useCallback((id) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+    setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   return (
@@ -29,7 +29,7 @@ const ToastContainer = ({ toasts, onDismiss }) => {
   if (toasts.length === 0) return null;
   return (
     <div className="toast-container">
-      {toasts.map(toast => (
+      {toasts.map((toast) => (
         <Toast key={toast.id} toast={toast} onDismiss={onDismiss} />
       ))}
     </div>
@@ -47,7 +47,9 @@ const Toast = ({ toast, onDismiss }) => (
   <div className={`toast toast-${toast.type}`} role="alert">
     <span className="toast-icon">{ICONS[toast.type]}</span>
     <span className="toast-text">{toast.text}</span>
-    <button className="toast-close" onClick={() => onDismiss(toast.id)} aria-label="Cerrar">×</button>
+    <button className="toast-close" onClick={() => onDismiss(toast.id)} aria-label="Cerrar">
+      ×
+    </button>
   </div>
 );
 

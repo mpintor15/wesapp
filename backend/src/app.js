@@ -19,6 +19,8 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('node:path');
 const config = require('./config/config');
+const logger = require('./config/logger');
+const httpLogger = require('./middleware/httpLogger');
 
 // Importar rutas
 const authRoutes = require('./routes/auth.routes');
@@ -58,7 +60,7 @@ app.use(cors(config.cors));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: config.nodeEnv === 'production' ? 300 : 2000,
-  standardHeaders: true,  // Return rate limit info in RateLimit-* headers
+  standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false,
   // Always return JSON so the frontend can read the message correctly
   handler: (req, res) => {
@@ -82,15 +84,9 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ======================
-// Logger simple (en desarrollo)
+// HTTP Logging
 // ======================
-
-if (config.nodeEnv === 'development') {
-  app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path} - ${new Date().toISOString()}`);
-    next();
-  });
-}
+app.use(httpLogger);
 
 // ======================
 // Rutas
@@ -101,7 +97,7 @@ app.get('/health', (req, res) => {
   res.json({
     success: true,
     message: 'WESApp API is running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -127,7 +123,7 @@ app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/*', (req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Ruta no encontrada'
+    message: 'Ruta no encontrada',
   });
 });
 
@@ -152,13 +148,23 @@ if (config.nodeEnv === 'production') {
 // Manejo de errores global
 // ======================
 
-app.use((err, req, res, next) => {
-  console.error('Error no manejado:', err);
-  
-  res.status(err.status || 500).json({
+app.use((err, req, res, _next) => {
+  const status = err.status || 500;
+  const level = status >= 500 ? 'error' : 'warn';
+  logger[level](`${req.method} ${req.path} - Error`, {
+    message: err.message,
+    stack: err.stack,
+    code: err.code,
+    status,
+  });
+
+  res.status(status).json({
     success: false,
-    message: err.message || 'Error interno del servidor',
-    ...(config.nodeEnv === 'development' && { stack: err.stack })
+    message:
+      status >= 500 && config.nodeEnv === 'production'
+        ? 'Error interno del servidor'
+        : err.message || 'Error interno del servidor',
+    ...(config.nodeEnv === 'development' && { stack: err.stack }),
   });
 });
 

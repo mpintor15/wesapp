@@ -90,3 +90,9 @@
 .confirm-actions .btn-primary:hover {
   background: #e01f15 !important;
 }
+
+@media (max-width: 480px) {
+  .confirm-dialog .modal-footer.confirm-actions {
+    grid-template-columns: 1fr;
+  }
+}

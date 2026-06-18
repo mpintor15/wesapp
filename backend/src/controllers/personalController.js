@@ -15,10 +15,19 @@
  *                              (con los mismos filtros) en formato .xlsx.
  */
 const db = require('../config/database');
+const logger = require('../config/logger');
 const { createHttpError, handleControllerError } = require('../utils/http');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const ESTADOS_COLABORADOR = new Set(['activo', 'inactivo']);
+
+const logControllerError = (message, error) => {
+  logger.error(message, {
+    message: error.message,
+    stack: error.stack,
+    code: error.code,
+  });
+};
 
 const buildColaboradoresQuery = ({ search, estado, cargo }) => {
   let query = 'SELECT * FROM colaboradores';
@@ -67,13 +76,13 @@ const getColaboradores = async (req, res) => {
     const { query, params } = buildColaboradoresQuery({
       search,
       estado: estado ? estadoNormalizado : undefined,
-      cargo
+      cargo,
     });
 
     const result = await db.query(query, params);
     res.json({ success: true, data: result.rows });
   } catch (error) {
-    console.error('Error al obtener colaboradores:', error);
+    logControllerError('Error al obtener colaboradores:', error);
     res.status(500).json({ success: false, message: 'Error en el servidor' });
   }
 };
@@ -89,14 +98,14 @@ const createColaborador = async (req, res) => {
       banco,
       numero_cuenta,
       sueldo,
-      estado
+      estado,
     } = req.body;
     const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : 'activo';
 
     if (!nombres_completos || !cedula || !fecha_nacimiento || !cargo) {
       return res.status(400).json({
         success: false,
-        message: 'Campos requeridos: nombres_completos, cedula, fecha_nacimiento, cargo'
+        message: 'Campos requeridos: nombres_completos, cedula, fecha_nacimiento, cargo',
       });
     }
 
@@ -105,9 +114,7 @@ const createColaborador = async (req, res) => {
     }
 
     const sueldoNormalizado =
-      sueldo === undefined || sueldo === null || sueldo === ''
-        ? null
-        : Number(sueldo);
+      sueldo === undefined || sueldo === null || sueldo === '' ? null : Number(sueldo);
 
     if (sueldoNormalizado !== null && !Number.isFinite(sueldoNormalizado)) {
       throw createHttpError(400, 'El sueldo no es válido');
@@ -135,7 +142,7 @@ const createColaborador = async (req, res) => {
         banco || null,
         numero_cuenta || null,
         sueldoNormalizado,
-        estadoNormalizado
+        estadoNormalizado,
       ]
     );
 
@@ -144,19 +151,19 @@ const createColaborador = async (req, res) => {
       operacion: 'INSERT',
       registro_id: String(result.rows[0].id),
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.status(201).json({
       success: true,
       message: 'Colaborador creado exitosamente',
-      data: result.rows[0]
+      data: result.rows[0],
     });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
-        message: 'La cédula ya está registrada'
+        message: 'La cédula ya está registrada',
       });
     }
     return handleControllerError(res, error, 'Error al crear colaborador:');
@@ -179,7 +186,7 @@ const updateColaborador = async (req, res) => {
       'banco',
       'numero_cuenta',
       'sueldo',
-      'estado'
+      'estado',
     ];
 
     const updates = [];
@@ -211,7 +218,7 @@ const updateColaborador = async (req, res) => {
     if (updates.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No hay campos para actualizar'
+        message: 'No hay campos para actualizar',
       });
     }
 
@@ -233,19 +240,19 @@ const updateColaborador = async (req, res) => {
       operacion: 'UPDATE',
       registro_id: String(id),
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({
       success: true,
       message: 'Colaborador actualizado exitosamente',
-      data: result.rows[0]
+      data: result.rows[0],
     });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
-        message: 'La cédula ya está registrada'
+        message: 'La cédula ya está registrada',
       });
     }
     return handleControllerError(res, error, 'Error al actualizar colaborador:');
@@ -270,7 +277,7 @@ const deleteColaborador = async (req, res) => {
       operacion: 'DELETE',
       registro_id: String(id),
       datos_anteriores: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({ success: true, message: 'Colaborador eliminado exitosamente' });
@@ -295,28 +302,32 @@ const exportColaboradoresExcel = async (req, res) => {
     const result = await db.query(query, params);
 
     const { workbook, worksheet } = createWorkbook('Colaboradores', [
-      { header: 'Nombres',          key: 'nombres_completos', width: 30 },
-      { header: 'Cédula',           key: 'cedula',            width: 15 },
-      { header: 'Fecha Nacimiento', key: 'fecha_nacimiento',  width: 16 },
-      { header: 'Cargo',            key: 'cargo',             width: 20 },
-      { header: 'Celular',          key: 'celular',           width: 15 },
-      { header: 'Banco',            key: 'banco',             width: 20 },
-      { header: 'Cuenta',           key: 'numero_cuenta',     width: 20 },
-      { header: 'Sueldo',           key: 'sueldo',            width: 14, numFmt: '$#,##0.00' },
-      { header: 'Estado',           key: 'estado',            width: 12 },
+      { header: 'Nombres', key: 'nombres_completos', width: 30 },
+      { header: 'Cédula', key: 'cedula', width: 15 },
+      { header: 'Fecha Nacimiento', key: 'fecha_nacimiento', width: 16 },
+      { header: 'Cargo', key: 'cargo', width: 20 },
+      { header: 'Celular', key: 'celular', width: 15 },
+      { header: 'Banco', key: 'banco', width: 20 },
+      { header: 'Cuenta', key: 'numero_cuenta', width: 20 },
+      { header: 'Sueldo', key: 'sueldo', width: 14, numFmt: '$#,##0.00' },
+      { header: 'Estado', key: 'estado', width: 12 },
     ]);
 
-    result.rows.forEach((row) => worksheet.addRow({
-      nombres_completos: row.nombres_completos,
-      cedula:            row.cedula,
-      fecha_nacimiento:  row.fecha_nacimiento ? new Date(row.fecha_nacimiento).toLocaleDateString('es-EC') : '',
-      cargo:             row.cargo,
-      celular:           row.celular || '',
-      banco:             row.banco || '',
-      numero_cuenta:     row.numero_cuenta || '',
-      sueldo:            row.sueldo ? Number.parseFloat(row.sueldo) : '',
-      estado:            row.estado,
-    }));
+    result.rows.forEach((row) =>
+      worksheet.addRow({
+        nombres_completos: row.nombres_completos,
+        cedula: row.cedula,
+        fecha_nacimiento: row.fecha_nacimiento
+          ? new Date(row.fecha_nacimiento).toLocaleDateString('es-EC')
+          : '',
+        cargo: row.cargo,
+        celular: row.celular || '',
+        banco: row.banco || '',
+        numero_cuenta: row.numero_cuenta || '',
+        sueldo: row.sueldo ? Number.parseFloat(row.sueldo) : '',
+        estado: row.estado,
+      })
+    );
 
     worksheet.getColumn('sueldo').numFmt = '$#,##0.00';
     styleDataRows(worksheet);
@@ -331,5 +342,5 @@ module.exports = {
   createColaborador,
   updateColaborador,
   deleteColaborador,
-  exportColaboradoresExcel
+  exportColaboradoresExcel,
 };

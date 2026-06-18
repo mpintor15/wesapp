@@ -67,7 +67,7 @@ api.interceptors.response.use(
       localStorage.removeItem('user');
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
     }
-    
+
     return Promise.reject(error);
   }
 );

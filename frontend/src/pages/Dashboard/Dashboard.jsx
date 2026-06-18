@@ -10,25 +10,26 @@ import iconPersonal from '../../assets/icons/audience.png';
 import iconUsuarios from '../../assets/icons/user.png';
 
 const MODULE_META = {
-  cuentas:    { description: 'Control de facturas, pagos y clientes' },
+  cuentas: { description: 'Control de facturas, pagos y clientes' },
   inventario: { description: 'Artículos, equipos y movimientos de bodega' },
-  personal:   { description: 'Colaboradores, cargos y nómina' },
-  usuarios:   { description: 'Cuentas de acceso y permisos del sistema' },
+  personal: { description: 'Colaboradores, cargos y nómina' },
+  usuarios: { description: 'Cuentas de acceso y permisos del sistema' },
 };
 
 const DASHBOARD_MODULES = [
-  { key: 'cuentas',    label: 'Cuentas',    icon: iconCuentas,    path: '/cuentas' },
+  { key: 'cuentas', label: 'Cuentas', icon: iconCuentas, path: '/cuentas' },
   { key: 'inventario', label: 'Inventario', icon: iconInventario, path: '/inventario' },
-  { key: 'personal',   label: 'Personal',   icon: iconPersonal,   path: '/personal' },
-  { key: 'usuarios',   label: 'Usuarios',   icon: iconUsuarios,   path: '/usuarios' },
+  { key: 'personal', label: 'Personal', icon: iconPersonal, path: '/personal' },
+  { key: 'usuarios', label: 'Usuarios', icon: iconUsuarios, path: '/usuarios' },
 ];
 
-const preloadImage = (src) => new Promise((resolve) => {
-  const image = new Image();
-  image.onload = resolve;
-  image.onerror = resolve;
-  image.src = src;
-});
+const preloadImage = (src) =>
+  new Promise((resolve) => {
+    const image = new Image();
+    image.onload = resolve;
+    image.onerror = resolve;
+    image.src = src;
+  });
 
 const Dashboard = () => {
   const { user, logout, hasPermission } = useAuth();
@@ -39,12 +40,15 @@ const Dashboard = () => {
 
   useEffect(() => {
     let mounted = true;
-    Promise.all([logo, ...DASHBOARD_MODULES.map(module => module.icon)].map(preloadImage))
-      .then(() => {
+    Promise.all([logo, ...DASHBOARD_MODULES.map((module) => module.icon)].map(preloadImage)).then(
+      () => {
         if (mounted) setAssetsReady(true);
-      });
+      }
+    );
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleLogout = () => setShowLogoutConfirm(true);
@@ -62,16 +66,18 @@ const Dashboard = () => {
 
   const modules = DASHBOARD_MODULES.filter((m) => hasPermission(m.key));
 
-  const roleLabel = {
-    gerente:    'Gerente',
-    secretario: 'Secretario',
-    supervisor: 'Supervisor',
-    contador:   'Contador',
-  }[user?.tipo_usuario] ?? user?.tipo_usuario ?? '';
+  const roleLabel =
+    {
+      gerente: 'Gerente',
+      secretario: 'Secretario',
+      supervisor: 'Supervisor',
+      contador: 'Contador',
+    }[user?.tipo_usuario] ??
+    user?.tipo_usuario ??
+    '';
 
-  const displayName = (user?.nombre && user?.apellido)
-    ? `${user.nombre} ${user.apellido}`
-    : user?.usuario ?? '';
+  const displayName =
+    user?.nombre && user?.apellido ? `${user.nombre} ${user.apellido}` : (user?.usuario ?? '');
 
   if (!assetsReady) {
     return (
@@ -95,10 +101,19 @@ const Dashboard = () => {
             {roleLabel && <span className="header-role">{roleLabel}</span>}
           </div>
           <button onClick={handleLogout} className="btn btn-ghost btn-sm">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              width="15"
+              height="15"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
             </svg>
             Cerrar sesión
           </button>
@@ -107,7 +122,9 @@ const Dashboard = () => {
 
       <main className="dashboard-content">
         <div className="dashboard-welcome">
-          <h2>Bienvenido, <span>{displayName}</span></h2>
+          <h2>
+            Bienvenido, <span>{displayName}</span>
+          </h2>
           <p>Selecciona un módulo para comenzar</p>
         </div>
 
@@ -123,18 +140,26 @@ const Dashboard = () => {
                 type="button"
               >
                 <div className="module-card-icon-wrap">
-                  {loadingModule === module.key
-                    ? <span className="spinner" />
-                    : <img src={module.icon} alt="" className="module-icon" />
-                  }
+                  {loadingModule === module.key ? (
+                    <span className="spinner" />
+                  ) : (
+                    <img src={module.icon} alt="" className="module-icon" />
+                  )}
                 </div>
                 <div className="module-card-body">
                   <h3>{module.label}</h3>
                   {meta.description && <p>{meta.description}</p>}
                 </div>
                 <span className="module-card-arrow">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="9 18 15 12 9 6"/>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </span>
               </button>

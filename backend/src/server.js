@@ -10,6 +10,7 @@
 const app = require('./app');
 const config = require('./config/config');
 const db = require('./config/database');
+const logger = require('./config/logger');
 const { runMigrations } = require('./config/migrations');
 
 const PORT = config.port;
@@ -20,27 +21,26 @@ const startServer = async () => {
   try {
     // Test de conexión a la base de datos
     await db.query('SELECT NOW()');
-    console.log('✅ Conexión a PostgreSQL establecida');
+    logger.info('✅ Conexión a PostgreSQL establecida');
 
     await runMigrations();
-    console.log('✅ Migraciones de base de datos verificadas');
-    
+    logger.info('✅ Migraciones de base de datos verificadas');
+
     // Iniciar servidor
     server = app.listen(PORT, () => {
-      console.log(`Servidor WESApp corriendo en puerto ${PORT}`);
-      console.log(`Ambiente: ${config.nodeEnv}`);
-      console.log(`URL: http://localhost:${PORT}`);
-      console.log(`Health check: http://localhost:${PORT}/health`);
+      logger.info(`Servidor WESApp corriendo en puerto ${PORT}`);
+      logger.info(`Ambiente: ${config.nodeEnv}`);
+      logger.info(`URL: http://localhost:${PORT}`);
+      logger.info(`Health check: http://localhost:${PORT}/health`);
     });
-    
   } catch (error) {
-    console.error('❌ Error al conectar a la base de datos:', error);
+    logger.error('❌ Error al conectar a la base de datos:', error);
     process.exit(1);
   }
 };
 
 const shutdown = async (signal) => {
-  console.log(`${signal} recibido, cerrando servidor...`);
+  logger.warn(`${signal} recibido, cerrando servidor...`);
   try {
     if (server) {
       await new Promise((resolve, reject) => {
@@ -50,14 +50,14 @@ const shutdown = async (signal) => {
     await db.close();
     process.exit(0);
   } catch (error) {
-    console.error('Error durante cierre ordenado:', error);
+    logger.error('Error durante cierre ordenado:', error);
     process.exit(1);
   }
 };
 
 // Manejo de errores no capturados
 process.on('unhandledRejection', (err) => {
-  console.error('❌ Error no manejado:', err);
+  logger.error('❌ Error no manejado:', err);
   process.exit(1);
 });
 

@@ -5,17 +5,22 @@
  * por lo que puede usarse dentro y fuera de transacciones.
  * Nunca lanza — un fallo de audit no interrumpe la operación principal.
  */
-const logAudit = async (dbClient, {
-  tabla,
-  operacion,
-  registro_id,
-  usuario_id = null,
-  usuario_nombre = null,
-  datos_anteriores = null,
-  datos_nuevos = null,
-  ip_address = null,
-  user_agent = null
-}) => {
+const logger = require('../config/logger');
+
+const logAudit = async (
+  dbClient,
+  {
+    tabla,
+    operacion,
+    registro_id,
+    usuario_id = null,
+    usuario_nombre = null,
+    datos_anteriores = null,
+    datos_nuevos = null,
+    ip_address = null,
+    user_agent = null,
+  }
+) => {
   try {
     await dbClient.query(
       `INSERT INTO audit_log
@@ -30,11 +35,14 @@ const logAudit = async (dbClient, {
         datos_anteriores ? JSON.stringify(datos_anteriores) : null,
         datos_nuevos ? JSON.stringify(datos_nuevos) : null,
         ip_address,
-        user_agent
+        user_agent,
       ]
     );
   } catch (err) {
-    console.error('[audit] Error al escribir en audit_log:', err.message);
+    logger.warn('[audit] Error al escribir en audit_log:', {
+      message: err.message,
+      code: err.code,
+    });
   }
 };
 
@@ -42,7 +50,7 @@ const auditFromReq = (req) => ({
   usuario_id: req.user?.id || null,
   usuario_nombre: req.user?.usuario || null,
   ip_address: req.ip || req.connection?.remoteAddress || null,
-  user_agent: req.get('user-agent') || null
+  user_agent: req.get('user-agent') || null,
 });
 
 module.exports = { logAudit, auditFromReq };

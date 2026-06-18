@@ -39,7 +39,7 @@ export const saveBlobWithPickerOrDownload = async (blob, fileName, pickerType) =
       const handle = await window.showSaveFilePicker({
         suggestedName: fileName,
         startIn: 'downloads',
-        types: pickerType ? [pickerType] : undefined
+        types: pickerType ? [pickerType] : undefined,
       });
       const writable = await handle.createWritable();
       await writable.write(blob);

@@ -21,7 +21,9 @@ const schemaCache = {};
 
 const tableColumnExists = async (tableName, columnName) => {
   const key = `${tableName}.${columnName}`;
-  if (key in schemaCache) return schemaCache[key];
+  if (key in schemaCache) {
+    return schemaCache[key];
+  }
 
   const result = await db.query(
     `SELECT 1
@@ -39,12 +41,12 @@ const tableColumnExists = async (tableName, columnName) => {
 const getUserIdentitySelect = async () => {
   const [hasNombre, hasApellido] = await Promise.all([
     tableColumnExists('usuarios', 'nombre'),
-    tableColumnExists('usuarios', 'apellido')
+    tableColumnExists('usuarios', 'apellido'),
   ]);
 
   return {
     nombre: hasNombre ? 'nombre' : 'NULL::varchar AS nombre',
-    apellido: hasApellido ? 'apellido' : 'NULL::varchar AS apellido'
+    apellido: hasApellido ? 'apellido' : 'NULL::varchar AS apellido',
   };
 };
 
@@ -55,60 +57,60 @@ const login = async (req, res) => {
   try {
     const usuario = typeof req.body?.usuario === 'string' ? req.body.usuario.trim() : '';
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
-    
+
     // Validar datos
     if (!usuario || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Usuario y contraseña son requeridos'
+        message: 'Usuario y contraseña son requeridos',
       });
     }
-    
+
     // Buscar usuario en la base de datos
     const identitySelect = await getUserIdentitySelect();
     const result = await db.query(
       `SELECT id, usuario, ${identitySelect.nombre}, ${identitySelect.apellido}, tipo_usuario, primer_login, activo, password_hash FROM usuarios WHERE usuario = $1`,
       [usuario]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(401).json({
         success: false,
-        message: 'Usuario o contraseña incorrectos'
+        message: 'Usuario o contraseña incorrectos',
       });
     }
-    
+
     const user = result.rows[0];
-    
+
     // Verificar si el usuario está activo
     if (!user.activo) {
       return res.status(403).json({
         success: false,
-        message: 'Usuario desactivado. Contacta al administrador'
+        message: 'Usuario desactivado. Contacta al administrador',
       });
     }
-    
+
     // Verificar contraseña
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    
+
     if (!passwordMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Usuario o contraseña incorrectos'
+        message: 'Usuario o contraseña incorrectos',
       });
     }
-    
+
     // Generar token JWT
     const token = jwt.sign(
       {
         id: user.id,
         usuario: user.usuario,
-        tipo_usuario: user.tipo_usuario
+        tipo_usuario: user.tipo_usuario,
       },
       config.jwt.secret,
       { expiresIn: config.jwt.expiration }
     );
-    
+
     // Responder con token y datos del usuario
     res.json({
       success: true,
@@ -121,11 +123,10 @@ const login = async (req, res) => {
           nombre: user.nombre,
           apellido: user.apellido,
           tipo_usuario: user.tipo_usuario,
-          primer_login: user.primer_login
-        }
-      }
+          primer_login: user.primer_login,
+        },
+      },
     });
-    
   } catch (error) {
     return handleControllerError(res, error, 'Error en login:');
   }
@@ -136,35 +137,37 @@ const login = async (req, res) => {
  */
 const changePassword = async (req, res) => {
   try {
-    const nuevaPassword = typeof req.body?.nueva_password === 'string' ? req.body.nueva_password : '';
-    const confirmarPassword = typeof req.body?.confirmar_password === 'string' ? req.body.confirmar_password : '';
+    const nuevaPassword =
+      typeof req.body?.nueva_password === 'string' ? req.body.nueva_password : '';
+    const confirmarPassword =
+      typeof req.body?.confirmar_password === 'string' ? req.body.confirmar_password : '';
     const userId = Number(req.user?.id);
 
     if (!Number.isInteger(userId) || userId <= 0) {
       throw createHttpError(401, 'Token inválido');
     }
-    
+
     // Validar datos
     if (!nuevaPassword || !confirmarPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Ambas contraseñas son requeridas'
+        message: 'Ambas contraseñas son requeridas',
       });
     }
-    
+
     // Verificar que las contraseñas coincidan
     if (nuevaPassword !== confirmarPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Las contraseñas no coinciden'
+        message: 'Las contraseñas no coinciden',
       });
     }
-    
+
     // Validar longitud mínima
     if (nuevaPassword.length < 8) {
       return res.status(400).json({
         success: false,
-        message: 'La contraseña debe tener al menos 8 caracteres'
+        message: 'La contraseña debe tener al menos 8 caracteres',
       });
     }
 
@@ -182,11 +185,11 @@ const changePassword = async (req, res) => {
     if (isSamePassword) {
       throw createHttpError(400, 'La nueva contraseña debe ser diferente a la actual');
     }
-    
+
     // Hashear nueva contraseña
     const saltRounds = 10;
     const password_hash = await bcrypt.hash(nuevaPassword, saltRounds);
-    
+
     // Actualizar contraseña y marcar primer_login como false
     const result = await db.query(
       'UPDATE usuarios SET password_hash = $1, primer_login = FALSE WHERE id = $2 RETURNING id',
@@ -196,12 +199,11 @@ const changePassword = async (req, res) => {
     if (result.rowCount === 0) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
-    
+
     res.json({
       success: true,
-      message: 'Contraseña actualizada exitosamente'
+      message: 'Contraseña actualizada exitosamente',
     });
-    
   } catch (error) {
     return handleControllerError(res, error, 'Error al cambiar contraseña:');
   }
@@ -216,30 +218,30 @@ const verifyToken = async (req, res) => {
     if (!Number.isInteger(userId) || userId <= 0) {
       throw createHttpError(401, 'Token inválido');
     }
-    
+
     // Obtener datos actualizados del usuario
     const identitySelect = await getUserIdentitySelect();
     const result = await db.query(
       `SELECT id, usuario, ${identitySelect.nombre}, ${identitySelect.apellido}, tipo_usuario, primer_login, activo FROM usuarios WHERE id = $1`,
       [userId]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Usuario no encontrado'
+        message: 'Usuario no encontrado',
       });
     }
-    
+
     const user = result.rows[0];
-    
+
     if (!user.activo) {
       return res.status(403).json({
         success: false,
-        message: 'Usuario desactivado'
+        message: 'Usuario desactivado',
       });
     }
-    
+
     res.json({
       success: true,
       data: {
@@ -249,11 +251,10 @@ const verifyToken = async (req, res) => {
           nombre: user.nombre,
           apellido: user.apellido,
           tipo_usuario: user.tipo_usuario,
-          primer_login: user.primer_login
-        }
-      }
+          primer_login: user.primer_login,
+        },
+      },
     });
-    
   } catch (error) {
     return handleControllerError(res, error, 'Error al verificar token:');
   }
@@ -262,5 +263,5 @@ const verifyToken = async (req, res) => {
 module.exports = {
   login,
   changePassword,
-  verifyToken
+  verifyToken,
 };

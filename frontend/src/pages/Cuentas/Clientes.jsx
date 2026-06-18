@@ -5,7 +5,13 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 
 const ROWS_PER_PAGE = 50;
 
-const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteForm, setShowClienteForm }) => {
+const Clientes = ({
+  clientes,
+  onClienteCreated,
+  onClienteDeleted,
+  showClienteForm,
+  setShowClienteForm,
+}) => {
   const { showToast } = useToast();
   const [newClienteName, setNewClienteName] = useState('');
   const [newClienteId, setNewClienteId] = useState('');
@@ -19,9 +25,8 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
   const filtered = useMemo(() => {
     if (!search.trim()) return clientes;
     const q = search.trim().toLowerCase();
-    return clientes.filter(c =>
-      c.nombre?.toLowerCase().includes(q) ||
-      c.identificacion?.toLowerCase().includes(q)
+    return clientes.filter(
+      (c) => c.nombre?.toLowerCase().includes(q) || c.identificacion?.toLowerCase().includes(q)
     );
   }, [clientes, search]);
 
@@ -30,23 +35,30 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
     const direction = clientesSort.direction === 'asc' ? 1 : -1;
     return [...filtered].sort((a, b) => {
       if (clientesSort.field === 'nombre') {
-        return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', {
-          sensitivity: 'base',
-          numeric: true
-        }) * direction;
+        return (
+          String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', {
+            sensitivity: 'base',
+            numeric: true,
+          }) * direction
+        );
       }
       if (clientesSort.field === 'identificacion') {
-        return String(a.identificacion || '').localeCompare(String(b.identificacion || ''), 'es', {
-          sensitivity: 'base',
-          numeric: true
-        }) * direction;
+        return (
+          String(a.identificacion || '').localeCompare(String(b.identificacion || ''), 'es', {
+            sensitivity: 'base',
+            numeric: true,
+          }) * direction
+        );
       }
       return 0;
     });
   }, [filtered, clientesSort]);
 
   const totalPages = Math.max(1, Math.ceil(sortedFiltered.length / ROWS_PER_PAGE));
-  const paginatedClientes = sortedFiltered.slice((currentPage - 1) * ROWS_PER_PAGE, currentPage * ROWS_PER_PAGE);
+  const paginatedClientes = sortedFiltered.slice(
+    (currentPage - 1) * ROWS_PER_PAGE,
+    currentPage * ROWS_PER_PAGE
+  );
 
   const handleSearch = (e) => {
     setSearch(e.target.value);
@@ -54,7 +66,7 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
   };
 
   const handleClientesSort = (field) => {
-    setClientesSort(prev => {
+    setClientesSort((prev) => {
       if (prev.field === field) {
         return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
       }
@@ -106,14 +118,22 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
 
   return (
     <div className="clientes-module">
-
       {/* Search filter */}
       <div className="ff-filter-row clientes-filters-row">
         <div className="ff-filter-card clientes-filter-card">
           <div className="ff-controls">
             <div className="ff-search">
-              <svg className="ff-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <svg
+                className="ff-search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
               <input
                 type="text"
@@ -124,21 +144,6 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
             </div>
           </div>
         </div>
-        <div className="ff-filter-actions-card clientes-filter-actions-card">
-          <div className="ff-actions clientes-filter-actions">
-            <button
-              className="ff-clear-btn"
-              type="button"
-              onClick={() => {
-                setSearch('');
-                setCurrentPage(1);
-              }}
-              disabled={!search.trim()}
-            >
-              Limpiar
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Create modal */}
@@ -147,43 +152,55 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
           <div className="modal modal-cliente" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Crear Cliente</h3>
-              <button className="modal-close" onClick={() => setShowClienteForm(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowClienteForm(false)}>
+                ×
+              </button>
             </div>
-            <form className="modal-body" onSubmit={handleCreateCliente}>
-              <div className="form-group">
-                <label>Nombre del Cliente</label>
-                <input
-                  type="text"
-                  value={newClienteName}
-                  onChange={(e) => {
-                    setNewClienteName(e.target.value);
-                    setClienteErrors(prev => ({ ...prev, nombre: '' }));
-                  }}
-                  placeholder="Ingresa el nombre del cliente"
-                  disabled={loading}
-                  autoFocus
-                />
-                {clienteErrors.nombre ? <span className="field-error">{clienteErrors.nombre}</span> : null}
-              </div>
-              <div className="form-group">
-                <label>Identificación (CI o RUC)</label>
-                <input
-                  type="text"
-                  value={newClienteId}
-                  onChange={(e) => {
-                    setNewClienteId(e.target.value);
-                    setClienteErrors(prev => ({ ...prev, identificacion: '' }));
-                  }}
-                  placeholder="Ej: 1790012345001"
-                  disabled={loading}
-                />
-                {clienteErrors.identificacion ? <span className="field-error">{clienteErrors.identificacion}</span> : null}
+            <form onSubmit={handleCreateCliente}>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>Nombre del Cliente</label>
+                  <input
+                    type="text"
+                    value={newClienteName}
+                    onChange={(e) => {
+                      setNewClienteName(e.target.value);
+                      setClienteErrors((prev) => ({ ...prev, nombre: '' }));
+                    }}
+                    placeholder="Ingresa el nombre del cliente"
+                    disabled={loading}
+                    autoFocus
+                  />
+                  {clienteErrors.nombre ? (
+                    <span className="field-error">{clienteErrors.nombre}</span>
+                  ) : null}
+                </div>
+                <div className="form-group">
+                  <label>Identificación (CI o RUC)</label>
+                  <input
+                    type="text"
+                    value={newClienteId}
+                    onChange={(e) => {
+                      setNewClienteId(e.target.value);
+                      setClienteErrors((prev) => ({ ...prev, identificacion: '' }));
+                    }}
+                    placeholder="Ej: 1790012345001"
+                    disabled={loading}
+                  />
+                  {clienteErrors.identificacion ? (
+                    <span className="field-error">{clienteErrors.identificacion}</span>
+                  ) : null}
+                </div>
               </div>
               <div className="modal-buttons">
                 <button type="submit" className="btn btn-primary" disabled={loading}>
                   {loading ? 'Creando...' : 'Crear cliente'}
                 </button>
-                <button type="button" className="btn btn-modal-clear" onClick={() => setShowClienteForm(false)}>
+                <button
+                  type="button"
+                  className="btn btn-modal-clear"
+                  onClick={() => setShowClienteForm(false)}
+                >
                   Cancelar
                 </button>
               </div>
@@ -193,18 +210,44 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
       )}
 
       {/* Table */}
+      <div className="table-result-count">
+        Mostrando {paginatedClientes.length} de {sortedFiltered.length} cliente(s)
+      </div>
+
       <div className="table-responsive app-table-shell">
         <table className="app-table clientes-table">
           <thead>
             <tr>
               <th>
-                <button type="button" className="th-sort-btn" onClick={() => handleClientesSort('nombre')}>
-                  Cliente<span className={`th-sort-indicator${clientesSort.field === 'nombre' ? ' active' : ''}`}>{clientesSort.field === 'nombre' && clientesSort.direction === 'desc' ? '↓' : '↑'}</span>
+                <button
+                  type="button"
+                  className="th-sort-btn"
+                  onClick={() => handleClientesSort('nombre')}
+                >
+                  Cliente
+                  <span
+                    className={`th-sort-indicator${clientesSort.field === 'nombre' ? ' active' : ''}`}
+                  >
+                    {clientesSort.field === 'nombre' && clientesSort.direction === 'desc'
+                      ? '↓'
+                      : '↑'}
+                  </span>
                 </button>
               </th>
               <th>
-                <button type="button" className="th-sort-btn" onClick={() => handleClientesSort('identificacion')}>
-                  Identificación<span className={`th-sort-indicator${clientesSort.field === 'identificacion' ? ' active' : ''}`}>{clientesSort.field === 'identificacion' && clientesSort.direction === 'desc' ? '↓' : '↑'}</span>
+                <button
+                  type="button"
+                  className="th-sort-btn"
+                  onClick={() => handleClientesSort('identificacion')}
+                >
+                  Identificación
+                  <span
+                    className={`th-sort-indicator${clientesSort.field === 'identificacion' ? ' active' : ''}`}
+                  >
+                    {clientesSort.field === 'identificacion' && clientesSort.direction === 'desc'
+                      ? '↓'
+                      : '↑'}
+                  </span>
                 </button>
               </th>
               <th className="app-col-actions app-col-actions--single"></th>
@@ -214,7 +257,9 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
             {paginatedClientes.length > 0 ? (
               paginatedClientes.map((cliente, idx) => (
                 <tr key={cliente.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
-                  <td className="clientes-cell-name" title={cliente.nombre}>{cliente.nombre}</td>
+                  <td className="clientes-cell-name" title={cliente.nombre}>
+                    {cliente.nombre}
+                  </td>
                   <td className="clientes-cell-id">{cliente.identificacion || '-'}</td>
                   <td className="app-col-actions app-col-actions--single">
                     <div className="action-buttons app-table-actions">
@@ -226,7 +271,14 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
                         disabled={loading}
                       >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M6 7h12M9 7v10m6-10v10M9 7h6M10 4h4l1 2H9l1-2M7 7l1 12h8l1-12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path
+                            d="M6 7h12M9 7v10m6-10v10M9 7h6M10 4h4l1 2H9l1-2M7 7l1 12h8l1-12"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
                         </svg>
                       </button>
                     </div>
@@ -236,7 +288,9 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
             ) : (
               <tr className="empty-row">
                 <td colSpan="3">
-                  {search.trim() ? 'No se encontraron clientes con ese criterio.' : 'No hay clientes registrados. Crea uno para empezar.'}
+                  {search.trim()
+                    ? 'No se encontraron clientes con ese criterio.'
+                    : 'No hay clientes registrados. Crea uno para empezar.'}
                 </td>
               </tr>
             )}
@@ -248,7 +302,7 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
         <div className="pagination">
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
           >
             ‹ Anterior
@@ -258,7 +312,7 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
           </span>
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
             disabled={currentPage === totalPages}
           >
             Siguiente ›
@@ -269,16 +323,18 @@ const Clientes = ({ clientes, onClienteCreated, onClienteDeleted, showClienteFor
       <ConfirmDialog
         isOpen={!!confirmTarget}
         title="Eliminar cliente"
-        message={confirmTarget ? (
-          <div className="delete-invoice-confirm">
-            <p>
-              Vas a eliminar permanentemente a <strong>{confirmTarget.nombre}</strong>.
-            </p>
-            <p>
-              Esta acción solo se completará si el cliente no tiene facturas asociadas.
-            </p>
-          </div>
-        ) : ''}
+        message={
+          confirmTarget ? (
+            <div className="delete-invoice-confirm">
+              <p>
+                Vas a eliminar permanentemente a <strong>{confirmTarget.nombre}</strong>.
+              </p>
+              <p>Esta acción solo se completará si el cliente no tiene facturas asociadas.</p>
+            </div>
+          ) : (
+            ''
+          )
+        }
         confirmText="Eliminar"
         cancelText="Cancelar"
         variant="danger"

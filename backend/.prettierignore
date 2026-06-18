@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+coverage
+*.pdf
+*.xlsx
+storage
+logs
+.env*
+package-lock.json

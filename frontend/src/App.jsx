@@ -18,12 +18,54 @@ function App() {
         <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/change-password" element={<ProtectedRoute><ChangePassword /></ProtectedRoute>} />
-            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/cuentas" element={<ProtectedRoute requiredPermission="cuentas"><Cuentas /></ProtectedRoute>} />
-            <Route path="/inventario" element={<ProtectedRoute requiredPermission="inventario"><Inventario /></ProtectedRoute>} />
-            <Route path="/personal" element={<ProtectedRoute requiredPermission="personal"><Personal /></ProtectedRoute>} />
-            <Route path="/usuarios" element={<ProtectedRoute requiredPermission="usuarios"><Usuarios /></ProtectedRoute>} />
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute>
+                  <ChangePassword />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/cuentas"
+              element={
+                <ProtectedRoute requiredPermission="cuentas">
+                  <Cuentas />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/inventario"
+              element={
+                <ProtectedRoute requiredPermission="inventario">
+                  <Inventario />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/personal"
+              element={
+                <ProtectedRoute requiredPermission="personal">
+                  <Personal />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/usuarios"
+              element={
+                <ProtectedRoute requiredPermission="usuarios">
+                  <Usuarios />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

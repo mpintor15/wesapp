@@ -56,13 +56,13 @@
 
 .usuarios-table {
   width: 100% !important;
-  min-width: 100% !important;
+  min-width: 720px !important;
 }
 
 .usuarios-table th:last-child,
 .usuarios-table td:last-child {
-  padding-left: 4px !important;
-  padding-right: 4px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
   text-align: center !important;
 }
 
@@ -118,9 +118,11 @@
 /* ── Modal action buttons ─────────────────────────────────── */
 .usuarios-modal-actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 8px;
-  padding: 0 20px 18px;
+  padding: 16px 20px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
 .usuarios-modal-actions .btn {
@@ -242,8 +244,9 @@
 
   .usuarios-modal-actions .btn,
   .usuarios-modal-actions .btn-modal-clear {
-    width: 140px;
-    max-width: 140px;
+    flex: 1 1 140px;
+    width: auto;
+    max-width: none;
   }
 
   .invitation-message {

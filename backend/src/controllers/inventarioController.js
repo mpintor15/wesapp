@@ -32,6 +32,7 @@
  *                            artículos, datos del traslado y casillas de firma.
  */
 const db = require('../config/database');
+const logger = require('../config/logger');
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
@@ -39,6 +40,15 @@ const { createHttpError, isConstraintOrInputError } = require('../utils/http');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const ALERTA_ESTADOS = new Set(['vencida', 'proxima_a_vencer', 'vigente']);
+
+const logControllerError = (message, error) => {
+  logger.error(message, {
+    message: error.message,
+    stack: error.stack,
+    code: error.code,
+    status: error.status,
+  });
+};
 
 const buildInventarioAlertasQuery = ({ tipo, ubicacion_id, estado, search }) => {
   let query = 'SELECT * FROM vista_inventario_alertas';
@@ -148,19 +158,17 @@ const buildBajasArticulosQuery = ({ search, from, to }) => {
 
 const getUbicaciones = async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT id, nombre FROM ubicaciones ORDER BY nombre ASC'
-    );
+    const result = await db.query('SELECT id, nombre FROM ubicaciones ORDER BY nombre ASC');
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
   } catch (error) {
-    console.error('Error al obtener ubicaciones:', error);
+    logControllerError('Error al obtener ubicaciones:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -180,35 +188,38 @@ const getArticulos = async (req, res) => {
       tipo,
       ubicacion_id,
       estado: estado ? normalizedEstado : undefined,
-      search
+      search,
     });
 
     const result = await db.query(query, params);
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
   } catch (error) {
-    console.error('Error al obtener articulos:', error);
+    logControllerError('Error al obtener articulos:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
 
 const normalizeEmpty = (value) => {
-  if (value === undefined || value === null) return null;
-  if (typeof value === 'string' && value.trim() === '') return null;
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === 'string' && value.trim() === '') {
+    return null;
+  }
   return value;
 };
 
 const isValidTipo = (tipo) => ['equipo', 'placa_balistica', 'arma', 'radio', 'otro'].includes(tipo);
 const isStockTipo = (tipo) => tipo === 'equipo' || tipo === 'otro';
-const getArticuloSerie = (articulo) => (
-  articulo?.tipo_articulo === 'radio' ? articulo.codigo_radio : articulo?.numero_serie
-);
+const getArticuloSerie = (articulo) =>
+  articulo?.tipo_articulo === 'radio' ? articulo.codigo_radio : articulo?.numero_serie;
 
 const getUniqueArticuloMessage = (error) => {
   const constraint = error.constraint || '';
@@ -241,20 +252,20 @@ const createArticulo = async (req, res) => {
       ubicacion_nombre,
       codigo_pantalla,
       codigo_radio,
-      version
+      version,
     } = req.body;
 
     if (!tipo_articulo || !isValidTipo(tipo_articulo)) {
       return res.status(400).json({
         success: false,
-        message: 'Tipo de articulo inválido'
+        message: 'Tipo de articulo inválido',
       });
     }
 
     if (!nombre_articulo || !String(nombre_articulo).trim()) {
       return res.status(400).json({
         success: false,
-        message: 'El nombre del artículo es requerido'
+        message: 'El nombre del artículo es requerido',
       });
     }
 
@@ -263,7 +274,7 @@ const createArticulo = async (req, res) => {
       if (!Number.isInteger(parsedCantidad) || parsedCantidad <= 0) {
         return res.status(400).json({
           success: false,
-          message: 'La cantidad debe ser un entero mayor a 0'
+          message: 'La cantidad debe ser un entero mayor a 0',
         });
       }
     }
@@ -279,10 +290,9 @@ const createArticulo = async (req, res) => {
       if (existente.rowCount > 0) {
         ubicacionId = existente.rows[0].id;
       } else {
-        const creado = await db.query(
-          'INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING id',
-          [ubicacionNombre]
-        );
+        const creado = await db.query('INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING id', [
+          ubicacionNombre,
+        ]);
         ubicacionId = creado.rows[0].id;
       }
     }
@@ -290,7 +300,7 @@ const createArticulo = async (req, res) => {
     if (!ubicacionId) {
       return res.status(400).json({
         success: false,
-        message: 'La ubicación es requerida'
+        message: 'La ubicación es requerida',
       });
     }
 
@@ -314,7 +324,7 @@ const createArticulo = async (req, res) => {
       [
         tipo_articulo,
         normalizeEmpty(nombre_articulo),
-        cantidad ? parseInt(cantidad, 10) : (!isStockTipo(tipo_articulo) ? 1 : null),
+        cantidad ? parseInt(cantidad, 10) : !isStockTipo(tipo_articulo) ? 1 : null,
         normalizeEmpty(talla),
         normalizeEmpty(marca),
         normalizeEmpty(modelo),
@@ -324,7 +334,7 @@ const createArticulo = async (req, res) => {
         parseInt(ubicacionId, 10),
         normalizeEmpty(codigo_pantalla),
         normalizeEmpty(codigo_radio),
-        normalizeEmpty(version)
+        normalizeEmpty(version),
       ]
     );
 
@@ -333,31 +343,31 @@ const createArticulo = async (req, res) => {
       operacion: 'INSERT',
       registro_id: String(result.rows[0].id),
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.status(201).json({
       success: true,
       message: 'Artículo creado exitosamente',
-      data: result.rows[0]
+      data: result.rows[0],
     });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
-        message: getUniqueArticuloMessage(error)
+        message: getUniqueArticuloMessage(error),
       });
     }
     if (error.code === '23503') {
       return res.status(400).json({
         success: false,
-        message: 'La ubicación especificada no existe'
+        message: 'La ubicación especificada no existe',
       });
     }
-    console.error('Error al crear artículo:', error);
+    logControllerError('Error al crear artículo:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -378,7 +388,7 @@ const updateArticulo = async (req, res) => {
       'ubicacion_id',
       'codigo_pantalla',
       'codigo_radio',
-      'version'
+      'version',
     ];
 
     const updates = [];
@@ -388,7 +398,7 @@ const updateArticulo = async (req, res) => {
       if (!isValidTipo(req.body.tipo_articulo)) {
         return res.status(400).json({
           success: false,
-          message: 'Tipo de articulo inválido'
+          message: 'Tipo de articulo inválido',
         });
       }
     }
@@ -410,7 +420,7 @@ const updateArticulo = async (req, res) => {
     if (updates.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No hay campos para actualizar'
+        message: 'No hay campos para actualizar',
       });
     }
 
@@ -426,7 +436,7 @@ const updateArticulo = async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Artículo no encontrado'
+        message: 'Artículo no encontrado',
       });
     }
 
@@ -435,31 +445,31 @@ const updateArticulo = async (req, res) => {
       operacion: 'UPDATE',
       registro_id: String(id),
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.json({
       success: true,
       message: 'Artículo actualizado exitosamente',
-      data: result.rows[0]
+      data: result.rows[0],
     });
   } catch (error) {
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
-        message: getUniqueArticuloMessage(error)
+        message: getUniqueArticuloMessage(error),
       });
     }
     if (error.code === '23503') {
       return res.status(400).json({
         success: false,
-        message: 'La ubicación especificada no existe'
+        message: 'La ubicación especificada no existe',
       });
     }
-    console.error('Error al actualizar artículo:', error);
+    logControllerError('Error al actualizar artículo:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -481,7 +491,7 @@ const deleteArticulo = async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
-        message: 'Artículo no encontrado'
+        message: 'Artículo no encontrado',
       });
     }
 
@@ -492,35 +502,35 @@ const deleteArticulo = async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(400).json({
           success: false,
-          message: 'Debes indicar la cantidad a eliminar'
+          message: 'Debes indicar la cantidad a eliminar',
         });
       }
       if (cantidadParam > articulo.cantidad) {
         await client.query('ROLLBACK');
         return res.status(400).json({
           success: false,
-          message: 'La cantidad a eliminar supera el stock disponible'
+          message: 'La cantidad a eliminar supera el stock disponible',
         });
       }
 
       const restante = articulo.cantidad - cantidadParam;
       if (restante > 0) {
-        await client.query(
-          'UPDATE articulos SET cantidad = $1 WHERE id = $2',
-          [restante, articulo.id]
-        );
+        await client.query('UPDATE articulos SET cantidad = $1 WHERE id = $2', [
+          restante,
+          articulo.id,
+        ]);
         await logAudit(client, {
           tabla: 'articulos',
           operacion: 'UPDATE',
           registro_id: String(articulo.id),
           datos_anteriores: articulo,
           datos_nuevos: { cantidad: restante },
-          ...auditFromReq(req)
+          ...auditFromReq(req),
         });
         await client.query('COMMIT');
         return res.json({
           success: true,
-          message: 'Cantidad eliminada exitosamente'
+          message: 'Cantidad eliminada exitosamente',
         });
       }
     }
@@ -534,7 +544,7 @@ const deleteArticulo = async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
-        message: 'Artículo no encontrado'
+        message: 'Artículo no encontrado',
       });
     }
 
@@ -544,21 +554,21 @@ const deleteArticulo = async (req, res) => {
       registro_id: String(id),
       datos_anteriores: articulo,
       datos_nuevos: { activo: false, cantidad: 0, ubicacion_id: null },
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     await client.query('COMMIT');
 
     res.json({
       success: true,
-      message: 'Artículo eliminado exitosamente'
+      message: 'Artículo eliminado exitosamente',
     });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error al eliminar artículo:', error);
+    logControllerError('Error al eliminar artículo:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   } finally {
     client.release();
@@ -573,13 +583,13 @@ const getBajasArticulos = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
   } catch (error) {
-    console.error('Error al obtener bajas de artículos:', error);
+    logControllerError('Error al obtener bajas de artículos:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -594,7 +604,7 @@ const darBajaArticulo = async (req, res) => {
     if (!motivo) {
       return res.status(400).json({
         success: false,
-        message: 'El motivo de la baja es requerido'
+        message: 'El motivo de la baja es requerido',
       });
     }
 
@@ -627,7 +637,7 @@ const darBajaArticulo = async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(404).json({
         success: false,
-        message: 'Artículo no encontrado'
+        message: 'Artículo no encontrado',
       });
     }
 
@@ -639,7 +649,7 @@ const darBajaArticulo = async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
-        message: 'La cantidad a dar de baja debe ser mayor a 0'
+        message: 'La cantidad a dar de baja debe ser mayor a 0',
       });
     }
 
@@ -647,7 +657,7 @@ const darBajaArticulo = async (req, res) => {
       await client.query('ROLLBACK');
       return res.status(400).json({
         success: false,
-        message: 'La cantidad a dar de baja supera el stock disponible'
+        message: 'La cantidad a dar de baja supera el stock disponible',
       });
     }
 
@@ -686,21 +696,20 @@ const darBajaArticulo = async (req, res) => {
         articulo.codigo_radio,
         articulo.version,
         articulo.ubicacion_id,
-        articulo.ubicacion_nombre
+        articulo.ubicacion_nombre,
       ]
     );
 
     const restante = cantidadActual - cantidadBaja;
     if (restante > 0) {
-      await client.query(
-        'UPDATE articulos SET cantidad = $1 WHERE id = $2',
-        [restante, articulo.id]
-      );
+      await client.query('UPDATE articulos SET cantidad = $1 WHERE id = $2', [
+        restante,
+        articulo.id,
+      ]);
     } else {
-      await client.query(
-        'UPDATE articulos SET cantidad = 0, activo = FALSE WHERE id = $1',
-        [articulo.id]
-      );
+      await client.query('UPDATE articulos SET cantidad = 0, activo = FALSE WHERE id = $1', [
+        articulo.id,
+      ]);
     }
 
     await logAudit(client, {
@@ -708,21 +717,22 @@ const darBajaArticulo = async (req, res) => {
       operacion: 'INSERT',
       registro_id: String(articulo.id),
       datos_nuevos: { articulo_id: articulo.id, cantidad: cantidadBaja, motivo, restante },
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     await client.query('COMMIT');
 
     res.json({
       success: true,
-      message: restante > 0 ? 'Cantidad dada de baja exitosamente' : 'Artículo dado de baja exitosamente'
+      message:
+        restante > 0 ? 'Cantidad dada de baja exitosamente' : 'Artículo dado de baja exitosamente',
     });
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error al dar de baja artículo:', error);
+    logControllerError('Error al dar de baja artículo:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   } finally {
     client.release();
@@ -773,13 +783,13 @@ const getMovimientos = async (req, res) => {
 
     res.json({
       success: true,
-      data: result.rows
+      data: result.rows,
     });
   } catch (error) {
-    console.error('Error al obtener movimientos:', error);
+    logControllerError('Error al obtener movimientos:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -831,7 +841,7 @@ const buildMovimientosReporteQuery = ({ from, to, destino_id }) => {
       LEFT JOIN ubicaciones ad ON d.ubicacion_destino_id = ad.id
       ${where}
       GROUP BY m.id, u.usuario
-      ORDER BY m.fecha_movimiento DESC`
+      ORDER BY m.fecha_movimiento DESC`,
   };
 };
 
@@ -870,11 +880,16 @@ const getMovimientoDataForPdf = async (movimientoId) => {
 // ============================================
 
 const TIPO_LABELS = {
-  equipo: 'Equipo', placa_balistica: 'Placa Balística',
-  arma: 'Arma', radio: 'Radio', otro: 'Otro',
+  equipo: 'Equipo',
+  placa_balistica: 'Placa Balística',
+  arma: 'Arma',
+  radio: 'Radio',
+  otro: 'Otro',
 };
 const ESTADO_LABELS = {
-  vencida: 'Vencida', proxima_a_vencer: 'Próxima a vencer', vigente: 'Vigente',
+  vencida: 'Vencida',
+  proxima_a_vencer: 'Próxima a vencer',
+  vigente: 'Vigente',
 };
 
 const exportArticulosExcel = async (req, res) => {
@@ -885,48 +900,54 @@ const exportArticulosExcel = async (req, res) => {
       throw createHttpError(400, 'El filtro estado no es válido');
     }
     const { query, params } = buildInventarioAlertasQuery({
-      tipo, ubicacion_id, search,
+      tipo,
+      ubicacion_id,
+      search,
       estado: estado ? normalizedEstado : undefined,
     });
 
     const result = await db.query(query, params);
 
     const { workbook, worksheet } = createWorkbook('Inventario', [
-      { header: 'Tipo',          key: 'tipo',            width: 16 },
-      { header: 'Artículo',      key: 'nombre',          width: 28 },
-      { header: 'Serie',         key: 'serie',           width: 18 },
-      { header: 'Cantidad',      key: 'cantidad',        width: 10 },
-      { header: 'Talla',         key: 'talla',           width: 10 },
-      { header: 'Marca',         key: 'marca',           width: 16 },
-      { header: 'Modelo',        key: 'modelo',          width: 16 },
-      { header: 'Calibre',       key: 'calibre',         width: 12 },
+      { header: 'Tipo', key: 'tipo', width: 16 },
+      { header: 'Artículo', key: 'nombre', width: 28 },
+      { header: 'Serie', key: 'serie', width: 18 },
+      { header: 'Cantidad', key: 'cantidad', width: 10 },
+      { header: 'Talla', key: 'talla', width: 10 },
+      { header: 'Marca', key: 'marca', width: 16 },
+      { header: 'Modelo', key: 'modelo', width: 16 },
+      { header: 'Calibre', key: 'calibre', width: 12 },
       { header: 'Cód. Pantalla', key: 'codigo_pantalla', width: 16 },
-      { header: 'Versión',       key: 'version',         width: 14 },
-      { header: 'Caducidad',     key: 'caducidad',       width: 14 },
-      { header: 'Ubicación',     key: 'ubicacion',       width: 20 },
-      { header: 'Estado',        key: 'estado',          width: 16 },
+      { header: 'Versión', key: 'version', width: 14 },
+      { header: 'Caducidad', key: 'caducidad', width: 14 },
+      { header: 'Ubicación', key: 'ubicacion', width: 20 },
+      { header: 'Estado', key: 'estado', width: 16 },
     ]);
 
-    result.rows.forEach((row) => worksheet.addRow({
-      tipo:            TIPO_LABELS[row.tipo_articulo] ?? row.tipo_articulo ?? '',
-      nombre:          row.nombre_articulo || '',
-      serie:           getArticuloSerie(row) || '',
-      cantidad:        row.cantidad || '',
-      talla:           row.talla || '',
-      marca:           row.marca || '',
-      modelo:          row.modelo || '',
-      calibre:         row.calibre || '',
-      codigo_pantalla: row.codigo_pantalla || '',
-      version:         row.version || '',
-      caducidad:       row.fecha_caducidad ? new Date(row.fecha_caducidad).toLocaleDateString('es-EC') : '',
-      ubicacion:       row.ubicacion_nombre || '',
-      estado:          ESTADO_LABELS[row.estado_caducidad] ?? 'Sin alerta',
-    }));
+    result.rows.forEach((row) =>
+      worksheet.addRow({
+        tipo: TIPO_LABELS[row.tipo_articulo] ?? row.tipo_articulo ?? '',
+        nombre: row.nombre_articulo || '',
+        serie: getArticuloSerie(row) || '',
+        cantidad: row.cantidad || '',
+        talla: row.talla || '',
+        marca: row.marca || '',
+        modelo: row.modelo || '',
+        calibre: row.calibre || '',
+        codigo_pantalla: row.codigo_pantalla || '',
+        version: row.version || '',
+        caducidad: row.fecha_caducidad
+          ? new Date(row.fecha_caducidad).toLocaleDateString('es-EC')
+          : '',
+        ubicacion: row.ubicacion_nombre || '',
+        estado: ESTADO_LABELS[row.estado_caducidad] ?? 'Sin alerta',
+      })
+    );
 
     styleDataRows(worksheet);
     await sendExcel(workbook, res, 'inventario.xlsx');
   } catch (error) {
-    console.error('Error al exportar inventario:', error);
+    logControllerError('Error al exportar inventario:', error);
     res.status(500).json({ success: false, message: 'Error al exportar Excel' });
   }
 };
@@ -938,27 +959,31 @@ const exportMovimientosExcel = async (req, res) => {
     const result = await db.query(query, params);
 
     const { workbook, worksheet } = createWorkbook('Movimientos', [
-      { header: 'Fecha',          key: 'fecha',     width: 14 },
-      { header: 'Cant. Artíc.',   key: 'items',     width: 14 },
-      { header: 'Artículos',      key: 'articulos', width: 40 },
-      { header: 'Origen',         key: 'origen',    width: 24 },
-      { header: 'Destino',        key: 'destino',   width: 24 },
-      { header: 'Usuario',        key: 'usuario',   width: 18 },
+      { header: 'Fecha', key: 'fecha', width: 14 },
+      { header: 'Cant. Artíc.', key: 'items', width: 14 },
+      { header: 'Artículos', key: 'articulos', width: 40 },
+      { header: 'Origen', key: 'origen', width: 24 },
+      { header: 'Destino', key: 'destino', width: 24 },
+      { header: 'Usuario', key: 'usuario', width: 18 },
     ]);
 
-    result.rows.forEach((row) => worksheet.addRow({
-      fecha:     row.fecha_movimiento ? new Date(row.fecha_movimiento).toLocaleDateString('es-EC') : '',
-      items:     row.items || 0,
-      articulos: row.articulos_movidos || '',
-      origen:    row.ubicacion_origen || '',
-      destino:   row.ubicacion_destino || '',
-      usuario:   row.usuario || '',
-    }));
+    result.rows.forEach((row) =>
+      worksheet.addRow({
+        fecha: row.fecha_movimiento
+          ? new Date(row.fecha_movimiento).toLocaleDateString('es-EC')
+          : '',
+        items: row.items || 0,
+        articulos: row.articulos_movidos || '',
+        origen: row.ubicacion_origen || '',
+        destino: row.ubicacion_destino || '',
+        usuario: row.usuario || '',
+      })
+    );
 
     styleDataRows(worksheet);
     await sendExcel(workbook, res, 'movimientos-inventario.xlsx');
   } catch (error) {
-    console.error('Error al exportar movimientos:', error);
+    logControllerError('Error al exportar movimientos:', error);
     res.status(500).json({ success: false, message: 'Error al exportar movimientos' });
   }
 };
@@ -970,37 +995,39 @@ const exportBajasArticulosExcel = async (req, res) => {
     const result = await db.query(query, params);
 
     const { workbook, worksheet } = createWorkbook('Dados de baja', [
-      { header: 'Fecha',      key: 'fecha',     width: 14 },
-      { header: 'Tipo',       key: 'tipo',      width: 16 },
-      { header: 'Artículo',   key: 'articulo',  width: 28 },
-      { header: 'Serie',      key: 'serie',     width: 22 },
-      { header: 'Cantidad',   key: 'cantidad',  width: 10 },
-      { header: 'Marca',      key: 'marca',     width: 16 },
-      { header: 'Modelo',     key: 'modelo',    width: 18 },
-      { header: 'Calibre',    key: 'calibre',   width: 12 },
-      { header: 'Ubicación',  key: 'ubicacion', width: 24 },
-      { header: 'Usuario',    key: 'usuario',   width: 18 },
-      { header: 'Motivo',     key: 'motivo',    width: 42 },
+      { header: 'Fecha', key: 'fecha', width: 14 },
+      { header: 'Tipo', key: 'tipo', width: 16 },
+      { header: 'Artículo', key: 'articulo', width: 28 },
+      { header: 'Serie', key: 'serie', width: 22 },
+      { header: 'Cantidad', key: 'cantidad', width: 10 },
+      { header: 'Marca', key: 'marca', width: 16 },
+      { header: 'Modelo', key: 'modelo', width: 18 },
+      { header: 'Calibre', key: 'calibre', width: 12 },
+      { header: 'Ubicación', key: 'ubicacion', width: 24 },
+      { header: 'Usuario', key: 'usuario', width: 18 },
+      { header: 'Motivo', key: 'motivo', width: 42 },
     ]);
 
-    result.rows.forEach((row) => worksheet.addRow({
-      fecha:     row.fecha_baja ? new Date(row.fecha_baja).toLocaleDateString('es-EC') : '',
-      tipo:      TIPO_LABELS[row.tipo_articulo] ?? row.tipo_articulo ?? '',
-      articulo:  row.nombre_articulo || '',
-      serie:     getArticuloSerie(row) || '',
-      cantidad:  row.cantidad || '',
-      marca:     row.marca || '',
-      modelo:    row.modelo || '',
-      calibre:   row.calibre || '',
-      ubicacion: row.ubicacion_nombre || '',
-      usuario:   row.usuario || '',
-      motivo:    row.motivo || '',
-    }));
+    result.rows.forEach((row) =>
+      worksheet.addRow({
+        fecha: row.fecha_baja ? new Date(row.fecha_baja).toLocaleDateString('es-EC') : '',
+        tipo: TIPO_LABELS[row.tipo_articulo] ?? row.tipo_articulo ?? '',
+        articulo: row.nombre_articulo || '',
+        serie: getArticuloSerie(row) || '',
+        cantidad: row.cantidad || '',
+        marca: row.marca || '',
+        modelo: row.modelo || '',
+        calibre: row.calibre || '',
+        ubicacion: row.ubicacion_nombre || '',
+        usuario: row.usuario || '',
+        motivo: row.motivo || '',
+      })
+    );
 
     styleDataRows(worksheet);
     await sendExcel(workbook, res, 'articulos-dados-de-baja.xlsx');
   } catch (error) {
-    console.error('Error al exportar bajas de artículos:', error);
+    logControllerError('Error al exportar bajas de artículos:', error);
     res.status(500).json({ success: false, message: 'Error al exportar bajas de artículos' });
   }
 };
@@ -1036,7 +1063,10 @@ const generateMovimientoPdf = async (movimientoId) => {
   doc.fontSize(11);
   const infoLeft = 60;
   doc.text(`Movimiento realizado por: ${usuario}`, infoLeft);
-  doc.text(`Fecha del movimiento: ${new Date(fechaMovimiento).toLocaleDateString('es-EC')}`, infoLeft);
+  doc.text(
+    `Fecha del movimiento: ${new Date(fechaMovimiento).toLocaleDateString('es-EC')}`,
+    infoLeft
+  );
   doc.text(`Ubicación destino: ${ubicacionDestino}`, infoLeft);
   doc.moveDown();
 
@@ -1052,7 +1082,10 @@ const generateMovimientoPdf = async (movimientoId) => {
   doc.text('Artículo', colItem, tableTop);
   doc.text('Serie', colSerial, tableTop);
   doc.text('Ubicación actual', colOrigin, tableTop);
-  doc.moveTo(40, tableTop + 15).lineTo(555, tableTop + 15).stroke();
+  doc
+    .moveTo(40, tableTop + 15)
+    .lineTo(555, tableTop + 15)
+    .stroke();
 
   doc.font('Helvetica');
   let rowY = tableTop + 25;
@@ -1078,21 +1111,23 @@ const generateMovimientoPdf = async (movimientoId) => {
   const leftLineStart = pageCenter - gapBetween / 2 - lineWidth;
   const rightLineStart = pageCenter + gapBetween / 2;
 
-  doc.moveTo(leftLineStart, signatureTop).lineTo(leftLineStart + lineWidth, signatureTop).stroke();
-  doc.moveTo(rightLineStart, signatureTop).lineTo(rightLineStart + lineWidth, signatureTop).stroke();
+  doc
+    .moveTo(leftLineStart, signatureTop)
+    .lineTo(leftLineStart + lineWidth, signatureTop)
+    .stroke();
+  doc
+    .moveTo(rightLineStart, signatureTop)
+    .lineTo(rightLineStart + lineWidth, signatureTop)
+    .stroke();
 
-  doc.fontSize(10).text(
-    'Firma de quien realiza',
-    leftLineStart,
-    signatureTop + 6,
-    { width: lineWidth, align: 'center' }
-  );
-  doc.text(
-    'Firma de quien recibe',
-    rightLineStart,
-    signatureTop + 6,
-    { width: lineWidth, align: 'center' }
-  );
+  doc.fontSize(10).text('Firma de quien realiza', leftLineStart, signatureTop + 6, {
+    width: lineWidth,
+    align: 'center',
+  });
+  doc.text('Firma de quien recibe', rightLineStart, signatureTop + 6, {
+    width: lineWidth,
+    align: 'center',
+  });
 
   doc.end();
 
@@ -1111,7 +1146,7 @@ const createMovimiento = async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Debes agregar al menos un artículo'
+        message: 'Debes agregar al menos un artículo',
       });
     }
 
@@ -1137,7 +1172,7 @@ const createMovimiento = async (req, res) => {
     if (!destinoId) {
       return res.status(400).json({
         success: false,
-        message: 'La ubicación destino es requerida para traslados'
+        message: 'La ubicación destino es requerida para traslados',
       });
     }
 
@@ -1234,28 +1269,28 @@ const createMovimiento = async (req, res) => {
               articulo.numero_serie,
               articulo.calibre,
               articulo.fecha_caducidad,
-              destinoId
+              destinoId,
             ]
           );
-          await client.query(
-            'UPDATE articulos SET cantidad = $1 WHERE id = $2',
-            [actual - cantidad, articulo.id]
-          );
+          await client.query('UPDATE articulos SET cantidad = $1 WHERE id = $2', [
+            actual - cantidad,
+            articulo.id,
+          ]);
           movedArticuloId = insertRes.rows[0].id;
         } else {
-          await client.query(
-            'UPDATE articulos SET ubicacion_id = $1 WHERE id = $2',
-            [destinoId, articulo.id]
-          );
+          await client.query('UPDATE articulos SET ubicacion_id = $1 WHERE id = $2', [
+            destinoId,
+            articulo.id,
+          ]);
         }
       } else {
         if (cantidad !== 1) {
           throw createHttpError(400, 'La cantidad debe ser 1 para artículos serializados');
         }
-        await client.query(
-          'UPDATE articulos SET ubicacion_id = $1 WHERE id = $2',
-          [destinoId, articulo.id]
-        );
+        await client.query('UPDATE articulos SET ubicacion_id = $1 WHERE id = $2', [
+          destinoId,
+          articulo.id,
+        ]);
       }
 
       await client.query(
@@ -1266,13 +1301,7 @@ const createMovimiento = async (req, res) => {
           ubicacion_origen_id,
           ubicacion_destino_id
         ) VALUES ($1, $2, $3, $4, $5)`,
-        [
-          movimientoId,
-          movedArticuloId,
-          cantidad,
-          origenArticuloId,
-          destinoId
-        ]
+        [movimientoId, movedArticuloId, cantidad, origenArticuloId, destinoId]
       );
     }
 
@@ -1281,10 +1310,10 @@ const createMovimiento = async (req, res) => {
 
     const pdfResult = await generateMovimientoPdf(movimientoId);
     if (pdfResult) {
-      await db.query(
-        'UPDATE movimientos SET pdf_path = $1 WHERE id = $2',
-        [pdfResult.relativePath, movimientoId]
-      );
+      await db.query('UPDATE movimientos SET pdf_path = $1 WHERE id = $2', [
+        pdfResult.relativePath,
+        movimientoId,
+      ]);
     }
 
     await logAudit(db, {
@@ -1292,7 +1321,7 @@ const createMovimiento = async (req, res) => {
       operacion: 'INSERT',
       registro_id: String(movimientoId),
       datos_nuevos: { id: movimientoId, items, ubicacion_destino_id: destinoId },
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.status(201).json({
@@ -1300,25 +1329,25 @@ const createMovimiento = async (req, res) => {
       message: 'Movimiento registrado exitosamente',
       data: {
         id: movimientoId,
-        pdf_path: pdfResult?.relativePath || null
-      }
+        pdf_path: pdfResult?.relativePath || null,
+      },
     });
   } catch (error) {
     if (transactionStarted) {
       try {
         await client.query('ROLLBACK');
       } catch (rollbackError) {
-        console.error('Error al hacer rollback de createMovimiento:', rollbackError);
+        logControllerError('Error al hacer rollback de createMovimiento:', rollbackError);
       }
     }
 
     const status = error.status || (isConstraintOrInputError(error) ? 400 : 500);
-    const message = status >= 500 ? 'Error en el servidor' : (error.message || 'Solicitud inválida');
-    console.error('Error al crear movimiento:', error);
+    const message = status >= 500 ? 'Error en el servidor' : error.message || 'Solicitud inválida';
+    logControllerError('Error al crear movimiento:', error);
 
     res.status(status).json({
       success: false,
-      message
+      message,
     });
   } finally {
     client.release();
@@ -1329,27 +1358,37 @@ const downloadMovimientoPdf = async (req, res) => {
   try {
     const { id } = req.params;
     const result = await db.query('SELECT pdf_path FROM movimientos WHERE id = $1', [id]);
-    if (result.rowCount === 0 || !result.rows[0].pdf_path) {
+    if (result.rowCount === 0) {
       return res.status(404).json({
         success: false,
-        message: 'PDF no encontrado'
+        message: 'Movimiento no encontrado',
       });
     }
 
-    const relativePath = result.rows[0].pdf_path;
-    const fullPath = path.resolve(__dirname, '..', relativePath);
+    let relativePath = result.rows[0].pdf_path;
     const baseDir = path.resolve(__dirname, '..', 'storage', 'movimientos');
-    if (!fullPath.startsWith(baseDir)) {
+    let fullPath = relativePath ? path.resolve(__dirname, '..', relativePath) : null;
+
+    if (fullPath && !fullPath.startsWith(baseDir)) {
       return res.status(400).json({
         success: false,
-        message: 'Ruta inválida'
+        message: 'Ruta inválida',
       });
     }
 
-    if (!fs.existsSync(fullPath)) {
+    if (!fullPath || !fs.existsSync(fullPath)) {
+      const pdfResult = await generateMovimientoPdf(id);
+      if (pdfResult) {
+        relativePath = pdfResult.relativePath;
+        fullPath = pdfResult.fullPath;
+        await db.query('UPDATE movimientos SET pdf_path = $1 WHERE id = $2', [relativePath, id]);
+      }
+    }
+
+    if (!fullPath || !fs.existsSync(fullPath)) {
       return res.status(404).json({
         success: false,
-        message: 'Archivo no encontrado'
+        message: 'No se pudo generar el PDF del movimiento',
       });
     }
 
@@ -1357,10 +1396,10 @@ const downloadMovimientoPdf = async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=movimiento-${id}.pdf`);
     return res.sendFile(fullPath);
   } catch (error) {
-    console.error('Error al descargar PDF:', error);
+    logControllerError('Error al descargar PDF:', error);
     res.status(500).json({
       success: false,
-      message: 'Error en el servidor'
+      message: 'Error en el servidor',
     });
   }
 };
@@ -1378,5 +1417,5 @@ module.exports = {
   downloadMovimientoPdf,
   exportArticulosExcel,
   exportBajasArticulosExcel,
-  exportMovimientosExcel
+  exportMovimientosExcel,
 };

@@ -14,6 +14,7 @@
  */
 const config = require('../config/config');
 const db = require('../config/database');
+const logger = require('../config/logger');
 
 const ACTIVE_CACHE_TTL_MS = Number.parseInt(process.env.ACTIVE_USER_CACHE_TTL_MS, 10) || 30000;
 const activeUserCache = new Map();
@@ -28,7 +29,7 @@ const requirePermission = (modulo) => {
     if (!tipo_usuario) {
       return res.status(403).json({
         success: false,
-        message: 'Tipo de usuario no definido'
+        message: 'Tipo de usuario no definido',
       });
     }
 
@@ -37,7 +38,7 @@ const requirePermission = (modulo) => {
     if (!permisos) {
       return res.status(403).json({
         success: false,
-        message: 'Tipo de usuario inválido'
+        message: 'Tipo de usuario inválido',
       });
     }
 
@@ -46,7 +47,7 @@ const requirePermission = (modulo) => {
     } else {
       return res.status(403).json({
         success: false,
-        message: `Acceso denegado. No tienes permisos para: ${modulo}`
+        message: `Acceso denegado. No tienes permisos para: ${modulo}`,
       });
     }
   };
@@ -61,7 +62,7 @@ const requireActive = async (req, res, next) => {
   if (!Number.isInteger(userId) || userId <= 0) {
     return res.status(401).json({
       success: false,
-      message: 'Token inválido'
+      message: 'Token inválido',
     });
   }
 
@@ -71,43 +72,44 @@ const requireActive = async (req, res, next) => {
       if (!cached.active) {
         return res.status(403).json({
           success: false,
-          message: 'Usuario desactivado. Contacta al administrador'
+          message: 'Usuario desactivado. Contacta al administrador',
         });
       }
       return next();
     }
 
-    const result = await db.query(
-      'SELECT activo FROM usuarios WHERE id = $1',
-      [userId]
-    );
+    const result = await db.query('SELECT activo FROM usuarios WHERE id = $1', [userId]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Usuario no encontrado'
+        message: 'Usuario no encontrado',
       });
     }
 
     const active = Boolean(result.rows[0].activo);
     activeUserCache.set(userId, {
       active,
-      expiresAt: Date.now() + ACTIVE_CACHE_TTL_MS
+      expiresAt: Date.now() + ACTIVE_CACHE_TTL_MS,
     });
 
     if (!active) {
       return res.status(403).json({
         success: false,
-        message: 'Usuario desactivado. Contacta al administrador'
+        message: 'Usuario desactivado. Contacta al administrador',
       });
     }
 
     next();
   } catch (error) {
-    console.error('Error en requireActive:', error);
+    logger.error('Error en requireActive:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+    });
     return res.status(500).json({
       success: false,
-      message: 'Error al verificar estado del usuario'
+      message: 'Error al verificar estado del usuario',
     });
   }
 };
@@ -121,7 +123,7 @@ const requireRole = (...roles) => {
     if (!req.user?.tipo_usuario || !roles.includes(req.user.tipo_usuario)) {
       return res.status(403).json({
         success: false,
-        message: 'Acceso denegado. No tienes permisos para realizar esta acción'
+        message: 'Acceso denegado. No tienes permisos para realizar esta acción',
       });
     }
     next();

@@ -9,7 +9,7 @@
 const { requirePermission, requireRole } = require('../middleware/permissions');
 
 const mockReq = (tipo_usuario) => ({
-  user: { id: 1, usuario: 'test', tipo_usuario }
+  user: { id: 1, usuario: 'test', tipo_usuario },
 });
 
 const mockRes = () => {

@@ -9,10 +9,19 @@
     "start": "node backend/src/server.js",
     "dev": "sh -c 'cd backend && npm run dev & BACKEND_PID=$! && cd frontend && npm start; kill $BACKEND_PID'",
     "dev:backend": "cd backend && npm run dev",
-    "dev:frontend": "cd frontend && npm start"
+    "dev:frontend": "cd frontend && npm start",
+    "lint": "cd backend && npm run lint && cd ../frontend && npm run lint",
+    "format": "cd backend && npm run format && cd ../frontend && npm run format",
+    "format:check": "cd backend && npm run format:check && cd ../frontend && npm run format:check",
+    "test": "cd backend && npm test",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "husky": "^9.1.7"
   }
 }

@@ -64,7 +64,9 @@
   line-height: 1;
   background: #e2e8f0;
   color: #64748b;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
 }
 
 .tab.active .tab-badge {
@@ -111,6 +113,23 @@
   flex-wrap: wrap;
 }
 
+.facturas-filter-card .ff-search,
+.pagos-filter-card .ff-search {
+  flex: 1 1 280px;
+  min-width: 240px;
+  max-width: none;
+}
+
+.facturas-filter-card .ff-dates,
+.pagos-filter-card .ff-dates {
+  flex: 0 1 auto;
+}
+
+.facturas-filter-card .ff-state,
+.pagos-filter-card .ff-state {
+  flex: 0 1 160px;
+}
+
 /* ============================================
    FORMS
    ============================================ */
@@ -149,7 +168,7 @@
   letter-spacing: normal;
 }
 
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   cursor: pointer;
   width: 16px;
   height: 16px;
@@ -157,7 +176,7 @@
   accent-color: #ff2519;
 }
 
-.checkbox-label input[type="checkbox"]:disabled {
+.checkbox-label input[type='checkbox']:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -185,7 +204,9 @@
   font-size: 0.95em;
   font-family: inherit;
   background: white;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .form-group input:focus,
@@ -234,21 +255,45 @@
   box-shadow: none !important;
 }
 
-.btn-primary { background-color: #ff2519; color: white; }
-.btn-primary:hover:not(:disabled) { background-color: #e01f15; }
+.btn-primary {
+  background-color: #ff2519;
+  color: white;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: #e01f15;
+}
 
-.btn-success { background-color: #48bb78; color: white; }
-.btn-success:hover:not(:disabled) { background-color: #38a169; }
+.btn-success {
+  background-color: #48bb78;
+  color: white;
+}
+.btn-success:hover:not(:disabled) {
+  background-color: #38a169;
+}
 
-.btn-danger { background-color: #f56565; color: white; }
-.btn-danger:hover:not(:disabled) { background-color: #e53e3e; }
+.btn-danger {
+  background-color: #f56565;
+  color: white;
+}
+.btn-danger:hover:not(:disabled) {
+  background-color: #e53e3e;
+}
 
-.btn-warning { background-color: #ed8936; color: white; }
-.btn-warning:hover:not(:disabled) { background-color: #dd6b20; }
+.btn-warning {
+  background-color: #ed8936;
+  color: white;
+}
+.btn-warning:hover:not(:disabled) {
+  background-color: #dd6b20;
+}
 
-
-.btn-secondary { background-color: #4a5568; color: white; }
-.btn-secondary:hover:not(:disabled) { background-color: #2d3748; }
+.btn-secondary {
+  background-color: #4a5568;
+  color: white;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: #2d3748;
+}
 
 .btn-sm {
   padding: 6px 12px;
@@ -260,8 +305,6 @@
    ============================================ */
 .cuentas-container .table-responsive {
   overflow-x: auto;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
 }
 
 /* ── Error banner ── */
@@ -286,13 +329,17 @@
   stroke: var(--color-danger);
 }
 
-.cuentas-error-banner span { flex: 1; }
+.cuentas-error-banner span {
+  flex: 1;
+}
 
-.cuentas-error-banner .btn { flex-shrink: 0; }
+.cuentas-error-banner .btn {
+  flex-shrink: 0;
+}
 
 .cuentas-table {
   width: 100% !important;
-  min-width: 0 !important;
+  min-width: 1120px !important;
   border-collapse: collapse;
   background-color: white;
   font-size: 0.8em !important;
@@ -339,13 +386,19 @@
 }
 
 .cuentas-table th:nth-child(2),
-.cuentas-table td:nth-child(2) { width: 7.8% !important; }
+.cuentas-table td:nth-child(2) {
+  width: 7.8% !important;
+}
 
 .cuentas-table th:nth-child(3),
-.cuentas-table td:nth-child(3) { width: 20.5% !important; }
+.cuentas-table td:nth-child(3) {
+  width: 20.5% !important;
+}
 
 .cuentas-table th:nth-child(4),
-.cuentas-table td:nth-child(4) { width: 6.9% !important; }
+.cuentas-table td:nth-child(4) {
+  width: 6.9% !important;
+}
 
 .cuentas-table th:nth-child(n + 5):nth-child(-n + 11),
 .cuentas-table td:nth-child(n + 5):nth-child(-n + 11) {
@@ -354,11 +407,11 @@
 
 .cuentas-table th:nth-child(12),
 .cuentas-table td:nth-child(12) {
-  width: 7.7% !important;
-  min-width: 0 !important;
+  width: 9% !important;
+  min-width: 120px !important;
   max-width: none !important;
-  padding-left: 4px !important;
-  padding-right: 4px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
 }
 
 .cuentas-table th:last-child,
@@ -438,6 +491,8 @@
 .cuentas-table .app-table-actions {
   gap: 3px !important;
   padding: 0;
+  flex-wrap: nowrap;
+  justify-content: center;
 }
 
 .cuentas-table .app-col-actions {
@@ -528,8 +583,20 @@
    FACTURA MODALS
    ============================================ */
 .modal-factura {
+  width: min(94vw, 680px);
+  max-width: 680px;
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
   border: 1px solid #cbd5e1;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
+}
+
+.modal-factura form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .modal-factura .modal-header {
@@ -674,7 +741,9 @@
   padding: 9px 11px;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .cliente-option + .cliente-option {
@@ -735,6 +804,7 @@
 .modal-cancel-factura {
   width: min(92vw, 620px);
   max-width: 620px;
+  max-height: calc(100dvh - 32px);
   border: 1px solid #cbd5e1;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
 }
@@ -865,9 +935,11 @@
   align-items: end;
 }
 
-.pagos-report-filters .ff-state { min-width: 0; }
+.pagos-report-filters .ff-state {
+  min-width: 0;
+}
 
-.pagos-report-filters input[type="date"],
+.pagos-report-filters input[type='date'],
 .pagos-report-filters .ff-state select {
   width: 100%;
 }
@@ -924,7 +996,9 @@
   line-height: 1.5;
 }
 
-.pago-detail-notes p:last-child { margin-bottom: 0; }
+.pago-detail-notes p:last-child {
+  margin-bottom: 0;
+}
 
 .pago-detail-notes strong {
   color: #64748b;
@@ -937,7 +1011,6 @@
 .pago-detail-table-shell {
   overflow-x: auto;
 }
-
 
 /* ============================================
    BATCH PAYMENT MODAL (modal-batch-payment)
@@ -970,7 +1043,9 @@
   border-bottom: 1px solid #eef1f7;
 }
 
-.bp-section:last-child { border-bottom: none; }
+.bp-section:last-child {
+  border-bottom: none;
+}
 
 .bp-fields-grid {
   display: grid;
@@ -978,7 +1053,9 @@
   gap: 16px;
 }
 
-.bp-notas-group { grid-column: 1 / -1; }
+.bp-notas-group {
+  grid-column: 1 / -1;
+}
 
 .bp-amount-input-wrapper {
   position: relative;
@@ -996,7 +1073,10 @@
   z-index: 1;
 }
 
-.bp-amount-input-wrapper input { padding-left: 24px !important; width: 100%; }
+.bp-amount-input-wrapper input {
+  padding-left: 24px !important;
+  width: 100%;
+}
 
 .bp-section-header {
   display: flex;
@@ -1044,7 +1124,11 @@
   align-items: center;
 }
 
-.bp-pill:hover { background: #eef2f8; border-color: #c0ccd8; color: #1e293b; }
+.bp-pill:hover {
+  background: #eef2f8;
+  border-color: #c0ccd8;
+  color: #1e293b;
+}
 
 .bp-pill-clear {
   color: #b91c1c;
@@ -1052,7 +1136,10 @@
   background: #fff1f2;
 }
 
-.bp-pill-clear:hover { background: #ffe4e6; border-color: #f87171; }
+.bp-pill-clear:hover {
+  background: #ffe4e6;
+  border-color: #f87171;
+}
 
 /* Invoice list */
 .bp-invoices-list {
@@ -1064,9 +1151,16 @@
   padding-right: 4px;
 }
 
-.bp-invoices-list::-webkit-scrollbar { width: 4px; }
-.bp-invoices-list::-webkit-scrollbar-track { background: transparent; }
-.bp-invoices-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+.bp-invoices-list::-webkit-scrollbar {
+  width: 4px;
+}
+.bp-invoices-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.bp-invoices-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
 
 /* Invoice row */
 .bp-invoice-row {
@@ -1078,11 +1172,17 @@
   border-radius: 10px;
   background: #fff;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
   user-select: none;
 }
 
-.bp-invoice-row:hover { border-color: #c0ccd8; background: #fafbff; }
+.bp-invoice-row:hover {
+  border-color: #c0ccd8;
+  background: #fafbff;
+}
 
 .bp-invoice-row.selected {
   border-color: var(--color-primary);
@@ -1090,7 +1190,10 @@
   box-shadow: 0 0 0 3px rgba(232, 32, 26, 0.07);
 }
 
-.bp-invoice-row.has-error { border-color: #dc2626; background: #fff5f5; }
+.bp-invoice-row.has-error {
+  border-color: #dc2626;
+  background: #fff5f5;
+}
 
 .bp-invoice-check {
   width: 20px;
@@ -1102,7 +1205,9 @@
   align-items: center;
   justify-content: center;
   background: #fff;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
 
 .bp-invoice-row.selected .bp-invoice-check {
@@ -1111,7 +1216,10 @@
   color: white;
 }
 
-.bp-invoice-check svg { width: 12px; height: 12px; }
+.bp-invoice-check svg {
+  width: 12px;
+  height: 12px;
+}
 
 .bp-invoice-body {
   flex: 1;
@@ -1128,9 +1236,21 @@
   flex-wrap: wrap;
 }
 
-.bp-invoice-num { font-weight: 700; color: #1e293b; font-size: 0.875rem; }
-.bp-invoice-date { color: #64748b; font-size: 0.8rem; }
-.bp-invoice-saldo { color: #475569; font-size: 0.8rem; font-weight: 600; margin-left: auto; }
+.bp-invoice-num {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 0.875rem;
+}
+.bp-invoice-date {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+.bp-invoice-saldo {
+  color: #475569;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-left: auto;
+}
 
 .bp-invoice-progress-wrap {
   display: flex;
@@ -1161,7 +1281,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-.bp-row-error { font-size: 0.75rem; color: #dc2626; font-weight: 500; }
+.bp-row-error {
+  font-size: 0.75rem;
+  color: #dc2626;
+  font-weight: 500;
+}
 
 .bp-invoice-right {
   display: flex;
@@ -1187,9 +1311,15 @@
   align-items: center;
 }
 
-.bp-pay-full-btn:hover { background: #eef2f8; border-color: #c0ccd8; color: #1e293b; }
+.bp-pay-full-btn:hover {
+  background: #eef2f8;
+  border-color: #c0ccd8;
+  color: #1e293b;
+}
 
-.bp-invoice-amount-wrapper { width: 96px; }
+.bp-invoice-amount-wrapper {
+  width: 96px;
+}
 
 .bp-invoice-amount-input {
   width: 96px;
@@ -1217,9 +1347,17 @@
   cursor: not-allowed;
 }
 
-.bp-invoice-amount-input.error { border-color: #dc2626; }
+.bp-invoice-amount-input.error {
+  border-color: #dc2626;
+}
 
-.bp-abonos-error { display: block; margin-top: 8px; font-size: 0.8rem; color: #dc2626; font-weight: 500; }
+.bp-abonos-error {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #dc2626;
+  font-weight: 500;
+}
 
 .bp-empty-invoices {
   text-align: center;
@@ -1240,7 +1378,10 @@
   border-radius: 10px;
 }
 
-.bp-progress-section.over { background: #fff5f5; border-color: #fca5a5; }
+.bp-progress-section.over {
+  background: #fff5f5;
+  border-color: #fca5a5;
+}
 
 .bp-progress-labels {
   display: flex;
@@ -1251,10 +1392,19 @@
   color: #475569;
 }
 
-.bp-remaining-label { font-weight: 600; font-size: 0.8rem; }
-.bp-remaining-label.pending { color: #d97706; }
-.bp-remaining-label.done { color: #15803d; }
-.bp-remaining-label.negative { color: #dc2626; }
+.bp-remaining-label {
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.bp-remaining-label.pending {
+  color: #d97706;
+}
+.bp-remaining-label.done {
+  color: #15803d;
+}
+.bp-remaining-label.negative {
+  color: #dc2626;
+}
 
 .bp-progress-track {
   height: 6px;
@@ -1270,7 +1420,9 @@
   transition: width 0.3s ease;
 }
 
-.bp-progress-section.over .bp-progress-fill { background: #dc2626; }
+.bp-progress-section.over .bp-progress-fill {
+  background: #dc2626;
+}
 
 /* Footer buttons */
 .modal-batch-payment .modal-buttons {
@@ -1300,11 +1452,66 @@
 /* ============================================
    RESPONSIVE
    ============================================ */
+@media (max-width: 1200px) {
+  .facturas-filter-row,
+  .pagos-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .facturas-filter-actions-card,
+  .pagos-filter-actions-card {
+    justify-self: stretch;
+  }
+
+  .facturas-filter-actions-card .ff-actions,
+  .pagos-filter-actions-card .ff-actions {
+    width: 100%;
+  }
+
+  .facturas-filter-actions-card .ff-actions .btn,
+  .facturas-filter-actions-card .ff-actions .ff-clear-btn,
+  .pagos-filter-actions-card .ff-actions .btn,
+  .pagos-filter-actions-card .ff-actions .ff-clear-btn {
+    flex: 1 1 0;
+    max-width: none;
+    width: auto;
+  }
+}
+
+@media (max-width: 1024px) {
+  .facturas-filter-card .ff-search,
+  .pagos-filter-card .ff-search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .facturas-filter-card .ff-dates,
+  .pagos-filter-card .ff-dates {
+    flex: 1 1 320px;
+    min-width: 0;
+  }
+
+  .facturas-filter-card .ff-date-field,
+  .pagos-filter-card .ff-date-field {
+    flex: 1 1 140px;
+  }
+
+  .facturas-filter-card .ff-date-field input[type='date'],
+  .pagos-filter-card .ff-date-field input[type='date'] {
+    width: 100%;
+  }
+
+  .facturas-filter-card .ff-state,
+  .pagos-filter-card .ff-state {
+    flex: 1 1 180px;
+    min-width: 160px;
+  }
+}
+
 @media (max-width: 768px) {
   .cuentas-container {
     padding: 12px;
   }
-
 
   .form-inline {
     grid-template-columns: 1fr 1fr;
@@ -1330,6 +1537,11 @@
 
   .section-actions .btn {
     flex: 1;
+  }
+
+  .facturas-filter-card .ff-dates,
+  .pagos-filter-card .ff-dates {
+    flex-wrap: wrap;
   }
 
   .modal-factura .factura-calc-sections {
@@ -1361,10 +1573,10 @@
   }
 
   .modal {
-    width: 95%;
-    margin: 12px;
+    width: 100%;
+    margin: 0;
+    max-height: calc(100dvh - 24px);
   }
-
 }
 
 @media (max-width: 480px) {
@@ -1481,7 +1693,6 @@
   border-radius: 0 6px 6px 0;
 }
 
-
 /* ============================================
    CLIENTES MODULE
    ============================================ */
@@ -1555,26 +1766,28 @@
 }
 
 .modal-cliente {
+  width: min(92vw, 460px);
   max-width: 460px;
 }
 
 .modal-cliente .modal-body {
-  padding: 22px 24px 8px;
+  padding: 18px 22px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
 }
 
 .modal-cliente .modal-buttons {
   display: flex;
   gap: 10px;
-  padding: 16px 24px 20px;
+  padding: 16px 22px 20px;
   border-top: 1px solid #e2e8f0;
   background: #f8fafc;
 }
 
 .modal-cliente .modal-buttons .btn {
   flex: 1;
+  min-height: 42px;
 }
 
 /* ============================================
