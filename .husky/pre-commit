@@ -1,0 +1,8 @@
+#!/bin/sh
+
+echo "Running pre-commit checks..."
+
+npm run lint || exit 1
+npm run format:check || exit 1
+
+echo "Pre-commit checks passed."

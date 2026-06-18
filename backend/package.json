@@ -8,7 +8,12 @@
     "dev": "nodemon src/server.js",
     "migrate": "node -e \"require('./src/config/migrations').runMigrations().then(() => require('./src/config/database').close()).catch((error) => { console.error(error); process.exit(1); })\"",
     "test": "jest --runInBand --forceExit",
-    "test:watch": "jest --watch --runInBand"
+    "test:watch": "jest --watch --runInBand",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "format": "prettier --write src",
+    "format:check": "prettier --check src",
+    "type-check": "tsc --noEmit"
   },
   "jest": {
     "testEnvironment": "node",
@@ -39,11 +44,24 @@
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "pdfkit": "^0.13.0",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^8.57.1",
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.9.2",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.6",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
-    "supertest": "^6.3.4"
+    "prettier": "^3.8.4",
+    "supertest": "^6.3.4",
+    "typescript": "^6.0.3"
   }
 }
