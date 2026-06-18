@@ -6,10 +6,35 @@ import { AUTH_EXPIRED_EVENT } from '../services/api';
 const AuthContext = createContext(null);
 
 const ROLE_PERMISSIONS = {
-  gerente:       ['cuentas', 'inventario', 'personal', 'usuarios', 'crear_articulo', 'eliminar_articulo', 'dar_baja_articulo', 'crear_movimiento', 'exportar'],
-  secretario:    ['cuentas', 'inventario', 'personal', 'crear_articulo', 'dar_baja_articulo', 'crear_movimiento', 'exportar'],
-  supervisor:    ['inventario', 'personal', 'crear_articulo', 'dar_baja_articulo', 'crear_movimiento', 'exportar'],
-  contador:      ['cuentas', 'exportar'],
+  gerente: [
+    'cuentas',
+    'inventario',
+    'personal',
+    'usuarios',
+    'crear_articulo',
+    'eliminar_articulo',
+    'dar_baja_articulo',
+    'crear_movimiento',
+    'exportar',
+  ],
+  secretario: [
+    'cuentas',
+    'inventario',
+    'personal',
+    'crear_articulo',
+    'dar_baja_articulo',
+    'crear_movimiento',
+    'exportar',
+  ],
+  supervisor: [
+    'inventario',
+    'personal',
+    'crear_articulo',
+    'dar_baja_articulo',
+    'crear_movimiento',
+    'exportar',
+  ],
+  contador: ['cuentas', 'exportar'],
 };
 
 const parseStoredUser = () => {
@@ -29,7 +54,7 @@ const getInitialAuthState = () => {
   return {
     user: storedUser,
     isAuthenticated: Boolean(token),
-    loading: Boolean(token && !storedUser)
+    loading: Boolean(token && !storedUser),
   };
 };
 
@@ -90,31 +115,33 @@ export const AuthProvider = ({ children }) => {
   const changePassword = useCallback(async (nueva_password, confirmar_password) => {
     const result = await authService.changePassword(nueva_password, confirmar_password);
     if (result.success) {
-      setUser(prev => ({ ...prev, primer_login: false }));
+      setUser((prev) => ({ ...prev, primer_login: false }));
     }
     return result;
   }, []);
 
-  const hasPermission = useCallback((modulo) => {
-    if (!user) return false;
-    return ROLE_PERMISSIONS[user.tipo_usuario]?.includes(modulo) || false;
-  }, [user]);
-
-  const value = useMemo(() => ({
-    user,
-    loading,
-    isAuthenticated,
-    login,
-    logout,
-    changePassword,
-    hasPermission,
-  }), [user, loading, isAuthenticated, login, logout, changePassword, hasPermission]);
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
+  const hasPermission = useCallback(
+    (modulo) => {
+      if (!user) return false;
+      return ROLE_PERMISSIONS[user.tipo_usuario]?.includes(modulo) || false;
+    },
+    [user]
   );
+
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      isAuthenticated,
+      login,
+      logout,
+      changePassword,
+      hasPermission,
+    }),
+    [user, loading, isAuthenticated, login, logout, changePassword, hasPermission]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 AuthProvider.propTypes = {

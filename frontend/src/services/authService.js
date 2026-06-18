@@ -22,7 +22,7 @@ const getFallbackApiUrls = () => {
     'http://localhost:3000/api',
     'http://127.0.0.1:3000/api',
     'http://localhost:3001/api',
-    'http://127.0.0.1:3001/api'
+    'http://127.0.0.1:3001/api',
   ];
 
   return [...new Set(urls.map((value) => String(value || '').trim()).filter(Boolean))];
@@ -38,7 +38,7 @@ const tryLoginFallback = async (usuario, password) => {
         { usuario, password },
         {
           headers: { 'Content-Type': 'application/json' },
-          timeout: 8000
+          timeout: 8000,
         }
       );
 
@@ -66,19 +66,19 @@ const authService = {
     try {
       const response = await api.post('/auth/login', {
         usuario,
-        password
+        password,
       });
-      
+
       if (response.data.success) {
         const { token, user } = response.data.data;
-        
+
         // Guardar token y usuario en localStorage
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(user));
-        
+
         return { success: true, data: response.data.data };
       }
-      
+
       return { success: false, message: response.data.message };
     } catch (error) {
       if (error?.response?.status === 401) {
@@ -93,13 +93,13 @@ const authService = {
 
         return {
           success: false,
-          message: 'No se pudo conectar con el servidor. Intenta nuevamente.'
+          message: 'No se pudo conectar con el servidor. Intenta nuevamente.',
         };
       }
 
       return {
         success: false,
-        message: extractError(error, 'Error al iniciar sesión')
+        message: extractError(error, 'Error al iniciar sesión'),
       };
     }
   },
@@ -111,9 +111,9 @@ const authService = {
     try {
       const response = await api.post('/auth/change-password', {
         nueva_password,
-        confirmar_password
+        confirmar_password,
       });
-      
+
       if (response.data.success) {
         // Actualizar el primer_login del usuario en localStorage
         const storedUser = localStorage.getItem('user');
@@ -122,15 +122,15 @@ const authService = {
           localStorage.setItem('user', JSON.stringify({ ...user, primer_login: false }));
         }
       }
-      
+
       return {
         success: response.data.success,
-        message: response.data.message
+        message: response.data.message,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al cambiar contraseña')
+        message: extractError(error, 'Error al cambiar contraseña'),
       };
     }
   },
@@ -141,13 +141,13 @@ const authService = {
   verifyToken: async () => {
     try {
       const response = await api.get('/auth/verify');
-      
+
       if (response.data.success) {
         // Actualizar usuario en localStorage
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
         return { success: true, user: response.data.data.user };
       }
-      
+
       return { success: false };
     } catch (error) {
       return { success: false };
@@ -160,7 +160,7 @@ const authService = {
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-  }
+  },
 };
 
 export default authService;
