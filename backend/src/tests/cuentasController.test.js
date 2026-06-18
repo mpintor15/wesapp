@@ -12,7 +12,7 @@
 
 jest.mock('../config/database', () => ({
   query: jest.fn(),
-  transaction: jest.fn()
+  transaction: jest.fn(),
 }));
 
 jest.mock('../utils/audit', () => ({
@@ -21,8 +21,8 @@ jest.mock('../utils/audit', () => ({
     usuario_id: 1,
     usuario_nombre: 'test',
     ip_address: '127.0.0.1',
-    user_agent: 'jest'
-  })
+    user_agent: 'jest',
+  }),
 }));
 
 const db = require('../config/database');
@@ -32,7 +32,7 @@ const {
   getNextNumFactura,
   cancelFactura,
   updateFactura,
-  deleteAbono
+  deleteAbono,
 } = require('../controllers/cuentasController');
 
 const mockReq = (overrides = {}) => ({
@@ -42,7 +42,7 @@ const mockReq = (overrides = {}) => ({
   user: { id: 1, usuario: 'gerente1', tipo_usuario: 'gerente' },
   ip: '127.0.0.1',
   get: jest.fn().mockReturnValue('jest-agent'),
-  ...overrides
+  ...overrides,
 });
 
 const mockRes = () => {
@@ -63,7 +63,7 @@ beforeEach(() => {
 describe('createBatchAbono', () => {
   test('rechaza si abonos está vacío', async () => {
     const req = mockReq({
-      body: { cliente_id: 1, fecha: '2024-01-01', abonos: [] }
+      body: { cliente_id: 1, fecha: '2024-01-01', abonos: [] },
     });
     const res = mockRes();
     await createBatchAbono(req, res);
@@ -72,7 +72,7 @@ describe('createBatchAbono', () => {
 
   test('rechaza si falta cliente_id', async () => {
     const req = mockReq({
-      body: { fecha: '2024-01-01', abonos: [{ num_factura: 1001, valor_abono: 100 }] }
+      body: { fecha: '2024-01-01', abonos: [{ num_factura: 1001, valor_abono: 100 }] },
     });
     const res = mockRes();
     await createBatchAbono(req, res);
@@ -82,12 +82,15 @@ describe('createBatchAbono', () => {
   test('rechaza si alguna factura está anulada', async () => {
     db.transaction.mockImplementation(async (callback) => {
       const fakeClient = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ num_factura: 1001 }] }) // bloqueo
           .mockResolvedValueOnce({
-            rows: [{ num_factura: 1001, cliente_id: 1, cancelada: true, saldo_pendiente: '500.00' }]
-          }) // facturas
+            rows: [
+              { num_factura: 1001, cliente_id: 1, cancelada: true, saldo_pendiente: '500.00' },
+            ],
+          }), // facturas
       };
       await callback(fakeClient);
     });
@@ -96,8 +99,8 @@ describe('createBatchAbono', () => {
       body: {
         cliente_id: 1,
         fecha: '2024-01-01',
-        abonos: [{ num_factura: 1001, valor_abono: 100 }]
-      }
+        abonos: [{ num_factura: 1001, valor_abono: 100 }],
+      },
     });
     const res = mockRes();
     await createBatchAbono(req, res);
@@ -111,12 +114,15 @@ describe('createBatchAbono', () => {
   test('rechaza si algún pago excede el saldo', async () => {
     db.transaction.mockImplementation(async (callback) => {
       const fakeClient = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ num_factura: 1001 }] }) // bloqueo
           .mockResolvedValueOnce({
-            rows: [{ num_factura: 1001, cliente_id: 1, cancelada: false, saldo_pendiente: '100.00' }]
-          })
+            rows: [
+              { num_factura: 1001, cliente_id: 1, cancelada: false, saldo_pendiente: '100.00' },
+            ],
+          }),
       };
       await callback(fakeClient);
     });
@@ -125,8 +131,8 @@ describe('createBatchAbono', () => {
       body: {
         cliente_id: 1,
         fecha: '2024-01-01',
-        abonos: [{ num_factura: 1001, valor_abono: 500 }]
-      }
+        abonos: [{ num_factura: 1001, valor_abono: 500 }],
+      },
     });
     const res = mockRes();
     await createBatchAbono(req, res);
@@ -140,21 +146,22 @@ describe('createBatchAbono', () => {
   test('registra todos los pagos si los datos son válidos', async () => {
     db.transaction.mockImplementation(async (callback) => {
       const fakeClient = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
           .mockResolvedValueOnce({
             rowCount: 2,
-            rows: [{ num_factura: 1001 }, { num_factura: 1002 }]
+            rows: [{ num_factura: 1001 }, { num_factura: 1002 }],
           }) // bloqueo
           .mockResolvedValueOnce({
             rows: [
               { num_factura: 1001, cliente_id: 1, cancelada: false, saldo_pendiente: '1000.00' },
-              { num_factura: 1002, cliente_id: 1, cancelada: false, saldo_pendiente: '2000.00' }
-            ]
+              { num_factura: 1002, cliente_id: 1, cancelada: false, saldo_pendiente: '2000.00' },
+            ],
           }) // facturas
           .mockResolvedValueOnce({ rows: [{ id: 10 }] }) // INSERT pagos
           .mockResolvedValueOnce({ rows: [] }) // INSERT abono 1
-          .mockResolvedValueOnce({ rows: [] }) // INSERT abono 2
+          .mockResolvedValueOnce({ rows: [] }), // INSERT abono 2
       };
       await callback(fakeClient);
     });
@@ -165,9 +172,9 @@ describe('createBatchAbono', () => {
         fecha: '2024-01-01',
         abonos: [
           { num_factura: 1001, valor_abono: 200 },
-          { num_factura: 1002, valor_abono: 300 }
-        ]
-      }
+          { num_factura: 1002, valor_abono: 300 },
+        ],
+      },
     });
     const res = mockRes();
     await createBatchAbono(req, res);
@@ -193,7 +200,7 @@ describe('createFactura', () => {
 
   test('rechaza si valor_factura es 0', async () => {
     const req = mockReq({
-      body: { num_factura: 1001, cliente_id: 1, fecha_factura: '2024-01-01', valor_factura: 0 }
+      body: { num_factura: 1001, cliente_id: 1, fecha_factura: '2024-01-01', valor_factura: 0 },
     });
     const res = mockRes();
     await createFactura(req, res);
@@ -203,9 +210,13 @@ describe('createFactura', () => {
   test('rechaza si incluye_retencion_iva=true pero incluye_iva=false', async () => {
     const req = mockReq({
       body: {
-        num_factura: 1001, cliente_id: 1, fecha_factura: '2024-01-01',
-        valor_factura: 1000, incluye_iva: false, incluye_retencion_iva: true
-      }
+        num_factura: 1001,
+        cliente_id: 1,
+        fecha_factura: '2024-01-01',
+        valor_factura: 1000,
+        incluye_iva: false,
+        incluye_retencion_iva: true,
+      },
     });
     const res = mockRes();
     await createFactura(req, res);
@@ -216,19 +227,30 @@ describe('createFactura', () => {
     db.query
       .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
       .mockResolvedValueOnce({
-        rows: [{
-          num_factura: 1001, cliente_id: 1, fecha_factura: '2024-01-01',
-          valor_factura: 5000, incluye_iva: true, incluye_retencion_fuente: true,
-          incluye_retencion_iva: true, cancelada: false
-        }]
+        rows: [
+          {
+            num_factura: 1001,
+            cliente_id: 1,
+            fecha_factura: '2024-01-01',
+            valor_factura: 5000,
+            incluye_iva: true,
+            incluye_retencion_fuente: true,
+            incluye_retencion_iva: true,
+            cancelada: false,
+          },
+        ],
       });
 
     const req = mockReq({
       body: {
-        num_factura: 1001, cliente_id: 1, fecha_factura: '2024-01-01',
-        valor_factura: 5000, incluye_iva: true, incluye_retencion_fuente: true,
-        incluye_retencion_iva: true
-      }
+        num_factura: 1001,
+        cliente_id: 1,
+        fecha_factura: '2024-01-01',
+        valor_factura: 5000,
+        incluye_iva: true,
+        incluye_retencion_fuente: true,
+        incluye_retencion_iva: true,
+      },
     });
     const res = mockRes();
     await createFactura(req, res);
@@ -265,7 +287,7 @@ describe('cancelFactura', () => {
 
     const req = mockReq({
       params: { num_factura: '9999' },
-      body: { detalle_anulacion: 'Error de prueba' }
+      body: { detalle_anulacion: 'Error de prueba' },
     });
     const res = mockRes();
     await cancelFactura(req, res);
@@ -276,7 +298,7 @@ describe('cancelFactura', () => {
   test('rechaza si falta detalle_anulacion', async () => {
     const req = mockReq({
       params: { num_factura: '1001' },
-      body: {}
+      body: {},
     });
     const res = mockRes();
     await cancelFactura(req, res);
@@ -293,12 +315,12 @@ describe('updateFactura', () => {
   test('rechaza editar una factura anulada', async () => {
     db.query.mockResolvedValueOnce({
       rowCount: 1,
-      rows: [{ num_factura: 1001, cancelada: true, cliente_id: 1, valor_factura: 5000 }]
+      rows: [{ num_factura: 1001, cancelada: true, cliente_id: 1, valor_factura: 5000 }],
     });
 
     const req = mockReq({
       params: { num_factura: '1001' },
-      body: { cliente_id: 1, fecha_factura: '2024-01-01', valor_factura: 6000 }
+      body: { cliente_id: 1, fecha_factura: '2024-01-01', valor_factura: 6000 },
     });
     const res = mockRes();
     await updateFactura(req, res);
@@ -314,7 +336,7 @@ describe('updateFactura', () => {
 
     const req = mockReq({
       params: { num_factura: '9999' },
-      body: { cliente_id: 1, fecha_factura: '2024-01-01', valor_factura: 5000 }
+      body: { cliente_id: 1, fecha_factura: '2024-01-01', valor_factura: 5000 },
     });
     const res = mockRes();
     await updateFactura(req, res);
@@ -326,22 +348,41 @@ describe('updateFactura', () => {
     db.query
       .mockResolvedValueOnce({
         rowCount: 1,
-        rows: [{ num_factura: 1001, cancelada: false, cliente_id: 1, fecha_factura: '2024-01-01', valor_factura: 5000, incluye_iva: false, incluye_retencion_fuente: false, incluye_retencion_iva: false }]
+        rows: [
+          {
+            num_factura: 1001,
+            cancelada: false,
+            cliente_id: 1,
+            fecha_factura: '2024-01-01',
+            valor_factura: 5000,
+            incluye_iva: false,
+            incluye_retencion_fuente: false,
+            incluye_retencion_iva: false,
+          },
+        ],
       })
       .mockResolvedValueOnce({
-        rows: [{ num_factura: 1001, cliente_id: 1, fecha_factura: '2024-06-01', valor_factura: 6000, incluye_iva: false, incluye_retencion_fuente: false, incluye_retencion_iva: false }]
+        rows: [
+          {
+            num_factura: 1001,
+            cliente_id: 1,
+            fecha_factura: '2024-06-01',
+            valor_factura: 6000,
+            incluye_iva: false,
+            incluye_retencion_fuente: false,
+            incluye_retencion_iva: false,
+          },
+        ],
       });
 
     const req = mockReq({
       params: { num_factura: '1001' },
-      body: { cliente_id: 1, fecha_factura: '2024-06-01', valor_factura: 6000 }
+      body: { cliente_id: 1, fecha_factura: '2024-06-01', valor_factura: 6000 },
     });
     const res = mockRes();
     await updateFactura(req, res);
 
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 });
 
@@ -363,15 +404,16 @@ describe('deleteAbono', () => {
   test('elimina el abono y el pago si no quedan más abonos', async () => {
     db.query.mockResolvedValueOnce({
       rowCount: 1,
-      rows: [{ id: 5, pago_id: 10, num_factura: 1001, valor_abono: 200 }]
+      rows: [{ id: 5, pago_id: 10, num_factura: 1001, valor_abono: 200 }],
     });
 
     db.transaction.mockImplementation(async (callback) => {
       const fakeClient = {
-        query: jest.fn()
+        query: jest
+          .fn()
           .mockResolvedValueOnce({ rows: [] }) // DELETE abono
           .mockResolvedValueOnce({ rows: [{ cnt: '0' }] }) // COUNT remaining
-          .mockResolvedValueOnce({ rows: [] }) // DELETE pago
+          .mockResolvedValueOnce({ rows: [] }), // DELETE pago
       };
       await callback(fakeClient);
     });
@@ -380,8 +422,6 @@ describe('deleteAbono', () => {
     const res = mockRes();
     await deleteAbono(req, res);
 
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true })
-    );
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 });

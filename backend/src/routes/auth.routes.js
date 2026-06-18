@@ -4,6 +4,8 @@ const rateLimit = require('express-rate-limit');
 const authController = require('../controllers/authController');
 const { verifyToken } = require('../middleware/auth');
 const { requireActive } = require('../middleware/permissions');
+const { validateRequest } = require('../middleware/validation');
+const { loginSchema, changePasswordSchema } = require('../utils/validationSchemas');
 const config = require('../config/config');
 
 const loginLimiter = rateLimit({
@@ -14,9 +16,9 @@ const loginLimiter = rateLimit({
   handler: (req, res) => {
     res.status(429).json({
       success: false,
-      message: 'Demasiados intentos de login. Intenta nuevamente en unos minutos.'
+      message: 'Demasiados intentos de login. Intenta nuevamente en unos minutos.',
     });
-  }
+  },
 });
 
 /**
@@ -24,14 +26,20 @@ const loginLimiter = rateLimit({
  * @desc    Login de usuario
  * @access  Public
  */
-router.post('/login', loginLimiter, authController.login);
+router.post('/login', loginLimiter, validateRequest(loginSchema), authController.login);
 
 /**
  * @route   POST /api/auth/change-password
  * @desc    Cambiar contraseña (obligatorio en primer login)
  * @access  Private
  */
-router.post('/change-password', verifyToken, requireActive, authController.changePassword);
+router.post(
+  '/change-password',
+  verifyToken,
+  requireActive,
+  validateRequest(changePasswordSchema),
+  authController.changePassword
+);
 
 /**
  * @route   GET /api/auth/verify

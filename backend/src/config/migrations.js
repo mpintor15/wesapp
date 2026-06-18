@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const db = require('./database');
+const logger = require('./logger');
 
 const MIGRATIONS_DIR = path.resolve(__dirname, '../../../database/migrations');
 const MIGRATION_FILE_PATTERN = /^(\d+)_.*\.sql$/;
@@ -35,10 +36,12 @@ const runMigrations = async () => {
     const migrations = await listMigrations();
 
     for (const migration of migrations) {
-      if (appliedVersions.has(migration.version)) continue;
+      if (appliedVersions.has(migration.version)) {
+        continue;
+      }
 
       const sql = await fs.readFile(path.join(MIGRATIONS_DIR, migration.fileName), 'utf8');
-      console.log(`Aplicando migración ${migration.fileName}...`);
+      logger.info(`Aplicando migración ${migration.fileName}...`);
 
       try {
         await client.query('BEGIN');
@@ -57,7 +60,7 @@ const runMigrations = async () => {
       }
 
       appliedVersions.add(migration.version);
-      console.log(`Migración ${migration.fileName} aplicada`);
+      logger.info(`Migración ${migration.fileName} aplicada`);
     }
   } finally {
     try {

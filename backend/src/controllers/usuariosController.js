@@ -9,18 +9,20 @@ const ALLOWED_TYPES = new Set(['gerente', 'secretario', 'supervisor', 'contador'
 const ROLE_GERENTE = 'gerente';
 
 const generateTempPassword = () => {
-  const upper  = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lower  = 'abcdefghjkmnpqrstuvwxyz';
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghjkmnpqrstuvwxyz';
   const digits = '23456789';
-  const all    = upper + lower + digits;
-  const buf    = crypto.randomBytes(16);
+  const all = upper + lower + digits;
+  const buf = crypto.randomBytes(16);
 
   const chars = [
-    upper [buf[0] % upper.length],
-    lower [buf[1] % lower.length],
+    upper[buf[0] % upper.length],
+    lower[buf[1] % lower.length],
     digits[buf[2] % digits.length],
   ];
-  for (let i = 3; i < 10; i++) chars.push(all[buf[i] % all.length]);
+  for (let i = 3; i < 10; i++) {
+    chars.push(all[buf[i] % all.length]);
+  }
 
   for (let i = chars.length - 1; i > 0; i--) {
     const j = buf[i] % (i + 1);
@@ -61,7 +63,9 @@ const getUsuarios = async (req, res) => {
 
     if (search) {
       params.push(`%${search}%`);
-      conditions.push(`(usuario ILIKE $${params.length} OR nombre ILIKE $${params.length} OR apellido ILIKE $${params.length})`);
+      conditions.push(
+        `(usuario ILIKE $${params.length} OR nombre ILIKE $${params.length} OR apellido ILIKE $${params.length})`
+      );
     }
 
     if (tipo_usuario) {
@@ -73,14 +77,21 @@ const getUsuarios = async (req, res) => {
       conditions.push(`tipo_usuario = $${params.length}`);
     }
 
-    if (activo === 'true' || activo === 'false') {
+    if (activo === 'pendiente' || activo === 'pending') {
+      conditions.push('primer_login = TRUE');
+    } else if (activo === 'true') {
+      params.push(true);
+      conditions.push(`activo = $${params.length} AND primer_login = FALSE`);
+    } else if (activo === 'false') {
       params.push(activo === 'true');
       conditions.push(`activo = $${params.length}`);
     } else if (activo !== undefined) {
-      throw createHttpError(400, 'Filtro activo inválido. Usa true o false');
+      throw createHttpError(400, 'Filtro activo inválido. Usa true, false o pendiente');
     }
 
-    if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
     query += ' ORDER BY apellido ASC, nombre ASC, usuario ASC';
 
     const result = await db.query(query, params);
@@ -92,15 +103,16 @@ const getUsuarios = async (req, res) => {
 
 const createUsuario = async (req, res) => {
   try {
-    const usuario     = typeof req.body?.usuario     === 'string' ? req.body.usuario.trim()     : '';
-    const nombre      = typeof req.body?.nombre      === 'string' ? req.body.nombre.trim()      : '';
-    const apellido    = typeof req.body?.apellido    === 'string' ? req.body.apellido.trim()    : '';
-    const tipoUsuario = typeof req.body?.tipo_usuario === 'string' ? req.body.tipo_usuario.trim().toLowerCase() : '';
+    const usuario = typeof req.body?.usuario === 'string' ? req.body.usuario.trim() : '';
+    const nombre = typeof req.body?.nombre === 'string' ? req.body.nombre.trim() : '';
+    const apellido = typeof req.body?.apellido === 'string' ? req.body.apellido.trim() : '';
+    const tipoUsuario =
+      typeof req.body?.tipo_usuario === 'string' ? req.body.tipo_usuario.trim().toLowerCase() : '';
 
     if (!usuario || !tipoUsuario || !nombre || !apellido) {
       return res.status(400).json({
         success: false,
-        message: 'Usuario, nombre, apellido y tipo de usuario son requeridos'
+        message: 'Usuario, nombre, apellido y tipo de usuario son requeridos',
       });
     }
 
@@ -108,7 +120,7 @@ const createUsuario = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Tipo de usuario inválido' });
     }
 
-    const tempPassword  = generateTempPassword();
+    const tempPassword = generateTempPassword();
     const password_hash = await bcrypt.hash(tempPassword, 10);
 
     const result = await db.query(
@@ -123,13 +135,13 @@ const createUsuario = async (req, res) => {
       operacion: 'INSERT',
       registro_id: String(result.rows[0].id),
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     res.status(201).json({
       success: true,
       message: 'Usuario creado exitosamente',
-      data: { ...result.rows[0], temp_password: tempPassword }
+      data: { ...result.rows[0], temp_password: tempPassword },
     });
   } catch (error) {
     if (error.code === '23505') {
@@ -141,42 +153,65 @@ const createUsuario = async (req, res) => {
 
 const buildUpdateFields = (body, currentUserId, targetId) => {
   const updates = [];
-  const values  = [];
+  const values = [];
 
-  const tipoUsuario = typeof body?.tipo_usuario === 'string' ? body.tipo_usuario.trim().toLowerCase() : null;
-  const nombre      = typeof body?.nombre       === 'string' ? body.nombre.trim()   : null;
-  const apellido    = typeof body?.apellido     === 'string' ? body.apellido.trim() : null;
-  const { activo }  = body ?? {};
+  const tipoUsuario =
+    typeof body?.tipo_usuario === 'string' ? body.tipo_usuario.trim().toLowerCase() : null;
+  const nombre = typeof body?.nombre === 'string' ? body.nombre.trim() : null;
+  const apellido = typeof body?.apellido === 'string' ? body.apellido.trim() : null;
+  const { activo } = body ?? {};
 
   if (tipoUsuario) {
-    if (!ALLOWED_TYPES.has(tipoUsuario)) throw createHttpError(400, 'Tipo de usuario inválido');
-    updates.push(`tipo_usuario = $${values.length + 1}`); values.push(tipoUsuario);
+    if (!ALLOWED_TYPES.has(tipoUsuario)) {
+      throw createHttpError(400, 'Tipo de usuario inválido');
+    }
+    updates.push(`tipo_usuario = $${values.length + 1}`);
+    values.push(tipoUsuario);
   }
-  if (nombre)   { updates.push(`nombre = $${values.length + 1}`);   values.push(nombre); }
-  if (apellido) { updates.push(`apellido = $${values.length + 1}`); values.push(apellido); }
+  if (nombre) {
+    updates.push(`nombre = $${values.length + 1}`);
+    values.push(nombre);
+  }
+  if (apellido) {
+    updates.push(`apellido = $${values.length + 1}`);
+    values.push(apellido);
+  }
 
   if (typeof activo === 'boolean') {
-    if (Number(currentUserId) === targetId && !activo) throw createHttpError(400, 'No puedes desactivar tu propio usuario');
-    updates.push(`activo = $${values.length + 1}`); values.push(activo);
+    if (Number(currentUserId) === targetId && !activo) {
+      throw createHttpError(400, 'No puedes desactivar tu propio usuario');
+    }
+    updates.push(`activo = $${values.length + 1}`);
+    values.push(activo);
   }
 
   return { updates, values, tipoUsuario, activo };
 };
 
 const assertGerenteNotLastActive = async (currentUser, nextTipo, nextActivo) => {
-  if (currentUser.tipo_usuario !== ROLE_GERENTE) return;
-  if (nextActivo && nextTipo === ROLE_GERENTE) return;
+  if (currentUser.tipo_usuario !== ROLE_GERENTE) {
+    return;
+  }
+  if (nextActivo && nextTipo === ROLE_GERENTE) {
+    return;
+  }
   const count = await getActiveGerentesCount();
-  if (count <= 1) throw createHttpError(400, 'Debe existir al menos un gerente activo en el sistema');
+  if (count <= 1) {
+    throw createHttpError(400, 'Debe existir al menos un gerente activo en el sistema');
+  }
 };
 
 const updateUsuario = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) throw createHttpError(400, 'El id de usuario es inválido');
+    if (!Number.isInteger(id) || id <= 0) {
+      throw createHttpError(400, 'El id de usuario es inválido');
+    }
 
     const currentUser = await getUsuarioSummaryById(id);
-    if (!currentUser) throw createHttpError(404, 'Usuario no encontrado');
+    if (!currentUser) {
+      throw createHttpError(404, 'Usuario no encontrado');
+    }
 
     const { updates, values, tipoUsuario, activo } = buildUpdateFields(req.body, req.user?.id, id);
 
@@ -184,7 +219,7 @@ const updateUsuario = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No hay campos para actualizar' });
     }
 
-    const nextTipo   = tipoUsuario || currentUser.tipo_usuario;
+    const nextTipo = tipoUsuario || currentUser.tipo_usuario;
     const nextActivo = typeof activo === 'boolean' ? activo : currentUser.activo;
     await assertGerenteNotLastActive(currentUser, nextTipo, nextActivo);
 
@@ -202,7 +237,7 @@ const updateUsuario = async (req, res) => {
       registro_id: String(id),
       datos_anteriores: currentUser,
       datos_nuevos: result.rows[0],
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     clearActiveCache(id);
@@ -212,15 +247,72 @@ const updateUsuario = async (req, res) => {
   }
 };
 
+const reenviarInvitacion = async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      throw createHttpError(400, 'El id de usuario es inválido');
+    }
+
+    const currentUser = await db.query(
+      `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo
+       FROM usuarios
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+    const user = currentUser.rows[0];
+    if (!user) {
+      throw createHttpError(404, 'Usuario no encontrado');
+    }
+    if (!user.primer_login) {
+      throw createHttpError(400, 'Este usuario ya completó su primer acceso');
+    }
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    const result = await db.query(
+      `UPDATE usuarios
+       SET password_hash = $1, primer_login = TRUE
+       WHERE id = $2
+       RETURNING id, usuario, nombre, apellido, tipo_usuario, primer_login, activo`,
+      [passwordHash, id]
+    );
+
+    await logAudit(db, {
+      tabla: 'usuarios',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_anteriores: user,
+      datos_nuevos: { ...result.rows[0], invitacion_reenviada: true },
+      ...auditFromReq(req),
+    });
+
+    res.json({
+      success: true,
+      message: 'Invitación regenerada exitosamente',
+      data: { ...result.rows[0], temp_password: tempPassword },
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al reenviar invitación:');
+  }
+};
+
 const deleteUsuario = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) throw createHttpError(400, 'El id de usuario es inválido');
+    if (!Number.isInteger(id) || id <= 0) {
+      throw createHttpError(400, 'El id de usuario es inválido');
+    }
 
-    if (Number(req.user?.id) === id) throw createHttpError(400, 'No puedes eliminar tu propio usuario');
+    if (Number(req.user?.id) === id) {
+      throw createHttpError(400, 'No puedes eliminar tu propio usuario');
+    }
 
     const userToDelete = await getUsuarioSummaryById(id);
-    if (!userToDelete) throw createHttpError(404, 'Usuario no encontrado');
+    if (!userToDelete) {
+      throw createHttpError(404, 'Usuario no encontrado');
+    }
 
     if (userToDelete.tipo_usuario === ROLE_GERENTE && userToDelete.activo) {
       const activeGerentesCount = await getActiveGerentesCount();
@@ -230,14 +322,16 @@ const deleteUsuario = async (req, res) => {
     }
 
     const result = await db.query('DELETE FROM usuarios WHERE id = $1 RETURNING id', [id]);
-    if (result.rowCount === 0) throw createHttpError(404, 'Usuario no encontrado');
+    if (result.rowCount === 0) {
+      throw createHttpError(404, 'Usuario no encontrado');
+    }
 
     await logAudit(db, {
       tabla: 'usuarios',
       operacion: 'DELETE',
       registro_id: String(id),
       datos_anteriores: userToDelete,
-      ...auditFromReq(req)
+      ...auditFromReq(req),
     });
 
     clearActiveCache(id);
@@ -247,4 +341,4 @@ const deleteUsuario = async (req, res) => {
   }
 };
 
-module.exports = { getUsuarios, createUsuario, updateUsuario, deleteUsuario };
+module.exports = { getUsuarios, createUsuario, updateUsuario, reenviarInvitacion, deleteUsuario };

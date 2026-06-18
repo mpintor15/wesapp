@@ -3,6 +3,14 @@ const router = express.Router();
 const cuentasController = require('../controllers/cuentasController');
 const { verifyToken } = require('../middleware/auth');
 const { requireActive, requirePermission, requireRole } = require('../middleware/permissions');
+const { validateRequest } = require('../middleware/validation');
+const {
+  clienteCreateSchema,
+  facturaCreateSchema,
+  facturaUpdateSchema,
+  facturaCancelSchema,
+  pagoCreateSchema,
+} = require('../utils/validationSchemas');
 
 // All routes require authentication + cuentas permission
 router.use(verifyToken, requireActive, requirePermission('cuentas'));
@@ -30,7 +38,7 @@ router.get('/clientes/excel', requirePermission('exportar'), cuentasController.e
  * @desc    Crear un cliente
  * @access  Private (cuentas)
  */
-router.post('/clientes', cuentasController.createCliente);
+router.post('/clientes', validateRequest(clienteCreateSchema), cuentasController.createCliente);
 
 /**
  * @route   DELETE /api/cuentas/clientes/:id
@@ -55,14 +63,24 @@ router.get('/facturas/next-number', requireRole('gerente'), cuentasController.ge
  * @desc    Crear una factura
  * @access  Private (gerente)
  */
-router.post('/facturas', requireRole('gerente'), cuentasController.createFactura);
+router.post(
+  '/facturas',
+  requireRole('gerente'),
+  validateRequest(facturaCreateSchema),
+  cuentasController.createFactura
+);
 
 /**
  * @route   PATCH /api/cuentas/facturas/:num_factura
  * @desc    Editar una factura (gerente only)
  * @access  Private (gerente)
  */
-router.patch('/facturas/:num_factura', requireRole('gerente'), cuentasController.updateFactura);
+router.patch(
+  '/facturas/:num_factura',
+  requireRole('gerente'),
+  validateRequest(facturaUpdateSchema),
+  cuentasController.updateFactura
+);
 
 /**
  * @route   DELETE /api/cuentas/facturas/:num_factura
@@ -76,7 +94,12 @@ router.delete('/facturas/:num_factura', requireRole('gerente'), cuentasControlle
  * @desc    Cancelar una factura (mantiene histórico pero no cuenta en totales)
  * @access  Private (gerente)
  */
-router.patch('/facturas/:num_factura/cancelar', requireRole('gerente'), cuentasController.cancelFactura);
+router.patch(
+  '/facturas/:num_factura/cancelar',
+  requireRole('gerente'),
+  validateRequest(facturaCancelSchema),
+  cuentasController.cancelFactura
+);
 
 // ============================================
 // ABONOS
@@ -115,7 +138,7 @@ router.get('/abonos/:num_factura', cuentasController.getAbonosByFactura);
  * @desc    Registrar múltiples abonos en una transacción (pago por cliente)
  * @access  Private (cuentas)
  */
-router.post('/abonos/batch', cuentasController.createBatchAbono);
+router.post('/abonos/batch', validateRequest(pagoCreateSchema), cuentasController.createBatchAbono);
 
 /**
  * @route   DELETE /api/cuentas/abonos/:id
@@ -123,7 +146,6 @@ router.post('/abonos/batch', cuentasController.createBatchAbono);
  * @access  Private (gerente)
  */
 router.delete('/abonos/:id', requireRole('gerente'), cuentasController.deleteAbono);
-
 
 // ============================================
 // REPORTE

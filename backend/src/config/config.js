@@ -21,7 +21,7 @@ const dotenv = require('dotenv');
 
 const envTarget = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 dotenv.config({
-  path: path.resolve(__dirname, `../../.env.${envTarget}`)
+  path: path.resolve(__dirname, `../../.env.${envTarget}`),
 });
 
 const nodeEnv = process.env.NODE_ENV || 'development';
@@ -53,8 +53,12 @@ const parseCorsOrigin = (value) => {
     };
   }
 
-  if (!value) return '*';
-  if (value === '*') return '*';
+  if (!value) {
+    return '*';
+  }
+  if (value === '*') {
+    return '*';
+  }
 
   const origins = value
     .split(',')
@@ -92,19 +96,19 @@ module.exports = {
   // Configuración del servidor
   port: process.env.PORT || 3000,
   nodeEnv,
-  
+
   // Configuración de JWT
   jwt: {
     secret: process.env.JWT_SECRET || 'default_secret_change_this',
     expiration: process.env.JWT_EXPIRATION || '24h',
   },
-  
+
   // Configuración de CORS
   cors: {
     origin: parseCorsOrigin(process.env.CORS_ORIGIN),
     credentials: true,
   },
-  
+
   // Configuración de base de datos
   database: {
     host: process.env.DB_HOST,
@@ -113,28 +117,28 @@ module.exports = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
   },
-  
+
   // Configuración de permisos por tipo de usuario
   permissions: {
     gerente: [
-      'cuentas', 
-      'inventario', 
-      'personal', 
-      'usuarios', 
-      'crear_articulo', 
-      'eliminar_articulo', 
+      'cuentas',
+      'inventario',
+      'personal',
+      'usuarios',
+      'crear_articulo',
+      'eliminar_articulo',
       'dar_baja_articulo',
-      'crear_movimiento', 
-      'exportar'
+      'crear_movimiento',
+      'exportar',
     ],
     secretario: [
-      'cuentas', 
-      'inventario', 
-      'personal', 
-      'crear_articulo', 
+      'cuentas',
+      'inventario',
+      'personal',
+      'crear_articulo',
       'dar_baja_articulo',
-      'crear_movimiento', 
-      'exportar'
+      'crear_movimiento',
+      'exportar',
     ],
     supervisor: [
       'inventario',
@@ -142,11 +146,8 @@ module.exports = {
       'crear_articulo',
       'dar_baja_articulo',
       'crear_movimiento',
-      'exportar'
+      'exportar',
     ],
-    contador: [
-      'cuentas',
-      'exportar'
-    ]
-  }
+    contador: ['cuentas', 'exportar'],
+  },
 };

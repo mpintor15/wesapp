@@ -20,7 +20,7 @@ const verifyToken = (req, res, next) => {
   if (scheme !== 'Bearer' || !token) {
     return res.status(401).json({
       success: false,
-      message: 'Token no proporcionado'
+      message: 'Token no proporcionado',
     });
   }
 
@@ -32,13 +32,13 @@ const verifyToken = (req, res, next) => {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({
         success: false,
-        message: 'Token expirado'
+        message: 'Token expirado',
       });
     }
 
     return res.status(401).json({
       success: false,
-      message: 'Token inválido'
+      message: 'Token inválido',
     });
   }
 };

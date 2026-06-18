@@ -3,6 +3,13 @@ const router = express.Router();
 const inventarioController = require('../controllers/inventarioController');
 const { verifyToken } = require('../middleware/auth');
 const { requireActive, requirePermission, requireRole } = require('../middleware/permissions');
+const { validateRequest } = require('../middleware/validation');
+const {
+  articuloCreateSchema,
+  articuloUpdateSchema,
+  articuloBajaSchema,
+  movimientoCreateSchema,
+} = require('../utils/validationSchemas');
 
 // All routes require authentication + inventario permission
 router.use(verifyToken, requireActive, requirePermission('inventario'));
@@ -66,6 +73,7 @@ router.get(
 router.post(
   '/articulos',
   requirePermission('crear_articulo'),
+  validateRequest(articuloCreateSchema),
   inventarioController.createArticulo
 );
 
@@ -77,6 +85,7 @@ router.post(
 router.put(
   '/articulos/:id',
   requirePermission('crear_articulo'),
+  validateRequest(articuloUpdateSchema),
   inventarioController.updateArticulo
 );
 
@@ -88,6 +97,7 @@ router.put(
 router.post(
   '/articulos/:id/baja',
   requirePermission('dar_baja_articulo'),
+  validateRequest(articuloBajaSchema),
   inventarioController.darBajaArticulo
 );
 
@@ -140,6 +150,7 @@ router.get('/movimientos/:id/pdf', inventarioController.downloadMovimientoPdf);
 router.post(
   '/movimientos',
   requirePermission('crear_movimiento'),
+  validateRequest(movimientoCreateSchema),
   inventarioController.createMovimiento
 );
 
