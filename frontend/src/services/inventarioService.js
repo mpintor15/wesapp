@@ -29,7 +29,7 @@ import api from './api';
 import {
   extractError,
   getFilenameFromDisposition,
-  saveBlobWithPickerOrDownload
+  saveBlobWithPickerOrDownload,
 } from './serviceUtils';
 
 const inventarioService = {
@@ -38,12 +38,12 @@ const inventarioService = {
       const response = await api.get('/inventario/ubicaciones');
       return {
         success: response.data.success,
-        data: response.data.data || []
+        data: response.data.data || [],
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al obtener ubicaciones')
+        message: extractError(error, 'Error al obtener ubicaciones'),
       };
     }
   },
@@ -53,12 +53,12 @@ const inventarioService = {
       const response = await api.get('/inventario/articulos', { params });
       return {
         success: response.data.success,
-        data: response.data.data || []
+        data: response.data.data || [],
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al obtener articulos')
+        message: extractError(error, 'Error al obtener articulos'),
       };
     }
   },
@@ -69,12 +69,12 @@ const inventarioService = {
       return {
         success: response.data.success,
         message: response.data.message,
-        data: response.data.data
+        data: response.data.data,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al crear artículo')
+        message: extractError(error, 'Error al crear artículo'),
       };
     }
   },
@@ -84,12 +84,12 @@ const inventarioService = {
       const response = await api.get('/inventario/articulos/bajas', { params });
       return {
         success: response.data.success,
-        data: response.data.data || []
+        data: response.data.data || [],
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al obtener artículos dados de baja')
+        message: extractError(error, 'Error al obtener artículos dados de baja'),
       };
     }
   },
@@ -99,12 +99,12 @@ const inventarioService = {
       const response = await api.post(`/inventario/articulos/${id}/baja`, data);
       return {
         success: response.data.success,
-        message: response.data.message
+        message: response.data.message,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al dar de baja artículo')
+        message: extractError(error, 'Error al dar de baja artículo'),
       };
     }
   },
@@ -115,12 +115,12 @@ const inventarioService = {
       return {
         success: response.data.success,
         message: response.data.message,
-        data: response.data.data
+        data: response.data.data,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al actualizar artículo')
+        message: extractError(error, 'Error al actualizar artículo'),
       };
     }
   },
@@ -128,16 +128,16 @@ const inventarioService = {
   deleteArticulo: async (id, cantidad = null) => {
     try {
       const response = await api.delete(`/inventario/articulos/${id}`, {
-        params: cantidad ? { cantidad } : {}
+        params: cantidad ? { cantidad } : {},
       });
       return {
         success: response.data.success,
-        message: response.data.message
+        message: response.data.message,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al eliminar artículo')
+        message: extractError(error, 'Error al eliminar artículo'),
       };
     }
   },
@@ -147,12 +147,12 @@ const inventarioService = {
       const response = await api.get('/inventario/movimientos');
       return {
         success: response.data.success,
-        data: response.data.data || []
+        data: response.data.data || [],
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al obtener movimientos')
+        message: extractError(error, 'Error al obtener movimientos'),
       };
     }
   },
@@ -163,12 +163,12 @@ const inventarioService = {
       return {
         success: response.data.success,
         message: response.data.message,
-        data: response.data.data
+        data: response.data.data,
       };
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al crear movimiento')
+        message: extractError(error, 'Error al crear movimiento'),
       };
     }
   },
@@ -176,7 +176,7 @@ const inventarioService = {
   downloadMovimientoPdf: async (id) => {
     try {
       const response = await api.get(`/inventario/movimientos/${id}/pdf`, {
-        responseType: 'blob'
+        responseType: 'blob',
       });
       const fileName = getFilenameFromDisposition(
         response.headers?.['content-disposition'],
@@ -184,12 +184,26 @@ const inventarioService = {
       );
       return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
         description: 'PDF',
-        accept: { 'application/pdf': ['.pdf'] }
+        accept: { 'application/pdf': ['.pdf'] },
       });
     } catch (error) {
+      let message = 'Error al descargar PDF';
+      const data = error?.response?.data;
+      if (data instanceof Blob) {
+        let text = '';
+        try {
+          text = await data.text();
+          const parsed = JSON.parse(text);
+          message = parsed?.message || message;
+        } catch {
+          message = text || message;
+        }
+      } else {
+        message = extractError(error, message);
+      }
       return {
         success: false,
-        message: extractError(error, 'Error al descargar PDF')
+        message,
       };
     }
   },
@@ -198,7 +212,7 @@ const inventarioService = {
     try {
       const response = await api.get('/inventario/articulos/excel', {
         params,
-        responseType: 'blob'
+        responseType: 'blob',
       });
       const fileName = getFilenameFromDisposition(
         response.headers?.['content-disposition'],
@@ -206,12 +220,12 @@ const inventarioService = {
       );
       return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
         description: 'Excel',
-        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al exportar Excel')
+        message: extractError(error, 'Error al exportar Excel'),
       };
     }
   },
@@ -220,7 +234,7 @@ const inventarioService = {
     try {
       const response = await api.get('/inventario/articulos/bajas/excel', {
         params,
-        responseType: 'blob'
+        responseType: 'blob',
       });
       const fileName = getFilenameFromDisposition(
         response.headers?.['content-disposition'],
@@ -228,12 +242,12 @@ const inventarioService = {
       );
       return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
         description: 'Excel',
-        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al exportar bajas')
+        message: extractError(error, 'Error al exportar bajas'),
       };
     }
   },
@@ -242,7 +256,7 @@ const inventarioService = {
     try {
       const response = await api.get('/inventario/movimientos/excel', {
         params,
-        responseType: 'blob'
+        responseType: 'blob',
       });
       const fileName = getFilenameFromDisposition(
         response.headers?.['content-disposition'],
@@ -250,15 +264,15 @@ const inventarioService = {
       );
       return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
         description: 'Excel',
-        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
       return {
         success: false,
-        message: extractError(error, 'Error al exportar movimientos')
+        message: extractError(error, 'Error al exportar movimientos'),
       };
     }
-  }
+  },
 };
 
 export default inventarioService;

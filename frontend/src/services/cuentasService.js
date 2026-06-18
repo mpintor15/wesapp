@@ -58,7 +58,7 @@ const cuentasService = {
       );
       return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
         description: 'Excel',
-        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al exportar clientes') };
@@ -68,7 +68,11 @@ const cuentasService = {
   createCliente: async (nombre, identificacion) => {
     try {
       const response = await api.post('/cuentas/clientes', { nombre, identificacion });
-      return { success: response.data.success, message: response.data.message, data: response.data.data };
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al crear cliente') };
     }
@@ -90,7 +94,11 @@ const cuentasService = {
   createFactura: async (data) => {
     try {
       const response = await api.post('/cuentas/facturas', data);
-      return { success: response.data.success, message: response.data.message, data: response.data.data };
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al crear factura') };
     }
@@ -108,7 +116,11 @@ const cuentasService = {
   cancelFactura: async (num_factura, data) => {
     try {
       const response = await api.patch(`/cuentas/facturas/${num_factura}/cancelar`, data);
-      return { success: response.data.success, message: response.data.message, data: response.data.data };
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al cancelar factura') };
     }
@@ -126,7 +138,11 @@ const cuentasService = {
   updateFactura: async (num_factura, data) => {
     try {
       const response = await api.patch(`/cuentas/facturas/${num_factura}`, data);
-      return { success: response.data.success, message: response.data.message, data: response.data.data };
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al actualizar factura') };
     }
@@ -163,7 +179,7 @@ const cuentasService = {
       );
       return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
         description: 'Excel',
-        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al exportar pagos') };
@@ -219,12 +235,12 @@ const cuentasService = {
       );
       return await saveBlobWithPickerOrDownload(new Blob([response.data]), fileName, {
         description: 'Excel',
-        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] }
+        accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
       return { success: false, message: extractError(error, 'Error al exportar Excel') };
     }
-  }
+  },
 };
 
 export default cuentasService;
