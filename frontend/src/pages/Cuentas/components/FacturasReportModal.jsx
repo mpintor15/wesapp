@@ -15,7 +15,7 @@ const FacturasReportModal = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal report-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Generar Reporte</h3>
+          <h3>Generar reporte de Facturas</h3>
           <button className="modal-close" onClick={onClose} type="button">
             ×
           </button>

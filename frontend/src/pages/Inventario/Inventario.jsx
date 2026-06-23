@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import inventarioService from '../../services/inventarioService';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
+import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ArticuloModal from './components/ArticuloModal';
 import ArticulosTab from './components/ArticulosTab';
 import BajaArticuloModal from './components/BajaArticuloModal';
@@ -51,6 +52,8 @@ import {
 import './Inventario.css';
 
 const Inventario = () => {
+  useScrollToTopOnMount();
+
   const navigate = useNavigate();
   const { hasPermission } = useAuth();
   const { showToast } = useToast();

@@ -44,6 +44,11 @@
   background: #fafafa;
 }
 
+.tab:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: -2px;
+}
+
 .tab.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
@@ -140,35 +145,7 @@
 }
 
 .inventario-movimientos-filter-card .ff-dates {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
   min-width: 308px;
-}
-
-.inventario-movimientos-filter-card .ff-date-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.inventario-movimientos-filter-card .ff-date-field input[type='date'] {
-  width: 150px;
-  min-height: 44px;
-  padding: 7px 9px;
-  border: 1.5px solid var(--color-border);
-  border-radius: 10px;
-  font-size: 0.86em;
-  font-family: inherit;
-  background: var(--color-bg);
-  color: var(--color-text);
-  box-sizing: border-box;
-}
-
-.inventario-movimientos-filter-card .ff-date-field input[type='date']:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .inventario-movimientos-filter-actions-card .ff-actions .btn,
@@ -198,35 +175,7 @@
 }
 
 .inventario-bajas-filter-card .ff-dates {
-  display: flex;
-  flex-direction: row;
-  gap: 8px;
   min-width: 308px;
-}
-
-.inventario-bajas-filter-card .ff-date-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.inventario-bajas-filter-card .ff-date-field input[type='date'] {
-  width: 150px;
-  min-height: 44px;
-  padding: 7px 9px;
-  border: 1.5px solid var(--color-border);
-  border-radius: 10px;
-  font-size: 0.86em;
-  font-family: inherit;
-  background: var(--color-bg);
-  color: var(--color-text);
-  box-sizing: border-box;
-}
-
-.inventario-bajas-filter-card .ff-date-field input[type='date']:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
 .inventario-bajas-filter-actions-card .ff-actions .btn,
@@ -1632,20 +1581,20 @@
   .inventario-articulos-filter-row,
   .inventario-movimientos-filter-row,
   .inventario-bajas-filter-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .inventario-articulos-filter-actions-card,
   .inventario-movimientos-filter-actions-card,
   .inventario-bajas-filter-actions-card {
-    justify-self: start;
+    justify-self: stretch;
   }
 
   .inventario-articulos-filter-actions-card .ff-actions,
   .inventario-movimientos-filter-actions-card .ff-actions,
   .inventario-bajas-filter-actions-card .ff-actions {
     flex-direction: row;
-    width: auto;
+    width: 100%;
   }
 
   .inventario-articulos-filter-actions-card .ff-actions .btn,
@@ -1654,9 +1603,9 @@
   .inventario-movimientos-filter-actions-card .ff-actions .ff-clear-btn,
   .inventario-bajas-filter-actions-card .ff-actions .btn,
   .inventario-bajas-filter-actions-card .ff-actions .ff-clear-btn {
-    flex: 0 0 auto;
-    max-width: 150px;
-    width: 150px;
+    flex: 1 1 0;
+    max-width: none;
+    width: auto;
   }
 }
 
@@ -1682,7 +1631,11 @@
 
 @media (max-width: 768px) {
   .inventario-container {
-    padding: 12px;
+    padding: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .inventario-articulos-filter-card .ff-controls {
@@ -1692,8 +1645,9 @@
 
   .inventario-articulos-filter-card .ff-search,
   .inventario-articulos-filter-card .ff-state {
-    flex: 1 1 100%;
+    flex: 0 0 auto;
     min-width: 0;
+    width: 100%;
   }
 
   .inventario-movimientos-filter-card .ff-controls {
@@ -1704,20 +1658,21 @@
   .inventario-movimientos-filter-card .ff-search,
   .inventario-movimientos-filter-card .movimientos-destino-filter,
   .inventario-movimientos-filter-card .ff-dates {
-    flex: 1 1 100%;
+    flex: 0 0 auto;
     min-width: 0;
-  }
-
-  .inventario-movimientos-filter-card .ff-dates {
-    flex-wrap: wrap;
+    width: 100%;
   }
 
   .inventario-movimientos-filter-card .ff-date-field {
-    flex: 1 1 140px;
+    flex: 0 0 auto;
+    width: 100%;
   }
 
   .inventario-movimientos-filter-card .ff-date-field input[type='date'] {
     width: 100%;
+    min-height: 32px;
+    padding-top: 5px;
+    padding-bottom: 5px;
   }
 
   .inventario-bajas-filter-card .ff-controls {
@@ -1727,20 +1682,21 @@
 
   .inventario-bajas-filter-card .ff-search,
   .inventario-bajas-filter-card .ff-dates {
-    flex: 1 1 100%;
+    flex: 0 0 auto;
     min-width: 0;
-  }
-
-  .inventario-bajas-filter-card .ff-dates {
-    flex-wrap: wrap;
+    width: 100%;
   }
 
   .inventario-bajas-filter-card .ff-date-field {
-    flex: 1 1 140px;
+    flex: 0 0 auto;
+    width: 100%;
   }
 
   .inventario-bajas-filter-card .ff-date-field input[type='date'] {
     width: 100%;
+    min-height: 32px;
+    padding-top: 5px;
+    padding-bottom: 5px;
   }
 
   .inventario-filters-row {
@@ -1791,7 +1747,10 @@
   }
 
   .tab-content {
-    padding: 16px;
+    padding: 14px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .inventario-container .app-table {
@@ -1825,12 +1784,126 @@
     display: none;
   }
 
+  .inventario-container .movimientos-table-shell,
+  .inventario-container .bajas-table-shell {
+    display: block;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .inventario-container .records-mobile {
     display: block;
   }
 }
 
 @media (max-width: 480px) {
+  .inventario-container {
+    padding: 8px;
+  }
+
+  .inventario-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-radius: 8px 8px 0 0;
+  }
+
+  .tab {
+    min-width: 0;
+    padding: 9px 4px;
+    font-size: 0.7em;
+    line-height: 1.15;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    flex-wrap: wrap;
+  }
+
+  .tab-badge {
+    margin-left: 0;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 0.64em;
+  }
+
+  .tab-content {
+    padding: 10px;
+  }
+
+  .inventario-articulos-filter-card .ff-state select {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .inventario-bajas-filter-row {
+    margin-bottom: 8px;
+  }
+
+  .inventario-bajas-filter-card .ff-controls {
+    gap: 4px;
+  }
+
+  .inventario-bajas-filter-card {
+    padding: 5px;
+  }
+
+  .inventario-bajas-filter-actions-card {
+    padding: 4px;
+  }
+
+  .inventario-bajas-filter-actions-card .ff-actions .btn,
+  .inventario-bajas-filter-actions-card .ff-actions .ff-clear-btn {
+    min-height: 30px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  .inventario-bajas-filter-card .ff-search input {
+    min-height: 30px;
+  }
+
+  .inventario-bajas-filter-card .ff-date-field input[type='date'] {
+    min-height: 32px;
+  }
+
+  .modal-overlay {
+    height: 100dvh;
+    align-items: flex-start;
+    overflow: hidden;
+    padding: max(10px, env(safe-area-inset-top, 0px)) 10px
+      max(10px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal {
+    max-height: calc(
+      100dvh - max(10px, env(safe-area-inset-top, 0px)) -
+        max(10px, env(safe-area-inset-bottom, 0px))
+    );
+  }
+
+  .modal-body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-movimiento .modal-buttons,
+  .export-modal-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .modal-movimiento .modal-buttons .btn,
+  .export-modal-actions .btn,
+  .export-modal-actions .btn-primary,
+  .export-modal-actions .btn-modal-clear {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
   .inventario-container .action-buttons {
     flex-direction: column;
     gap: 4px;

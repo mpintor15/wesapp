@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { resetViewportScroll } from '../../hooks/useScrollToTopOnMount';
 import wesLogo from '../../assets/icons/wes-logo.png';
 import './Login.css';
 
@@ -43,6 +44,16 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  const handleMobileInputFocus = (event) => {
+    if (!window.matchMedia('(max-width: 480px)').matches) return;
+
+    event.currentTarget.scrollIntoView({
+      block: 'center',
+      inline: 'nearest',
+      behavior: 'smooth',
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
@@ -58,6 +69,9 @@ const Login = () => {
       const result = await login(usuario, password);
 
       if (result.success) {
+        document.activeElement?.blur();
+        resetViewportScroll();
+
         if (result.data.user.primer_login) {
           navigate('/change-password');
         } else {
@@ -105,6 +119,7 @@ const Login = () => {
                 type="text"
                 id="usuario"
                 value={usuario}
+                onFocus={handleMobileInputFocus}
                 onChange={(e) => {
                   setUsuario(e.target.value);
                   if (error) setError('');
@@ -112,7 +127,6 @@ const Login = () => {
                 placeholder="Ingrese su usuario"
                 disabled={loading}
                 autoComplete="username"
-                autoFocus
               />
             </div>
           </div>
@@ -137,6 +151,7 @@ const Login = () => {
                 type={showPassword ? 'text' : 'password'}
                 id="password"
                 value={password}
+                onFocus={handleMobileInputFocus}
                 onChange={(e) => {
                   setPassword(e.target.value);
                   if (error) setError('');

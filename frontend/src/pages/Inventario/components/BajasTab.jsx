@@ -1,4 +1,5 @@
 import { formatDate, getSerieDisplay, getTipoLabel } from '../utils/inventarioHelpers';
+import FilterDateInput from '../../../components/FilterDateInput';
 
 const BajasTab = ({
   bajas,
@@ -37,8 +38,9 @@ const BajasTab = ({
           <div className="ff-dates">
             <div className="ff-date-field">
               <span className="ff-date-label">Desde</span>
-              <input
-                type="date"
+              <FilterDateInput
+                ariaLabel="Desde"
+                id="bajas-desde"
                 name="from"
                 value={bajasFiltersDraft.from}
                 onChange={onDraftChange}
@@ -47,8 +49,9 @@ const BajasTab = ({
             </div>
             <div className="ff-date-field">
               <span className="ff-date-label">Hasta</span>
-              <input
-                type="date"
+              <FilterDateInput
+                ariaLabel="Hasta"
+                id="bajas-hasta"
                 name="to"
                 value={bajasFiltersDraft.to}
                 onChange={onDraftChange}
@@ -79,7 +82,7 @@ const BajasTab = ({
       <>
         <div className="table-result-count">Mostrando {bajas.length} baja(s)</div>
 
-        <div className="table-responsive app-table-shell">
+        <div className="table-responsive app-table-shell bajas-table-shell">
           <table className="app-table bajas-table">
             <thead>
               <tr>

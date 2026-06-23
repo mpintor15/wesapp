@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import usuariosService from '../../services/usuariosService';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
+import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import UsuarioCreateModal from './components/UsuarioCreateModal';
 import UsuarioEditModal from './components/UsuarioEditModal';
@@ -26,6 +27,8 @@ import {
 import './Usuarios.css';
 
 const Usuarios = () => {
+  useScrollToTopOnMount();
+
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [usuarios, setUsuarios] = useState([]);

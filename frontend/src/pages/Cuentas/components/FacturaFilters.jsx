@@ -1,3 +1,5 @@
+import FilterDateInput from '../../../components/FilterDateInput';
+
 const FacturaFilters = ({ filters, onFilterChange, onApply, onClear, onToggle }) => (
   <div className="ff-filter-row facturas-filter-row">
     <div className="ff-filter-card facturas-filter-card">
@@ -27,8 +29,9 @@ const FacturaFilters = ({ filters, onFilterChange, onApply, onClear, onToggle })
         <div className="ff-dates">
           <div className="ff-date-field">
             <span className="ff-date-label">Desde</span>
-            <input
-              type="date"
+            <FilterDateInput
+              ariaLabel="Desde"
+              id="facturas-desde"
               name="fechaInicio"
               value={filters.fechaInicio}
               onChange={onFilterChange}
@@ -36,7 +39,13 @@ const FacturaFilters = ({ filters, onFilterChange, onApply, onClear, onToggle })
           </div>
           <div className="ff-date-field">
             <span className="ff-date-label">Hasta</span>
-            <input type="date" name="fechaFin" value={filters.fechaFin} onChange={onFilterChange} />
+            <FilterDateInput
+              ariaLabel="Hasta"
+              id="facturas-hasta"
+              name="fechaFin"
+              value={filters.fechaFin}
+              onChange={onFilterChange}
+            />
           </div>
         </div>
         <div className="ff-state">

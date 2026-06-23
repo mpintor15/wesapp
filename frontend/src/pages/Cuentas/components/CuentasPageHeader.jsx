@@ -30,18 +30,18 @@ const CuentasPageHeader = ({
         </svg>
         Volver
       </button>
-      <h1>Control de Cuentas</h1>
+      <h1>Cuentas</h1>
     </div>
 
     {activeTab === 'facturas' ? (
       <div className="page-header-actions">
         {isGerente ? (
           <button className="btn btn-ghost btn-sm" onClick={onCreateFactura} type="button">
-            Crear factura
+            Crear nueva factura
           </button>
         ) : null}
         <button className="btn btn-ghost btn-sm" onClick={onShowFacturasReport} type="button">
-          Generar reporte
+          Generar reporte de Facturas
         </button>
         <button
           className="btn btn-ghost btn-sm btn-icon-only"
@@ -60,7 +60,7 @@ const CuentasPageHeader = ({
           Registrar pago
         </button>
         <button className="btn btn-ghost btn-sm" onClick={onShowPagosReport} type="button">
-          Generar reporte
+          Generar reporte de Pagos
         </button>
         <button
           className="btn btn-ghost btn-sm btn-icon-only"
@@ -79,7 +79,7 @@ const CuentasPageHeader = ({
           {showClienteForm ? 'Cancelar' : 'Crear cliente'}
         </button>
         <button className="btn btn-ghost btn-sm" onClick={onShowClientesReport} type="button">
-          Generar reporte
+          Generar reporte de Clientes
         </button>
         <button
           className="btn btn-ghost btn-sm btn-icon-only"

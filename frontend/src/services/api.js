@@ -2,7 +2,7 @@
  * api.js — Instancia central de Axios para comunicación con el backend
  *
  * Configura una instancia de Axios con la URL base del API (variable de
- * entorno REACT_APP_API_URL o http://localhost:3000/api por defecto).
+ * entorno REACT_APP_API_URL o http://localhost:3001/api por defecto).
  *
  * Interceptores:
  *  - Request  : Agrega automáticamente el header Authorization: Bearer <token>
@@ -31,7 +31,7 @@ const shouldExpireSession = (error) => {
 };
 
 // URL base del backend
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
 // Instancia de Axios configurada
 const api = axios.create({

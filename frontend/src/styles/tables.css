@@ -2,6 +2,8 @@
 
 .app-table-shell {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   border-radius: var(--radius-lg);
@@ -347,7 +349,8 @@
 }
 
 .ff-date-row input[type='date'],
-.ff-date-field input[type='date'] {
+.ff-date-field input[type='date'],
+.ff-date-input {
   width: 140px;
   min-height: 40px;
   padding: 7px 9px;
@@ -363,7 +366,8 @@
 }
 
 .ff-date-row input[type='date']:focus,
-.ff-date-field input[type='date']:focus {
+.ff-date-field input[type='date']:focus,
+.ff-date-input:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px var(--color-primary-light);
@@ -504,6 +508,315 @@
 .ff-clear-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+@media (max-width: 768px) {
+  .app-table-shell {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .ff-filter-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    margin-bottom: 12px;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    box-sizing: border-box;
+  }
+
+  .ff-filter-card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    padding: 9px;
+    border-radius: 10px;
+    box-sizing: border-box;
+  }
+
+  .ff-filter-actions-card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    padding: 7px;
+    border-radius: 10px;
+    justify-self: stretch;
+    box-sizing: border-box;
+  }
+
+  .ff-controls {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    box-sizing: border-box;
+  }
+
+  .ff-controls > * {
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    box-sizing: border-box;
+  }
+
+  .ff-search,
+  .ff-state,
+  .ff-dates,
+  .ff-date-field,
+  .ff-date-row {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .ff-dates {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .ff-dates > * {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    box-sizing: border-box;
+  }
+
+  .ff-date-field,
+  .ff-date-row,
+  .ff-state {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .ff-date-field {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    box-sizing: border-box;
+  }
+
+  .ff-date-row input[type='date'],
+  .ff-date-field input[type='date'],
+  .ff-date-input,
+  .ff-state select,
+  .ff-search input {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 36px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    font-size: 0.82rem;
+    box-sizing: border-box;
+  }
+
+  .ff-date-row input[type='date'],
+  .ff-date-field input[type='date'],
+  .ff-date-input {
+    display: block;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    -webkit-min-logical-width: 0;
+  }
+
+  .ff-search input {
+    padding-left: 28px;
+  }
+
+  .ff-search-icon {
+    left: 9px;
+    width: 13px;
+    height: 13px;
+  }
+
+  .ff-date-field {
+    gap: 3px;
+  }
+
+  .ff-state {
+    gap: 3px;
+  }
+
+  .ff-date-label,
+  .ff-state-label {
+    font-size: 0.64rem;
+    min-height: 0;
+    letter-spacing: 0.055em;
+    line-height: 1.2;
+    white-space: normal;
+  }
+
+  .ff-pills {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    align-self: stretch;
+    gap: 6px;
+    padding-bottom: 0;
+  }
+
+  .ff-pill {
+    width: 100%;
+    justify-content: center;
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 0.78rem;
+    white-space: normal;
+    line-height: 1.15;
+  }
+
+  .ff-pills > :only-child {
+    grid-column: 1 / -1;
+  }
+
+  .ff-actions {
+    width: 100%;
+    height: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .ff-actions .btn,
+  .ff-actions .ff-clear-btn {
+    width: 100%;
+    max-width: none;
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 0.82rem;
+  }
+
+  .table-result-count {
+    min-height: 28px;
+    margin: 2px 0 8px;
+    font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .ff-dates {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ff-filter-card input,
+  .ff-filter-card select,
+  .ff-filter-card textarea {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
+  }
+
+  .ff-filter-card input[type='date'] {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    -webkit-min-logical-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .ff-filter-row {
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .ff-filter-card {
+    padding: 6px;
+  }
+
+  .ff-filter-actions-card {
+    padding: 5px;
+  }
+
+  .ff-controls {
+    gap: 4px;
+  }
+
+  .ff-dates {
+    gap: 10px;
+  }
+
+  .ff-date-row input[type='date'],
+  .ff-date-field input[type='date'],
+  .ff-date-input,
+  .ff-state select,
+  .ff-search input {
+    min-height: 32px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    border-radius: 8px;
+    font-size: 16px;
+  }
+
+  .ff-search input {
+    padding-left: 26px;
+  }
+
+  .ff-search-icon {
+    left: 8px;
+    width: 12px;
+    height: 12px;
+  }
+
+  .ff-date-field,
+  .ff-state {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .ff-pills {
+    gap: 5px;
+  }
+
+  .ff-pill {
+    min-height: 31px;
+    padding: 5px 7px;
+    border-radius: 8px;
+  }
+
+  .ff-actions {
+    gap: 5px;
+  }
+
+  .ff-actions .btn,
+  .ff-actions .ff-clear-btn {
+    min-height: 32px;
+    padding: 6px 8px;
+    border-radius: 8px;
+  }
+}
+
+@media (max-width: 380px) {
+  .ff-pills {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Shared pagination ───────────────────────────────────── */

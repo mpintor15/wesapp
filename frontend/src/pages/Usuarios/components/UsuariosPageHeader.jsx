@@ -16,11 +16,11 @@ const UsuariosPageHeader = ({ onBack, onCreate, onRefresh }) => (
         </svg>
         Volver
       </button>
-      <h1>Control de usuarios</h1>
+      <h1>Usuarios</h1>
     </div>
     <div className="page-header-actions">
       <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
-        Nuevo usuario
+        Crear nuevo usuario
       </button>
       <button
         className="btn btn-ghost btn-sm btn-icon-only"

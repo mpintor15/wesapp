@@ -70,7 +70,7 @@ const PersonalTable = ({
               <td className="center col-actions app-col-actions app-col-actions--double">
                 <div className="action-buttons app-table-actions">
                   <button
-                    className="action-btn action-btn-cancel"
+                    className="action-btn action-btn-edit"
                     onClick={() => onEdit(c)}
                     title="Editar"
                     type="button"

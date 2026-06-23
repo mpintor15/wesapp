@@ -204,7 +204,7 @@
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {
   .usuarios-filter-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .usuarios-filter-card .ff-controls {
@@ -226,12 +226,13 @@
 
   .usuarios-filter-actions-card .ff-actions {
     width: 100%;
-    justify-content: flex-start;
+    justify-content: stretch;
   }
 
   .usuarios-filter-actions-card .ff-actions .btn,
   .usuarios-filter-actions-card .ff-actions .ff-clear-btn {
-    width: 130px !important;
+    width: 100% !important;
+    max-width: none;
   }
 
   .usuarios-form-grid {

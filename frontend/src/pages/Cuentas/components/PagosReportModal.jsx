@@ -13,7 +13,7 @@ const PagosReportModal = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal report-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Generar Reporte de Pagos</h3>
+          <h3>Generar reporte de Pagos</h3>
           <button className="modal-close" onClick={onClose} type="button">
             ×
           </button>

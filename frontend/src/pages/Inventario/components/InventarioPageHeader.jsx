@@ -39,17 +39,17 @@ const InventarioPageHeader = ({
       )}
       {activeTab === 'articulos' && canExport && (
         <button className="btn btn-ghost btn-sm" onClick={onExportArticulos} type="button">
-          Generar reporte
+          Generar reporte de Inventario
         </button>
       )}
       {activeTab === 'movimientos' && canCreateMovimiento && (
         <button className="btn btn-ghost btn-sm" onClick={onCreateMovimiento} type="button">
-          Crear movimiento
+          Crear nuevo movimiento
         </button>
       )}
       {activeTab === 'movimientos' && canExport && (
         <button className="btn btn-ghost btn-sm" onClick={onExportMovimientos} type="button">
-          Generar reporte
+          Generar reporte de Movimientos
         </button>
       )}
       {activeTab === 'bajas' && canExport && (
@@ -59,7 +59,7 @@ const InventarioPageHeader = ({
           disabled={isExportingBajas}
           type="button"
         >
-          {isExportingBajas ? 'Generando...' : 'Generar reporte'}
+          {isExportingBajas ? 'Generando...' : 'Generar reporte de Dados de baja'}
         </button>
       )}
       <button

@@ -154,13 +154,6 @@ const ArticulosTable = ({
         </tbody>
       </table>
     </div>
-    {articulosTotalPages > 1 && (
-      <PaginationControls
-        page={articulosPage}
-        totalPages={articulosTotalPages}
-        onPageChange={onPageChange}
-      />
-    )}
     {articulos.length > 0 && (
       <ArticulosMobileCards
         articulos={paginatedArticulos}
@@ -169,6 +162,13 @@ const ArticulosTable = ({
         onDarBaja={onDarBaja}
         onDelete={onDelete}
         showArticuloActions={showArticuloActions}
+      />
+    )}
+    {articulosTotalPages > 1 && (
+      <PaginationControls
+        page={articulosPage}
+        totalPages={articulosTotalPages}
+        onPageChange={onPageChange}
       />
     )}
   </>

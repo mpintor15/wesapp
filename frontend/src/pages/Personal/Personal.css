@@ -281,7 +281,7 @@
 
 @media (max-width: 768px) {
   .personal-filter-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .personal-filter-card .ff-controls {
@@ -303,12 +303,13 @@
 
   .personal-filter-actions-card .ff-actions {
     width: 100%;
-    justify-content: flex-start;
+    justify-content: stretch;
   }
 
   .personal-filter-actions-card .ff-actions .btn,
   .personal-filter-actions-card .ff-actions .ff-clear-btn {
-    width: 150px !important;
+    width: 100% !important;
+    max-width: none;
   }
 
   .personal-table {
@@ -328,5 +329,16 @@
     flex: 1 1 140px;
     width: auto;
     max-width: none;
+  }
+
+  .personal-modal input[type='date'] {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .personal-filter-card .ff-controls {
+    gap: 8px;
   }
 }
