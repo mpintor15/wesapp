@@ -9,7 +9,7 @@ const PersonalExportModal = ({
   <div className="modal-overlay">
     <div className="modal personal-modal personal-report-modal">
       <div className="modal-header">
-        <h3>Generar Reporte de Personal</h3>
+        <h3>Generar reporte de Personal</h3>
         <button className="modal-close" onClick={onCancel} aria-label="Cerrar" type="button">
           ×
         </button>

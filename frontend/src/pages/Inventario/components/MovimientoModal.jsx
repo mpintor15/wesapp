@@ -22,7 +22,7 @@ const MovimientoModal = ({
   <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onCancel()}>
     <div className="modal modal-movimiento">
       <div className="modal-header">
-        <h3>Nuevo movimiento</h3>
+        <h3>Crear nuevo movimiento</h3>
         <button className="modal-close" onClick={onCancel} type="button">
           ×
         </button>
@@ -208,7 +208,7 @@ const MovimientoModal = ({
                 Guardando…
               </>
             ) : (
-              'Guardar Movimiento'
+              'Guardar movimiento'
             )}
           </button>
           <button

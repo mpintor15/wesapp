@@ -1,6 +1,7 @@
 import { formatDate } from '../utils/inventarioHelpers';
 import PaginationControls from './PaginationControls';
 import SortHeader from './SortHeader';
+import FilterDateInput from '../../../components/FilterDateInput';
 
 const MovimientosTab = ({
   movimientosFiltersDraft,
@@ -69,8 +70,9 @@ const MovimientosTab = ({
               <div className="ff-dates">
                 <div className="ff-date-field">
                   <span className="ff-date-label">Desde</span>
-                  <input
-                    type="date"
+                  <FilterDateInput
+                    ariaLabel="Desde"
+                    id="movimientos-desde"
                     name="from"
                     value={movimientosFiltersDraft.from}
                     onChange={onDraftChange}
@@ -79,8 +81,9 @@ const MovimientosTab = ({
                 </div>
                 <div className="ff-date-field">
                   <span className="ff-date-label">Hasta</span>
-                  <input
-                    type="date"
+                  <FilterDateInput
+                    ariaLabel="Hasta"
+                    id="movimientos-hasta"
                     name="to"
                     value={movimientosFiltersDraft.to}
                     onChange={onDraftChange}
@@ -106,7 +109,7 @@ const MovimientosTab = ({
           Mostrando {paginatedMovimientos.length} de {sortedMovimientos.length} movimiento(s)
         </div>
 
-        <div className="table-responsive app-table-shell">
+        <div className="table-responsive app-table-shell movimientos-table-shell">
           <table className="app-table movimientos-table">
             <thead>
               <tr>

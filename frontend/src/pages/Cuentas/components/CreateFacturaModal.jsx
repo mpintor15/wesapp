@@ -26,7 +26,7 @@ const CreateFacturaModal = ({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-factura" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Crear Nueva Factura</h3>
+          <h3>Crear nueva factura</h3>
           <button className="modal-close" onClick={onClose} type="button">
             ×
           </button>
@@ -130,7 +130,7 @@ const CreateFacturaModal = ({
                   Creando…
                 </>
               ) : (
-                'Crear Factura'
+                'Crear factura'
               )}
             </button>
             <button

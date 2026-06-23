@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import './Dashboard.css';
 import logo from '../../assets/icons/wes-logo.png';
 import iconCuentas from '../../assets/icons/invoice.png';
@@ -23,33 +24,13 @@ const DASHBOARD_MODULES = [
   { key: 'usuarios', label: 'Usuarios', icon: iconUsuarios, path: '/usuarios' },
 ];
 
-const preloadImage = (src) =>
-  new Promise((resolve) => {
-    const image = new Image();
-    image.onload = resolve;
-    image.onerror = resolve;
-    image.src = src;
-  });
-
 const Dashboard = () => {
+  useScrollToTopOnMount();
+
   const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [loadingModule, setLoadingModule] = useState(null);
-  const [assetsReady, setAssetsReady] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    Promise.all([logo, ...DASHBOARD_MODULES.map((module) => module.icon)].map(preloadImage)).then(
-      () => {
-        if (mounted) setAssetsReady(true);
-      }
-    );
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const handleLogout = () => setShowLogoutConfirm(true);
 
@@ -78,15 +59,6 @@ const Dashboard = () => {
 
   const displayName =
     user?.nombre && user?.apellido ? `${user.nombre} ${user.apellido}` : (user?.usuario ?? '');
-
-  if (!assetsReady) {
-    return (
-      <div className="dashboard-loading-screen">
-        <span className="spinner dashboard-loading-spinner" />
-        <span>Cargando inicio…</span>
-      </div>
-    );
-  }
 
   return (
     <div className="dashboard-container">

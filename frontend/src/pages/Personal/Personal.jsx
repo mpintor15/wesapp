@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import personalService from '../../services/personalService';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
+import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PersonalExportModal from './components/PersonalExportModal';
 import PersonalFilters from './components/PersonalFilters';
@@ -28,6 +29,8 @@ import {
 import './Personal.css';
 
 const Personal = () => {
+  useScrollToTopOnMount();
+
   const navigate = useNavigate();
   const { showToast } = useToast();
   const [colaboradores, setColaboradores] = useState([]);

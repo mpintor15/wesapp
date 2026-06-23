@@ -16,14 +16,14 @@ const PersonalPageHeader = ({ onBack, onCreate, onExport, onRefresh }) => (
         </svg>
         Volver
       </button>
-      <h1>Manejo del personal</h1>
+      <h1>Personal</h1>
     </div>
     <div className="page-header-actions">
       <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
-        Nuevo colaborador
+        Crear nuevo colaborador
       </button>
       <button className="btn btn-ghost btn-sm" onClick={onExport} type="button">
-        Generar reporte
+        Generar reporte de Personal
       </button>
       <button
         className="btn btn-ghost btn-sm btn-icon-only"

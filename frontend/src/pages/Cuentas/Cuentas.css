@@ -44,6 +44,11 @@
   background: #fafafa;
 }
 
+.tab:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: -2px;
+}
+
 .tab.active {
   color: var(--color-primary);
   border-bottom-color: var(--color-primary);
@@ -1455,7 +1460,7 @@
 @media (max-width: 1200px) {
   .facturas-filter-row,
   .pagos-filter-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .facturas-filter-actions-card,
@@ -1510,7 +1515,11 @@
 
 @media (max-width: 768px) {
   .cuentas-container {
-    padding: 12px;
+    padding: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .form-inline {
@@ -1523,6 +1532,13 @@
 
   .cuentas-tabs {
     border-radius: 8px 8px 0 0;
+  }
+
+  .tab-content {
+    padding: 14px;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .section-header {
@@ -1539,9 +1555,17 @@
     flex: 1;
   }
 
+  .facturas-filter-card .ff-search,
   .facturas-filter-card .ff-dates,
-  .pagos-filter-card .ff-dates {
-    flex-wrap: wrap;
+  .facturas-filter-card .ff-date-field,
+  .facturas-filter-card .ff-state,
+  .pagos-filter-card .ff-search,
+  .pagos-filter-card .ff-dates,
+  .pagos-filter-card .ff-date-field,
+  .pagos-filter-card .ff-state {
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
   }
 
   .modal-factura .factura-calc-sections {
@@ -1567,6 +1591,11 @@
     font-size: 0.82em;
   }
 
+  .cuentas-container .app-table-shell {
+    display: block;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .cuentas-table th,
   .cuentas-table td {
     padding: 8px 10px;
@@ -1580,6 +1609,68 @@
 }
 
 @media (max-width: 480px) {
+  .cuentas-container {
+    padding: 8px;
+  }
+
+  .cuentas-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .tab {
+    min-width: 0;
+    padding: 9px 5px;
+    font-size: 0.76em;
+    line-height: 1.15;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .tab-badge {
+    margin-left: 0;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 0.64em;
+  }
+
+  .tab-content {
+    padding: 10px;
+  }
+
+  .modal-overlay {
+    height: 100dvh;
+    align-items: flex-start;
+    overflow: hidden;
+    padding: max(10px, env(safe-area-inset-top, 0px)) 10px
+      max(10px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .modal {
+    max-height: calc(
+      100dvh - max(10px, env(safe-area-inset-top, 0px)) -
+        max(10px, env(safe-area-inset-bottom, 0px))
+    );
+  }
+
+  .modal-body,
+  .report-body,
+  .modal > form {
+    min-height: 0;
+  }
+
+  .modal-body,
+  .report-body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: 20px;
+  }
+
   .form-inline {
     grid-template-columns: 1fr;
   }

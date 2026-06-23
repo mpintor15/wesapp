@@ -14,7 +14,7 @@ const PersonalFormModal = ({
     <div className="modal-overlay">
       <div className="modal personal-modal">
         <div className="modal-header">
-          <h3>{editingColaborador ? 'Editar colaborador' : 'Nuevo colaborador'}</h3>
+          <h3>{editingColaborador ? 'Editar colaborador' : 'Crear nuevo colaborador'}</h3>
           <button className="modal-close" onClick={onCancel} aria-label="Cerrar" type="button">
             ×
           </button>

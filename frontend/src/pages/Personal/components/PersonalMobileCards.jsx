@@ -32,7 +32,7 @@ const PersonalMobileCards = ({ colaboradores, onDelete, onEdit }) => (
         </dl>
         <div className="record-card-actions">
           <button
-            className="btn btn-primary btn-sm"
+            className="btn btn-secondary btn-sm"
             onClick={() => onEdit(colaborador)}
             type="button"
           >

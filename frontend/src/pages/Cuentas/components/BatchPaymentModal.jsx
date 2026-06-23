@@ -39,7 +39,7 @@ const BatchPaymentModal = ({
       <div className="modal modal-batch-payment" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-header-content">
-            <h3>Registrar Pago</h3>
+            <h3>Registrar pago</h3>
           </div>
           <button className="modal-close" onClick={onClose} type="button">
             ×
@@ -307,7 +307,7 @@ const BatchPaymentModal = ({
                   Registrando…
                 </>
               ) : (
-                'Registrar Pago'
+                'Registrar pago'
               )}
             </button>
             <button

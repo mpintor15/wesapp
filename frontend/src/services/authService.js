@@ -17,13 +17,7 @@ import api, { API_URL } from './api';
 import { extractError } from './serviceUtils';
 
 const getFallbackApiUrls = () => {
-  const urls = [
-    API_URL,
-    'http://localhost:3000/api',
-    'http://127.0.0.1:3000/api',
-    'http://localhost:3001/api',
-    'http://127.0.0.1:3001/api',
-  ];
+  const urls = [API_URL, 'http://localhost:3001/api', 'http://127.0.0.1:3001/api'];
 
   return [...new Set(urls.map((value) => String(value || '').trim()).filter(Boolean))];
 };

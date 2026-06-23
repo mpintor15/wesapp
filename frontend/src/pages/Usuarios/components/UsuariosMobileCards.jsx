@@ -28,7 +28,11 @@ const UsuariosMobileCards = ({ onDelete, onEdit, onInvite, usuarios }) => (
           </div>
         </dl>
         <div className="record-card-actions">
-          <button className="btn btn-primary btn-sm" onClick={() => onEdit(usuario)} type="button">
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => onEdit(usuario)}
+            type="button"
+          >
             Editar
           </button>
           {isPendingUser(usuario) && (

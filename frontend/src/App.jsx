@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -10,12 +10,24 @@ import Cuentas from './pages/Cuentas/Cuentas';
 import Inventario from './pages/Inventario/Inventario';
 import Personal from './pages/Personal/Personal';
 import Usuarios from './pages/Usuarios/Usuarios';
+import { resetViewportScroll } from './hooks/useScrollToTopOnMount';
+
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  React.useLayoutEffect(() => {
+    resetViewportScroll();
+  }, [pathname]);
+
+  return null;
+};
 
 function App() {
   return (
     <AuthProvider>
       <ToastProvider>
         <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <ScrollToTop />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import cuentasService from '../../services/cuentasService';
 import useSubmitState from '../../hooks/useSubmitState';
+import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
 import AnulacionDetailModal from './components/AnulacionDetailModal';
@@ -46,6 +47,8 @@ import {
 import './Cuentas.css';
 
 const Cuentas = () => {
+  useScrollToTopOnMount();
+
   const navigate = useNavigate();
   const { showToast } = useToast();
   const { user } = useAuth();

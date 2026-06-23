@@ -39,7 +39,7 @@ const InventarioReportModals = ({
       >
         <div className="modal modal-export" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <h3>Reporte de inventario</h3>
+            <h3>Generar reporte de Inventario</h3>
             <button className="modal-close" onClick={onCancelArticulos} type="button">
               ×
             </button>
@@ -126,7 +126,7 @@ const InventarioReportModals = ({
       >
         <div className="modal modal-export" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <h3>Reporte de dados de baja</h3>
+            <h3>Generar reporte de Dados de baja</h3>
             <button className="modal-close" onClick={onCancelBajas} type="button">
               ×
             </button>
@@ -184,7 +184,7 @@ const InventarioReportModals = ({
       >
         <div className="modal modal-export" onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
-            <h3>Reporte de movimientos</h3>
+            <h3>Generar reporte de Movimientos</h3>
             <button className="modal-close" onClick={onCancelMovimientos} type="button">
               ×
             </button>

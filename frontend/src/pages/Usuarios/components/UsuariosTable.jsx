@@ -53,7 +53,7 @@ const UsuariosTable = ({ onDelete, onEdit, onInvite, onSort, tableSort, usuarios
               <td className="center app-col-actions app-col-actions--triple">
                 <div className="action-buttons app-table-actions">
                   <button
-                    className="action-btn action-btn-cancel"
+                    className="action-btn action-btn-edit"
                     onClick={() => onEdit(usuario)}
                     title="Editar"
                     type="button"
