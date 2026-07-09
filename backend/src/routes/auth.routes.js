@@ -9,8 +9,8 @@ const { loginSchema, changePasswordSchema } = require('../utils/validationSchema
 const config = require('../config/config');
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: config.nodeEnv === 'production' ? 10 : 30,
+  windowMs: config.rateLimits.login.windowMs,
+  max: config.rateLimits.login.max,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {

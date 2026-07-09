@@ -25,6 +25,9 @@ dotenv.config({
 });
 
 const nodeEnv = process.env.NODE_ENV || 'development';
+const parseBooleanEnv = (value) => ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
+const e2eMode = nodeEnv !== 'production' && parseBooleanEnv(process.env.E2E_MODE);
+
 const parseCorsOrigin = (value) => {
   if (nodeEnv === 'development') {
     return (origin, callback) => {
@@ -96,6 +99,20 @@ module.exports = {
   // Configuración del servidor
   port: process.env.PORT || 3000,
   nodeEnv,
+  e2eMode,
+
+  // Rate limits. E2E_MODE is ignored in production and exists only to keep
+  // local Playwright suites from exhausting IP-based development buckets.
+  rateLimits: {
+    global: {
+      windowMs: 15 * 60 * 1000,
+      max: e2eMode ? 50_000 : nodeEnv === 'production' ? 300 : 2000,
+    },
+    login: {
+      windowMs: 15 * 60 * 1000,
+      max: e2eMode ? 2_000 : nodeEnv === 'production' ? 10 : 30,
+    },
+  },
 
   // Configuración de JWT
   jwt: {

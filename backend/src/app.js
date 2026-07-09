@@ -55,11 +55,12 @@ app.use(helmet());
 app.use(cors(config.cors));
 
 // Rate limiting (limitar peticiones por IP)
-// Development: 2000 req/15 min to avoid false positives from hot-reloads and tooling
 // Production : 300 req/15 min per IP
+// Development: 2000 req/15 min per IP
+// E2E local : 50000 req/15 min per IP (requires E2E_MODE=true; ignored in production)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: config.nodeEnv === 'production' ? 300 : 2000,
+  windowMs: config.rateLimits.global.windowMs,
+  max: config.rateLimits.global.max,
   standardHeaders: true, // Return rate limit info in RateLimit-* headers
   legacyHeaders: false,
   // Always return JSON so the frontend can read the message correctly
