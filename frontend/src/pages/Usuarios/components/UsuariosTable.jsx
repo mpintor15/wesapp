@@ -53,9 +53,10 @@ const UsuariosTable = ({ onDelete, onEdit, onInvite, onSort, tableSort, usuarios
               <td className="center app-col-actions app-col-actions--triple">
                 <div className="action-buttons app-table-actions">
                   <button
-                    className="action-btn action-btn-edit"
+                    className="action-btn action-btn-neutral"
                     onClick={() => onEdit(usuario)}
                     title="Editar"
+                    aria-label={`Editar ${fullName(usuario)}`}
                     type="button"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -65,9 +66,10 @@ const UsuariosTable = ({ onDelete, onEdit, onInvite, onSort, tableSort, usuarios
                   </button>
                   {isPendingUser(usuario) && (
                     <button
-                      className="action-btn action-btn-pdf"
+                      className="action-btn action-btn-invite"
                       onClick={() => onInvite(usuario)}
                       title="Reenviar invitación"
+                      aria-label={`Reenviar invitación a ${fullName(usuario)}`}
                       type="button"
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -77,9 +79,10 @@ const UsuariosTable = ({ onDelete, onEdit, onInvite, onSort, tableSort, usuarios
                     </button>
                   )}
                   <button
-                    className="action-btn action-btn-del"
+                    className="action-btn action-btn-destructive"
                     onClick={() => onDelete(usuario)}
                     title="Eliminar"
+                    aria-label={`Eliminar ${fullName(usuario)}`}
                     type="button"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">

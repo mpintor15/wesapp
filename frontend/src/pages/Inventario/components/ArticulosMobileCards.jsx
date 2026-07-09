@@ -8,9 +8,9 @@ import {
 const ArticulosMobileCards = ({
   articulos,
   canDarBajaArticulo,
-  canDeleteArticulo,
+  canEditArticulo,
   onDarBaja,
-  onDelete,
+  onEdit,
   showArticuloActions,
 }) => (
   <div className="records-mobile">
@@ -57,22 +57,22 @@ const ArticulosMobileCards = ({
         </div>
         {showArticuloActions && (
           <div className="inventory-card-actions">
+            {canEditArticulo && (
+              <button
+                className="btn btn-neutral btn-sm inventory-card-action"
+                onClick={() => onEdit(articulo)}
+                type="button"
+              >
+                Editar
+              </button>
+            )}
             {canDarBajaArticulo && (
               <button
-                className="btn btn-ghost btn-sm"
+                className="btn btn-destructive btn-sm inventory-card-action"
                 onClick={() => onDarBaja(articulo)}
                 type="button"
               >
                 Dar de baja
-              </button>
-            )}
-            {canDeleteArticulo && (
-              <button
-                className="btn btn-danger btn-sm"
-                onClick={() => onDelete(articulo)}
-                type="button"
-              >
-                Eliminar
               </button>
             )}
           </div>

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import cuentasService from '../../services/cuentasService';
 import { useToast } from '../../context/ToastContext';
+import AppModal from '../../components/AppModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
 const ROWS_PER_PAGE = 50;
@@ -148,65 +149,65 @@ const Clientes = ({
 
       {/* Create modal */}
       {showClienteForm && (
-        <div className="modal-overlay" onClick={() => setShowClienteForm(false)}>
-          <div className="modal modal-cliente" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Crear Cliente</h3>
-              <button className="modal-close" onClick={() => setShowClienteForm(false)}>
-                ×
+        <AppModal
+          isOpen={showClienteForm}
+          onClose={() => setShowClienteForm(false)}
+          closeOnBackdrop
+          title="Crear Cliente"
+          size="sm"
+          className="modal-cliente"
+        >
+          <form onSubmit={handleCreateCliente}>
+            <AppModal.Header />
+            <AppModal.Body>
+              <div className="form-group">
+                <label>Nombre del Cliente</label>
+                <input
+                  type="text"
+                  value={newClienteName}
+                  onChange={(e) => {
+                    setNewClienteName(e.target.value);
+                    setClienteErrors((prev) => ({ ...prev, nombre: '' }));
+                  }}
+                  placeholder="Ingresa el nombre del cliente"
+                  disabled={loading}
+                  autoFocus
+                />
+                {clienteErrors.nombre ? (
+                  <span className="field-error">{clienteErrors.nombre}</span>
+                ) : null}
+              </div>
+              <div className="form-group">
+                <label>Identificación (CI o RUC)</label>
+                <input
+                  type="text"
+                  value={newClienteId}
+                  onChange={(e) => {
+                    setNewClienteId(e.target.value);
+                    setClienteErrors((prev) => ({ ...prev, identificacion: '' }));
+                  }}
+                  placeholder="Ej: 1790012345001"
+                  disabled={loading}
+                />
+                {clienteErrors.identificacion ? (
+                  <span className="field-error">{clienteErrors.identificacion}</span>
+                ) : null}
+              </div>
+            </AppModal.Body>
+            <AppModal.Footer className="modal-buttons">
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {loading ? 'Creando...' : 'Crear cliente'}
               </button>
-            </div>
-            <form onSubmit={handleCreateCliente}>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>Nombre del Cliente</label>
-                  <input
-                    type="text"
-                    value={newClienteName}
-                    onChange={(e) => {
-                      setNewClienteName(e.target.value);
-                      setClienteErrors((prev) => ({ ...prev, nombre: '' }));
-                    }}
-                    placeholder="Ingresa el nombre del cliente"
-                    disabled={loading}
-                    autoFocus
-                  />
-                  {clienteErrors.nombre ? (
-                    <span className="field-error">{clienteErrors.nombre}</span>
-                  ) : null}
-                </div>
-                <div className="form-group">
-                  <label>Identificación (CI o RUC)</label>
-                  <input
-                    type="text"
-                    value={newClienteId}
-                    onChange={(e) => {
-                      setNewClienteId(e.target.value);
-                      setClienteErrors((prev) => ({ ...prev, identificacion: '' }));
-                    }}
-                    placeholder="Ej: 1790012345001"
-                    disabled={loading}
-                  />
-                  {clienteErrors.identificacion ? (
-                    <span className="field-error">{clienteErrors.identificacion}</span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="modal-buttons">
-                <button type="submit" className="btn btn-primary" disabled={loading}>
-                  {loading ? 'Creando...' : 'Crear cliente'}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-modal-clear"
-                  onClick={() => setShowClienteForm(false)}
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              <button
+                type="button"
+                className="btn btn-modal-clear"
+                onClick={() => setShowClienteForm(false)}
+              >
+                Cancelar
+              </button>
+            </AppModal.Footer>
+          </form>
+        </AppModal>
       )}
 
       {/* Table */}
