@@ -82,6 +82,9 @@ jobs:
       - name: Check frontend formatting
         run: npm run format:check
 
+      - name: Run frontend unit tests
+        run: npm run test:unit
+
   frontend-build:
     name: Frontend Build
     runs-on: ubuntu-latest
