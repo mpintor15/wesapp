@@ -64,4 +64,17 @@ export default [
       ],
     },
   },
+  {
+    files: ['src/**/*.test.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        jest: 'readonly',
+      },
+    },
+  },
 ];

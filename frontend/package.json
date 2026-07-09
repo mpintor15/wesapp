@@ -10,6 +10,7 @@
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
+    "test:unit": "react-scripts test --watchAll=false",
     "test:e2e": "playwright test",
     "test:e2e:auth": "playwright test e2e/auth.setup.js --project=setup",
     "test:e2e:smoke": "playwright test e2e/smoke.spec.js --project=chromium",
