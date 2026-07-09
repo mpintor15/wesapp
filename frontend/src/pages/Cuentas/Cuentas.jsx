@@ -22,15 +22,9 @@ import PagoDetailModal from './components/PagoDetailModal';
 import PagosReportModal from './components/PagosReportModal';
 import PagosTab from './components/PagosTab';
 import useBatchPaymentState from './hooks/useBatchPaymentState';
+import useCuentasData from './hooks/useCuentasData';
+import useFacturaForm from './hooks/useFacturaForm';
 import { validateBatchPaymentForm } from './utils/cuentasBatchPayment';
-import {
-  calculateFacturaPreview,
-  filterClientesBySearch,
-  getExistingInvoiceNumbers,
-  getNumFacturaError,
-  shouldShowFacturaCalculation,
-  validateFacturaForm,
-} from './utils/cuentasFacturaForm';
 import {
   calculateFacturaTotals,
   filterAndSortFacturas,
@@ -42,7 +36,6 @@ import {
   DEFAULT_PAGO_FILTERS,
   PAGOS_ROWS_PER_PAGE,
   ROWS_PER_PAGE,
-  getInitialFacturaForm,
 } from './utils/cuentasState';
 import './Cuentas.css';
 
@@ -66,30 +59,24 @@ const Cuentas = () => {
     useSubmitState();
   const { isSubmitting: isExportingPagos, withSubmit: withPagosExportSubmit } = useSubmitState();
 
-  const [clientes, setClientes] = useState([]);
-  const [reporte, setReporte] = useState([]);
-  const [pagos, setPagos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [clientesLoading, setClientesLoading] = useState(false);
-  const [clientesLoaded, setClientesLoaded] = useState(false);
-  const [pagosLoading, setPagosLoading] = useState(false);
-  const [pagosLoaded, setPagosLoaded] = useState(false);
-  const [loadError, setLoadError] = useState('');
   const [activeTab, setActiveTab] = useState('facturas');
 
-  // Nueva factura modal
-  const [showFacturaModal, setShowFacturaModal] = useState(false);
-  const [formData, setFormData] = useState(getInitialFacturaForm());
-  const [facturaErrors, setFacturaErrors] = useState({});
-  const [debouncedFacturaInputs, setDebouncedFacturaInputs] = useState({
-    num_factura: '',
-    valor_factura: '',
-  });
-
-  // Cliente search
-  const [clienteSearch, setClienteSearch] = useState('');
-  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
-  const [selectedCliente, setSelectedCliente] = useState(null);
+  const cuentasData = useCuentasData({ showToast });
+  const {
+    clientes,
+    reporte,
+    pagos,
+    loading,
+    clientesLoading,
+    clientesLoaded,
+    pagosLoading,
+    pagosLoaded,
+    loadError,
+    loadClientes,
+    loadPagos,
+    loadReporte,
+    refreshFinancialData,
+  } = cuentasData;
 
   // Anulacion detail modal
   const [anulacionModal, setAnulacionModal] = useState(null);
@@ -143,79 +130,19 @@ const Cuentas = () => {
   const [editFormData, setEditFormData] = useState({});
   const [editFacturaErrors, setEditFacturaErrors] = useState({});
 
-  // Close cliente dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (showClienteDropdown && !e.target.closest('.cliente-search-container')) {
-        setShowClienteDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showClienteDropdown]);
-
-  const loadPagos = useCallback(async () => {
-    setPagosLoading(true);
-    const pagosRes = await cuentasService.getPagos();
-
-    if (pagosRes.success) {
-      setPagos(pagosRes.data);
-      setPagosLoaded(true);
-    } else {
-      const message = pagosRes.message || 'Error al cargar pagos';
-      setLoadError(message);
-      showToast(message, 'error');
-    }
-    setPagosLoading(false);
-  }, [showToast]);
-
-  const loadClientes = useCallback(async () => {
-    setClientesLoading(true);
-    const clientesRes = await cuentasService.getClientes();
-
-    if (clientesRes.success) {
-      setClientes(clientesRes.data);
-      setClientesLoaded(true);
-    } else {
-      const message = clientesRes.message || 'Error al cargar clientes';
-      setLoadError(message);
-      showToast(message, 'error');
-    }
-    setClientesLoading(false);
-    return clientesRes.success;
-  }, [showToast]);
-
-  const loadReporte = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
-    const reporteRes = await cuentasService.getReporte();
-    if (reporteRes.success) setReporte(reporteRes.data);
-    if (!reporteRes.success) {
-      const message = reporteRes.message || 'Error al cargar facturas';
-      setLoadError(message);
-      showToast(message, 'error');
-    }
-    setLoading(false);
-  }, [showToast]);
-
-  const refreshFinancialData = useCallback(async () => {
-    const requests = [loadReporte()];
-    if (pagosLoaded) requests.push(loadPagos());
-    await Promise.all(requests);
-  }, [loadPagos, loadReporte, pagosLoaded]);
+  const facturaForm = useFacturaForm({
+    clientes,
+    reporte,
+    isGerente,
+    showToast,
+    onCreated: refreshFinancialData,
+  });
 
   const refreshActiveTab = useCallback(() => {
     if (activeTab === 'pagos') return loadPagos();
     if (activeTab === 'clientes') return loadClientes();
     return loadReporte();
   }, [activeTab, loadClientes, loadPagos, loadReporte]);
-
-  // Load all datasets on entry so tab badges and row counters are available from the start.
-  useEffect(() => {
-    loadReporte();
-    loadPagos();
-    loadClientes();
-  }, [loadClientes, loadPagos, loadReporte]);
 
   useEffect(() => {
     if (activeTab === 'pagos' && !pagosLoaded && !pagosLoading) {
@@ -234,25 +161,6 @@ const Cuentas = () => {
     pagosLoading,
   ]);
 
-  useEffect(() => {
-    if (!showFacturaModal) return;
-    setFormData((prev) => ({
-      ...prev,
-      fecha_factura: prev.fecha_factura || new Date().toISOString().split('T')[0],
-    }));
-  }, [showFacturaModal]);
-
-  useEffect(() => {
-    if (!showFacturaModal) return;
-    const timeoutId = window.setTimeout(() => {
-      setDebouncedFacturaInputs({
-        num_factura: formData.num_factura,
-        valor_factura: formData.valor_factura,
-      });
-    }, 500);
-    return () => window.clearTimeout(timeoutId);
-  }, [showFacturaModal, formData.num_factura, formData.valor_factura]);
-
   // ============================================
   // HANDLERS
   // ============================================
@@ -263,10 +171,8 @@ const Cuentas = () => {
       return;
     }
     if (!clientesLoaded && !(await loadClientes())) return;
-    setFormData(getInitialFacturaForm());
-    setDebouncedFacturaInputs({ num_factura: '', valor_factura: '' });
-    setShowFacturaModal(true);
-  }, [clientesLoaded, isGerente, loadClientes, showToast]);
+    facturaForm.open();
+  }, [clientesLoaded, facturaForm, isGerente, loadClientes, showToast]);
 
   const openEditFacturaModal = useCallback(
     (row) => {
@@ -336,98 +242,6 @@ const Cuentas = () => {
     if (result.success) {
       showToast('Factura actualizada exitosamente', 'success');
       closeEditFacturaModal();
-      refreshFinancialData();
-    } else {
-      showToast(result.message, 'error');
-    }
-  });
-
-  const handleFormChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-      ...(name === 'incluye_iva' && !checked ? { incluye_retencion_iva: false } : {}),
-    }));
-    setFacturaErrors((prev) => ({ ...prev, [name]: '' }));
-  };
-
-  const handleClienteSelect = (cliente) => {
-    setFormData((prev) => ({ ...prev, cliente_id: cliente.id }));
-    setClienteSearch(cliente.nombre);
-    setSelectedCliente(cliente);
-    setShowClienteDropdown(false);
-    setFacturaErrors((prev) => ({ ...prev, cliente_id: '' }));
-  };
-
-  const handleClienteSearchChange = (e) => {
-    const value = e.target.value;
-    setClienteSearch(value);
-    setShowClienteDropdown(true);
-    if (!value || (selectedCliente && value !== selectedCliente.nombre)) {
-      setFormData((prev) => ({ ...prev, cliente_id: '' }));
-      setSelectedCliente(null);
-    }
-  };
-
-  const filteredClientes = filterClientesBySearch(clientes, clienteSearch);
-
-  const existingInvoiceNumbers = useMemo(() => getExistingInvoiceNumbers(reporte), [reporte]);
-
-  const numFacturaError = getNumFacturaError(
-    debouncedFacturaInputs.num_factura,
-    existingInvoiceNumbers,
-    facturaErrors.num_factura
-  );
-
-  const facturaPreview = calculateFacturaPreview(formData);
-
-  const closeFacturaModal = useCallback(() => {
-    setShowFacturaModal(false);
-    setFormData(getInitialFacturaForm());
-    setFacturaErrors({});
-    setDebouncedFacturaInputs({ num_factura: '', valor_factura: '' });
-    setClienteSearch('');
-    setSelectedCliente(null);
-    setShowClienteDropdown(false);
-  }, []);
-
-  const flushFacturaNumericInputs = () => {
-    setDebouncedFacturaInputs({
-      num_factura: formData.num_factura,
-      valor_factura: formData.valor_factura,
-    });
-  };
-
-  const showFacturaCalculation = shouldShowFacturaCalculation(debouncedFacturaInputs, formData);
-
-  const handleCreateFactura = withFacturaSubmit(async (e) => {
-    e.preventDefault();
-    if (!isGerente) {
-      showToast('Solo un usuario Gerente puede crear facturas', 'error');
-      return;
-    }
-    const errors = validateFacturaForm(formData, existingInvoiceNumbers);
-    if (Object.keys(errors).length > 0) {
-      setFacturaErrors(errors);
-      const firstError = Object.values(errors)[0];
-      showToast(firstError, 'error');
-      return;
-    }
-
-    const result = await cuentasService.createFactura({
-      num_factura: parseInt(formData.num_factura),
-      cliente_id: parseInt(formData.cliente_id),
-      fecha_factura: formData.fecha_factura,
-      valor_factura: parseFloat(formData.valor_factura),
-      incluye_iva: formData.incluye_iva,
-      incluye_retencion_fuente: formData.incluye_retencion_fuente,
-      incluye_retencion_iva: formData.incluye_retencion_iva,
-    });
-
-    if (result.success) {
-      showToast('Factura creada exitosamente', 'success');
-      closeFacturaModal();
       refreshFinancialData();
     } else {
       showToast(result.message, 'error');
@@ -823,24 +637,24 @@ const Cuentas = () => {
           />
 
           <CreateFacturaModal
-            isOpen={showFacturaModal}
-            formData={formData}
-            facturaErrors={facturaErrors}
-            numFacturaError={numFacturaError}
-            clienteSearch={clienteSearch}
-            showClienteDropdown={showClienteDropdown}
-            filteredClientes={filteredClientes}
-            selectedCliente={selectedCliente}
-            shouldShowCalculation={showFacturaCalculation}
-            preview={facturaPreview}
+            isOpen={facturaForm.isOpen}
+            formData={facturaForm.formData}
+            facturaErrors={facturaForm.facturaErrors}
+            numFacturaError={facturaForm.numFacturaError}
+            clienteSearch={facturaForm.clienteSearch}
+            showClienteDropdown={facturaForm.showClienteDropdown}
+            filteredClientes={facturaForm.filteredClientes}
+            selectedCliente={facturaForm.selectedCliente}
+            shouldShowCalculation={facturaForm.showFacturaCalculation}
+            preview={facturaForm.facturaPreview}
             isSubmitting={isCreatingFactura}
-            onFormChange={handleFormChange}
-            onClienteSearchChange={handleClienteSearchChange}
-            onClienteFocus={() => setShowClienteDropdown(true)}
-            onClienteSelect={handleClienteSelect}
-            onFlushNumericInputs={flushFacturaNumericInputs}
-            onSubmit={handleCreateFactura}
-            onClose={closeFacturaModal}
+            onFormChange={facturaForm.handleFormChange}
+            onClienteSearchChange={facturaForm.handleClienteSearchChange}
+            onClienteFocus={() => facturaForm.setShowClienteDropdown(true)}
+            onClienteSelect={facturaForm.handleClienteSelect}
+            onFlushNumericInputs={facturaForm.flushFacturaNumericInputs}
+            onSubmit={withFacturaSubmit(facturaForm.handleCreateFactura)}
+            onClose={facturaForm.close}
           />
 
           <BatchPaymentModal

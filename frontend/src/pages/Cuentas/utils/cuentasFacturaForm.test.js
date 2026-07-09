@@ -1,4 +1,5 @@
 import {
+  buildFacturaPayload,
   calculateFacturaPreview,
   filterClientesBySearch,
   getExistingInvoiceNumbers,
@@ -22,6 +23,28 @@ describe('cuentasFacturaForm', () => {
       retencionFuente: 3,
       retencionIva: 10.5,
       porCobrar: 101.5,
+    });
+  });
+
+  test('construye payload parseado para crear factura', () => {
+    expect(
+      buildFacturaPayload({
+        num_factura: '12',
+        cliente_id: '3',
+        fecha_factura: '2026-07-09',
+        valor_factura: '100.50',
+        incluye_iva: true,
+        incluye_retencion_fuente: false,
+        incluye_retencion_iva: true,
+      })
+    ).toEqual({
+      num_factura: 12,
+      cliente_id: 3,
+      fecha_factura: '2026-07-09',
+      valor_factura: 100.5,
+      incluye_iva: true,
+      incluye_retencion_fuente: false,
+      incluye_retencion_iva: true,
     });
   });
 

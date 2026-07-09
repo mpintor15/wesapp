@@ -68,6 +68,16 @@ export const calculateFacturaPreview = (formData) => {
   return { subtotal, iva, retencionFuente, retencionIva, porCobrar };
 };
 
+export const buildFacturaPayload = (formData) => ({
+  num_factura: parseInt(formData.num_factura),
+  cliente_id: parseInt(formData.cliente_id),
+  fecha_factura: formData.fecha_factura,
+  valor_factura: parseFloat(formData.valor_factura),
+  incluye_iva: formData.incluye_iva,
+  incluye_retencion_fuente: formData.incluye_retencion_fuente,
+  incluye_retencion_iva: formData.incluye_retencion_iva,
+});
+
 export const shouldShowFacturaCalculation = (debouncedInputs, formData) =>
   parseInt(debouncedInputs.num_factura, 10) >= 1 &&
   !!formData.cliente_id &&
