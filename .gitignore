@@ -19,6 +19,13 @@ dist/
 build/
 *.log
 
+# Playwright local artifacts
+playwright-report/
+test-results/
+frontend/e2e/.auth/
+frontend/playwright-report/
+frontend/test-results/
+
 # IDE
 .vscode/
 .idea/
