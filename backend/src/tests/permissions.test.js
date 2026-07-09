@@ -6,7 +6,21 @@
  * - requireRole: restricción a rol específico
  */
 
-const { requirePermission, requireRole } = require('../middleware/permissions');
+jest.mock('../config/database', () => ({
+  query: jest.fn(),
+}));
+
+jest.mock('../config/logger', () => ({
+  error: jest.fn(),
+}));
+
+const db = require('../config/database');
+const {
+  requirePermission,
+  requireRole,
+  requireActive,
+  clearActiveCache,
+} = require('../middleware/permissions');
 
 const mockReq = (tipo_usuario) => ({
   user: { id: 1, usuario: 'test', tipo_usuario },
@@ -21,7 +35,10 @@ const mockRes = () => {
 
 const next = jest.fn();
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  clearActiveCache();
+});
 
 // ============================================
 // requirePermission
@@ -127,5 +144,48 @@ describe('requireRole', () => {
     const res = mockRes();
     middleware(mockReq('supervisor'), res, next);
     expect(res.status).toHaveBeenCalledWith(403);
+  });
+});
+
+// ============================================
+// requireActive
+// ============================================
+
+describe('requireActive', () => {
+  test('rechaza request sin usuario autenticado', async () => {
+    const res = mockRes();
+    await requireActive({ user: null }, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('permite usuario activo', async () => {
+    db.query.mockResolvedValue({ rows: [{ activo: true }], rowCount: 1 });
+
+    await requireActive(mockReq('gerente'), mockRes(), next);
+
+    expect(db.query).toHaveBeenCalledWith('SELECT activo FROM usuarios WHERE id = $1', [1]);
+    expect(next).toHaveBeenCalled();
+  });
+
+  test('rechaza usuario inexistente', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await requireActive(mockReq('gerente'), res, next);
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('rechaza usuario inactivo', async () => {
+    db.query.mockResolvedValue({ rows: [{ activo: false }], rowCount: 1 });
+    const res = mockRes();
+
+    await requireActive(mockReq('gerente'), res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(next).not.toHaveBeenCalled();
   });
 });
