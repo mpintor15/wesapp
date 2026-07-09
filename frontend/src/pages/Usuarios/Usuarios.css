@@ -79,33 +79,9 @@
   font-size: 0.82em;
 }
 
-/* ── Modals ───────────────────────────────────────────────── */
-.usuarios-modal {
-  width: min(94vw, 560px);
-  max-width: 560px;
-}
-
-.usuarios-modal--sm {
-  width: min(92vw, 400px);
-  max-width: 400px;
-}
-
-.usuarios-invitation-modal {
-  width: min(94vw, 580px);
-  max-width: 580px;
-}
-
 .usuarios-modal em {
   font-style: normal;
   color: var(--color-primary);
-}
-
-.usuarios-modal .modal-header {
-  padding: 16px 20px;
-}
-
-.usuarios-modal .modal-body {
-  padding: 16px 20px;
 }
 
 /* ── Form grid ────────────────────────────────────────────── */
@@ -116,15 +92,6 @@
 }
 
 /* ── Modal action buttons ─────────────────────────────────── */
-.usuarios-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 16px 20px 20px;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
-}
-
 .usuarios-modal-actions .btn {
   flex: 0 0 auto;
   width: 170px;
@@ -156,6 +123,16 @@
   gap: 6px;
 }
 
+.usuarios-card-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.usuarios-card-actions .usuarios-invite-action {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
 /* ── Invitation message ───────────────────────────────────── */
 .invitation-intro {
   font-size: 0.88rem;
@@ -175,8 +152,6 @@
   white-space: pre-wrap;
   word-break: break-word;
   color: #334155;
-  max-height: 320px;
-  overflow-y: auto;
 }
 
 /* ── Required field indicator ─────────────────────────────── */
@@ -239,10 +214,6 @@
     grid-template-columns: 1fr;
   }
 
-  .usuarios-modal-actions {
-    flex-wrap: wrap;
-  }
-
   .usuarios-modal-actions .btn,
   .usuarios-modal-actions .btn-modal-clear {
     flex: 1 1 140px;
@@ -252,6 +223,5 @@
 
   .invitation-message {
     font-size: 0.72rem;
-    max-height: 240px;
   }
 }

@@ -588,11 +588,7 @@
    FACTURA MODALS
    ============================================ */
 .modal-factura {
-  width: min(94vw, 680px);
-  max-width: 680px;
-  max-height: calc(100dvh - 32px);
-  display: flex;
-  flex-direction: column;
+  --app-modal-max-width: 680px;
   border: 1px solid #cbd5e1;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
 }
@@ -601,12 +597,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-.modal-factura .modal-header {
-  border-bottom: 1px solid #dbe2ea;
-  background: #f8fafc;
+.modal-factura .app-modal__body {
+  padding: 0;
 }
 
 .modal-factura .modal-form-grid {
@@ -711,11 +706,7 @@
 }
 
 .modal-factura .modal-buttons {
-  display: flex;
   gap: 10px;
-  padding: 16px 24px 20px;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
 }
 
 .modal-factura .modal-buttons .btn {
@@ -807,24 +798,16 @@
    CANCEL FACTURA MODAL
    ============================================ */
 .modal-cancel-factura {
-  width: min(92vw, 620px);
-  max-width: 620px;
-  max-height: calc(100dvh - 32px);
+  --app-modal-max-width: 620px;
   border: 1px solid #cbd5e1;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.24);
-}
-
-.modal-cancel-factura .modal-header {
-  padding: 18px 24px;
-  background: #f8fafc;
-  border-bottom: 1px solid #dbe2ea;
 }
 
 .modal-cancel-factura .modal-context {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  margin: 18px 24px 0;
+  margin-bottom: 18px;
   padding: 12px 14px;
   background: #fff7ed;
   border: 1px solid #fed7aa;
@@ -843,10 +826,6 @@
 .modal-cancel-factura .modal-context strong {
   color: #1f2937;
   font-weight: 800;
-}
-
-.modal-cancel-factura form {
-  padding: 18px 24px 22px;
 }
 
 .modal-cancel-factura .form-group {
@@ -893,7 +872,6 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  margin-top: 8px;
 }
 
 .modal-cancel-factura .modal-buttons .btn {
@@ -906,16 +884,9 @@
    REPORT MODAL
    ============================================ */
 .report-modal {
-  width: min(92vw, 560px);
-  max-width: 560px;
+  --app-modal-max-width: 560px;
   border: 1px solid #cbd5e1;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.22);
-}
-
-.report-modal .modal-header {
-  padding: 18px 24px;
-  background: #f8fafc;
-  border-bottom: 1px solid #dbe2ea;
 }
 
 .report-body {
@@ -944,7 +915,7 @@
   min-width: 0;
 }
 
-.pagos-report-filters input[type='date'],
+.pagos-report-filters .ff-date-input,
 .pagos-report-filters .ff-state select {
   width: 100%;
 }
@@ -968,17 +939,17 @@
    PAGO DETAIL MODAL
    ============================================ */
 .pago-detail-modal {
-  max-width: min(92vw, 580px);
-  width: 100%;
+  --app-modal-max-width: 580px;
 }
 
 .pago-detail-context {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px 16px;
-  padding: 14px 24px;
+  padding: 14px;
   background: #f8fafc;
-  border-bottom: 1px solid #eef1f7;
+  border: 1px solid #eef1f7;
+  border-radius: 10px;
   font-size: 0.875rem;
   color: #475569;
 }
@@ -989,8 +960,10 @@
 }
 
 .pago-detail-notes {
-  padding: 11px 24px;
-  border-bottom: 1px solid #eef1f7;
+  margin-top: 12px;
+  padding: 11px 14px;
+  border: 1px solid #eef1f7;
+  border-radius: 10px;
   background: #f8fafc;
   font-size: 0.86rem;
 }
@@ -1014,6 +987,7 @@
 }
 
 .pago-detail-table-shell {
+  margin-top: 12px;
   overflow-x: auto;
 }
 
@@ -1021,12 +995,7 @@
    BATCH PAYMENT MODAL (modal-batch-payment)
    ============================================ */
 .modal-batch-payment {
-  max-width: min(92vw, 720px);
-  width: 100%;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  --app-modal-max-width: 720px;
 }
 
 .modal-batch-payment form {
@@ -1038,9 +1007,7 @@
 }
 
 .bp-form-scroll {
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
+  padding: 0;
 }
 
 .bp-section {
@@ -1431,12 +1398,7 @@
 
 /* Footer buttons */
 .modal-batch-payment .modal-buttons {
-  display: flex;
   gap: 10px;
-  padding: 16px 24px;
-  border-top: 1px solid #eef1f7;
-  background: #f8fafc;
-  flex-shrink: 0;
 }
 
 .modal-batch-payment .modal-buttons .btn {
@@ -1573,10 +1535,6 @@
   }
 
   /* Batch payment modal responsive */
-  .modal-batch-payment {
-    max-height: 95vh;
-  }
-
   .bp-progress-labels {
     flex-direction: column;
     align-items: flex-start;
@@ -1599,12 +1557,6 @@
   .cuentas-table th,
   .cuentas-table td {
     padding: 8px 10px;
-  }
-
-  .modal {
-    width: 100%;
-    margin: 0;
-    max-height: calc(100dvh - 24px);
   }
 }
 
@@ -1642,32 +1594,7 @@
     padding: 10px;
   }
 
-  .modal-overlay {
-    height: 100dvh;
-    align-items: flex-start;
-    overflow: hidden;
-    padding: max(10px, env(safe-area-inset-top, 0px)) 10px
-      max(10px, env(safe-area-inset-bottom, 0px));
-  }
-
-  .modal {
-    max-height: calc(
-      100dvh - max(10px, env(safe-area-inset-top, 0px)) -
-        max(10px, env(safe-area-inset-bottom, 0px))
-    );
-  }
-
-  .modal-body,
-  .report-body,
-  .modal > form {
-    min-height: 0;
-  }
-
-  .modal-body,
   .report-body {
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
     scroll-padding-bottom: 20px;
   }
 
@@ -1742,8 +1669,7 @@
 
 /* Anulacion modal */
 .modal-anulacion {
-  max-width: 480px;
-  width: 90%;
+  --app-modal-max-width: 480px;
 }
 
 .anulacion-body {
@@ -1857,23 +1783,17 @@
 }
 
 .modal-cliente {
-  width: min(92vw, 460px);
-  max-width: 460px;
+  --app-modal-max-width: 460px;
 }
 
-.modal-cliente .modal-body {
-  padding: 18px 22px;
+.modal-cliente .app-modal__body {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
 .modal-cliente .modal-buttons {
-  display: flex;
   gap: 10px;
-  padding: 16px 22px 20px;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
 }
 
 .modal-cliente .modal-buttons .btn {

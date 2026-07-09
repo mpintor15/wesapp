@@ -1,18 +1,21 @@
+import AppModal from '../../../components/AppModal';
 import { formatDate, formatMetodoPago, formatMoney } from '../utils/cuentasFormatters';
 
 const PagoDetailModal = ({ pago, onClose }) => {
   if (!pago) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal pago-detail-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Pago #{pago.id}</h3>
-          <button className="modal-close" onClick={onClose} type="button">
-            ×
-          </button>
-        </div>
-        <div className="modal-context pago-detail-context">
+    <AppModal
+      isOpen={Boolean(pago)}
+      onClose={onClose}
+      closeOnBackdrop
+      title={`Pago #${pago.id}`}
+      size="lg"
+      className="pago-detail-modal"
+    >
+      <AppModal.Header />
+      <AppModal.Body>
+        <div className="pago-detail-context">
           <span>
             Cliente: <strong>{pago.cliente}</strong>
           </span>
@@ -72,8 +75,13 @@ const PagoDetailModal = ({ pago, onClose }) => {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </AppModal.Body>
+      <AppModal.Footer>
+        <button type="button" className="btn btn-modal-clear" onClick={onClose}>
+          Cerrar
+        </button>
+      </AppModal.Footer>
+    </AppModal>
   );
 };
 

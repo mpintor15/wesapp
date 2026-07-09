@@ -1,3 +1,5 @@
+import AppModal from '../../../components/AppModal';
+
 const CancelFacturaModal = ({
   isOpen,
   factura,
@@ -10,23 +12,25 @@ const CancelFacturaModal = ({
   if (!isOpen || !factura) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-cancel-factura" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Anular Factura</h3>
-          <button className="modal-close" onClick={onClose} type="button">
-            ×
-          </button>
-        </div>
-        <div className="modal-context">
-          <span>
-            Factura: <strong>#{factura.num_factura}</strong>
-          </span>
-          <span>
-            Cliente: <strong>{factura.cliente}</strong>
-          </span>
-        </div>
-        <form onSubmit={onSubmit}>
+    <AppModal
+      isOpen={isOpen}
+      onClose={onClose}
+      closeOnBackdrop
+      title="Anular Factura"
+      size="lg"
+      className="modal-cancel-factura"
+    >
+      <form onSubmit={onSubmit}>
+        <AppModal.Header />
+        <AppModal.Body>
+          <div className="modal-context">
+            <span>
+              Factura: <strong>#{factura.num_factura}</strong>
+            </span>
+            <span>
+              Cliente: <strong>{factura.cliente}</strong>
+            </span>
+          </div>
           <div className="form-group">
             <label>Detalle de anulación</label>
             <textarea
@@ -38,29 +42,29 @@ const CancelFacturaModal = ({
             />
             <span className="field-help">{detail.length}/300</span>
           </div>
-          <div className="modal-buttons">
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <span className="spinner spinner--sm" />
-                  Anulando…
-                </>
-              ) : (
-                'Confirmar anulación'
-              )}
-            </button>
-            <button
-              type="button"
-              className="btn btn-modal-clear"
-              onClick={onClose}
-              disabled={isSubmitting}
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </AppModal.Body>
+        <AppModal.Footer className="modal-buttons">
+          <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <span className="spinner spinner--sm" />
+                Anulando…
+              </>
+            ) : (
+              'Confirmar anulación'
+            )}
+          </button>
+          <button
+            type="button"
+            className="btn btn-modal-clear"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancelar
+          </button>
+        </AppModal.Footer>
+      </form>
+    </AppModal>
   );
 };
 

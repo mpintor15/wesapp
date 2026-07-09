@@ -27,24 +27,24 @@ const UsuariosMobileCards = ({ onDelete, onEdit, onInvite, usuarios }) => (
             <dd>{usuario.primer_login ? 'Pendiente' : 'Completado'}</dd>
           </div>
         </dl>
-        <div className="record-card-actions">
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => onEdit(usuario)}
-            type="button"
-          >
-            Editar
-          </button>
+        <div className="record-card-actions usuarios-card-actions">
           {isPendingUser(usuario) && (
             <button
-              className="btn btn-ghost btn-sm"
+              className="btn btn-invite btn-sm usuarios-invite-action"
               onClick={() => onInvite(usuario)}
               type="button"
             >
-              Invitación
+              Reenviar invitación
             </button>
           )}
-          <button className="btn btn-danger btn-sm" onClick={() => onDelete(usuario)} type="button">
+          <button className="btn btn-neutral btn-sm" onClick={() => onEdit(usuario)} type="button">
+            Editar
+          </button>
+          <button
+            className="btn btn-destructive btn-sm"
+            onClick={() => onDelete(usuario)}
+            type="button"
+          >
             Eliminar
           </button>
         </div>

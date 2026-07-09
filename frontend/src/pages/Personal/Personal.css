@@ -48,33 +48,6 @@
   padding: 8px 10px;
 }
 
-.personal-modal {
-  width: min(94vw, 680px);
-  max-width: 680px;
-}
-
-.personal-report-modal {
-  width: min(92vw, 440px);
-  max-width: 440px;
-}
-
-.personal-modal .modal-header {
-  padding: 16px 20px;
-}
-
-.personal-modal .modal-body {
-  padding: 16px 20px;
-}
-
-.personal-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 16px 20px 20px;
-  border-top: 1px solid #e2e8f0;
-  background: #f8fafc;
-}
-
 .personal-modal-actions .btn {
   flex: 0 0 auto;
   width: 160px;
@@ -104,6 +77,15 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.personal-modal .personal-date-input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-inline-size: 0;
+  box-sizing: border-box;
 }
 
 .personal-report-modal .report-form-grid {
@@ -318,10 +300,6 @@
 
   .personal-form-grid {
     grid-template-columns: 1fr;
-  }
-
-  .personal-modal-actions {
-    flex-wrap: wrap;
   }
 
   .personal-modal-actions .btn,

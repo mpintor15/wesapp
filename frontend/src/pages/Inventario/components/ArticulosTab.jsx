@@ -8,6 +8,7 @@ const ArticulosTab = ({
   articulosTotalPages,
   canDarBajaArticulo,
   canDeleteArticulo,
+  canEditArticulo,
   emptyStateText,
   filters,
   loading,
@@ -15,6 +16,7 @@ const ArticulosTab = ({
   onClearFilters,
   onDarBaja,
   onDelete,
+  onEdit,
   onFilterChange,
   onPageChange,
   onSort,
@@ -50,9 +52,11 @@ const ArticulosTab = ({
           articulosTotalPages={articulosTotalPages}
           canDarBajaArticulo={canDarBajaArticulo}
           canDeleteArticulo={canDeleteArticulo}
+          canEditArticulo={canEditArticulo}
           emptyStateText={emptyStateText}
           onDarBaja={onDarBaja}
           onDelete={onDelete}
+          onEdit={onEdit}
           onPageChange={onPageChange}
           onSort={onSort}
           paginatedArticulos={paginatedArticulos}

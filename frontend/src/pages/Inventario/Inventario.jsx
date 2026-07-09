@@ -90,6 +90,7 @@ const Inventario = () => {
   const [deleteCantidad, setDeleteCantidad] = useState(1);
   const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false);
   const [showBajaModal, setShowBajaModal] = useState(false);
+  const [editingArticulo, setEditingArticulo] = useState(null);
   const [bajaTarget, setBajaTarget] = useState(null);
   const [bajaForm, setBajaForm] = useState({ cantidad: 1, motivo: '' });
 
@@ -127,9 +128,17 @@ const Inventario = () => {
 
   const canDeleteArticulo = hasPermission('eliminar_articulo');
   const canDarBajaArticulo = hasPermission('dar_baja_articulo');
-  const showArticuloActions = canDeleteArticulo || canDarBajaArticulo;
+  const canEditArticulo = hasPermission('crear_articulo');
+  const showArticuloActions = canEditArticulo || canDeleteArticulo || canDarBajaArticulo;
+  const articuloActionCount = [canEditArticulo, canDarBajaArticulo, canDeleteArticulo].filter(
+    Boolean
+  ).length;
   const articuloActionsClass =
-    canDeleteArticulo && canDarBajaArticulo ? 'app-col-actions--double' : 'app-col-actions--single';
+    articuloActionCount >= 3
+      ? 'app-col-actions--triple'
+      : articuloActionCount === 2
+        ? 'app-col-actions--double'
+        : 'app-col-actions--single';
 
   // ── Data loading ─────────────────────────────────
   const loadInitialData = useCallback(async () => {
@@ -277,9 +286,37 @@ const Inventario = () => {
   };
 
   const handleOpenCreate = () => {
+    setEditingArticulo(null);
     resetFormData();
     setArticuloErrors({});
     setShowArticuloModal(true);
+  };
+
+  const handleOpenEdit = (articulo) => {
+    setEditingArticulo(articulo);
+    setFormData({
+      ...EMPTY_ARTICULO_FORM,
+      tipo_articulo: articulo.tipo_articulo || '',
+      nombre_articulo: articulo.nombre_articulo || '',
+      cantidad: articulo.cantidad ? String(articulo.cantidad) : '',
+      talla: articulo.talla || '',
+      marca: articulo.marca || '',
+      modelo: articulo.modelo || '',
+      numero_serie: articulo.numero_serie || '',
+      calibre: articulo.calibre || '',
+      fecha_caducidad: articulo.fecha_caducidad ? articulo.fecha_caducidad.slice(0, 10) : '',
+      ubicacion_nombre: articulo.ubicacion_nombre || '',
+      codigo_pantalla: articulo.codigo_pantalla || '',
+      codigo_radio: articulo.codigo_radio || '',
+      version: articulo.version || '',
+    });
+    setArticuloErrors({});
+    setShowArticuloModal(true);
+  };
+
+  const handleCancelArticulo = () => {
+    setShowArticuloModal(false);
+    setEditingArticulo(null);
   };
 
   const handleTipoChange = (e) => {
@@ -304,11 +341,18 @@ const Inventario = () => {
       return;
     }
 
-    const result = await inventarioService.createArticulo(buildArticuloPayload(formData));
+    const payload = buildArticuloPayload(formData);
+    const result = editingArticulo
+      ? await inventarioService.updateArticulo(editingArticulo.id, payload)
+      : await inventarioService.createArticulo(payload);
 
     if (result.success) {
-      showMessage('success', 'Artículo creado exitosamente');
+      showMessage(
+        'success',
+        editingArticulo ? 'Artículo actualizado exitosamente' : 'Artículo creado exitosamente'
+      );
       setShowArticuloModal(false);
+      setEditingArticulo(null);
       await fetchArticulos(getActiveFilterParams(), true);
     } else {
       showMessage('error', result.message);
@@ -614,6 +658,7 @@ const Inventario = () => {
           articulosTotalPages={articulosTotalPages}
           canDarBajaArticulo={canDarBajaArticulo}
           canDeleteArticulo={canDeleteArticulo}
+          canEditArticulo={canEditArticulo}
           emptyStateText={emptyStateText}
           filters={filters}
           loading={loading}
@@ -621,6 +666,7 @@ const Inventario = () => {
           onClearFilters={handleClearFilters}
           onDarBaja={handleOpenBaja}
           onDelete={handleDeleteArticulo}
+          onEdit={handleOpenEdit}
           onFilterChange={handleFilterChange}
           onPageChange={setArticulosPage}
           onSort={handleArticulosSort}
@@ -665,8 +711,9 @@ const Inventario = () => {
         <ArticuloModal
           articuloErrors={articuloErrors}
           formData={formData}
+          isEditing={Boolean(editingArticulo)}
           isSavingArticulo={isSavingArticulo}
-          onCancel={() => setShowArticuloModal(false)}
+          onCancel={handleCancelArticulo}
           onFormChange={handleFormChange}
           onSubmit={handleSaveArticulo}
           onTipoChange={handleTipoChange}

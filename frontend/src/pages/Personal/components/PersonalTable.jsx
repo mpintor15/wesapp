@@ -70,9 +70,10 @@ const PersonalTable = ({
               <td className="center col-actions app-col-actions app-col-actions--double">
                 <div className="action-buttons app-table-actions">
                   <button
-                    className="action-btn action-btn-edit"
+                    className="action-btn action-btn-neutral"
                     onClick={() => onEdit(c)}
                     title="Editar"
+                    aria-label={`Editar ${c.nombres_completos}`}
                     type="button"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -81,9 +82,10 @@ const PersonalTable = ({
                     </svg>
                   </button>
                   <button
-                    className="action-btn action-btn-del"
+                    className="action-btn action-btn-destructive"
                     onClick={() => onDelete(c)}
                     title="Eliminar"
+                    aria-label={`Eliminar ${c.nombres_completos}`}
                     type="button"
                   >
                     <svg viewBox="0 0 24 24" aria-hidden="true">
