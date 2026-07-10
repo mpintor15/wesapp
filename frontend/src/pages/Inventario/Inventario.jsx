@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import inventarioService from '../../services/inventarioService';
@@ -15,6 +15,8 @@ import InventarioReportModals from './components/InventarioReportModals';
 import InventarioTabs from './components/InventarioTabs';
 import MovimientoModal from './components/MovimientoModal';
 import MovimientosTab from './components/MovimientosTab';
+import useInventarioData from './hooks/useInventarioData';
+import useMovimientoForm from './hooks/useMovimientoForm';
 import {
   buildArticuloFilterParams,
   buildArticuloPayload,
@@ -22,8 +24,6 @@ import {
   buildBajaPayload,
   buildBajasFilterParams,
   buildMovimientosExportParams,
-  buildMovimientoPayload,
-  createMovimientoForm,
   EMPTY_ARTICULO_FORM,
   EMPTY_ARTICULOS_EXPORT_FILTERS,
   EMPTY_ARTICULOS_FILTERS,
@@ -31,23 +31,16 @@ import {
   EMPTY_BAJAS_FILTERS,
   EMPTY_MOVIMIENTOS_EXPORT_FILTERS,
   EMPTY_MOVIMIENTOS_FILTERS,
-  addMovimientoItem,
   filterMovimientos,
-  filterArticulosForMovimiento,
-  getArticuloLabel,
   getArticuloTypeFormData,
   getNextSortState,
   getTotalPages,
   isStockTipo,
   paginateRows,
-  removeMovimientoItem,
   sortArticulos,
   sortMovimientos,
-  updateIndexedValue,
-  updateMovimientoItem,
   validateArticuloForm,
   validateBajaForm,
-  validateMovimientoForm,
 } from './utils/inventarioHelpers';
 import './Inventario.css';
 
@@ -58,17 +51,6 @@ const Inventario = () => {
   const { hasPermission } = useAuth();
   const { showToast } = useToast();
 
-  const [articulos, setArticulos] = useState([]);
-  const [catalogArticulos, setCatalogArticulos] = useState([]);
-  const [ubicaciones, setUbicaciones] = useState([]);
-  const [movimientos, setMovimientos] = useState([]);
-  const [bajas, setBajas] = useState([]);
-
-  const [loading, setLoading] = useState(true);
-  const [movimientosLoading, setMovimientosLoading] = useState(false);
-  const [bajasLoading, setBajasLoading] = useState(false);
-  const [movimientosLoaded, setMovimientosLoaded] = useState(false);
-  const [bajasLoaded, setBajasLoaded] = useState(false);
   const { isSubmitting: isSavingArticulo, withSubmit: withArticuloSubmit } = useSubmitState();
   const { isSubmitting: isSavingMovimiento, withSubmit: withMovimientoSubmit } = useSubmitState();
   const { isSubmitting: isSavingBaja, withSubmit: withBajaSubmit } = useSubmitState();
@@ -81,7 +63,6 @@ const Inventario = () => {
 
   // Modals
   const [showArticuloModal, setShowArticuloModal] = useState(false);
-  const [showMovimientoModal, setShowMovimientoModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showMovimientosExportModal, setShowMovimientosExportModal] = useState(false);
   const [showBajasExportModal, setShowBajasExportModal] = useState(false);
@@ -95,12 +76,8 @@ const Inventario = () => {
   const [bajaForm, setBajaForm] = useState({ cantidad: 1, motivo: '' });
 
   // Forms
-  const [movimientoForm, setMovimientoForm] = useState(createMovimientoForm);
-  const [itemSearchTerms, setItemSearchTerms] = useState(['']);
-  const [itemDropdownOpen, setItemDropdownOpen] = useState([false]);
   const [formData, setFormData] = useState(EMPTY_ARTICULO_FORM);
   const [articuloErrors, setArticuloErrors] = useState({});
-  const [movimientoErrors, setMovimientoErrors] = useState({});
   const [filters, setFilters] = useState(EMPTY_ARTICULOS_FILTERS);
   const [movimientosFilters, setMovimientosFilters] = useState(EMPTY_MOVIMIENTOS_FILTERS);
   const [movimientosFiltersDraft, setMovimientosFiltersDraft] = useState(EMPTY_MOVIMIENTOS_FILTERS);
@@ -126,6 +103,22 @@ const Inventario = () => {
     [showToast]
   );
 
+  const {
+    articulos,
+    catalogArticulos,
+    ubicaciones,
+    movimientos,
+    bajas,
+    loading,
+    movimientosLoading,
+    bajasLoading,
+    movimientosLoaded,
+    bajasLoaded,
+    fetchArticulos,
+    loadMovimientos,
+    loadBajas,
+  } = useInventarioData({ showMessage });
+
   const canDeleteArticulo = hasPermission('eliminar_articulo');
   const canDarBajaArticulo = hasPermission('dar_baja_articulo');
   const canEditArticulo = hasPermission('crear_articulo');
@@ -140,86 +133,23 @@ const Inventario = () => {
         ? 'app-col-actions--double'
         : 'app-col-actions--single';
 
-  // ── Data loading ─────────────────────────────────
-  const loadInitialData = useCallback(async () => {
-    setLoading(true);
-    const [ubicacionesRes, articulosRes] = await Promise.all([
-      inventarioService.getUbicaciones(),
-      inventarioService.getArticulos(),
-    ]);
-
-    if (ubicacionesRes.success) setUbicaciones(ubicacionesRes.data);
-    if (articulosRes.success) {
-      setArticulos(articulosRes.data);
-      setCatalogArticulos(articulosRes.data);
-    }
-    if (!ubicacionesRes.success || !articulosRes.success) {
-      showMessage(
-        'error',
-        ubicacionesRes.message || articulosRes.message || 'Error al cargar inventario'
-      );
-    }
-    setLoading(false);
-  }, [showMessage]);
-
-  const fetchArticulos = async (params = {}, refreshCatalog = false) => {
-    const shouldFetchCatalog = refreshCatalog && Object.keys(params).length > 0;
-    const [res, catalogRes] = await Promise.all([
-      inventarioService.getArticulos(params),
-      shouldFetchCatalog ? inventarioService.getArticulos() : Promise.resolve(null),
-    ]);
-    if (res.success) {
-      setArticulos(res.data);
-      if (refreshCatalog && !shouldFetchCatalog) setCatalogArticulos(res.data);
-    } else {
-      showMessage('error', res.message);
-    }
-    if (catalogRes) {
-      if (catalogRes.success) {
-        setCatalogArticulos(catalogRes.data);
-      } else {
-        showMessage('error', catalogRes.message);
-      }
-    }
-  };
-
-  const loadMovimientos = useCallback(async () => {
-    setMovimientosLoading(true);
-    const res = await inventarioService.getMovimientos();
-    if (res.success) {
-      setMovimientos(res.data);
-      setMovimientosLoaded(true);
-    } else {
-      showMessage('error', res.message);
-    }
-    setMovimientosLoading(false);
-  }, [showMessage]);
-
   const getActiveBajasFilterParams = useCallback(
     (source = bajasFilters) => buildBajasFilterParams(source),
     [bajasFilters]
   );
 
-  const loadBajas = useCallback(
-    async (params = getActiveBajasFilterParams()) => {
-      setBajasLoading(true);
-      const res = await inventarioService.getBajasArticulos(params);
-      if (res.success) {
-        setBajas(res.data);
-        setBajasLoaded(true);
-      } else {
-        showMessage('error', res.message);
-      }
-      setBajasLoading(false);
-    },
-    [getActiveBajasFilterParams, showMessage]
-  );
+  const getActiveFilterParams = useCallback(() => buildArticuloFilterParams(filters), [filters]);
 
-  useEffect(() => {
-    loadInitialData();
-    loadMovimientos();
-    loadBajas();
-  }, [loadInitialData, loadMovimientos, loadBajas]);
+  const handleMovimientoCreated = useCallback(async () => {
+    await fetchArticulos(getActiveFilterParams(), true);
+    await loadMovimientos();
+  }, [fetchArticulos, getActiveFilterParams, loadMovimientos]);
+
+  const movimientoFormState = useMovimientoForm({
+    catalogArticulos,
+    showMessage,
+    onCreated: handleMovimientoCreated,
+  });
 
   // ── Filters ──────────────────────────────────────
   const handleFilterChange = (e) => {
@@ -227,21 +157,15 @@ const Inventario = () => {
     setFilters((prev) => ({ ...prev, [name]: value }));
   };
 
-  const getActiveFilterParams = () => buildArticuloFilterParams(filters);
-
   const handleApplyFilters = async () => {
     setArticulosPage(1);
-    setLoading(true);
-    await fetchArticulos(getActiveFilterParams());
-    setLoading(false);
+    await fetchArticulos(getActiveFilterParams(), false, { showLoading: true });
   };
 
   const handleClearFilters = async () => {
     setFilters(EMPTY_ARTICULOS_FILTERS);
     setArticulosPage(1);
-    setLoading(true);
-    await fetchArticulos({}, true);
-    setLoading(false);
+    await fetchArticulos({}, true, { showLoading: true });
   };
 
   const handleMovimientosDraftChange = (e) => {
@@ -397,7 +321,7 @@ const Inventario = () => {
       setShowBajaModal(false);
       setBajaTarget(null);
       const requests = [fetchArticulos(getActiveFilterParams(), true)];
-      if (bajasLoaded) requests.push(loadBajas());
+      if (bajasLoaded) requests.push(loadBajas(getActiveBajasFilterParams()));
       await Promise.all(requests);
     } else {
       showMessage('error', result.message);
@@ -429,85 +353,6 @@ const Inventario = () => {
     setShowConfirmDeleteModal(false);
     setDeleteTarget(null);
   };
-
-  // ── Movimiento handlers ──────────────────────────
-  const openMovimientoModal = () => {
-    setMovimientoForm(createMovimientoForm());
-    setItemSearchTerms(['']);
-    setItemDropdownOpen([false]);
-    setMovimientoErrors({});
-    setShowMovimientoModal(true);
-  };
-
-  const handleMovimientoFormChange = (e) => {
-    const { name, value } = e.target;
-    setMovimientoForm((prev) => ({ ...prev, [name]: value }));
-    setMovimientoErrors((prev) => ({ ...prev, [name]: '' }));
-  };
-
-  const handleMovimientoItemChange = (index, field, value) => {
-    setMovimientoForm((prev) => ({
-      ...prev,
-      items: updateMovimientoItem(prev.items, index, field, value),
-    }));
-  };
-
-  const handleAddMovimientoItem = () => {
-    setMovimientoForm((prev) => ({
-      ...prev,
-      items: addMovimientoItem(prev.items),
-    }));
-    setItemSearchTerms((prev) => [...prev, '']);
-    setItemDropdownOpen((prev) => [...prev, false]);
-  };
-
-  const handleRemoveMovimientoItem = (index) => {
-    setMovimientoForm((prev) => ({
-      ...prev,
-      items: removeMovimientoItem(prev.items, index),
-    }));
-    setItemSearchTerms((prev) => removeMovimientoItem(prev, index));
-    setItemDropdownOpen((prev) => removeMovimientoItem(prev, index));
-  };
-
-  const filterArticulos = (searchTerm) =>
-    filterArticulosForMovimiento(catalogArticulos, searchTerm);
-
-  const selectArticuloForItem = (index, articulo) => {
-    handleMovimientoItemChange(index, 'articulo_id', String(articulo.id));
-    handleMovimientoItemChange(index, 'talla', articulo.talla || '');
-    handleMovimientoItemChange(index, 'cantidad', 1);
-    setItemSearchTerms((prev) => updateIndexedValue(prev, index, getArticuloLabel(articulo)));
-    setItemDropdownOpen((prev) => updateIndexedValue(prev, index, false));
-  };
-
-  const clearArticuloForItem = (index) => {
-    handleMovimientoItemChange(index, 'articulo_id', '');
-    handleMovimientoItemChange(index, 'talla', '');
-    handleMovimientoItemChange(index, 'cantidad', 1);
-    setItemSearchTerms((prev) => updateIndexedValue(prev, index, ''));
-  };
-
-  const handleCreateMovimiento = withMovimientoSubmit(async (e) => {
-    e.preventDefault();
-    const errors = validateMovimientoForm(movimientoForm);
-
-    if (Object.keys(errors).length > 0) {
-      setMovimientoErrors(errors);
-      showMessage('error', Object.values(errors)[0]);
-      return;
-    }
-
-    const result = await inventarioService.createMovimiento(buildMovimientoPayload(movimientoForm));
-    if (result.success) {
-      showMessage('success', 'Movimiento registrado exitosamente');
-      setShowMovimientoModal(false);
-      await fetchArticulos(getActiveFilterParams(), true);
-      await loadMovimientos();
-    } else {
-      showMessage('error', result.message);
-    }
-  });
 
   const handleDownloadPdf = async (movimiento) => {
     const result = await inventarioService.downloadMovimientoPdf(movimiento.id);
@@ -616,7 +461,7 @@ const Inventario = () => {
       loadMovimientos();
     }
     if (tab === 'bajas' && !bajasLoaded && !bajasLoading) {
-      loadBajas();
+      loadBajas(getActiveBajasFilterParams());
     }
   };
 
@@ -631,7 +476,7 @@ const Inventario = () => {
         isExportingBajas={isExportingBajas}
         onBack={() => navigate('/')}
         onCreateArticulo={handleOpenCreate}
-        onCreateMovimiento={openMovimientoModal}
+        onCreateMovimiento={movimientoFormState.open}
         onExportArticulos={openExportModal}
         onExportBajas={openBajasExportModal}
         onExportMovimientos={openMovimientosExportModal}
@@ -720,25 +565,25 @@ const Inventario = () => {
         />
       )}
 
-      {showMovimientoModal && (
+      {movimientoFormState.isOpen && (
         <MovimientoModal
           catalogArticulos={catalogArticulos}
-          filterArticulos={filterArticulos}
+          filterArticulos={movimientoFormState.filterArticulos}
           isSavingMovimiento={isSavingMovimiento}
-          itemDropdownOpen={itemDropdownOpen}
-          itemSearchTerms={itemSearchTerms}
-          movimientoErrors={movimientoErrors}
-          movimientoForm={movimientoForm}
-          onAddItem={handleAddMovimientoItem}
-          onCancel={() => setShowMovimientoModal(false)}
-          onClearArticulo={clearArticuloForItem}
-          onFormChange={handleMovimientoFormChange}
-          onItemChange={handleMovimientoItemChange}
-          onRemoveItem={handleRemoveMovimientoItem}
-          onSelectArticulo={selectArticuloForItem}
-          onSubmit={handleCreateMovimiento}
-          setItemDropdownOpen={setItemDropdownOpen}
-          setItemSearchTerms={setItemSearchTerms}
+          itemDropdownOpen={movimientoFormState.itemDropdownOpen}
+          itemSearchTerms={movimientoFormState.itemSearchTerms}
+          movimientoErrors={movimientoFormState.movimientoErrors}
+          movimientoForm={movimientoFormState.movimientoForm}
+          onAddItem={movimientoFormState.handleAddMovimientoItem}
+          onCancel={movimientoFormState.close}
+          onClearArticulo={movimientoFormState.clearArticuloForItem}
+          onFormChange={movimientoFormState.handleMovimientoFormChange}
+          onItemChange={movimientoFormState.handleMovimientoItemChange}
+          onRemoveItem={movimientoFormState.handleRemoveMovimientoItem}
+          onSelectArticulo={movimientoFormState.selectArticuloForItem}
+          onSubmit={withMovimientoSubmit(movimientoFormState.handleCreateMovimiento)}
+          setItemDropdownOpen={movimientoFormState.setItemDropdownOpen}
+          setItemSearchTerms={movimientoFormState.setItemSearchTerms}
         />
       )}
 
