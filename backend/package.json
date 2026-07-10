@@ -50,6 +50,9 @@
     "zod": "^4.4.3"
   },
   "overrides": {
+    "express": {
+      "path-to-regexp": "0.1.13"
+    },
     "exceljs": {
       "uuid": "11.1.1"
     }
