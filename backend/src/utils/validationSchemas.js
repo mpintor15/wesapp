@@ -1,4 +1,9 @@
 const { z } = require('zod');
+const {
+  isValidDateString,
+  parseStrictPositiveInteger,
+  parseStrictPositiveNumber,
+} = require('./inputValidation');
 
 const emptyToUndefined = (value) => (value === '' ? undefined : value);
 const trimmedString = (max, label) =>
@@ -8,23 +13,35 @@ const optionalTrimmedString = (max, label) =>
 const requiredTrimmedString = (max, label) =>
   trimmedString(max, label).min(1, `${label} no puede estar vacío`);
 const positiveInt = (label) =>
-  z.coerce
-    .number({ required_error: `${label} es requerido` })
-    .int(`${label} debe ser un entero`)
-    .positive(`${label} debe ser positivo`);
+  z
+    .union([z.string(), z.number()], { required_error: `${label} es requerido` })
+    .refine((value) => parseStrictPositiveInteger(value, `${label} debe ser positivo`).valid, {
+      message: `${label} debe ser un entero positivo`,
+    })
+    .transform((value) => parseStrictPositiveInteger(value, `${label} debe ser positivo`).value);
 const positiveNumber = (label) =>
-  z.coerce
-    .number({ required_error: `${label} es requerido` })
-    .positive(`${label} debe ser positivo`);
+  z
+    .union([z.string(), z.number()], { required_error: `${label} es requerido` })
+    .refine((value) => parseStrictPositiveNumber(value, `${label} debe ser positivo`).valid, {
+      message: `${label} debe ser positivo`,
+    })
+    .transform((value) => parseStrictPositiveNumber(value, `${label} debe ser positivo`).value);
 const optionalPositiveNumber = (label) =>
   z.preprocess(
     emptyToUndefined,
-    z.coerce.number().positive(`${label} debe ser positivo`).optional()
+    z
+      .union([z.string(), z.number()], { required_error: `${label} es requerido` })
+      .refine((value) => parseStrictPositiveNumber(value, `${label} debe ser positivo`).valid, {
+        message: `${label} debe ser positivo`,
+      })
+      .transform((value) => parseStrictPositiveNumber(value, `${label} debe ser positivo`).value)
+      .optional()
   );
 const dateString = (label) =>
   z
     .string({ required_error: `${label} es requerida` })
-    .regex(/^\d{4}-\d{2}-\d{2}$/, `${label} debe tener formato YYYY-MM-DD`);
+    .regex(/^\d{4}-\d{2}-\d{2}$/, `${label} debe tener formato YYYY-MM-DD`)
+    .refine(isValidDateString, `${label} debe ser una fecha real`);
 const optionalDateString = (label) => z.preprocess(emptyToUndefined, dateString(label).optional());
 const booleanFromForm = z.preprocess((value) => {
   if (value === 'true') {

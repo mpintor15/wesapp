@@ -11,6 +11,7 @@ const db = require('../config/database');
 const app = require('../app');
 const config = require('../config/config');
 const { clearActiveCache } = require('../middleware/permissions');
+const { AUTH_ERROR_CODES, AUTH_ERROR_MESSAGES } = require('../utils/authErrorCodes');
 
 const userRow = async (overrides = {}) => ({
   id: 7,
@@ -24,19 +25,11 @@ const userRow = async (overrides = {}) => ({
   ...overrides,
 });
 
-const mockAuthQuery = ({
-  loginUser,
-  verifyUser,
-  activeForRequireActive = true,
-  updateOk = true,
-}) => {
+const mockAuthQuery = ({ loginUser, verifyUser, updateOk = true }) => {
   db.query.mockImplementation(async (sql) => {
     const query = String(sql);
     if (query.includes('information_schema.columns')) {
       return { rows: [{ column_name: 'nombre' }], rowCount: 1 };
-    }
-    if (query === 'SELECT activo FROM usuarios WHERE id = $1') {
-      return { rows: [{ activo: activeForRequireActive }], rowCount: 1 };
     }
     if (query.includes('FROM usuarios WHERE usuario = $1')) {
       return loginUser ? { rows: [loginUser], rowCount: 1 } : { rows: [], rowCount: 0 };
@@ -49,7 +42,7 @@ const mockAuthQuery = ({
     if (query.includes('UPDATE usuarios SET password_hash')) {
       return { rows: [], rowCount: updateOk ? 1 : 0 };
     }
-    if (query.includes('FROM usuarios WHERE id = $1')) {
+    if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
       return verifyUser ? { rows: [verifyUser], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     return { rows: [], rowCount: 0 };
@@ -60,6 +53,31 @@ const signToken = (payload = {}) =>
   jwt.sign({ id: 7, usuario: 'admin', tipo_usuario: 'gerente', ...payload }, config.jwt.secret, {
     expiresIn: '1h',
   });
+
+const signExpiredToken = () =>
+  jwt.sign({ id: 7, usuario: 'admin', tipo_usuario: 'gerente' }, config.jwt.secret, {
+    expiresIn: '-1s',
+  });
+
+const expectAuthRequired = (res) => {
+  expect(res.status).toBe(401);
+  expect(res.body).toEqual({
+    success: false,
+    code: AUTH_ERROR_CODES.AUTHENTICATION_REQUIRED,
+    message: AUTH_ERROR_MESSAGES[AUTH_ERROR_CODES.AUTHENTICATION_REQUIRED],
+  });
+  expect(JSON.stringify(res.body)).not.toMatch(/Token|jwt|expired|invalid|stack|secret/i);
+};
+
+const expectUserDisabled = (res) => {
+  expect(res.status).toBe(403);
+  expect(res.body).toEqual({
+    success: false,
+    code: AUTH_ERROR_CODES.USER_DISABLED,
+    message: AUTH_ERROR_MESSAGES[AUTH_ERROR_CODES.USER_DISABLED],
+  });
+  expect(JSON.stringify(res.body)).not.toMatch(/stack|jwt|authorization|password/i);
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -93,8 +111,7 @@ describe('auth routes', () => {
       .post('/api/auth/login')
       .send({ usuario: 'ghost', password: 'correct-password' });
 
-    expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
+    expectAuthRequired(res);
   });
 
   test('login rechaza password inválido', async () => {
@@ -104,8 +121,7 @@ describe('auth routes', () => {
       .post('/api/auth/login')
       .send({ usuario: 'admin', password: 'wrong-password' });
 
-    expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
+    expectAuthRequired(res);
   });
 
   test('login rechaza usuario inactivo', async () => {
@@ -115,15 +131,13 @@ describe('auth routes', () => {
       .post('/api/auth/login')
       .send({ usuario: 'admin', password: 'correct-password' });
 
-    expect(res.status).toBe(403);
-    expect(res.body.message).toMatch(/desactivado/i);
+    expectUserDisabled(res);
   });
 
   test('verify rechaza token ausente', async () => {
     const res = await request(app).get('/api/auth/verify');
 
-    expect(res.status).toBe(401);
-    expect(res.body.message).toMatch(/Token no proporcionado/);
+    expectAuthRequired(res);
   });
 
   test('verify rechaza token inválido', async () => {
@@ -131,8 +145,25 @@ describe('auth routes', () => {
       .get('/api/auth/verify')
       .set('Authorization', 'Bearer not-a-token');
 
-    expect(res.status).toBe(401);
-    expect(res.body.message).toMatch(/Token inválido/);
+    expectAuthRequired(res);
+  });
+
+  test('verify rechaza token expirado con contrato genérico', async () => {
+    const res = await request(app)
+      .get('/api/auth/verify')
+      .set('Authorization', `Bearer ${signExpiredToken()}`);
+
+    expectAuthRequired(res);
+  });
+
+  test('verify rechaza usuario inexistente con token válido', async () => {
+    mockAuthQuery({ verifyUser: null });
+
+    const res = await request(app)
+      .get('/api/auth/verify')
+      .set('Authorization', `Bearer ${signToken()}`);
+
+    expectAuthRequired(res);
   });
 
   test('verify acepta token válido de usuario activo', async () => {
@@ -155,14 +186,12 @@ describe('auth routes', () => {
       .get('/api/auth/verify')
       .set('Authorization', `Bearer ${signToken()}`);
 
-    expect(res.status).toBe(403);
-    expect(res.body.message).toMatch(/desactivado/i);
+    expectUserDisabled(res);
   });
 
   test('change-password exige usuario activo antes del controlador', async () => {
     mockAuthQuery({
-      verifyUser: await userRow(),
-      activeForRequireActive: false,
+      verifyUser: await userRow({ activo: false }),
     });
 
     const res = await request(app)
@@ -170,8 +199,7 @@ describe('auth routes', () => {
       .set('Authorization', `Bearer ${signToken()}`)
       .send({ nueva_password: 'new-password-1', confirmar_password: 'new-password-1' });
 
-    expect(res.status).toBe(403);
-    expect(res.body.success).toBe(false);
+    expectUserDisabled(res);
   });
 
   test('change-password cambia password válido y completa primer login', async () => {

@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import cuentasService from '../../services/cuentasService';
 import { useToast } from '../../context/ToastContext';
 import AppModal from '../../components/AppModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import useClientesActions from './hooks/useClientesActions';
 
 const ROWS_PER_PAGE = 50;
 
@@ -16,12 +16,16 @@ const Clientes = ({
   const { showToast } = useToast();
   const [newClienteName, setNewClienteName] = useState('');
   const [newClienteId, setNewClienteId] = useState('');
-  const [loading, setLoading] = useState(false);
   const [clienteErrors, setClienteErrors] = useState({});
   const [search, setSearch] = useState('');
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [clientesSort, setClientesSort] = useState({ field: 'nombre', direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
+  const { loading, createCliente, deleteCliente } = useClientesActions({
+    showToast,
+    onClienteCreated,
+    onClienteDeleted,
+  });
 
   const filtered = useMemo(() => {
     if (!search.trim()) return clientes;
@@ -78,43 +82,21 @@ const Clientes = ({
 
   const handleCreateCliente = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    const errors = {};
-
-    if (!newClienteName.trim()) errors.nombre = 'Ingresa el nombre del cliente';
-    if (!newClienteId.trim()) errors.identificacion = 'Ingresa la identificación del cliente';
-
-    if (Object.keys(errors).length > 0) {
-      setClienteErrors(errors);
-      showToast(Object.values(errors)[0], 'error');
-      setLoading(false);
-      return;
-    }
-
-    const result = await cuentasService.createCliente(newClienteName, newClienteId);
-    if (result.success) {
-      showToast('Cliente creado exitosamente', 'success');
-      setNewClienteName('');
-      setNewClienteId('');
-      setClienteErrors({});
-      setShowClienteForm(false);
-      onClienteCreated();
-    } else {
-      showToast(result.message, 'error');
-    }
-    setLoading(false);
+    await createCliente({
+      nombre: newClienteName,
+      identificacion: newClienteId,
+      onValidationError: setClienteErrors,
+      onSuccess: () => {
+        setNewClienteName('');
+        setNewClienteId('');
+        setClienteErrors({});
+        setShowClienteForm(false);
+      },
+    });
   };
 
   const handleDeleteConfirmed = async () => {
-    if (!confirmTarget) return;
-    const result = await cuentasService.deleteCliente(confirmTarget.id);
-    if (result.success) {
-      showToast('Cliente eliminado exitosamente', 'success');
-      onClienteDeleted();
-    } else {
-      showToast(result.message, 'error');
-    }
-    setConfirmTarget(null);
+    await deleteCliente(confirmTarget, () => setConfirmTarget(null));
   };
 
   return (

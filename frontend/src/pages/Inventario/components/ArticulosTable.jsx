@@ -1,6 +1,8 @@
 import {
   formatDate,
   getCaducidadClass,
+  getEstadoOperativoClass,
+  getEstadoOperativoLabel,
   getSerieDisplay,
   getTipoLabel,
 } from '../utils/inventarioHelpers';
@@ -63,6 +65,7 @@ const ArticulosTable = ({
               sort={articulosSort}
               onSort={onSort}
             />
+            <SortHeader field="estado" label="Estado" sort={articulosSort} onSort={onSort} />
             {showArticuloActions && (
               <th className={`col-actions app-col-actions ${articuloActionsClass}`}></th>
             )}
@@ -90,6 +93,14 @@ const ArticulosTable = ({
                   {formatDate(articulo.fecha_caducidad)}
                 </td>
                 <td>{articulo.ubicacion_nombre || '-'}</td>
+                <td>
+                  <span
+                    className={`status-badge ${getEstadoOperativoClass(articulo.estado)}`}
+                    aria-label={`Estado: ${getEstadoOperativoLabel(articulo.estado)}`}
+                  >
+                    {getEstadoOperativoLabel(articulo.estado)}
+                  </span>
+                </td>
                 {showArticuloActions && (
                   <td className={`col-actions app-col-actions ${articuloActionsClass}`}>
                     <div className="action-buttons app-table-actions">
@@ -143,7 +154,7 @@ const ArticulosTable = ({
                         <button
                           className="action-btn action-btn-del"
                           onClick={() => onDelete(articulo)}
-                          title="Eliminar artículo"
+                          title="Eliminar administrativamente"
                           type="button"
                         >
                           <svg
@@ -171,7 +182,7 @@ const ArticulosTable = ({
             ))
           ) : (
             <tr>
-              <td colSpan={showArticuloActions ? 13 : 12} className="text-center">
+              <td colSpan={showArticuloActions ? 14 : 13} className="text-center">
                 {emptyStateText}
               </td>
             </tr>

@@ -1,8 +1,7 @@
 /**
  * api.js — Instancia central de Axios para comunicación con el backend
  *
- * Configura una instancia de Axios con la URL base del API (variable de
- * entorno REACT_APP_API_URL o http://localhost:3001/api por defecto).
+ * Configura una instancia de Axios con la URL base del API.
  *
  * Interceptores:
  *  - Request  : Agrega automáticamente el header Authorization: Bearer <token>
@@ -14,24 +13,32 @@
  * sus llamadas HTTP, garantizando autenticación y manejo de errores uniforme.
  */
 import axios from 'axios';
+import {
+  AUTH_ERROR_CODES,
+  getAuthErrorCode,
+  isPermissionDeniedAuthError,
+  isSessionExpiredAuthError,
+} from './authErrorClassifier';
 
 const AUTH_EXPIRED_EVENT = 'wesapp:auth-expired';
+const AUTH_PERMISSIONS_CHANGED_EVENT = 'wesapp:auth-permissions-changed';
 
-const shouldExpireSession = (error) => {
+const isAuthVerificationRequest = (error) => {
+  const url = String(error.config?.url || '');
+  return url.includes('/auth/verify');
+};
+
+const shouldResyncUserAfterForbidden = (error) => {
   const status = error.response?.status;
-  const message = String(error.response?.data?.message || '').toLowerCase();
 
-  if (status === 401) return true;
+  if (status !== 403) return false;
+  if (isAuthVerificationRequest(error)) return false;
 
-  if (status === 403 && message.includes('usuario desactivado')) {
-    return true;
-  }
-
-  return false;
+  return isPermissionDeniedAuthError(error);
 };
 
 // URL base del backend
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 // Instancia de Axios configurada
 const api = axios.create({
@@ -62,10 +69,12 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (shouldExpireSession(error)) {
+    if (isSessionExpiredAuthError(error)) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT));
+    } else if (shouldResyncUserAfterForbidden(error)) {
+      window.dispatchEvent(new CustomEvent(AUTH_PERMISSIONS_CHANGED_EVENT));
     }
 
     return Promise.reject(error);
@@ -73,5 +82,11 @@ api.interceptors.response.use(
 );
 
 export default api;
-export { AUTH_EXPIRED_EVENT };
+export {
+  AUTH_ERROR_CODES,
+  AUTH_EXPIRED_EVENT,
+  AUTH_PERMISSIONS_CHANGED_EVENT,
+  getAuthErrorCode,
+  shouldResyncUserAfterForbidden,
+};
 export { API_URL };

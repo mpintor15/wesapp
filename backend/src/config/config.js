@@ -10,11 +10,7 @@
  *  - jwt                 : Secreto y expiración del token JWT (24h por defecto).
  *  - cors                : Origen(es) permitidos para peticiones cross-origin.
  *  - database            : Credenciales de conexión a PostgreSQL.
- *  - permissions         : Mapa de módulos accesibles por tipo de usuario:
- *      · gerente    → acceso total (incluye gestión de usuarios).
- *      · secretario → cuentas, inventario y personal (sin gestión de usuarios).
- *      · supervisor → inventario y personal (solo lectura/movimientos).
- *      · contador   → únicamente el módulo de cuentas.
+ *  - pdfStorage          : Directorio base para PDFs generados en runtime.
  */
 const path = require('path');
 const dotenv = require('dotenv');
@@ -85,6 +81,7 @@ if (nodeEnv === 'production') {
   requireInProduction('DB_PASSWORD');
   requireInProduction('JWT_SECRET');
   requireInProduction('CORS_ORIGIN');
+  requireInProduction('PDF_STORAGE_PATH');
 
   if (process.env.JWT_SECRET === 'default_secret_change_this') {
     throw new Error('[CONFIG] JWT_SECRET cannot use the insecure default in production');
@@ -135,36 +132,8 @@ module.exports = {
     password: process.env.DB_PASSWORD,
   },
 
-  // Configuración de permisos por tipo de usuario
-  permissions: {
-    gerente: [
-      'cuentas',
-      'inventario',
-      'personal',
-      'usuarios',
-      'crear_articulo',
-      'eliminar_articulo',
-      'dar_baja_articulo',
-      'crear_movimiento',
-      'exportar',
-    ],
-    secretario: [
-      'cuentas',
-      'inventario',
-      'personal',
-      'crear_articulo',
-      'dar_baja_articulo',
-      'crear_movimiento',
-      'exportar',
-    ],
-    supervisor: [
-      'inventario',
-      'personal',
-      'crear_articulo',
-      'dar_baja_articulo',
-      'crear_movimiento',
-      'exportar',
-    ],
-    contador: ['cuentas', 'exportar'],
+  // En producción debe apuntar a un volumen persistente.
+  pdfStorage: {
+    path: process.env.PDF_STORAGE_PATH || path.resolve(__dirname, '../storage'),
   },
 };

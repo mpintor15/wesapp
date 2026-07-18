@@ -1,6 +1,8 @@
 import {
   formatDate,
   getCaducidadClass,
+  getEstadoOperativoClass,
+  getEstadoOperativoLabel,
   getSerieDisplay,
   getTipoLabel,
 } from '../utils/inventarioHelpers';
@@ -8,8 +10,10 @@ import {
 const ArticulosMobileCards = ({
   articulos,
   canDarBajaArticulo,
+  canDeleteArticulo,
   canEditArticulo,
   onDarBaja,
+  onDelete,
   onEdit,
   showArticuloActions,
 }) => (
@@ -25,6 +29,12 @@ const ArticulosMobileCards = ({
           </div>
           <span>{articulo.ubicacion_nombre || '-'}</span>
         </div>
+        <span
+          className={`status-badge ${getEstadoOperativoClass(articulo.estado)}`}
+          aria-label={`Estado: ${getEstadoOperativoLabel(articulo.estado)}`}
+        >
+          {getEstadoOperativoLabel(articulo.estado)}
+        </span>
         <div className="inventory-card-grid">
           <div>
             <strong>Serie</strong>
@@ -73,6 +83,15 @@ const ArticulosMobileCards = ({
                 type="button"
               >
                 Dar de baja
+              </button>
+            )}
+            {canDeleteArticulo && (
+              <button
+                className="btn btn-destructive btn-sm inventory-card-action"
+                onClick={() => onDelete(articulo)}
+                type="button"
+              >
+                Eliminar administrativamente
               </button>
             )}
           </div>

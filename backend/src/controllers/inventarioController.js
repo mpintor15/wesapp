@@ -36,9 +36,15 @@ const logger = require('../config/logger');
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
-const { createHttpError, isConstraintOrInputError } = require('../utils/http');
+const {
+  createHttpError,
+  parsePositiveInteger,
+  isConstraintOrInputError,
+} = require('../utils/http');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
-const { logAudit, auditFromReq } = require('../utils/audit');
+const { logAuditStrict, auditFromReq } = require('../utils/audit');
+const movementPdfStorage = require('../utils/movementPdfStorage');
+const { validateOptionalDateBounds } = require('../utils/inputValidation');
 const ALERTA_ESTADOS = new Set(['vencida', 'proxima_a_vencer', 'vigente']);
 
 const logControllerError = (message, error) => {
@@ -48,6 +54,16 @@ const logControllerError = (message, error) => {
     code: error.code,
     status: error.status,
   });
+};
+
+const validateInventoryDateBounds = (from, to) => {
+  const validation = validateOptionalDateBounds(from, to, {
+    invalidDateMessage: 'Las fechas deben tener formato YYYY-MM-DD y ser reales',
+    invertedRangeMessage: 'El rango de fechas es inválido',
+  });
+  if (!validation.valid) {
+    throw createHttpError(validation.status, validation.message);
+  }
 };
 
 const buildInventarioAlertasQuery = ({ tipo, ubicacion_id, estado, search }) => {
@@ -61,7 +77,7 @@ const buildInventarioAlertasQuery = ({ tipo, ubicacion_id, estado, search }) => 
   }
 
   if (ubicacion_id) {
-    params.push(ubicacion_id);
+    params.push(parsePositiveInteger(ubicacion_id, 'El filtro ubicación es inválido'));
     conditions.push(`ubicacion_id = $${params.length}`);
   }
 
@@ -113,9 +129,15 @@ const buildBajasArticulosQuery = ({ search, from, to }) => {
       b.version,
       b.ubicacion_id,
       b.ubicacion_nombre,
+      b.estado,
+      b.anulado_por,
+      b.anulado_en,
+      b.motivo_anulacion,
       u.usuario
     FROM articulos_bajas b
     LEFT JOIN usuarios u ON u.id = b.usuario_id`;
+
+  conditions.push('COALESCE(b.estado, $$ACTIVO$$) <> $$ELIMINADO$$');
 
   if (search) {
     params.push(`%${String(search).trim()}%`);
@@ -144,9 +166,7 @@ const buildBajasArticulosQuery = ({ search, from, to }) => {
     conditions.push(`b.fecha_baja::date <= $${params.length}::date`);
   }
 
-  if (conditions.length > 0) {
-    query += ` WHERE ${conditions.join(' AND ')}`;
-  }
+  query += ` WHERE ${conditions.join(' AND ')}`;
 
   query += ' ORDER BY b.fecha_baja DESC, b.id DESC';
   return { query, params };
@@ -180,6 +200,9 @@ const getUbicaciones = async (req, res) => {
 const getArticulos = async (req, res) => {
   try {
     const { tipo, ubicacion_id, estado, search } = req.query;
+    if (Object.prototype.hasOwnProperty.call(req.query, 'ubicacion_id')) {
+      parsePositiveInteger(ubicacion_id, 'El filtro ubicación es inválido');
+    }
     const normalizedEstado = estado ? String(estado).trim().toLowerCase() : '';
     if (estado && !ALERTA_ESTADOS.has(normalizedEstado)) {
       throw createHttpError(400, 'El filtro estado no es válido');
@@ -199,9 +222,9 @@ const getArticulos = async (req, res) => {
     });
   } catch (error) {
     logControllerError('Error al obtener articulos:', error);
-    res.status(500).json({
+    res.status(error.status || 500).json({
       success: false,
-      message: 'Error en el servidor',
+      message: error.status ? error.message : 'Error en el servidor',
     });
   }
 };
@@ -221,6 +244,129 @@ const isStockTipo = (tipo) => tipo === 'equipo' || tipo === 'otro';
 const getArticuloSerie = (articulo) =>
   articulo?.tipo_articulo === 'radio' ? articulo.codigo_radio : articulo?.numero_serie;
 
+const createAppError = (status, code, message) => {
+  const error = createHttpError(status, message);
+  error.appCode = code;
+  return error;
+};
+
+const validateDetailedReason = (value, fieldName = 'motivo') => {
+  if (typeof value !== 'string') {
+    throw createHttpError(400, `El ${fieldName} es requerido`);
+  }
+
+  const reason = value.trim();
+  if (reason.length < 10) {
+    throw createHttpError(400, `El ${fieldName} debe tener al menos 10 caracteres`);
+  }
+  if (reason.length > 500) {
+    throw createHttpError(400, `El ${fieldName} no puede exceder 500 caracteres`);
+  }
+  return reason;
+};
+
+const sendInventoryError = (res, error, logMessage) => {
+  logControllerError(logMessage, error);
+  const status = error.status || (isConstraintOrInputError(error) ? 400 : 500);
+  const body = {
+    success: false,
+    message: status >= 500 ? 'Error en el servidor' : error.message || 'Solicitud inválida',
+  };
+  if (error.appCode) {
+    body.code = error.appCode;
+  }
+  return res.status(status).json(body);
+};
+
+const ensureNonNegativeStock = (value, code = 'INSUFFICIENT_STOCK') => {
+  if (Number(value) < 0) {
+    throw createAppError(409, code, 'Stock insuficiente');
+  }
+};
+
+const lockArticulosByIds = async (client, ids) => {
+  const uniqueIds = [
+    ...new Set(ids.map(Number).filter((id) => Number.isInteger(id) && id > 0)),
+  ].sort((a, b) => a - b);
+  if (!uniqueIds.length) {
+    return new Map();
+  }
+
+  const result = await client.query(
+    `SELECT *
+     FROM articulos
+     WHERE id = ANY($1::int[])
+     ORDER BY id ASC
+     FOR UPDATE`,
+    [uniqueIds]
+  );
+
+  return new Map(result.rows.map((row) => [Number(row.id), row]));
+};
+
+const recordStockEffect = async (
+  client,
+  {
+    movimiento_id = null,
+    baja_id = null,
+    articulo_id,
+    delta,
+    stock_anterior,
+    stock_posterior,
+    ubicacion_anterior_id,
+    ubicacion_posterior_id,
+  }
+) => {
+  await client.query(
+    `INSERT INTO inventario_stock_efectos (
+      movimiento_id,
+      baja_id,
+      articulo_id,
+      delta,
+      stock_anterior,
+      stock_posterior,
+      ubicacion_anterior_id,
+      ubicacion_posterior_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [
+      movimiento_id,
+      baja_id,
+      articulo_id,
+      delta,
+      stock_anterior,
+      stock_posterior,
+      ubicacion_anterior_id,
+      ubicacion_posterior_id,
+    ]
+  );
+};
+
+const applyInverseStockEffect = async (client, effect, articulo, code) => {
+  if (!articulo) {
+    throw createAppError(409, code, 'No se puede revertir: artículo no disponible');
+  }
+
+  const currentStock = Number(articulo.cantidad) || 0;
+  const reversedStock = currentStock - Number(effect.delta);
+  ensureNonNegativeStock(reversedStock, code);
+
+  const shouldDeactivate =
+    reversedStock === 0 && effect.ubicacion_anterior_id === null && effect.delta > 0;
+  const nextLocation =
+    effect.ubicacion_anterior_id === undefined
+      ? articulo.ubicacion_id
+      : effect.ubicacion_anterior_id;
+
+  await client.query(
+    `UPDATE articulos
+     SET cantidad = $1,
+         activo = $2,
+         ubicacion_id = $3
+     WHERE id = $4`,
+    [reversedStock, !shouldDeactivate, nextLocation, articulo.id]
+  );
+};
+
 const getUniqueArticuloMessage = (error) => {
   const constraint = error.constraint || '';
   const detail = error.detail || '';
@@ -237,6 +383,8 @@ const getUniqueArticuloMessage = (error) => {
 };
 
 const createArticulo = async (req, res) => {
+  let client;
+  let transactionStarted = false;
   try {
     const {
       tipo_articulo,
@@ -282,29 +430,31 @@ const createArticulo = async (req, res) => {
     let ubicacionId = ubicacion_id;
     const ubicacionNombre = ubicacion_nombre ? String(ubicacion_nombre).trim() : '';
 
+    client = await db.getClient();
+    await client.query('BEGIN');
+    transactionStarted = true;
+
     if (!ubicacionId && ubicacionNombre) {
-      const existente = await db.query(
+      const existente = await client.query(
         'SELECT id FROM ubicaciones WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
         [ubicacionNombre]
       );
       if (existente.rowCount > 0) {
         ubicacionId = existente.rows[0].id;
       } else {
-        const creado = await db.query('INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING id', [
-          ubicacionNombre,
-        ]);
+        const creado = await client.query(
+          'INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING id',
+          [ubicacionNombre]
+        );
         ubicacionId = creado.rows[0].id;
       }
     }
 
     if (!ubicacionId) {
-      return res.status(400).json({
-        success: false,
-        message: 'La ubicación es requerida',
-      });
+      throw createHttpError(400, 'La ubicación es requerida');
     }
 
-    const result = await db.query(
+    const result = await client.query(
       `INSERT INTO articulos (
         tipo_articulo,
         nombre_articulo,
@@ -338,7 +488,7 @@ const createArticulo = async (req, res) => {
       ]
     );
 
-    await logAudit(db, {
+    await logAuditStrict(client, {
       tabla: 'articulos',
       operacion: 'INSERT',
       registro_id: String(result.rows[0].id),
@@ -346,12 +496,18 @@ const createArticulo = async (req, res) => {
       ...auditFromReq(req),
     });
 
+    await client.query('COMMIT');
+    transactionStarted = false;
+
     res.status(201).json({
       success: true,
       message: 'Artículo creado exitosamente',
       data: result.rows[0],
     });
   } catch (error) {
+    if (transactionStarted && client) {
+      await client.query('ROLLBACK');
+    }
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
@@ -364,17 +520,19 @@ const createArticulo = async (req, res) => {
         message: 'La ubicación especificada no existe',
       });
     }
-    logControllerError('Error al crear artículo:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    sendInventoryError(res, error, 'Error al crear artículo:');
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 
 const updateArticulo = async (req, res) => {
+  let client;
+  let transactionStarted = false;
   try {
-    const { id } = req.params;
+    const id = parsePositiveInteger(req.params.id, 'El id del artículo es inválido');
     const allowedFields = [
       'tipo_articulo',
       'nombre_articulo',
@@ -408,6 +566,9 @@ const updateArticulo = async (req, res) => {
         let value = req.body[field];
         if (field === 'cantidad' && value !== null && value !== undefined && value !== '') {
           value = parseInt(value, 10);
+          if (!Number.isInteger(value) || value < 0) {
+            throw createHttpError(400, 'La cantidad no puede ser negativa');
+          }
         }
         if (field === 'ubicacion_id' && value !== null && value !== undefined && value !== '') {
           value = parseInt(value, 10);
@@ -426,7 +587,16 @@ const updateArticulo = async (req, res) => {
 
     values.push(id);
 
-    const result = await db.query(
+    client = await db.getClient();
+    await client.query('BEGIN');
+    transactionStarted = true;
+
+    const currentRes = await client.query('SELECT * FROM articulos WHERE id = $1 FOR UPDATE', [id]);
+    if (currentRes.rowCount === 0) {
+      throw createHttpError(404, 'Artículo no encontrado');
+    }
+
+    const result = await client.query(
       `UPDATE articulos SET ${updates.join(', ')}
        WHERE id = $${values.length}
        RETURNING id, tipo_articulo, nombre_articulo, cantidad, talla, marca, modelo, numero_serie, calibre, fecha_caducidad, ubicacion_id`,
@@ -434,19 +604,20 @@ const updateArticulo = async (req, res) => {
     );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Artículo no encontrado',
-      });
+      throw createHttpError(404, 'Artículo no encontrado');
     }
 
-    await logAudit(db, {
+    await logAuditStrict(client, {
       tabla: 'articulos',
       operacion: 'UPDATE',
       registro_id: String(id),
+      datos_anteriores: currentRes.rows[0],
       datos_nuevos: result.rows[0],
       ...auditFromReq(req),
     });
+
+    await client.query('COMMIT');
+    transactionStarted = false;
 
     res.json({
       success: true,
@@ -454,6 +625,9 @@ const updateArticulo = async (req, res) => {
       data: result.rows[0],
     });
   } catch (error) {
+    if (transactionStarted && client) {
+      await client.query('ROLLBACK');
+    }
     if (error.code === '23505') {
       return res.status(400).json({
         success: false,
@@ -467,93 +641,82 @@ const updateArticulo = async (req, res) => {
       });
     }
     logControllerError('Error al actualizar artículo:', error);
-    res.status(500).json({
+    res.status(error.status || 500).json({
       success: false,
-      message: 'Error en el servidor',
+      message: error.status ? error.message : 'Error en el servidor',
     });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 
 const deleteArticulo = async (req, res) => {
-  const client = await db.getClient();
+  let client;
   try {
-    const { id } = req.params;
-    const cantidadParam = req.query.cantidad ? parseInt(req.query.cantidad, 10) : null;
+    const id = parsePositiveInteger(req.params.id, 'El id del artículo es inválido');
+    if (req.query?.cantidad !== undefined || req.body?.cantidad !== undefined) {
+      throw createAppError(
+        409,
+        'PARTIAL_ARTICLE_DELETE_DEPRECATED',
+        'La eliminación parcial por DELETE está obsoleta; usa baja de artículo o un ajuste explícito de inventario'
+      );
+    }
+    const motivo = validateDetailedReason(req.body?.motivo, 'motivo de eliminación');
 
+    client = await db.getClient();
     await client.query('BEGIN');
 
     const articuloRes = await client.query(
-      'SELECT id, tipo_articulo, cantidad FROM articulos WHERE id = $1',
+      `SELECT *
+       FROM articulos
+       WHERE id = $1
+       FOR UPDATE`,
       [id]
     );
 
     if (articuloRes.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({
-        success: false,
-        message: 'Artículo no encontrado',
-      });
+      throw createHttpError(404, 'Artículo no encontrado');
     }
 
     const articulo = articuloRes.rows[0];
-
-    if (isStockTipo(articulo.tipo_articulo) && articulo.cantidad && articulo.cantidad > 1) {
-      if (!cantidadParam || cantidadParam <= 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({
-          success: false,
-          message: 'Debes indicar la cantidad a eliminar',
-        });
-      }
-      if (cantidadParam > articulo.cantidad) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({
-          success: false,
-          message: 'La cantidad a eliminar supera el stock disponible',
-        });
-      }
-
-      const restante = articulo.cantidad - cantidadParam;
-      if (restante > 0) {
-        await client.query('UPDATE articulos SET cantidad = $1 WHERE id = $2', [
-          restante,
-          articulo.id,
-        ]);
-        await logAudit(client, {
-          tabla: 'articulos',
-          operacion: 'UPDATE',
-          registro_id: String(articulo.id),
-          datos_anteriores: articulo,
-          datos_nuevos: { cantidad: restante },
-          ...auditFromReq(req),
-        });
-        await client.query('COMMIT');
-        return res.json({
-          success: true,
-          message: 'Cantidad eliminada exitosamente',
-        });
-      }
-    }
-
-    const result = await client.query(
-      'UPDATE articulos SET activo = FALSE, cantidad = 0, ubicacion_id = NULL WHERE id = $1 RETURNING id',
+    const historialRes = await client.query(
+      `SELECT
+        EXISTS (SELECT 1 FROM detalle_movimientos WHERE articulo_id = $1) AS tiene_movimientos,
+        EXISTS (SELECT 1 FROM articulos_bajas WHERE articulo_id = $1) AS tiene_bajas`,
       [id]
     );
 
+    const result = await client.query(
+      `UPDATE articulos
+       SET activo = FALSE,
+           cantidad = 0,
+           ubicacion_id = NULL,
+           eliminado_por = $2,
+           eliminado_en = CURRENT_TIMESTAMP,
+           motivo_eliminacion = $3
+       WHERE id = $1
+       RETURNING id, activo, cantidad, ubicacion_id, eliminado_por, eliminado_en, motivo_eliminacion`,
+      [id, req.user?.id || null, motivo]
+    );
+
     if (result.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({
-        success: false,
-        message: 'Artículo no encontrado',
-      });
+      throw createHttpError(404, 'Artículo no encontrado');
     }
 
-    await logAudit(client, {
+    await logAuditStrict(client, {
       tabla: 'articulos',
       operacion: 'UPDATE',
       registro_id: String(id),
       datos_anteriores: articulo,
-      datos_nuevos: { activo: false, cantidad: 0, ubicacion_id: null },
+      datos_nuevos: {
+        ...result.rows[0],
+        motivo_eliminacion: motivo,
+        tiene_historial: Boolean(
+          historialRes.rows[0]?.tiene_movimientos || historialRes.rows[0]?.tiene_bajas
+        ),
+      },
       ...auditFromReq(req),
     });
 
@@ -564,20 +727,21 @@ const deleteArticulo = async (req, res) => {
       message: 'Artículo eliminado exitosamente',
     });
   } catch (error) {
-    await client.query('ROLLBACK');
-    logControllerError('Error al eliminar artículo:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    sendInventoryError(res, error, 'Error al eliminar artículo:');
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 };
 
 const getBajasArticulos = async (req, res) => {
   try {
     const { search, from, to } = req.query;
+    validateInventoryDateBounds(from, to);
     const { query, params } = buildBajasArticulosQuery({ search, from, to });
     const result = await db.query(query, params);
 
@@ -586,18 +750,14 @@ const getBajasArticulos = async (req, res) => {
       data: result.rows,
     });
   } catch (error) {
-    logControllerError('Error al obtener bajas de artículos:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    sendInventoryError(res, error, 'Error al obtener bajas de artículos:');
   }
 };
 
 const darBajaArticulo = async (req, res) => {
-  const client = await db.getClient();
+  let client;
   try {
-    const { id } = req.params;
+    const id = parsePositiveInteger(req.params.id, 'El id del artículo es inválido');
     const motivo = req.body?.motivo ? String(req.body.motivo).trim() : '';
     const cantidadSolicitada = Number.parseInt(req.body?.cantidad, 10);
 
@@ -608,6 +768,7 @@ const darBajaArticulo = async (req, res) => {
       });
     }
 
+    client = await db.getClient();
     await client.query('BEGIN');
 
     const articuloRes = await client.query(
@@ -634,11 +795,7 @@ const darBajaArticulo = async (req, res) => {
     );
 
     if (articuloRes.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({
-        success: false,
-        message: 'Artículo no encontrado',
-      });
+      throw createHttpError(404, 'Artículo no encontrado');
     }
 
     const articulo = articuloRes.rows[0];
@@ -646,22 +803,18 @@ const darBajaArticulo = async (req, res) => {
     const cantidadBaja = isStockTipo(articulo.tipo_articulo) ? cantidadSolicitada : 1;
 
     if (!Number.isInteger(cantidadBaja) || cantidadBaja <= 0) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        success: false,
-        message: 'La cantidad a dar de baja debe ser mayor a 0',
-      });
+      throw createHttpError(400, 'La cantidad a dar de baja debe ser mayor a 0');
     }
 
     if (cantidadBaja > cantidadActual) {
-      await client.query('ROLLBACK');
-      return res.status(400).json({
-        success: false,
-        message: 'La cantidad a dar de baja supera el stock disponible',
-      });
+      throw createAppError(
+        409,
+        'INSUFFICIENT_STOCK',
+        'La cantidad a dar de baja supera el stock disponible'
+      );
     }
 
-    await client.query(
+    const bajaInsertRes = await client.query(
       `INSERT INTO articulos_bajas (
         articulo_id,
         usuario_id,
@@ -678,8 +831,10 @@ const darBajaArticulo = async (req, res) => {
         codigo_radio,
         version,
         ubicacion_id,
-        ubicacion_nombre
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+        ubicacion_nombre,
+        reversion_datos_completos
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, TRUE)
+       RETURNING id`,
       [
         articulo.id,
         req.user?.id || null,
@@ -712,11 +867,27 @@ const darBajaArticulo = async (req, res) => {
       ]);
     }
 
-    await logAudit(client, {
+    await recordStockEffect(client, {
+      baja_id: bajaInsertRes.rows[0].id,
+      articulo_id: articulo.id,
+      delta: -cantidadBaja,
+      stock_anterior: cantidadActual,
+      stock_posterior: restante,
+      ubicacion_anterior_id: articulo.ubicacion_id,
+      ubicacion_posterior_id: articulo.ubicacion_id,
+    });
+
+    await logAuditStrict(client, {
       tabla: 'articulos_bajas',
       operacion: 'INSERT',
-      registro_id: String(articulo.id),
-      datos_nuevos: { articulo_id: articulo.id, cantidad: cantidadBaja, motivo, restante },
+      registro_id: String(bajaInsertRes.rows[0].id),
+      datos_nuevos: {
+        id: bajaInsertRes.rows[0].id,
+        articulo_id: articulo.id,
+        cantidad: cantidadBaja,
+        motivo,
+        restante,
+      },
       ...auditFromReq(req),
     });
 
@@ -728,14 +899,14 @@ const darBajaArticulo = async (req, res) => {
         restante > 0 ? 'Cantidad dada de baja exitosamente' : 'Artículo dado de baja exitosamente',
     });
   } catch (error) {
-    await client.query('ROLLBACK');
-    logControllerError('Error al dar de baja artículo:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    sendInventoryError(res, error, 'Error al dar de baja artículo:');
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 };
 
@@ -750,6 +921,30 @@ const getMovimientos = async (req, res) => {
         m.id,
         m.fecha_movimiento,
         m.pdf_path,
+        m.estado,
+        m.anulado_por,
+        m.anulado_en,
+        m.motivo_anulacion,
+        (
+          COALESCE(m.estado, 'ACTIVO') = 'ACTIVO'
+          AND COALESCE(m.reversion_datos_completos, FALSE) = TRUE
+          AND EXISTS (
+            SELECT 1
+            FROM inventario_stock_efectos e
+            WHERE e.movimiento_id = m.id
+          )
+        ) AS reversible,
+        CASE
+          WHEN COALESCE(m.estado, 'ACTIVO') = 'ANULADO' THEN 'ALREADY_VOIDED'
+          WHEN COALESCE(m.estado, 'ACTIVO') = 'ELIMINADO' THEN 'ADMINISTRATIVELY_DELETED'
+          WHEN COALESCE(m.reversion_datos_completos, FALSE) = TRUE
+            AND EXISTS (
+              SELECT 1
+              FROM inventario_stock_efectos e
+              WHERE e.movimiento_id = m.id
+            ) THEN 'COMPLETE'
+          ELSE 'INCOMPLETE'
+        END AS reversal_status,
         u.usuario,
         COALESCE(SUM(d.cantidad), 0)::INT AS items,
         STRING_AGG(
@@ -777,6 +972,7 @@ const getMovimientos = async (req, res) => {
       LEFT JOIN usuarios u ON m.usuario_id = u.id
       LEFT JOIN ubicaciones ao ON d.ubicacion_origen_id = ao.id
       LEFT JOIN ubicaciones ad ON d.ubicacion_destino_id = ad.id
+      WHERE COALESCE(m.estado, 'ACTIVO') <> 'ELIMINADO'
       GROUP BY m.id, u.usuario
       ORDER BY m.fecha_movimiento DESC`
     );
@@ -786,11 +982,7 @@ const getMovimientos = async (req, res) => {
       data: result.rows,
     });
   } catch (error) {
-    logControllerError('Error al obtener movimientos:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    sendInventoryError(res, error, 'Error al obtener movimientos:');
   }
 };
 
@@ -809,11 +1001,13 @@ const buildMovimientosReporteQuery = ({ from, to, destino_id }) => {
   }
 
   if (destino_id) {
-    params.push(destino_id);
+    params.push(parsePositiveInteger(destino_id, 'El filtro destino es inválido'));
     conditions.push(`d.ubicacion_destino_id = $${params.length}`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  conditions.push('COALESCE(m.estado, $$ACTIVO$$) <> $$ELIMINADO$$');
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
 
   return {
     params,
@@ -821,6 +1015,9 @@ const buildMovimientosReporteQuery = ({ from, to, destino_id }) => {
       SELECT
         m.id,
         m.fecha_movimiento,
+        m.estado,
+        m.anulado_en,
+        m.motivo_anulacion,
         u.usuario,
         COALESCE(SUM(d.cantidad), 0)::INT AS items,
         STRING_AGG(
@@ -895,6 +1092,9 @@ const ESTADO_LABELS = {
 const exportArticulosExcel = async (req, res) => {
   try {
     const { tipo, ubicacion_id, estado, search } = req.query;
+    if (Object.prototype.hasOwnProperty.call(req.query, 'ubicacion_id')) {
+      parsePositiveInteger(ubicacion_id, 'El filtro ubicación es inválido');
+    }
     const normalizedEstado = estado ? String(estado).trim().toLowerCase() : '';
     if (estado && !ALERTA_ESTADOS.has(normalizedEstado)) {
       throw createHttpError(400, 'El filtro estado no es válido');
@@ -948,13 +1148,19 @@ const exportArticulosExcel = async (req, res) => {
     await sendExcel(workbook, res, 'inventario.xlsx');
   } catch (error) {
     logControllerError('Error al exportar inventario:', error);
-    res.status(500).json({ success: false, message: 'Error al exportar Excel' });
+    res
+      .status(error.status || 500)
+      .json({ success: false, message: error.status ? error.message : 'Error al exportar Excel' });
   }
 };
 
 const exportMovimientosExcel = async (req, res) => {
   try {
     const { from, to, destino_id } = req.query;
+    validateInventoryDateBounds(from, to);
+    if (Object.prototype.hasOwnProperty.call(req.query, 'destino_id')) {
+      parsePositiveInteger(destino_id, 'El filtro destino es inválido');
+    }
     const { query, params } = buildMovimientosReporteQuery({ from, to, destino_id });
     const result = await db.query(query, params);
 
@@ -984,13 +1190,17 @@ const exportMovimientosExcel = async (req, res) => {
     await sendExcel(workbook, res, 'movimientos-inventario.xlsx');
   } catch (error) {
     logControllerError('Error al exportar movimientos:', error);
-    res.status(500).json({ success: false, message: 'Error al exportar movimientos' });
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : 'Error al exportar movimientos',
+    });
   }
 };
 
 const exportBajasArticulosExcel = async (req, res) => {
   try {
     const { search, from, to } = req.query;
+    validateInventoryDateBounds(from, to);
     const { query, params } = buildBajasArticulosQuery({ search, from, to });
     const result = await db.query(query, params);
 
@@ -1027,8 +1237,7 @@ const exportBajasArticulosExcel = async (req, res) => {
     styleDataRows(worksheet);
     await sendExcel(workbook, res, 'articulos-dados-de-baja.xlsx');
   } catch (error) {
-    logControllerError('Error al exportar bajas de artículos:', error);
-    res.status(500).json({ success: false, message: 'Error al exportar bajas de artículos' });
+    sendInventoryError(res, error, 'Error al exportar bajas de artículos:');
   }
 };
 
@@ -1042,116 +1251,138 @@ const generateMovimientoPdf = async (movimientoId) => {
   const usuario = detalles[0].usuario || 'N/A';
   const ubicacionDestino = detalles[0].ubicacion_destino || 'N/A';
 
-  const storageDir = path.join(__dirname, '..', 'storage', 'movimientos');
-  fs.mkdirSync(storageDir, { recursive: true });
-  const filename = `movimiento-${movimientoId}.pdf`;
-  const fullPath = path.join(storageDir, filename);
-
+  const writer = await movementPdfStorage.createAtomicWrite(movimientoId);
   const doc = new PDFDocument({ margin: 40 });
-  const stream = fs.createWriteStream(fullPath);
+  const stream = writer.stream;
   doc.pipe(stream);
 
-  // Header with optional logo
-  const logoPath = path.join(__dirname, '..', 'assets', 'wes-logo.png');
-  if (fs.existsSync(logoPath)) {
-    doc.image(logoPath, 480, 25, { width: 70 });
+  try {
+    // Header with optional logo
+    const logoPath = path.join(__dirname, '..', 'assets', 'wes-logo.png');
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 480, 25, { width: 70 });
+    }
+    doc.fontSize(18).text('Movimiento de Inventario', { align: 'center' });
+    doc.moveDown(1.8);
+
+    // Movement info
+    doc.fontSize(11);
+    const infoLeft = 60;
+    doc.text(`Movimiento realizado por: ${usuario}`, infoLeft);
+    doc.text(
+      `Fecha del movimiento: ${new Date(fechaMovimiento).toLocaleDateString('es-EC')}`,
+      infoLeft
+    );
+    doc.text(`Ubicación destino: ${ubicacionDestino}`, infoLeft);
+    doc.moveDown();
+
+    // Table header
+    const tableTop = doc.y + 5;
+    const colQty = 40;
+    const colItem = 110;
+    const colSerial = 360;
+    const colOrigin = 470;
+
+    doc.fontSize(11).font('Helvetica-Bold');
+    doc.text('Cantidad', colQty, tableTop);
+    doc.text('Artículo', colItem, tableTop);
+    doc.text('Serie', colSerial, tableTop);
+    doc.text('Ubicación actual', colOrigin, tableTop);
+    doc
+      .moveTo(40, tableTop + 15)
+      .lineTo(555, tableTop + 15)
+      .stroke();
+
+    doc.font('Helvetica');
+    let rowY = tableTop + 25;
+    detalles.forEach((item) => {
+      const qty = item.cantidad || 1;
+      const name = item.nombre_articulo || 'Artículo';
+      const serial = getArticuloSerie(item) || '-';
+      const origin = item.ubicacion_origen || '-';
+      doc.text(String(qty), colQty, rowY);
+      doc.text(name, colItem, rowY, { width: 240 });
+      doc.text(serial, colSerial, rowY, { width: 90 });
+      doc.text(origin, colOrigin, rowY, { width: 120 });
+      rowY += 18;
+    });
+
+    doc.moveDown(2);
+
+    // Signature boxes
+    const lineWidth = 220;
+    const signatureTop = doc.page.height - 90;
+    const pageCenter = doc.page.width / 2;
+    const gapBetween = 40;
+    const leftLineStart = pageCenter - gapBetween / 2 - lineWidth;
+    const rightLineStart = pageCenter + gapBetween / 2;
+
+    doc
+      .moveTo(leftLineStart, signatureTop)
+      .lineTo(leftLineStart + lineWidth, signatureTop)
+      .stroke();
+    doc
+      .moveTo(rightLineStart, signatureTop)
+      .lineTo(rightLineStart + lineWidth, signatureTop)
+      .stroke();
+
+    doc.fontSize(10).text('Firma de quien realiza', leftLineStart, signatureTop + 6, {
+      width: lineWidth,
+      align: 'center',
+    });
+    doc.text('Firma de quien recibe', rightLineStart, signatureTop + 6, {
+      width: lineWidth,
+      align: 'center',
+    });
+
+    doc.end();
+
+    await writer.finished;
+    await writer.commit();
+  } catch (error) {
+    stream.destroy();
+    await writer.cleanup();
+    throw error;
   }
-  doc.fontSize(18).text('Movimiento de Inventario', { align: 'center' });
-  doc.moveDown(1.8);
 
-  // Movement info
-  doc.fontSize(11);
-  const infoLeft = 60;
-  doc.text(`Movimiento realizado por: ${usuario}`, infoLeft);
-  doc.text(
-    `Fecha del movimiento: ${new Date(fechaMovimiento).toLocaleDateString('es-EC')}`,
-    infoLeft
-  );
-  doc.text(`Ubicación destino: ${ubicacionDestino}`, infoLeft);
-  doc.moveDown();
-
-  // Table header
-  const tableTop = doc.y + 5;
-  const colQty = 40;
-  const colItem = 110;
-  const colSerial = 360;
-  const colOrigin = 470;
-
-  doc.fontSize(11).font('Helvetica-Bold');
-  doc.text('Cantidad', colQty, tableTop);
-  doc.text('Artículo', colItem, tableTop);
-  doc.text('Serie', colSerial, tableTop);
-  doc.text('Ubicación actual', colOrigin, tableTop);
-  doc
-    .moveTo(40, tableTop + 15)
-    .lineTo(555, tableTop + 15)
-    .stroke();
-
-  doc.font('Helvetica');
-  let rowY = tableTop + 25;
-  detalles.forEach((item) => {
-    const qty = item.cantidad || 1;
-    const name = item.nombre_articulo || 'Artículo';
-    const serial = getArticuloSerie(item) || '-';
-    const origin = item.ubicacion_origen || '-';
-    doc.text(String(qty), colQty, rowY);
-    doc.text(name, colItem, rowY, { width: 240 });
-    doc.text(serial, colSerial, rowY, { width: 90 });
-    doc.text(origin, colOrigin, rowY, { width: 120 });
-    rowY += 18;
-  });
-
-  doc.moveDown(2);
-
-  // Signature boxes
-  const lineWidth = 220;
-  const signatureTop = doc.page.height - 90;
-  const pageCenter = doc.page.width / 2;
-  const gapBetween = 40;
-  const leftLineStart = pageCenter - gapBetween / 2 - lineWidth;
-  const rightLineStart = pageCenter + gapBetween / 2;
-
-  doc
-    .moveTo(leftLineStart, signatureTop)
-    .lineTo(leftLineStart + lineWidth, signatureTop)
-    .stroke();
-  doc
-    .moveTo(rightLineStart, signatureTop)
-    .lineTo(rightLineStart + lineWidth, signatureTop)
-    .stroke();
-
-  doc.fontSize(10).text('Firma de quien realiza', leftLineStart, signatureTop + 6, {
-    width: lineWidth,
-    align: 'center',
-  });
-  doc.text('Firma de quien recibe', rightLineStart, signatureTop + 6, {
-    width: lineWidth,
-    align: 'center',
-  });
-
-  doc.end();
-
-  await new Promise((resolve) => stream.on('finish', resolve));
-
-  const relativePath = path.join('storage', 'movimientos', filename);
-  return { fullPath, relativePath };
+  return { fullPath: writer.fullPath, relativePath: writer.relativePath };
 };
 
 const createMovimiento = async (req, res) => {
-  const client = await db.getClient();
+  let client;
   let transactionStarted = false;
+  let movimientoId;
+
   try {
     const { ubicacion_destino_id, ubicacion_destino_nombre, items, fecha_movimiento } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Debes agregar al menos un artículo',
-      });
+      throw createHttpError(400, 'Debes agregar al menos un artículo');
+    }
+
+    const normalizedItems = items
+      .map((item) => ({
+        articulo_id: Number(item?.articulo_id),
+        cantidad: item?.cantidad === undefined ? 1 : Number(item.cantidad),
+        talla: item?.talla ? String(item.talla).trim() : '',
+      }))
+      .sort((a, b) => a.articulo_id - b.articulo_id);
+
+    for (const item of normalizedItems) {
+      if (!Number.isInteger(item.articulo_id) || item.articulo_id <= 0) {
+        throw createHttpError(400, 'Artículo inválido');
+      }
+      if (!Number.isInteger(item.cantidad) || item.cantidad <= 0) {
+        throw createHttpError(400, 'Cantidad inválida');
+      }
     }
 
     let destinoId = ubicacion_destino_id;
     const destinoNombre = ubicacion_destino_nombre ? String(ubicacion_destino_nombre).trim() : '';
+
+    client = await db.getClient();
+    await client.query('BEGIN');
+    transactionStarted = true;
 
     if (!destinoId && destinoNombre) {
       const existente = await client.query(
@@ -1170,10 +1401,7 @@ const createMovimiento = async (req, res) => {
     }
 
     if (!destinoId) {
-      return res.status(400).json({
-        success: false,
-        message: 'La ubicación destino es requerida para traslados',
-      });
+      throw createHttpError(400, 'La ubicación destino es requerida para traslados');
     }
 
     destinoId = Number(destinoId);
@@ -1181,41 +1409,20 @@ const createMovimiento = async (req, res) => {
       throw createHttpError(400, 'La ubicación destino es inválida');
     }
 
-    await client.query('BEGIN');
-    transactionStarted = true;
-
-    const movimientoRes = await client.query(
-      `INSERT INTO movimientos (usuario_id, fecha_movimiento)
-       VALUES ($1, COALESCE($2::date, CURRENT_DATE))
-       RETURNING id, fecha_movimiento`,
-      [req.user.id, fecha_movimiento || null]
+    const lockedArticulos = await lockArticulosByIds(
+      client,
+      normalizedItems.map((item) => item.articulo_id)
     );
+    const detalleRows = [];
+    const stockEffects = [];
 
-    const movimientoId = movimientoRes.rows[0].id;
-
-    for (const item of items) {
-      const articuloId = Number(item?.articulo_id);
-      if (!Number.isInteger(articuloId) || articuloId <= 0) {
-        throw createHttpError(400, 'Artículo inválido');
+    for (const item of normalizedItems) {
+      const articulo = lockedArticulos.get(item.articulo_id);
+      if (!articulo || articulo.activo === false) {
+        throw createHttpError(400, `Artículo #${item.articulo_id} no encontrado`);
       }
 
-      const articuloRes = await client.query(
-        'SELECT id, tipo_articulo, nombre_articulo, cantidad, talla, marca, modelo, numero_serie, calibre, fecha_caducidad, ubicacion_id FROM articulos WHERE id = $1',
-        [articuloId]
-      );
-
-      if (articuloRes.rowCount === 0) {
-        throw createHttpError(400, `Artículo #${articuloId} no encontrado`);
-      }
-
-      const articulo = articuloRes.rows[0];
-      const cantidad = item.cantidad === undefined ? 1 : Number(item.cantidad);
-      const tallaMovimiento = item.talla ? String(item.talla).trim() : '';
-      if (!Number.isInteger(cantidad) || cantidad <= 0) {
-        throw createHttpError(400, 'Cantidad inválida');
-      }
-
-      if (!isStockTipo(articulo.tipo_articulo) && cantidad > 1) {
+      if (!isStockTipo(articulo.tipo_articulo) && item.cantidad > 1) {
         throw createHttpError(400, 'La cantidad debe ser 1 para artículos serializados');
       }
 
@@ -1230,21 +1437,24 @@ const createMovimiento = async (req, res) => {
       let movedArticuloId = articulo.id;
 
       if (isStockTipo(articulo.tipo_articulo)) {
-        if (articulo.talla && !tallaMovimiento) {
+        if (articulo.talla && !item.talla) {
           throw createHttpError(400, 'Debes indicar la talla del artículo');
         }
-        if (articulo.talla && tallaMovimiento && articulo.talla !== tallaMovimiento) {
+        if (articulo.talla && item.talla && articulo.talla !== item.talla) {
           throw createHttpError(400, 'La talla indicada no coincide con el artículo');
         }
-        const actual = articulo.cantidad || 0;
-        if (cantidad > actual) {
-          throw createHttpError(400, 'Cantidad supera el stock disponible');
+
+        const actual = Number(articulo.cantidad) || 0;
+        const restante = actual - item.cantidad;
+        if (restante < 0) {
+          throw createAppError(409, 'INSUFFICIENT_STOCK', 'Cantidad supera el stock disponible');
         }
-        if (cantidad < actual && articulo.numero_serie) {
+        if (item.cantidad < actual && articulo.numero_serie) {
           throw createHttpError(400, 'No se puede fraccionar un artículo con número de serie');
         }
-        if (cantidad < actual) {
-          const tallaFinal = tallaMovimiento || articulo.talla || null;
+
+        if (item.cantidad < actual) {
+          const tallaFinal = item.talla || articulo.talla || null;
           const insertRes = await client.query(
             `INSERT INTO articulos (
               tipo_articulo,
@@ -1262,7 +1472,7 @@ const createMovimiento = async (req, res) => {
             [
               articulo.tipo_articulo,
               articulo.nombre_articulo,
-              cantidad,
+              item.cantidad,
               tallaFinal,
               articulo.marca,
               articulo.modelo,
@@ -1273,26 +1483,79 @@ const createMovimiento = async (req, res) => {
             ]
           );
           await client.query('UPDATE articulos SET cantidad = $1 WHERE id = $2', [
-            actual - cantidad,
+            restante,
             articulo.id,
           ]);
+          stockEffects.push({
+            articulo_id: articulo.id,
+            delta: -item.cantidad,
+            stock_anterior: actual,
+            stock_posterior: restante,
+            ubicacion_anterior_id: origenArticuloId,
+            ubicacion_posterior_id: origenArticuloId,
+          });
+          stockEffects.push({
+            articulo_id: insertRes.rows[0].id,
+            delta: item.cantidad,
+            stock_anterior: 0,
+            stock_posterior: item.cantidad,
+            ubicacion_anterior_id: null,
+            ubicacion_posterior_id: destinoId,
+          });
+          articulo.cantidad = restante;
           movedArticuloId = insertRes.rows[0].id;
         } else {
           await client.query('UPDATE articulos SET ubicacion_id = $1 WHERE id = $2', [
             destinoId,
             articulo.id,
           ]);
+          stockEffects.push({
+            articulo_id: articulo.id,
+            delta: 0,
+            stock_anterior: actual,
+            stock_posterior: actual,
+            ubicacion_anterior_id: origenArticuloId,
+            ubicacion_posterior_id: destinoId,
+          });
+          articulo.ubicacion_id = destinoId;
         }
       } else {
-        if (cantidad !== 1) {
+        if (item.cantidad !== 1) {
           throw createHttpError(400, 'La cantidad debe ser 1 para artículos serializados');
         }
         await client.query('UPDATE articulos SET ubicacion_id = $1 WHERE id = $2', [
           destinoId,
           articulo.id,
         ]);
+        stockEffects.push({
+          articulo_id: articulo.id,
+          delta: 0,
+          stock_anterior: Number(articulo.cantidad) || 1,
+          stock_posterior: Number(articulo.cantidad) || 1,
+          ubicacion_anterior_id: origenArticuloId,
+          ubicacion_posterior_id: destinoId,
+        });
+        articulo.ubicacion_id = destinoId;
       }
 
+      detalleRows.push({
+        articulo_id: movedArticuloId,
+        cantidad: item.cantidad,
+        ubicacion_origen_id: origenArticuloId,
+        ubicacion_destino_id: destinoId,
+      });
+    }
+
+    const movimientoRes = await client.query(
+      `INSERT INTO movimientos (usuario_id, fecha_movimiento, estado, reversion_datos_completos)
+       VALUES ($1, COALESCE($2::date, CURRENT_DATE), 'ACTIVO', TRUE)
+       RETURNING id, fecha_movimiento, estado`,
+      [req.user.id, fecha_movimiento || null]
+    );
+
+    movimientoId = movimientoRes.rows[0].id;
+
+    for (const detalle of detalleRows) {
       await client.query(
         `INSERT INTO detalle_movimientos (
           movimiento_id,
@@ -1301,39 +1564,60 @@ const createMovimiento = async (req, res) => {
           ubicacion_origen_id,
           ubicacion_destino_id
         ) VALUES ($1, $2, $3, $4, $5)`,
-        [movimientoId, movedArticuloId, cantidad, origenArticuloId, destinoId]
+        [
+          movimientoId,
+          detalle.articulo_id,
+          detalle.cantidad,
+          detalle.ubicacion_origen_id,
+          detalle.ubicacion_destino_id,
+        ]
       );
     }
+
+    for (const effect of stockEffects) {
+      await recordStockEffect(client, { movimiento_id: movimientoId, ...effect });
+    }
+
+    await logAuditStrict(client, {
+      tabla: 'movimientos',
+      operacion: 'INSERT',
+      registro_id: String(movimientoId),
+      datos_nuevos: { id: movimientoId, items: detalleRows, ubicacion_destino_id: destinoId },
+      ...auditFromReq(req),
+    });
 
     await client.query('COMMIT');
     transactionStarted = false;
 
-    const pdfResult = await generateMovimientoPdf(movimientoId);
-    if (pdfResult) {
-      await db.query('UPDATE movimientos SET pdf_path = $1 WHERE id = $2', [
-        pdfResult.relativePath,
-        movimientoId,
-      ]);
+    let pdf = { available: false, code: 'PDF_GENERATION_FAILED' };
+    try {
+      const pdfResult = await generateMovimientoPdf(movimientoId);
+      if (pdfResult) {
+        await db.query('UPDATE movimientos SET pdf_path = $1 WHERE id = $2', [
+          pdfResult.relativePath,
+          movimientoId,
+        ]);
+        pdf = { available: true, path: pdfResult.relativePath };
+      } else {
+        pdf = { available: false, code: 'MOVEMENT_PDF_NOT_AVAILABLE' };
+      }
+    } catch (pdfError) {
+      logControllerError('Error al generar PDF después de crear movimiento:', pdfError);
     }
-
-    await logAudit(db, {
-      tabla: 'movimientos',
-      operacion: 'INSERT',
-      registro_id: String(movimientoId),
-      datos_nuevos: { id: movimientoId, items, ubicacion_destino_id: destinoId },
-      ...auditFromReq(req),
-    });
 
     res.status(201).json({
       success: true,
-      message: 'Movimiento registrado exitosamente',
+      message: pdf.available
+        ? 'Movimiento registrado exitosamente'
+        : 'Movimiento registrado exitosamente, pero el PDF no está disponible',
       data: {
         id: movimientoId,
-        pdf_path: pdfResult?.relativePath || null,
+        pdf_path: pdf.available ? pdf.path : null,
       },
+      pdf,
     });
   } catch (error) {
-    if (transactionStarted) {
+    if (transactionStarted && client) {
       try {
         await client.query('ROLLBACK');
       } catch (rollbackError) {
@@ -1341,22 +1625,355 @@ const createMovimiento = async (req, res) => {
       }
     }
 
-    const status = error.status || (isConstraintOrInputError(error) ? 400 : 500);
-    const message = status >= 500 ? 'Error en el servidor' : error.message || 'Solicitud inválida';
-    logControllerError('Error al crear movimiento:', error);
-
-    res.status(status).json({
-      success: false,
-      message,
-    });
+    sendInventoryError(res, error, 'Error al crear movimiento:');
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+const anularMovimiento = async (req, res) => {
+  let client;
+  try {
+    const id = parsePositiveInteger(req.params.id, 'El id del movimiento es inválido');
+    const motivo = validateDetailedReason(req.body?.motivo, 'motivo de anulación');
+
+    client = await db.getClient();
+    await client.query('BEGIN');
+
+    const movimientoRes = await client.query('SELECT * FROM movimientos WHERE id = $1 FOR UPDATE', [
+      id,
+    ]);
+    if (movimientoRes.rowCount === 0) {
+      throw createHttpError(404, 'Movimiento no encontrado');
+    }
+
+    const movimiento = movimientoRes.rows[0];
+    if (movimiento.estado === 'ANULADO') {
+      throw createAppError(409, 'MOVEMENT_ALREADY_VOIDED', 'El movimiento ya está anulado');
+    }
+    if (movimiento.estado === 'ELIMINADO') {
+      throw createAppError(
+        409,
+        'MOVEMENT_ADMINISTRATIVELY_DELETED',
+        'El movimiento fue eliminado administrativamente'
+      );
+    }
+    if (movimiento.reversion_datos_completos !== true) {
+      throw createAppError(
+        409,
+        'MOVEMENT_REVERSAL_DATA_INCOMPLETE',
+        'El movimiento no tiene datos completos para reversión automática'
+      );
+    }
+
+    const effectsRes = await client.query(
+      `SELECT *
+       FROM inventario_stock_efectos
+       WHERE movimiento_id = $1
+       ORDER BY articulo_id ASC, id ASC`,
+      [id]
+    );
+
+    if (effectsRes.rowCount === 0) {
+      throw createAppError(
+        409,
+        'MOVEMENT_REVERSAL_DATA_INCOMPLETE',
+        'El movimiento no tiene efectos de stock registrados'
+      );
+    }
+
+    const lockedArticulos = await lockArticulosByIds(
+      client,
+      effectsRes.rows.map((effect) => effect.articulo_id)
+    );
+
+    for (const effect of effectsRes.rows) {
+      const articulo = lockedArticulos.get(Number(effect.articulo_id));
+      await applyInverseStockEffect(client, effect, articulo, 'CANNOT_VOID_INSUFFICIENT_STOCK');
+    }
+
+    const updateRes = await client.query(
+      `UPDATE movimientos
+       SET estado = 'ANULADO',
+           anulado_por = $2,
+           anulado_en = CURRENT_TIMESTAMP,
+           motivo_anulacion = $3
+       WHERE id = $1
+       RETURNING id, estado, anulado_por, anulado_en, motivo_anulacion`,
+      [id, req.user?.id || null, motivo]
+    );
+
+    await logAuditStrict(client, {
+      tabla: 'movimientos',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_anteriores: movimiento,
+      datos_nuevos: updateRes.rows[0],
+      ...auditFromReq(req),
+    });
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: 'Movimiento anulado exitosamente',
+      data: updateRes.rows[0],
+    });
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    sendInventoryError(res, error, 'Error al anular movimiento:');
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+const anularBajaArticulo = async (req, res) => {
+  let client;
+  try {
+    const id = parsePositiveInteger(req.params.id, 'El id de la baja es inválido');
+    const motivo = validateDetailedReason(req.body?.motivo, 'motivo de anulación');
+
+    client = await db.getClient();
+    await client.query('BEGIN');
+
+    const bajaRes = await client.query('SELECT * FROM articulos_bajas WHERE id = $1 FOR UPDATE', [
+      id,
+    ]);
+    if (bajaRes.rowCount === 0) {
+      throw createHttpError(404, 'Baja no encontrada');
+    }
+
+    const baja = bajaRes.rows[0];
+    if (baja.estado === 'ANULADO') {
+      throw createAppError(409, 'BAJA_ALREADY_VOIDED', 'La baja ya está anulada');
+    }
+    if (baja.estado === 'ELIMINADO') {
+      throw createAppError(
+        409,
+        'BAJA_ADMINISTRATIVELY_DELETED',
+        'La baja fue eliminada administrativamente'
+      );
+    }
+    if (baja.reversion_datos_completos !== true) {
+      throw createAppError(
+        409,
+        'BAJA_REVERSAL_DATA_INCOMPLETE',
+        'La baja no tiene datos completos para reversión automática'
+      );
+    }
+
+    const effectsRes = await client.query(
+      `SELECT *
+       FROM inventario_stock_efectos
+       WHERE baja_id = $1
+       ORDER BY articulo_id ASC, id ASC`,
+      [id]
+    );
+
+    if (effectsRes.rowCount === 0) {
+      throw createAppError(
+        409,
+        'BAJA_REVERSAL_DATA_INCOMPLETE',
+        'La baja no tiene efectos de stock registrados'
+      );
+    }
+
+    const lockedArticulos = await lockArticulosByIds(
+      client,
+      effectsRes.rows.map((effect) => effect.articulo_id)
+    );
+
+    for (const effect of effectsRes.rows) {
+      const articulo = lockedArticulos.get(Number(effect.articulo_id));
+      await applyInverseStockEffect(client, effect, articulo, 'BAJA_REVERSAL_DATA_INCOMPLETE');
+    }
+
+    const updateRes = await client.query(
+      `UPDATE articulos_bajas
+       SET estado = 'ANULADO',
+           anulado_por = $2,
+           anulado_en = CURRENT_TIMESTAMP,
+           motivo_anulacion = $3
+       WHERE id = $1
+       RETURNING id, estado, anulado_por, anulado_en, motivo_anulacion`,
+      [id, req.user?.id || null, motivo]
+    );
+
+    await logAuditStrict(client, {
+      tabla: 'articulos_bajas',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_anteriores: baja,
+      datos_nuevos: updateRes.rows[0],
+      ...auditFromReq(req),
+    });
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: 'Baja anulada exitosamente',
+      data: updateRes.rows[0],
+    });
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    sendInventoryError(res, error, 'Error al anular baja:');
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+const deleteMovimientoAdministrativo = async (req, res) => {
+  let client;
+  try {
+    const id = parsePositiveInteger(req.params.id, 'El id del movimiento es inválido');
+    const motivo = validateDetailedReason(req.body?.motivo, 'motivo de eliminación');
+
+    client = await db.getClient();
+    await client.query('BEGIN');
+
+    const movimientoRes = await client.query('SELECT * FROM movimientos WHERE id = $1 FOR UPDATE', [
+      id,
+    ]);
+    if (movimientoRes.rowCount === 0) {
+      throw createHttpError(404, 'Movimiento no encontrado');
+    }
+
+    const movimiento = movimientoRes.rows[0];
+    if (movimiento.estado === 'ELIMINADO') {
+      throw createAppError(
+        409,
+        'MOVEMENT_ADMINISTRATIVELY_DELETED',
+        'El movimiento ya fue eliminado administrativamente'
+      );
+    }
+    if (movimiento.estado !== 'ANULADO') {
+      throw createAppError(
+        409,
+        'MOVEMENT_MUST_BE_VOIDED_FIRST',
+        'El movimiento debe estar anulado antes de eliminarse'
+      );
+    }
+
+    const updateRes = await client.query(
+      `UPDATE movimientos
+       SET estado = 'ELIMINADO',
+           eliminado_por = $2,
+           eliminado_en = CURRENT_TIMESTAMP,
+           motivo_eliminacion = $3
+       WHERE id = $1
+       RETURNING id, estado, eliminado_por, eliminado_en, motivo_eliminacion`,
+      [id, req.user?.id || null, motivo]
+    );
+
+    await logAuditStrict(client, {
+      tabla: 'movimientos',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_anteriores: movimiento,
+      datos_nuevos: updateRes.rows[0],
+      ...auditFromReq(req),
+    });
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: 'Movimiento eliminado administrativamente',
+      data: updateRes.rows[0],
+    });
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    sendInventoryError(res, error, 'Error al eliminar movimiento:');
+  } finally {
+    if (client) {
+      client.release();
+    }
+  }
+};
+
+const deleteBajaAdministrativa = async (req, res) => {
+  let client;
+  try {
+    const id = parsePositiveInteger(req.params.id, 'El id de la baja es inválido');
+    const motivo = validateDetailedReason(req.body?.motivo, 'motivo de eliminación');
+
+    client = await db.getClient();
+    await client.query('BEGIN');
+
+    const bajaRes = await client.query('SELECT * FROM articulos_bajas WHERE id = $1 FOR UPDATE', [
+      id,
+    ]);
+    if (bajaRes.rowCount === 0) {
+      throw createHttpError(404, 'Baja no encontrada');
+    }
+
+    const baja = bajaRes.rows[0];
+    if (baja.estado === 'ELIMINADO') {
+      throw createAppError(
+        409,
+        'BAJA_ADMINISTRATIVELY_DELETED',
+        'La baja ya fue eliminada administrativamente'
+      );
+    }
+    if (baja.estado !== 'ANULADO') {
+      throw createAppError(
+        409,
+        'BAJA_MUST_BE_VOIDED_FIRST',
+        'La baja debe estar anulada antes de eliminarse'
+      );
+    }
+
+    const updateRes = await client.query(
+      `UPDATE articulos_bajas
+       SET estado = 'ELIMINADO',
+           eliminado_por = $2,
+           eliminado_en = CURRENT_TIMESTAMP,
+           motivo_eliminacion = $3
+       WHERE id = $1
+       RETURNING id, estado, eliminado_por, eliminado_en, motivo_eliminacion`,
+      [id, req.user?.id || null, motivo]
+    );
+
+    await logAuditStrict(client, {
+      tabla: 'articulos_bajas',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_anteriores: baja,
+      datos_nuevos: updateRes.rows[0],
+      ...auditFromReq(req),
+    });
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: 'Baja eliminada administrativamente',
+      data: updateRes.rows[0],
+    });
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    sendInventoryError(res, error, 'Error al eliminar baja:');
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 
 const downloadMovimientoPdf = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = parsePositiveInteger(req.params.id, 'El id del movimiento es inválido');
     const result = await db.query('SELECT pdf_path FROM movimientos WHERE id = $1', [id]);
     if (result.rowCount === 0) {
       return res.status(404).json({
@@ -1365,30 +1982,13 @@ const downloadMovimientoPdf = async (req, res) => {
       });
     }
 
-    let relativePath = result.rows[0].pdf_path;
-    const baseDir = path.resolve(__dirname, '..', 'storage', 'movimientos');
-    let fullPath = relativePath ? path.resolve(__dirname, '..', relativePath) : null;
+    const fullPath = movementPdfStorage.resolveReference(result.rows[0].pdf_path);
 
-    if (fullPath && !fullPath.startsWith(baseDir)) {
-      return res.status(400).json({
+    if (!fullPath || !movementPdfStorage.exists(result.rows[0].pdf_path)) {
+      return res.status(409).json({
         success: false,
-        message: 'Ruta inválida',
-      });
-    }
-
-    if (!fullPath || !fs.existsSync(fullPath)) {
-      const pdfResult = await generateMovimientoPdf(id);
-      if (pdfResult) {
-        relativePath = pdfResult.relativePath;
-        fullPath = pdfResult.fullPath;
-        await db.query('UPDATE movimientos SET pdf_path = $1 WHERE id = $2', [relativePath, id]);
-      }
-    }
-
-    if (!fullPath || !fs.existsSync(fullPath)) {
-      return res.status(404).json({
-        success: false,
-        message: 'No se pudo generar el PDF del movimiento',
+        code: 'MOVEMENT_PDF_NOT_AVAILABLE',
+        message: 'PDF del movimiento no disponible',
       });
     }
 
@@ -1397,10 +1997,71 @@ const downloadMovimientoPdf = async (req, res) => {
     return res.sendFile(fullPath);
   } catch (error) {
     logControllerError('Error al descargar PDF:', error);
-    res.status(500).json({
+    res.status(error.status || 500).json({
       success: false,
-      message: 'Error en el servidor',
+      message: error.status ? error.message : 'Error en el servidor',
     });
+  }
+};
+
+const regenerateMovimientoPdf = async (req, res) => {
+  let client;
+  try {
+    const id = parsePositiveInteger(req.params.id, 'El id del movimiento es inválido');
+    const result = await db.query('SELECT id FROM movimientos WHERE id = $1', [id]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Movimiento no encontrado',
+      });
+    }
+
+    const pdfResult = await generateMovimientoPdf(id);
+    if (!pdfResult) {
+      return res.status(409).json({
+        success: false,
+        code: 'MOVEMENT_PDF_NOT_AVAILABLE',
+        message: 'PDF del movimiento no disponible',
+      });
+    }
+
+    client = await db.getClient();
+    await client.query('BEGIN');
+    await client.query('UPDATE movimientos SET pdf_path = $1 WHERE id = $2', [
+      pdfResult.relativePath,
+      id,
+    ]);
+    await logAuditStrict(client, {
+      tabla: 'movimientos',
+      operacion: 'UPDATE',
+      registro_id: String(id),
+      datos_nuevos: { pdf_path: pdfResult.relativePath, pdf_regenerado: true },
+      ...auditFromReq(req),
+    });
+    await client.query('COMMIT');
+
+    return res.json({
+      success: true,
+      message: 'PDF del movimiento regenerado exitosamente',
+      data: {
+        id,
+        pdf_path: pdfResult.relativePath,
+      },
+    });
+  } catch (error) {
+    if (client) {
+      await client.query('ROLLBACK');
+    }
+    logControllerError('Error al regenerar PDF:', error);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : 'Error en el servidor',
+    });
+  } finally {
+    if (client) {
+      client.release();
+    }
   }
 };
 
@@ -1414,7 +2075,12 @@ module.exports = {
   darBajaArticulo,
   getMovimientos,
   createMovimiento,
+  anularMovimiento,
+  anularBajaArticulo,
+  deleteMovimientoAdministrativo,
+  deleteBajaAdministrativa,
   downloadMovimientoPdf,
+  regenerateMovimientoPdf,
   exportArticulosExcel,
   exportBajasArticulosExcel,
   exportMovimientosExcel,

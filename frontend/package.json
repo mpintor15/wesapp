@@ -5,7 +5,8 @@
   "author": "WES Security",
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "react-scripts build && node scripts/check-production-bundle.js",
+    "check:production-bundle": "node scripts/check-production-bundle.js",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src",

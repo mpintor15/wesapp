@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const inventarioController = require('../controllers/inventarioController');
 const { verifyToken } = require('../middleware/auth');
-const { requireActive, requirePermission, requireRole } = require('../middleware/permissions');
+const { requirePermission } = require('../middleware/permissions');
+const { PERMISSIONS } = require('../config/permissions');
 const { validateRequest } = require('../middleware/validation');
 const {
   articuloCreateSchema,
@@ -11,8 +12,7 @@ const {
   movimientoCreateSchema,
 } = require('../utils/validationSchemas');
 
-// All routes require authentication + inventario permission
-router.use(verifyToken, requireActive, requirePermission('inventario'));
+router.use(verifyToken);
 
 // ============================================
 // UBICACIONES
@@ -23,7 +23,11 @@ router.use(verifyToken, requireActive, requirePermission('inventario'));
  * @desc    Obtener todas las ubicaciones
  * @access  Private (inventario)
  */
-router.get('/ubicaciones', inventarioController.getUbicaciones);
+router.get(
+  '/ubicaciones',
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_VER),
+  inventarioController.getUbicaciones
+);
 
 // ============================================
 // ARTICULOS
@@ -34,14 +38,44 @@ router.get('/ubicaciones', inventarioController.getUbicaciones);
  * @desc    Obtener articulos con filtros
  * @access  Private (inventario)
  */
-router.get('/articulos', inventarioController.getArticulos);
+router.get(
+  '/articulos',
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_VER),
+  inventarioController.getArticulos
+);
 
 /**
  * @route   GET /api/inventario/articulos/bajas
  * @desc    Obtener historial de bajas de artículos
  * @access  Private (inventario)
  */
-router.get('/articulos/bajas', inventarioController.getBajasArticulos);
+router.get(
+  '/articulos/bajas',
+  requirePermission(PERMISSIONS.INVENTARIO_BAJAS_VER),
+  inventarioController.getBajasArticulos
+);
+
+/**
+ * @route   POST /api/inventario/bajas/:id/anular
+ * @desc    Anular una baja de artículo
+ * @access  Private (gerente/supervisor)
+ */
+router.post(
+  '/bajas/:id/anular',
+  requirePermission(PERMISSIONS.INVENTARIO_BAJAS_ANULAR),
+  inventarioController.anularBajaArticulo
+);
+
+/**
+ * @route   DELETE /api/inventario/bajas/:id
+ * @desc    Eliminar administrativamente una baja anulada
+ * @access  Private (gerente)
+ */
+router.delete(
+  '/bajas/:id',
+  requirePermission(PERMISSIONS.INVENTARIO_BAJAS_ELIMINAR),
+  inventarioController.deleteBajaAdministrativa
+);
 
 /**
  * @route   GET /api/inventario/articulos/bajas/excel
@@ -50,7 +84,7 @@ router.get('/articulos/bajas', inventarioController.getBajasArticulos);
  */
 router.get(
   '/articulos/bajas/excel',
-  requirePermission('exportar'),
+  requirePermission(PERMISSIONS.INVENTARIO_REPORTES_EXPORTAR),
   inventarioController.exportBajasArticulosExcel
 );
 
@@ -61,7 +95,7 @@ router.get(
  */
 router.get(
   '/articulos/excel',
-  requirePermission('exportar'),
+  requirePermission(PERMISSIONS.INVENTARIO_REPORTES_EXPORTAR),
   inventarioController.exportArticulosExcel
 );
 
@@ -72,7 +106,7 @@ router.get(
  */
 router.post(
   '/articulos',
-  requirePermission('crear_articulo'),
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_CREAR),
   validateRequest(articuloCreateSchema),
   inventarioController.createArticulo
 );
@@ -84,7 +118,7 @@ router.post(
  */
 router.put(
   '/articulos/:id',
-  requirePermission('crear_articulo'),
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR),
   validateRequest(articuloUpdateSchema),
   inventarioController.updateArticulo
 );
@@ -96,7 +130,7 @@ router.put(
  */
 router.post(
   '/articulos/:id/baja',
-  requirePermission('dar_baja_articulo'),
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_DAR_BAJA),
   validateRequest(articuloBajaSchema),
   inventarioController.darBajaArticulo
 );
@@ -108,8 +142,7 @@ router.post(
  */
 router.delete(
   '/articulos/:id',
-  requirePermission('eliminar_articulo'),
-  requireRole('gerente'),
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_ELIMINAR),
   inventarioController.deleteArticulo
 );
 
@@ -122,7 +155,11 @@ router.delete(
  * @desc    Obtener movimientos
  * @access  Private (inventario)
  */
-router.get('/movimientos', inventarioController.getMovimientos);
+router.get(
+  '/movimientos',
+  requirePermission(PERMISSIONS.INVENTARIO_MOVIMIENTOS_VER),
+  inventarioController.getMovimientos
+);
 
 /**
  * @route   GET /api/inventario/movimientos/excel
@@ -131,7 +168,7 @@ router.get('/movimientos', inventarioController.getMovimientos);
  */
 router.get(
   '/movimientos/excel',
-  requirePermission('exportar'),
+  requirePermission(PERMISSIONS.INVENTARIO_REPORTES_EXPORTAR),
   inventarioController.exportMovimientosExcel
 );
 
@@ -140,7 +177,44 @@ router.get(
  * @desc    Descargar PDF de movimiento
  * @access  Private (inventario)
  */
-router.get('/movimientos/:id/pdf', inventarioController.downloadMovimientoPdf);
+router.get(
+  '/movimientos/:id/pdf',
+  requirePermission(PERMISSIONS.INVENTARIO_MOVIMIENTOS_VER),
+  inventarioController.downloadMovimientoPdf
+);
+
+/**
+ * @route   POST /api/inventario/movimientos/:id/anular
+ * @desc    Anular movimiento de inventario
+ * @access  Private (gerente/supervisor)
+ */
+router.post(
+  '/movimientos/:id/anular',
+  requirePermission(PERMISSIONS.INVENTARIO_MOVIMIENTOS_ANULAR),
+  inventarioController.anularMovimiento
+);
+
+/**
+ * @route   DELETE /api/inventario/movimientos/:id
+ * @desc    Eliminar administrativamente un movimiento anulado
+ * @access  Private (gerente)
+ */
+router.delete(
+  '/movimientos/:id',
+  requirePermission(PERMISSIONS.INVENTARIO_MOVIMIENTOS_ELIMINAR),
+  inventarioController.deleteMovimientoAdministrativo
+);
+
+/**
+ * @route   POST /api/inventario/movimientos/:id/pdf/regenerar
+ * @desc    Regenerar PDF de movimiento
+ * @access  Private (gerente)
+ */
+router.post(
+  '/movimientos/:id/pdf/regenerar',
+  requirePermission(PERMISSIONS.INVENTARIO_MOVIMIENTOS_REGENERAR_PDF),
+  inventarioController.regenerateMovimientoPdf
+);
 
 /**
  * @route   POST /api/inventario/movimientos
@@ -149,7 +223,7 @@ router.get('/movimientos/:id/pdf', inventarioController.downloadMovimientoPdf);
  */
 router.post(
   '/movimientos',
-  requirePermission('crear_movimiento'),
+  requirePermission(PERMISSIONS.INVENTARIO_MOVIMIENTOS_CREAR),
   validateRequest(movimientoCreateSchema),
   inventarioController.createMovimiento
 );

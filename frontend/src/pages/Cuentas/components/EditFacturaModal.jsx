@@ -7,7 +7,7 @@ const EditFacturaModal = ({
   factura,
   formData,
   errors,
-  isGerente,
+  canEditFactura,
   isSubmitting,
   onFormChange,
   onSubmit,
@@ -45,7 +45,7 @@ const EditFacturaModal = ({
                 name="fecha_factura"
                 value={formData.fecha_factura}
                 onChange={onFormChange}
-                disabled={!isGerente}
+                disabled={!canEditFactura}
               />
             </div>
             <div className="form-group">
@@ -59,7 +59,7 @@ const EditFacturaModal = ({
                   value={formData.valor_factura}
                   onChange={onFormChange}
                   placeholder="0.00"
-                  disabled={!isGerente}
+                  disabled={!canEditFactura}
                 />
               </div>
             </div>

@@ -3,15 +3,21 @@ import {
   buildArticuloPayload,
   buildBajaPayload,
   buildMovimientoPayload,
+  canDeleteAdminRecord,
+  canVoidRecord,
   filterArticulosForMovimiento,
   filterMovimientos,
+  getBajaActionState,
   getArticuloLabel,
   getArticuloTypeFormData,
+  getEstadoOperativoLabel,
+  getMovimientoActionState,
   getNextSortState,
   getSerieDisplay,
   sortArticulos,
   validateArticuloForm,
   validateBajaForm,
+  validateMotivoAdministrativo,
   validateMovimientoForm,
 } from './inventarioHelpers';
 
@@ -120,15 +126,92 @@ describe('inventarioHelpers', () => {
   test('valida baja y construye payload', () => {
     const target = { tipo_articulo: 'equipo', cantidad: 2 };
     expect(validateBajaForm(target, { motivo: '', cantidad: '1' })).toEqual({
-      message: 'Ingresa el motivo de la baja',
+      message: 'Ingresa un motivo',
     });
-    expect(validateBajaForm(target, { motivo: 'Dañado', cantidad: '3' })).toEqual({
+    expect(
+      validateBajaForm(target, { motivo: 'Equipo dañado irreparable', cantidad: '3' })
+    ).toEqual({
       message: 'La cantidad supera el stock disponible',
     });
-    expect(buildBajaPayload(target, { motivo: ' Dañado ', cantidad: '2' })).toEqual({
-      motivo: 'Dañado',
+    expect(
+      buildBajaPayload(target, { motivo: ' Equipo dañado irreparable ', cantidad: '2' })
+    ).toEqual({
+      motivo: 'Equipo dañado irreparable',
       cantidad: 2,
     });
+  });
+
+  test('valida motivos administrativos entre 10 y 500 caracteres', () => {
+    expect(validateMotivoAdministrativo('')).toBe('Ingresa un motivo');
+    expect(validateMotivoAdministrativo(' corto ')).toBe(
+      'El motivo debe tener al menos 10 caracteres'
+    );
+    expect(validateMotivoAdministrativo('a'.repeat(501))).toBe(
+      'El motivo no puede exceder 500 caracteres'
+    );
+    expect(validateMotivoAdministrativo('Motivo suficiente')).toBe('');
+  });
+
+  test('calcula estados operativos y acciones de movimientos', () => {
+    const permissions = {
+      can: (action) =>
+        [
+          'movimientos.pdf.download',
+          'movimientos.pdf.regenerate',
+          'movimientos.void',
+          'movimientos.deleteAdmin',
+        ].includes(action),
+    };
+
+    expect(getEstadoOperativoLabel('ANULADO')).toBe('Anulado');
+    expect(canVoidRecord({ estado: 'ACTIVO', reversible: true, reversal_status: 'COMPLETE' })).toBe(
+      true
+    );
+    expect(canDeleteAdminRecord({ estado: 'ANULADO' })).toBe(true);
+
+    expect(
+      getMovimientoActionState(
+        { estado: 'ACTIVO', reversible: true, reversal_status: 'COMPLETE' },
+        permissions
+      )
+    ).toEqual(
+      expect.objectContaining({
+        canDownloadPdf: true,
+        canRegeneratePdf: true,
+        canVoid: true,
+        canDelete: false,
+      })
+    );
+
+    expect(
+      getMovimientoActionState(
+        { estado: 'ACTIVO', reversible: false, reversal_status: 'INCOMPLETE' },
+        permissions
+      )
+    ).toEqual(expect.objectContaining({ canVoid: false, showDisabledVoid: true }));
+
+    expect(getMovimientoActionState({ estado: 'ELIMINADO' }, permissions)).toEqual(
+      expect.objectContaining({ hasAnyAction: false })
+    );
+  });
+
+  test('calcula acciones de bajas según estado y permisos', () => {
+    const permissions = {
+      can: (action) => ['bajas.void', 'bajas.deleteAdmin'].includes(action),
+    };
+
+    expect(
+      getBajaActionState(
+        { estado: 'ACTIVO', reversible: true, reversal_status: 'COMPLETE' },
+        permissions
+      )
+    ).toEqual(expect.objectContaining({ canVoid: true, canDelete: false }));
+    expect(getBajaActionState({ estado: 'ANULADO' }, permissions)).toEqual(
+      expect.objectContaining({ canVoid: false, canDelete: true })
+    );
+    expect(getBajaActionState({ estado: 'ELIMINADO' }, permissions)).toEqual(
+      expect.objectContaining({ hasAnyAction: false })
+    );
   });
 
   test('construye filtros compactos para artículos', () => {

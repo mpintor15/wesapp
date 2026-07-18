@@ -114,21 +114,33 @@ CREATE TABLE articulos (
     ubicacion_id INTEGER REFERENCES ubicaciones(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    activo BOOLEAN DEFAULT TRUE
+    activo BOOLEAN DEFAULT TRUE,
+    eliminado_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    eliminado_en TIMESTAMP,
+    motivo_eliminacion TEXT,
+    CONSTRAINT chk_articulos_cantidad_non_negative CHECK (cantidad >= 0)
 );
 
 CREATE TABLE movimientos (
     id SERIAL PRIMARY KEY,
     usuario_id INTEGER REFERENCES usuarios(id),
     fecha_movimiento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    pdf_path TEXT
+    pdf_path TEXT,
+    estado VARCHAR(20) DEFAULT 'ACTIVO' CHECK (estado IN ('ACTIVO', 'ANULADO', 'ELIMINADO')),
+    anulado_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    anulado_en TIMESTAMP,
+    motivo_anulacion TEXT,
+    eliminado_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    eliminado_en TIMESTAMP,
+    motivo_eliminacion TEXT,
+    reversion_datos_completos BOOLEAN DEFAULT FALSE
 );
 
 CREATE TABLE detalle_movimientos (
     id SERIAL PRIMARY KEY,
     movimiento_id INTEGER REFERENCES movimientos(id) ON DELETE CASCADE,
     articulo_id INTEGER REFERENCES articulos(id),
-    cantidad INTEGER DEFAULT 1,
+    cantidad INTEGER DEFAULT 1 CHECK (cantidad > 0),
     ubicacion_origen_id INTEGER REFERENCES ubicaciones(id),
     ubicacion_destino_id INTEGER REFERENCES ubicaciones(id),
     CHECK (ubicacion_origen_id != ubicacion_destino_id)
@@ -152,7 +164,35 @@ CREATE TABLE articulos_bajas (
     codigo_radio VARCHAR(50),
     version VARCHAR(50),
     ubicacion_id INTEGER REFERENCES ubicaciones(id) ON DELETE SET NULL,
-    ubicacion_nombre VARCHAR(100)
+    ubicacion_nombre VARCHAR(100),
+    estado VARCHAR(20) DEFAULT 'ACTIVO' CHECK (estado IN ('ACTIVO', 'ANULADO', 'ELIMINADO')),
+    anulado_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    anulado_en TIMESTAMP,
+    motivo_anulacion TEXT,
+    eliminado_por INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    eliminado_en TIMESTAMP,
+    motivo_eliminacion TEXT,
+    reversion_datos_completos BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE inventario_stock_efectos (
+    id SERIAL PRIMARY KEY,
+    movimiento_id INTEGER REFERENCES movimientos(id) ON DELETE CASCADE,
+    baja_id INTEGER REFERENCES articulos_bajas(id) ON DELETE CASCADE,
+    articulo_id INTEGER NOT NULL REFERENCES articulos(id),
+    delta INTEGER NOT NULL,
+    stock_anterior INTEGER,
+    stock_posterior INTEGER,
+    ubicacion_anterior_id INTEGER REFERENCES ubicaciones(id) ON DELETE SET NULL,
+    ubicacion_posterior_id INTEGER REFERENCES ubicaciones(id) ON DELETE SET NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_inventario_stock_efectos_owner CHECK (
+        (movimiento_id IS NOT NULL AND baja_id IS NULL)
+        OR (movimiento_id IS NULL AND baja_id IS NOT NULL)
+    ),
+    CONSTRAINT chk_inventario_stock_efectos_change CHECK (
+        delta <> 0 OR ubicacion_anterior_id IS DISTINCT FROM ubicacion_posterior_id
+    )
 );
 
 -- ============================================
@@ -214,10 +254,15 @@ CREATE UNIQUE INDEX uq_articulos_codigo_pantalla ON articulos(codigo_pantalla) W
 CREATE UNIQUE INDEX uq_articulos_codigo_radio ON articulos(codigo_radio) WHERE codigo_radio IS NOT NULL;
 CREATE UNIQUE INDEX uq_articulos_version ON articulos(version) WHERE version IS NOT NULL;
 CREATE INDEX idx_movimientos_fecha ON movimientos(fecha_movimiento);
+CREATE INDEX idx_movimientos_operativos_fecha ON movimientos(fecha_movimiento DESC) WHERE estado <> 'ELIMINADO';
 CREATE INDEX idx_detalle_movimientos_movimiento ON detalle_movimientos(movimiento_id);
 CREATE INDEX idx_detalle_movimientos_articulo ON detalle_movimientos(articulo_id);
 CREATE INDEX idx_detalle_movimientos_destino ON detalle_movimientos(ubicacion_destino_id);
+CREATE INDEX idx_inventario_stock_efectos_movimiento ON inventario_stock_efectos(movimiento_id);
+CREATE INDEX idx_inventario_stock_efectos_baja ON inventario_stock_efectos(baja_id);
+CREATE INDEX idx_inventario_stock_efectos_articulo ON inventario_stock_efectos(articulo_id);
 CREATE INDEX idx_articulos_bajas_fecha ON articulos_bajas(fecha_baja);
+CREATE INDEX idx_articulos_bajas_operativas_fecha ON articulos_bajas(fecha_baja DESC) WHERE estado <> 'ELIMINADO';
 CREATE INDEX idx_articulos_bajas_articulo ON articulos_bajas(articulo_id);
 CREATE INDEX idx_articulos_bajas_usuario ON articulos_bajas(usuario_id);
 CREATE INDEX idx_colaboradores_estado ON colaboradores(estado);
@@ -423,7 +468,10 @@ INSERT INTO schema_version (version, description) VALUES
 (10, 'Ensure production columns for cuentas and pagos'),
 (11, 'Historial de bajas de articulos'),
 (12, 'Index on abonos(pago_id) for getPagos join performance'),
-(13, 'Reconcile production schema, constraints, triggers and indexes');
+(13, 'Reconcile production schema, constraints, triggers and indexes'),
+(14, 'Improve inventory table query performance'),
+(15, 'Inventory transactional integrity, voiding and logical deletion metadata'),
+(16, 'Inventory exact stock effects and reversible history markers');
 
 -- ============================================
 -- FINALIZADO

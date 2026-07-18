@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const crypto = require('node:crypto');
 const db = require('../config/database');
-const { createHttpError, handleControllerError } = require('../utils/http');
+const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { clearActiveCache } = require('../middleware/permissions');
 const { logAudit, auditFromReq } = require('../utils/audit');
 
@@ -203,10 +203,7 @@ const assertGerenteNotLastActive = async (currentUser, nextTipo, nextActivo) => 
 
 const updateUsuario = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, 'El id de usuario es inválido');
-    }
+    const id = parsePositiveInteger(req.params.id, 'El id de usuario es inválido');
 
     const currentUser = await getUsuarioSummaryById(id);
     if (!currentUser) {
@@ -249,10 +246,7 @@ const updateUsuario = async (req, res) => {
 
 const reenviarInvitacion = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, 'El id de usuario es inválido');
-    }
+    const id = parsePositiveInteger(req.params.id, 'El id de usuario es inválido');
 
     const currentUser = await db.query(
       `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo
@@ -300,10 +294,7 @@ const reenviarInvitacion = async (req, res) => {
 
 const deleteUsuario = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, 'El id de usuario es inválido');
-    }
+    const id = parsePositiveInteger(req.params.id, 'El id de usuario es inválido');
 
     if (Number(req.user?.id) === id) {
       throw createHttpError(400, 'No puedes eliminar tu propio usuario');

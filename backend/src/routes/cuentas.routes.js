@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const cuentasController = require('../controllers/cuentasController');
 const { verifyToken } = require('../middleware/auth');
-const { requireActive, requirePermission, requireRole } = require('../middleware/permissions');
+const { requirePermission } = require('../middleware/permissions');
+const { PERMISSIONS } = require('../config/permissions');
 const { validateRequest } = require('../middleware/validation');
 const {
   clienteCreateSchema,
@@ -12,8 +13,7 @@ const {
   pagoCreateSchema,
 } = require('../utils/validationSchemas');
 
-// All routes require authentication + cuentas permission
-router.use(verifyToken, requireActive, requirePermission('cuentas'));
+router.use(verifyToken);
 
 // ============================================
 // CLIENTES
@@ -24,28 +24,45 @@ router.use(verifyToken, requireActive, requirePermission('cuentas'));
  * @desc    Obtener todos los clientes
  * @access  Private (cuentas)
  */
-router.get('/clientes', cuentasController.getClientes);
+router.get(
+  '/clientes',
+  requirePermission(PERMISSIONS.CUENTAS_CLIENTES_VER),
+  cuentasController.getClientes
+);
 
 /**
  * @route   GET /api/cuentas/clientes/excel
  * @desc    Exportar clientes a Excel
  * @access  Private (cuentas)
  */
-router.get('/clientes/excel', requirePermission('exportar'), cuentasController.exportClientesExcel);
+router.get(
+  '/clientes/excel',
+  requirePermission(PERMISSIONS.CUENTAS_REPORTES_EXPORTAR),
+  cuentasController.exportClientesExcel
+);
 
 /**
  * @route   POST /api/cuentas/clientes
  * @desc    Crear un cliente
  * @access  Private (cuentas)
  */
-router.post('/clientes', validateRequest(clienteCreateSchema), cuentasController.createCliente);
+router.post(
+  '/clientes',
+  requirePermission(PERMISSIONS.CUENTAS_CLIENTES_CREAR),
+  validateRequest(clienteCreateSchema),
+  cuentasController.createCliente
+);
 
 /**
  * @route   DELETE /api/cuentas/clientes/:id
  * @desc    Eliminar un cliente
  * @access  Private (cuentas)
  */
-router.delete('/clientes/:id', cuentasController.deleteCliente);
+router.delete(
+  '/clientes/:id',
+  requirePermission(PERMISSIONS.CUENTAS_CLIENTES_ELIMINAR),
+  cuentasController.deleteCliente
+);
 
 // ============================================
 // FACTURAS
@@ -56,7 +73,11 @@ router.delete('/clientes/:id', cuentasController.deleteCliente);
  * @desc    Obtener el siguiente número de factura disponible
  * @access  Private (gerente)
  */
-router.get('/facturas/next-number', requireRole('gerente'), cuentasController.getNextNumFactura);
+router.get(
+  '/facturas/next-number',
+  requirePermission(PERMISSIONS.CUENTAS_FACTURAS_CREAR),
+  cuentasController.getNextNumFactura
+);
 
 /**
  * @route   POST /api/cuentas/facturas
@@ -65,7 +86,7 @@ router.get('/facturas/next-number', requireRole('gerente'), cuentasController.ge
  */
 router.post(
   '/facturas',
-  requireRole('gerente'),
+  requirePermission(PERMISSIONS.CUENTAS_FACTURAS_CREAR),
   validateRequest(facturaCreateSchema),
   cuentasController.createFactura
 );
@@ -77,7 +98,7 @@ router.post(
  */
 router.patch(
   '/facturas/:num_factura',
-  requireRole('gerente'),
+  requirePermission(PERMISSIONS.CUENTAS_FACTURAS_EDITAR),
   validateRequest(facturaUpdateSchema),
   cuentasController.updateFactura
 );
@@ -87,7 +108,11 @@ router.patch(
  * @desc    Eliminar una factura (cascada a abonos)
  * @access  Private (gerente)
  */
-router.delete('/facturas/:num_factura', requireRole('gerente'), cuentasController.deleteFactura);
+router.delete(
+  '/facturas/:num_factura',
+  requirePermission(PERMISSIONS.CUENTAS_FACTURAS_ELIMINAR),
+  cuentasController.deleteFactura
+);
 
 /**
  * @route   PATCH /api/cuentas/facturas/:num_factura/cancelar
@@ -96,7 +121,7 @@ router.delete('/facturas/:num_factura', requireRole('gerente'), cuentasControlle
  */
 router.patch(
   '/facturas/:num_factura/cancelar',
-  requireRole('gerente'),
+  requirePermission(PERMISSIONS.CUENTAS_FACTURAS_CANCELAR),
   validateRequest(facturaCancelSchema),
   cuentasController.cancelFactura
 );
@@ -110,42 +135,63 @@ router.patch(
  * @desc    Obtener pagos con facturas asociadas
  * @access  Private (cuentas)
  */
-router.get('/pagos', cuentasController.getPagos);
+router.get('/pagos', requirePermission(PERMISSIONS.CUENTAS_PAGOS_VER), cuentasController.getPagos);
 
 /**
  * @route   GET /api/cuentas/pagos/excel
  * @desc    Exportar pagos a Excel
  * @access  Private (cuentas)
  */
-router.get('/pagos/excel', requirePermission('exportar'), cuentasController.exportPagosExcel);
+router.get(
+  '/pagos/excel',
+  requirePermission(PERMISSIONS.CUENTAS_REPORTES_EXPORTAR),
+  cuentasController.exportPagosExcel
+);
 
 /**
  * @route   DELETE /api/cuentas/pagos/:id
  * @desc    Eliminar un pago completo con sus abonos
  * @access  Private (gerente)
  */
-router.delete('/pagos/:id', requireRole('gerente'), cuentasController.deletePago);
+router.delete(
+  '/pagos/:id',
+  requirePermission(PERMISSIONS.CUENTAS_PAGOS_ELIMINAR),
+  cuentasController.deletePago
+);
 
 /**
  * @route   GET /api/cuentas/abonos/:num_factura
  * @desc    Obtener abonos de una factura
  * @access  Private (cuentas)
  */
-router.get('/abonos/:num_factura', cuentasController.getAbonosByFactura);
+router.get(
+  '/abonos/:num_factura',
+  requirePermission(PERMISSIONS.CUENTAS_ABONOS_VER),
+  cuentasController.getAbonosByFactura
+);
 
 /**
  * @route   POST /api/cuentas/abonos/batch
  * @desc    Registrar múltiples abonos en una transacción (pago por cliente)
  * @access  Private (cuentas)
  */
-router.post('/abonos/batch', validateRequest(pagoCreateSchema), cuentasController.createBatchAbono);
+router.post(
+  '/abonos/batch',
+  requirePermission(PERMISSIONS.CUENTAS_ABONOS_CREAR),
+  validateRequest(pagoCreateSchema),
+  cuentasController.createBatchAbono
+);
 
 /**
  * @route   DELETE /api/cuentas/abonos/:id
  * @desc    Eliminar un abono individual (gerente only)
  * @access  Private (gerente)
  */
-router.delete('/abonos/:id', requireRole('gerente'), cuentasController.deleteAbono);
+router.delete(
+  '/abonos/:id',
+  requirePermission(PERMISSIONS.CUENTAS_ABONOS_ELIMINAR),
+  cuentasController.deleteAbono
+);
 
 // ============================================
 // REPORTE
@@ -156,13 +202,21 @@ router.delete('/abonos/:id', requireRole('gerente'), cuentasController.deleteAbo
  * @desc    Exportar reporte a Excel
  * @access  Private (cuentas)
  */
-router.get('/reporte/excel', requirePermission('exportar'), cuentasController.exportReporteExcel);
+router.get(
+  '/reporte/excel',
+  requirePermission(PERMISSIONS.CUENTAS_REPORTES_EXPORTAR),
+  cuentasController.exportReporteExcel
+);
 
 /**
  * @route   GET /api/cuentas/reporte
  * @desc    Obtener reporte de cuentas por cobrar
  * @access  Private (cuentas)
  */
-router.get('/reporte', cuentasController.getReporte);
+router.get(
+  '/reporte',
+  requirePermission(PERMISSIONS.CUENTAS_REPORTES_GENERAR),
+  cuentasController.getReporte
+);
 
 module.exports = router;

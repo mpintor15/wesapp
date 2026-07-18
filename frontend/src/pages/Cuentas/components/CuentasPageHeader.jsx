@@ -1,6 +1,6 @@
 const CuentasPageHeader = ({
   activeTab,
-  isGerente,
+  canCreateFactura,
   showClienteForm,
   onBack,
   onCreateFactura,
@@ -35,7 +35,7 @@ const CuentasPageHeader = ({
 
     {activeTab === 'facturas' ? (
       <div className="page-header-actions">
-        {isGerente ? (
+        {canCreateFactura ? (
           <button className="btn btn-ghost btn-sm" onClick={onCreateFactura} type="button">
             Crear nueva factura
           </button>

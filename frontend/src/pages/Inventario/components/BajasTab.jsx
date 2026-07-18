@@ -1,13 +1,25 @@
-import { formatDate, getSerieDisplay, getTipoLabel } from '../utils/inventarioHelpers';
+import {
+  formatDate,
+  getBajaActionState,
+  getEstadoOperativoClass,
+  getEstadoOperativoLabel,
+  getReversalStatus,
+  getSerieDisplay,
+  getTipoLabel,
+  REVERSAL_STATUS_LABELS,
+} from '../utils/inventarioHelpers';
 import FilterDateInput from '../../../components/FilterDateInput';
 
 const BajasTab = ({
   bajas,
   bajasFiltersDraft,
   bajasLoading,
+  onDeleteBaja,
   onApplyFilters,
   onClearFilters,
   onDraftChange,
+  onVoidBaja,
+  permissions,
 }) => (
   <div className="tab-content">
     <div className="ff-filter-row inventario-bajas-filter-row">
@@ -96,31 +108,131 @@ const BajasTab = ({
                 <th>Ubicación</th>
                 <th>Usuario</th>
                 <th className="cell-motivo-heading">Motivo</th>
+                <th>Estado</th>
+                <th>Reversión</th>
+                <th className="col-actions app-col-actions app-col-actions--double"></th>
               </tr>
             </thead>
             <tbody>
               {bajas.length > 0 ? (
-                bajas.map((baja, idx) => (
-                  <tr key={baja.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
-                    <td className="app-cell-date">{formatDate(baja.fecha_baja)}</td>
-                    <td className="cell-compact">{getTipoLabel(baja.tipo_articulo)}</td>
-                    <td className="cell-articulo">{baja.nombre_articulo || '-'}</td>
-                    <td className="cell-serie">{getSerieDisplay(baja)}</td>
-                    <td className="app-cell-qty">{baja.cantidad ?? '-'}</td>
-                    <td className="cell-compact">{baja.marca || '-'}</td>
-                    <td className="cell-compact">{baja.modelo || '-'}</td>
-                    <td>{baja.ubicacion_nombre || '-'}</td>
-                    <td>{baja.usuario || '-'}</td>
-                    <td className="cell-motivo">
-                      <span className="cell-motivo-text" title={baja.motivo || '-'}>
-                        {baja.motivo || '-'}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                bajas.map((baja, idx) => {
+                  const actions = getBajaActionState(baja, permissions);
+                  const reversalStatus = getReversalStatus(baja);
+                  return (
+                    <tr key={baja.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
+                      <td className="app-cell-date">{formatDate(baja.fecha_baja)}</td>
+                      <td className="cell-compact">{getTipoLabel(baja.tipo_articulo)}</td>
+                      <td className="cell-articulo">{baja.nombre_articulo || '-'}</td>
+                      <td className="cell-serie">{getSerieDisplay(baja)}</td>
+                      <td className="app-cell-qty">{baja.cantidad ?? '-'}</td>
+                      <td className="cell-compact">{baja.marca || '-'}</td>
+                      <td className="cell-compact">{baja.modelo || '-'}</td>
+                      <td>{baja.ubicacion_nombre || '-'}</td>
+                      <td>{baja.usuario || '-'}</td>
+                      <td className="cell-motivo">
+                        <span className="cell-motivo-text" title={baja.motivo || '-'}>
+                          {baja.motivo || '-'}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`status-badge ${getEstadoOperativoClass(baja.estado)}`}
+                          aria-label={`Estado: ${getEstadoOperativoLabel(baja.estado)}`}
+                        >
+                          {getEstadoOperativoLabel(baja.estado)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="status-badge status-badge--neutral">
+                          {REVERSAL_STATUS_LABELS[reversalStatus] || reversalStatus}
+                        </span>
+                      </td>
+                      <td className="col-actions app-col-actions app-col-actions--double">
+                        {actions.hasAnyAction ? (
+                          <div className="action-buttons app-table-actions">
+                            {actions.canVoid && (
+                              <button
+                                className="action-btn action-btn-baja"
+                                type="button"
+                                title="Anular baja"
+                                onClick={() => onVoidBaja(baja)}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="13"
+                                  height="13"
+                                >
+                                  <circle cx="12" cy="12" r="8" />
+                                  <path d="M8 12h8" />
+                                </svg>
+                              </button>
+                            )}
+                            {actions.showDisabledVoid && (
+                              <button
+                                className="action-btn action-btn-baja"
+                                type="button"
+                                title={actions.disabledVoidReason}
+                                disabled
+                                aria-label={actions.disabledVoidReason}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="13"
+                                  height="13"
+                                >
+                                  <circle cx="12" cy="12" r="8" />
+                                  <path d="M8 12h8" />
+                                </svg>
+                              </button>
+                            )}
+                            {actions.canDelete && (
+                              <button
+                                className="action-btn action-btn-del"
+                                type="button"
+                                title="Eliminar baja administrativamente"
+                                onClick={() => onDeleteBaja(baja)}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="13"
+                                  height="13"
+                                >
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                  <path d="M10 11v6M14 11v6" />
+                                  <path d="M9 6V4h6v2" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="table-action-empty">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan="10" className="text-center">
+                  <td colSpan="13" className="text-center">
                     No hay artículos dados de baja.
                   </td>
                 </tr>

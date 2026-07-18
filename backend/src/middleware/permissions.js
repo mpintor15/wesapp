@@ -1,117 +1,42 @@
-/**
- * permissions.js — Middlewares de autorización basada en roles
- *
- * Exporta:
- *  - requirePermission(modulo): Verifica que el tipo de usuario en el token
- *    tenga acceso al módulo indicado según la tabla de permisos en config.js.
- *    Responde 403 si el usuario no tiene el permiso requerido.
- *  - requireActive: Consulta la base de datos para confirmar que el usuario
- *    sigue activo (no desactivado por un administrador). Responde 403 si
- *    el usuario está desactivado.
- *
- * Ambos middlewares se usan en cadena después de verifyToken en cada ruta
- * protegida: verifyToken → requireActive → requirePermission('modulo').
- */
-const config = require('../config/config');
-const db = require('../config/database');
-const logger = require('../config/logger');
-
-const ACTIVE_CACHE_TTL_MS = Number.parseInt(process.env.ACTIVE_USER_CACHE_TTL_MS, 10) || 30000;
-const activeUserCache = new Map();
+const { hasPermission } = require('../config/permissions');
+const {
+  sendAuthenticationRequired,
+  sendInsufficientPermissions,
+  sendUserDisabled,
+} = require('../utils/authErrorCodes');
 
 /**
- * Middleware para verificar si el usuario tiene permiso para acceder a un módulo
+ * Middleware para verificar si el usuario actual tiene permiso para una acción.
  */
-const requirePermission = (modulo) => {
+const requirePermission = (permission) => {
   return (req, res, next) => {
     const { tipo_usuario } = req.user;
 
     if (!tipo_usuario) {
-      return res.status(403).json({
-        success: false,
-        message: 'Tipo de usuario no definido',
-      });
+      return sendInsufficientPermissions(res);
     }
 
-    const permisos = config.permissions[tipo_usuario];
-
-    if (!permisos) {
-      return res.status(403).json({
-        success: false,
-        message: 'Tipo de usuario inválido',
-      });
-    }
-
-    if (permisos.includes(modulo)) {
+    if (hasPermission(tipo_usuario, permission)) {
       next();
     } else {
-      return res.status(403).json({
-        success: false,
-        message: `Acceso denegado. No tienes permisos para: ${modulo}`,
-      });
+      return sendInsufficientPermissions(res);
     }
   };
 };
 
 /**
- * Middleware para verificar si el usuario está activo
+ * Compatibilidad temporal: verifyToken ya rehidrata y valida usuario activo desde DB.
  */
-const requireActive = async (req, res, next) => {
-  const userId = Number(req.user?.id);
-
-  if (!Number.isInteger(userId) || userId <= 0) {
-    return res.status(401).json({
-      success: false,
-      message: 'Token inválido',
-    });
+const requireActive = (req, res, next) => {
+  if (!req.user?.id) {
+    return sendAuthenticationRequired(res);
   }
 
-  try {
-    const cached = activeUserCache.get(userId);
-    if (cached && cached.expiresAt > Date.now()) {
-      if (!cached.active) {
-        return res.status(403).json({
-          success: false,
-          message: 'Usuario desactivado. Contacta al administrador',
-        });
-      }
-      return next();
-    }
-
-    const result = await db.query('SELECT activo FROM usuarios WHERE id = $1', [userId]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Usuario no encontrado',
-      });
-    }
-
-    const active = Boolean(result.rows[0].activo);
-    activeUserCache.set(userId, {
-      active,
-      expiresAt: Date.now() + ACTIVE_CACHE_TTL_MS,
-    });
-
-    if (!active) {
-      return res.status(403).json({
-        success: false,
-        message: 'Usuario desactivado. Contacta al administrador',
-      });
-    }
-
-    next();
-  } catch (error) {
-    logger.error('Error en requireActive:', {
-      message: error.message,
-      stack: error.stack,
-      code: error.code,
-    });
-    return res.status(500).json({
-      success: false,
-      message: 'Error al verificar estado del usuario',
-    });
+  if (!req.user.activo) {
+    return sendUserDisabled(res);
   }
+
+  return next();
 };
 
 /**
@@ -121,21 +46,14 @@ const requireActive = async (req, res, next) => {
 const requireRole = (...roles) => {
   return (req, res, next) => {
     if (!req.user?.tipo_usuario || !roles.includes(req.user.tipo_usuario)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Acceso denegado. No tienes permisos para realizar esta acción',
-      });
+      return sendInsufficientPermissions(res);
     }
     next();
   };
 };
 
 const clearActiveCache = (userId) => {
-  if (userId) {
-    activeUserCache.delete(Number(userId));
-    return;
-  }
-  activeUserCache.clear();
+  void userId;
 };
 
 module.exports = { requirePermission, requireRole, requireActive, clearActiveCache };

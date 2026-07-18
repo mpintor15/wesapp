@@ -12,8 +12,7 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src",
-    "format:check": "prettier --check src",
-    "type-check": "tsc --noEmit"
+    "format:check": "prettier --check src"
   },
   "jest": {
     "testEnvironment": "node",
@@ -55,6 +54,12 @@
     },
     "exceljs": {
       "uuid": "11.1.1"
+    },
+    "readdir-glob": {
+      "minimatch": {
+        ".": "5.1.8",
+        "brace-expansion": "2.0.3"
+      }
     }
   },
   "devDependencies": {

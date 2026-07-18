@@ -105,6 +105,7 @@ DB_NAME=wesapp
 DB_USER=postgres
 DB_PASSWORD=your_password_here
 DB_SSL=false
+PDF_STORAGE_PATH=./src/storage
 JWT_SECRET=change_this_secret
 JWT_EXPIRATION=24h
 CORS_ORIGIN=http://localhost:3000
@@ -113,6 +114,7 @@ NODE_ENV=development
 
 **Nota:** 
 - `DB_USER` y `DB_PASSWORD` son tus credenciales de PostgreSQL
+- `PDF_STORAGE_PATH` define dónde se guardan los PDFs de inventario; en producción debe ser un volumen persistente.
 - En macOS con Homebrew, el rol de PostgreSQL puede variar según la instalación. Verifica tus roles con `psql postgres` o crea un rol/usuario específico para WESApp.
 - En Windows, define el usuario y contraseña que configuraste durante la instalación
 

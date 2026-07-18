@@ -147,4 +147,45 @@ describe('useMovimientoForm', () => {
 
     hook.unmount();
   });
+
+  test('avisa cuando el movimiento se crea pero falla el PDF', async () => {
+    inventarioService.createMovimiento.mockResolvedValue({
+      success: true,
+      message: 'Movimiento registrado',
+      pdf: {
+        available: false,
+        code: 'PDF_GENERATION_FAILED',
+        message: 'El PDF no pudo generarse.',
+      },
+    });
+    const hook = renderHook(() =>
+      useMovimientoForm({
+        catalogArticulos,
+        canRegeneratePdf: true,
+        showMessage,
+        onCreated,
+      })
+    );
+
+    act(() => {
+      hook.result.open();
+      hook.result.handleMovimientoFormChange({
+        target: { name: 'ubicacion_destino_nombre', value: 'Bodega norte' },
+      });
+      hook.result.selectArticuloForItem(0, catalogArticulos[0]);
+    });
+
+    await act(async () => {
+      await hook.result.handleCreateMovimiento(submitEvent());
+    });
+
+    expect(showMessage).toHaveBeenCalledWith('success', 'Movimiento registrado');
+    expect(showMessage).toHaveBeenCalledWith(
+      'warning',
+      'El PDF no pudo generarse. Puedes regenerarlo desde la tabla de movimientos.'
+    );
+    expect(onCreated).toHaveBeenCalledTimes(1);
+
+    hook.unmount();
+  });
 });

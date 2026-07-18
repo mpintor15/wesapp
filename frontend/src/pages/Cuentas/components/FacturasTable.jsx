@@ -9,7 +9,7 @@ const FacturasTable = ({
   currentPage,
   totalPages,
   totals,
-  isGerente,
+  canManageFacturas,
   onSort,
   onShowAnulacion,
   onEdit,
@@ -108,7 +108,7 @@ const FacturasTable = ({
                         />
                       </svg>
                     </button>
-                  ) : isGerente ? (
+                  ) : canManageFacturas ? (
                     <>
                       <button
                         className="action-btn action-btn-edit"
@@ -154,7 +154,7 @@ const FacturasTable = ({
                       </button>
                     </>
                   ) : null}
-                  {isGerente ? (
+                  {canManageFacturas ? (
                     <button
                       className="action-btn action-btn-del"
                       onClick={() => onDelete(row)}
