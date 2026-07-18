@@ -1,5 +1,10 @@
 import AppModal from '../../../components/AppModal';
-import { getSerieDisplay, getTipoLabel, isStockTipo } from '../utils/inventarioHelpers';
+import {
+  getSerieDisplay,
+  getTipoLabel,
+  isStockTipo,
+  validateMotivoAdministrativo,
+} from '../utils/inventarioHelpers';
 
 const BajaArticuloModal = ({
   bajaForm,
@@ -10,6 +15,7 @@ const BajaArticuloModal = ({
   onFormChange,
 }) => {
   if (!bajaTarget) return null;
+  const motivoError = validateMotivoAdministrativo(bajaForm.motivo);
 
   return (
     <AppModal
@@ -63,11 +69,18 @@ const BajaArticuloModal = ({
           <textarea
             id="baja-motivo"
             rows="4"
+            maxLength="500"
             value={bajaForm.motivo}
             onChange={(e) => onFormChange((prev) => ({ ...prev, motivo: e.target.value }))}
             placeholder="Describe por qué se da de baja este artículo"
+            aria-describedby="baja-motivo-help"
+            aria-invalid={Boolean(motivoError)}
             required
           />
+          <div id="baja-motivo-help" className="reason-field-help">
+            <span>{motivoError || 'Motivo válido.'}</span>
+            <span>{bajaForm.motivo.length}/500</span>
+          </div>
         </div>
       </AppModal.Body>
       <AppModal.Footer className="inventory-modal-actions">
@@ -82,7 +95,7 @@ const BajaArticuloModal = ({
         <button
           className="btn btn-destructive"
           onClick={onConfirm}
-          disabled={isSavingBaja}
+          disabled={isSavingBaja || Boolean(motivoError)}
           type="button"
         >
           {isSavingBaja ? (

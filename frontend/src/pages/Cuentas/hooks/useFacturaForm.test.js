@@ -12,7 +12,7 @@ const clientes = [
 const baseProps = (overrides = {}) => ({
   clientes,
   reporte: [],
-  isGerente: true,
+  canCreateFactura: true,
   showToast: jest.fn(),
   onCreated: jest.fn(),
   ...overrides,

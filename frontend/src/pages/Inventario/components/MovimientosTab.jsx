@@ -1,4 +1,11 @@
-import { formatDate } from '../utils/inventarioHelpers';
+import {
+  formatDate,
+  getEstadoOperativoClass,
+  getEstadoOperativoLabel,
+  getMovimientoActionState,
+  getReversalStatus,
+  REVERSAL_STATUS_LABELS,
+} from '../utils/inventarioHelpers';
 import PaginationControls from './PaginationControls';
 import SortHeader from './SortHeader';
 import FilterDateInput from '../../../components/FilterDateInput';
@@ -11,11 +18,16 @@ const MovimientosTab = ({
   movimientosTotalPages,
   onApplyFilters,
   onClearFilters,
+  onDeleteMovimiento,
   onDownloadPdf,
   onDraftChange,
   onPageChange,
+  onRegeneratePdf,
   onSort,
+  onVoidMovimiento,
   paginatedMovimientos,
+  permissions,
+  regeneratingPdfId,
   sortedMovimientos,
   ubicaciones,
 }) => (
@@ -149,50 +161,173 @@ const MovimientosTab = ({
                   sort={movimientosSort}
                   onSort={onSort}
                 />
-                <th className="col-actions app-col-actions app-col-actions--single"></th>
+                <th>Estado</th>
+                <th>Reversión</th>
+                <th className="col-actions app-col-actions app-col-actions--triple"></th>
               </tr>
             </thead>
             <tbody>
               {sortedMovimientos.length > 0 ? (
-                paginatedMovimientos.map((mov, idx) => (
-                  <tr key={mov.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
-                    <td className="app-cell-date">{formatDate(mov.fecha_movimiento)}</td>
-                    <td className="app-cell-qty">{mov.items}</td>
-                    <td>{mov.articulos_movidos || '-'}</td>
-                    <td>{mov.ubicacion_origen || '-'}</td>
-                    <td>{mov.ubicacion_destino || '-'}</td>
-                    <td>{mov.usuario || '-'}</td>
-                    <td className="col-actions app-col-actions app-col-actions--single">
-                      <div className="action-buttons app-table-actions">
-                        <button
-                          className="action-btn action-btn-pdf"
-                          type="button"
-                          title="Descargar PDF"
-                          onClick={() => onDownloadPdf(mov)}
+                paginatedMovimientos.map((mov, idx) => {
+                  const actions = getMovimientoActionState(mov, permissions);
+                  const reversalStatus = getReversalStatus(mov);
+                  return (
+                    <tr key={mov.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
+                      <td className="app-cell-date">{formatDate(mov.fecha_movimiento)}</td>
+                      <td className="app-cell-qty">{mov.items}</td>
+                      <td>{mov.articulos_movidos || '-'}</td>
+                      <td>{mov.ubicacion_origen || '-'}</td>
+                      <td>{mov.ubicacion_destino || '-'}</td>
+                      <td>{mov.usuario || '-'}</td>
+                      <td>
+                        <span
+                          className={`status-badge ${getEstadoOperativoClass(mov.estado)}`}
+                          aria-label={`Estado: ${getEstadoOperativoLabel(mov.estado)}`}
                         >
-                          <svg
-                            viewBox="0 0 24 24"
-                            aria-hidden="true"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            width="13"
-                            height="13"
-                          >
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {getEstadoOperativoLabel(mov.estado)}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="status-badge status-badge--neutral">
+                          {REVERSAL_STATUS_LABELS[reversalStatus] || reversalStatus}
+                        </span>
+                      </td>
+                      <td className="col-actions app-col-actions app-col-actions--triple">
+                        {actions.hasAnyAction ? (
+                          <div className="action-buttons app-table-actions">
+                            {actions.canDownloadPdf && (
+                              <button
+                                className="action-btn action-btn-pdf"
+                                type="button"
+                                title="Descargar PDF existente"
+                                onClick={() => onDownloadPdf(mov)}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="13"
+                                  height="13"
+                                >
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="7 10 12 15 17 10" />
+                                  <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                              </button>
+                            )}
+                            {actions.canRegeneratePdf && (
+                              <button
+                                className="action-btn action-btn-neutral"
+                                type="button"
+                                title="Regenerar PDF"
+                                disabled={regeneratingPdfId === mov.id}
+                                onClick={() => onRegeneratePdf(mov)}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="13"
+                                  height="13"
+                                >
+                                  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                                  <path d="M3 21v-5h5" />
+                                  <path d="M3 12a9 9 0 0 1 15.74-6.26L21 8" />
+                                  <path d="M16 8h5V3" />
+                                </svg>
+                              </button>
+                            )}
+                            {actions.canVoid && (
+                              <button
+                                className="action-btn action-btn-baja"
+                                type="button"
+                                title="Anular movimiento"
+                                onClick={() => onVoidMovimiento(mov)}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="13"
+                                  height="13"
+                                >
+                                  <circle cx="12" cy="12" r="8" />
+                                  <path d="M8 12h8" />
+                                </svg>
+                              </button>
+                            )}
+                            {actions.showDisabledVoid && (
+                              <button
+                                className="action-btn action-btn-baja"
+                                type="button"
+                                title={actions.disabledVoidReason}
+                                disabled
+                                aria-label={actions.disabledVoidReason}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="13"
+                                  height="13"
+                                >
+                                  <circle cx="12" cy="12" r="8" />
+                                  <path d="M8 12h8" />
+                                </svg>
+                              </button>
+                            )}
+                            {actions.canDelete && (
+                              <button
+                                className="action-btn action-btn-del"
+                                type="button"
+                                title="Eliminar movimiento administrativamente"
+                                onClick={() => onDeleteMovimiento(mov)}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  aria-hidden="true"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="13"
+                                  height="13"
+                                >
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                  <path d="M10 11v6M14 11v6" />
+                                  <path d="M9 6V4h6v2" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="table-action-empty">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan="7" className="text-center">
+                  <td colSpan="9" className="text-center">
                     No hay movimientos registrados.
                   </td>
                 </tr>

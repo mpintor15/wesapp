@@ -6,7 +6,7 @@ const PagosTable = ({
   loading,
   filters,
   sort,
-  isGerente,
+  canDeletePago,
   onSort,
   onOpenDetail,
   onDelete,
@@ -26,13 +26,13 @@ const PagosTable = ({
             className="col-money"
           />
           <th>Facturas</th>
-          {isGerente ? <th className="col-actions app-col-actions"></th> : null}
+          {canDeletePago ? <th className="col-actions app-col-actions"></th> : null}
         </tr>
       </thead>
       <tbody>
         {loading ? (
           <tr>
-            <td colSpan={isGerente ? 6 : 5} className="text-center">
+            <td colSpan={canDeletePago ? 6 : 5} className="text-center">
               <span className="spinner spinner--sm" /> Cargando pagos…
             </td>
           </tr>
@@ -61,7 +61,7 @@ const PagosTable = ({
                   {pago.facturas_count || pago.facturas?.length || 0} factura(s)
                 </span>
               </td>
-              {isGerente ? (
+              {canDeletePago ? (
                 <td className="col-actions app-col-actions">
                   <div className="action-buttons app-table-actions">
                     <button
@@ -92,7 +92,7 @@ const PagosTable = ({
           ))
         ) : (
           <tr>
-            <td colSpan={isGerente ? 6 : 5} className="text-center">
+            <td colSpan={canDeletePago ? 6 : 5} className="text-center">
               {filters.search || filters.fechaInicio || filters.fechaFin || filters.metodoPago
                 ? 'No hay pagos para los filtros seleccionados'
                 : 'No hay pagos registrados'}

@@ -12,7 +12,12 @@ import {
   validateMovimientoForm,
 } from '../utils/inventarioHelpers';
 
-const useMovimientoForm = ({ catalogArticulos, showMessage, onCreated }) => {
+const useMovimientoForm = ({
+  catalogArticulos,
+  canRegeneratePdf = false,
+  showMessage,
+  onCreated,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [movimientoForm, setMovimientoForm] = useState(createMovimientoForm);
   const [itemSearchTerms, setItemSearchTerms] = useState(['']);
@@ -103,14 +108,23 @@ const useMovimientoForm = ({ catalogArticulos, showMessage, onCreated }) => {
         buildMovimientoPayload(movimientoForm)
       );
       if (result.success) {
-        showMessage('success', 'Movimiento registrado exitosamente');
+        showMessage('success', result.message || 'Movimiento registrado exitosamente');
+        if (result.pdf?.available === false) {
+          const regenerateHint = canRegeneratePdf
+            ? ' Puedes regenerarlo desde la tabla de movimientos.'
+            : '';
+          showMessage(
+            'warning',
+            `${result.pdf.message || 'El PDF no pudo generarse.'}${regenerateHint}`
+          );
+        }
         setIsOpen(false);
         await onCreated?.();
       } else {
         showMessage('error', result.message);
       }
     },
-    [movimientoForm, onCreated, showMessage]
+    [canRegeneratePdf, movimientoForm, onCreated, showMessage]
   );
 
   return {

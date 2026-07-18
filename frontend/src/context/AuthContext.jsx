@@ -1,7 +1,15 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import PropTypes from 'prop-types';
 import authService from '../services/authService';
-import { AUTH_EXPIRED_EVENT } from '../services/api';
+import { AUTH_EXPIRED_EVENT, AUTH_PERMISSIONS_CHANGED_EVENT } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -63,6 +71,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(initialAuthState.user);
   const [loading, setLoading] = useState(initialAuthState.loading);
   const [isAuthenticated, setIsAuthenticated] = useState(initialAuthState.isAuthenticated);
+  const permissionResyncPromiseRef = useRef(null);
 
   const clearSession = useCallback(() => {
     authService.logout();
@@ -98,6 +107,48 @@ export const AuthProvider = ({ children }) => {
     globalThis.addEventListener(AUTH_EXPIRED_EVENT, handleUnauthorized);
     return () => globalThis.removeEventListener(AUTH_EXPIRED_EVENT, handleUnauthorized);
   }, [clearSession]);
+
+  const resyncAuthenticatedUser = useCallback(() => {
+    if (permissionResyncPromiseRef.current) {
+      return permissionResyncPromiseRef.current;
+    }
+
+    permissionResyncPromiseRef.current = authService
+      .verifyToken()
+      .then((result) => {
+        if (result.success) {
+          setUser(result.user);
+          setIsAuthenticated(true);
+          return result;
+        }
+
+        if (result.status === 401) {
+          clearSession();
+        }
+
+        return result;
+      })
+      .catch((error) => {
+        console.error('Error al resincronizar usuario:', error);
+        return { success: false, error };
+      })
+      .finally(() => {
+        permissionResyncPromiseRef.current = null;
+      });
+
+    return permissionResyncPromiseRef.current;
+  }, [clearSession]);
+
+  useEffect(() => {
+    const handlePermissionsChanged = () => {
+      if (!localStorage.getItem('token')) return;
+      void resyncAuthenticatedUser();
+    };
+
+    globalThis.addEventListener(AUTH_PERMISSIONS_CHANGED_EVENT, handlePermissionsChanged);
+    return () =>
+      globalThis.removeEventListener(AUTH_PERMISSIONS_CHANGED_EVENT, handlePermissionsChanged);
+  }, [resyncAuthenticatedUser]);
 
   const login = useCallback(async (usuario, password) => {
     const result = await authService.login(usuario, password);

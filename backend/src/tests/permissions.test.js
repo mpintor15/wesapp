@@ -1,29 +1,9 @@
-/**
- * Tests para middlewares de autorización
- *
- * Cubre:
- * - requirePermission: acceso correcto por rol
- * - requireRole: restricción a rol específico
- */
+const { PERMISSIONS, hasPermission } = require('../config/permissions');
+const { requirePermission, requireRole, requireActive } = require('../middleware/permissions');
+const { AUTH_ERROR_CODES, AUTH_ERROR_MESSAGES } = require('../utils/authErrorCodes');
 
-jest.mock('../config/database', () => ({
-  query: jest.fn(),
-}));
-
-jest.mock('../config/logger', () => ({
-  error: jest.fn(),
-}));
-
-const db = require('../config/database');
-const {
-  requirePermission,
-  requireRole,
-  requireActive,
-  clearActiveCache,
-} = require('../middleware/permissions');
-
-const mockReq = (tipo_usuario) => ({
-  user: { id: 1, usuario: 'test', tipo_usuario },
+const mockReq = (tipo_usuario, extraUser = {}) => ({
+  user: { id: 1, usuario: 'test', tipo_usuario, activo: true, ...extraUser },
 });
 
 const mockRes = () => {
@@ -37,155 +17,130 @@ const next = jest.fn();
 
 beforeEach(() => {
   jest.clearAllMocks();
-  clearActiveCache();
 });
 
-// ============================================
-// requirePermission
-// ============================================
+describe('permission matrix', () => {
+  test('gerente es superadmin para cualquier permiso definido', () => {
+    expect(hasPermission('gerente', PERMISSIONS.USUARIOS_ELIMINAR)).toBe(true);
+    expect(hasPermission('gerente', PERMISSIONS.INVENTARIO_MOVIMIENTOS_REGENERAR_PDF)).toBe(true);
+  });
+
+  test('secretario puede crear clientes pero no facturas ni abonos', () => {
+    expect(hasPermission('secretario', PERMISSIONS.CUENTAS_CLIENTES_CREAR)).toBe(true);
+    expect(hasPermission('secretario', PERMISSIONS.CUENTAS_FACTURAS_CREAR)).toBe(false);
+    expect(hasPermission('secretario', PERMISSIONS.CUENTAS_ABONOS_CREAR)).toBe(false);
+  });
+
+  test('contador puede operar Cuentas y solo ver Personal', () => {
+    expect(hasPermission('contador', PERMISSIONS.CUENTAS_FACTURAS_CREAR)).toBe(true);
+    expect(hasPermission('contador', PERMISSIONS.CUENTAS_ABONOS_ELIMINAR)).toBe(true);
+    expect(hasPermission('contador', PERMISSIONS.PERSONAL_VER)).toBe(true);
+    expect(hasPermission('contador', PERMISSIONS.PERSONAL_CREAR)).toBe(false);
+  });
+
+  test('supervisor puede operar inventario sin eliminar ni regenerar PDF', () => {
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_ARTICULOS_CREAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_ARTICULOS_DAR_BAJA)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_ARTICULOS_ELIMINAR)).toBe(false);
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_MOVIMIENTOS_ANULAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_BAJAS_ANULAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_MOVIMIENTOS_REGENERAR_PDF)).toBe(
+      false
+    );
+  });
+
+  test('solo gerente puede eliminar administrativamente inventario', () => {
+    expect(hasPermission('gerente', PERMISSIONS.INVENTARIO_MOVIMIENTOS_ELIMINAR)).toBe(true);
+    expect(hasPermission('gerente', PERMISSIONS.INVENTARIO_BAJAS_ELIMINAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_MOVIMIENTOS_ELIMINAR)).toBe(false);
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_BAJAS_ELIMINAR)).toBe(false);
+  });
+});
 
 describe('requirePermission', () => {
-  test('gerente accede al módulo cuentas', () => {
-    const middleware = requirePermission('cuentas');
-    middleware(mockReq('gerente'), mockRes(), next);
-    expect(next).toHaveBeenCalled();
-  });
+  test('permite acción concedida por rol actual', () => {
+    const middleware = requirePermission(PERMISSIONS.PERSONAL_CREAR);
 
-  test('contador accede al módulo cuentas', () => {
-    const middleware = requirePermission('cuentas');
-    middleware(mockReq('contador'), mockRes(), next);
-    expect(next).toHaveBeenCalled();
-  });
-
-  test('supervisor NO accede al módulo cuentas', () => {
-    const middleware = requirePermission('cuentas');
-    const res = mockRes();
-    middleware(mockReq('supervisor'), res, next);
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  test('supervisor accede al módulo inventario', () => {
-    const middleware = requirePermission('inventario');
     middleware(mockReq('supervisor'), mockRes(), next);
+
     expect(next).toHaveBeenCalled();
   });
 
-  test('supervisor puede crear artículo', () => {
-    const middleware = requirePermission('crear_articulo');
-    middleware(mockReq('supervisor'), mockRes(), next);
-    expect(next).toHaveBeenCalled();
-  });
-
-  test('supervisor NO puede eliminar artículo', () => {
-    const middleware = requirePermission('eliminar_articulo');
+  test('rechaza acción no concedida sin exponer matriz interna', () => {
+    const middleware = requirePermission(PERMISSIONS.USUARIOS_VER);
     const res = mockRes();
-    middleware(mockReq('supervisor'), res, next);
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(next).not.toHaveBeenCalled();
-  });
 
-  test('supervisor puede dar de baja artículo', () => {
-    const middleware = requirePermission('dar_baja_articulo');
-    middleware(mockReq('supervisor'), mockRes(), next);
-    expect(next).toHaveBeenCalled();
-  });
-
-  test('contador NO puede crear artículo', () => {
-    const middleware = requirePermission('crear_articulo');
-    const res = mockRes();
-    middleware(mockReq('contador'), res, next);
-    expect(res.status).toHaveBeenCalledWith(403);
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  test('gerente accede al módulo usuarios', () => {
-    const middleware = requirePermission('usuarios');
-    middleware(mockReq('gerente'), mockRes(), next);
-    expect(next).toHaveBeenCalled();
-  });
-
-  test('secretario NO accede al módulo usuarios', () => {
-    const middleware = requirePermission('usuarios');
-    const res = mockRes();
     middleware(mockReq('secretario'), res, next);
+
     expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json.mock.calls[0][0]).toEqual({
+      success: false,
+      code: AUTH_ERROR_CODES.INSUFFICIENT_PERMISSIONS,
+      message: AUTH_ERROR_MESSAGES[AUTH_ERROR_CODES.INSUFFICIENT_PERMISSIONS],
+    });
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/USUARIOS_VER|secretario|stack/i);
     expect(next).not.toHaveBeenCalled();
   });
 });
-
-// ============================================
-// requireRole
-// ============================================
 
 describe('requireRole', () => {
-  test('gerente pasa el filtro requireRole("gerente")', () => {
+  test('usa el rol actual ya rehidratado en req.user', () => {
     const middleware = requireRole('gerente');
+
     middleware(mockReq('gerente'), mockRes(), next);
+
     expect(next).toHaveBeenCalled();
   });
 
-  test('secretario NO pasa requireRole("gerente")', () => {
+  test('rechaza rol no permitido', () => {
     const middleware = requireRole('gerente');
     const res = mockRes();
+
     middleware(mockReq('secretario'), res, next);
+
     expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json.mock.calls[0][0]).toEqual({
+      success: false,
+      code: AUTH_ERROR_CODES.INSUFFICIENT_PERMISSIONS,
+      message: AUTH_ERROR_MESSAGES[AUTH_ERROR_CODES.INSUFFICIENT_PERMISSIONS],
+    });
     expect(next).not.toHaveBeenCalled();
-  });
-
-  test('acepta múltiples roles: secretario pasa requireRole("gerente", "secretario")', () => {
-    const middleware = requireRole('gerente', 'secretario');
-    middleware(mockReq('secretario'), mockRes(), next);
-    expect(next).toHaveBeenCalled();
-  });
-
-  test('supervisor NO pasa requireRole("gerente", "secretario")', () => {
-    const middleware = requireRole('gerente', 'secretario');
-    const res = mockRes();
-    middleware(mockReq('supervisor'), res, next);
-    expect(res.status).toHaveBeenCalledWith(403);
   });
 });
 
-// ============================================
-// requireActive
-// ============================================
-
 describe('requireActive', () => {
-  test('rechaza request sin usuario autenticado', async () => {
+  test('rechaza request sin usuario autenticado', () => {
     const res = mockRes();
-    await requireActive({ user: null }, res, next);
+
+    requireActive({ user: null }, res, next);
 
     expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json.mock.calls[0][0]).toEqual({
+      success: false,
+      code: AUTH_ERROR_CODES.AUTHENTICATION_REQUIRED,
+      message: AUTH_ERROR_MESSAGES[AUTH_ERROR_CODES.AUTHENTICATION_REQUIRED],
+    });
     expect(next).not.toHaveBeenCalled();
   });
 
-  test('permite usuario activo', async () => {
-    db.query.mockResolvedValue({ rows: [{ activo: true }], rowCount: 1 });
+  test('permite usuario activo ya rehidratado', () => {
+    requireActive(mockReq('gerente'), mockRes(), next);
 
-    await requireActive(mockReq('gerente'), mockRes(), next);
-
-    expect(db.query).toHaveBeenCalledWith('SELECT activo FROM usuarios WHERE id = $1', [1]);
     expect(next).toHaveBeenCalled();
   });
 
-  test('rechaza usuario inexistente', async () => {
-    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+  test('rechaza usuario inactivo ya rehidratado', () => {
     const res = mockRes();
 
-    await requireActive(mockReq('gerente'), res, next);
-
-    expect(res.status).toHaveBeenCalledWith(404);
-    expect(next).not.toHaveBeenCalled();
-  });
-
-  test('rechaza usuario inactivo', async () => {
-    db.query.mockResolvedValue({ rows: [{ activo: false }], rowCount: 1 });
-    const res = mockRes();
-
-    await requireActive(mockReq('gerente'), res, next);
+    requireActive(mockReq('gerente', { activo: false }), res, next);
 
     expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json.mock.calls[0][0]).toEqual({
+      success: false,
+      code: AUTH_ERROR_CODES.USER_DISABLED,
+      message: AUTH_ERROR_MESSAGES[AUTH_ERROR_CODES.USER_DISABLED],
+    });
     expect(next).not.toHaveBeenCalled();
   });
 });

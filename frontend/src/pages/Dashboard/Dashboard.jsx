@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import './Dashboard.css';
-import logo from '../../assets/icons/wes-logo.png';
+import logo from '../../assets/branding/logo_horizontal_header.png';
 import iconCuentas from '../../assets/icons/invoice.png';
 import iconInventario from '../../assets/icons/inventory.png';
 import iconPersonal from '../../assets/icons/audience.png';
@@ -64,7 +64,7 @@ const Dashboard = () => {
     <div className="dashboard-container">
       <header className="dashboard-header">
         <div className="header-logo">
-          <img src={logo} alt="WES Security" />
+          <img src={logo} alt="WES Security Cía. Ltda." width="1725" height="1000" />
         </div>
 
         <div className="header-user">

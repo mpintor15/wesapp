@@ -19,6 +19,7 @@ const { Pool } = require('pg');
 const path = require('path');
 const dotenv = require('dotenv');
 const logger = require('./logger');
+const { sanitizeError } = require('../utils/logSanitizer');
 
 const envTarget = process.env.NODE_ENV === 'production' ? 'production' : 'development';
 dotenv.config({
@@ -75,11 +76,7 @@ pool.on('connect', () => {
 pool.on('error', (err) => {
   // pg ya retira del pool el cliente idle que falló. En Railway/DBaaS esto puede
   // pasar durante reinicios breves; matar el proceso entero provoca caídas visibles.
-  logger.error('Error inesperado en un cliente idle de PostgreSQL', {
-    message: err.message,
-    code: err.code,
-    stack: err.stack,
-  });
+  logger.error('Error inesperado en un cliente idle de PostgreSQL', sanitizeError(err));
 });
 
 // Función helper para ejecutar queries
@@ -94,10 +91,7 @@ const query = async (text, params) => {
     return res;
   } catch (error) {
     logger.error('Error en query:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      stack: error.stack,
+      error: sanitizeError(error),
       pool: getPoolStats(),
     });
     throw error;

@@ -9,10 +9,10 @@ import ArticuloModal from './components/ArticuloModal';
 import ArticulosTab from './components/ArticulosTab';
 import BajaArticuloModal from './components/BajaArticuloModal';
 import BajasTab from './components/BajasTab';
-import InventarioDeleteDialogs from './components/InventarioDeleteDialogs';
 import InventarioPageHeader from './components/InventarioPageHeader';
 import InventarioReportModals from './components/InventarioReportModals';
 import InventarioTabs from './components/InventarioTabs';
+import InventoryReasonModal from './components/InventoryReasonModal';
 import MovimientoModal from './components/MovimientoModal';
 import MovimientosTab from './components/MovimientosTab';
 import useInventarioData from './hooks/useInventarioData';
@@ -41,19 +41,23 @@ import {
   sortMovimientos,
   validateArticuloForm,
   validateBajaForm,
+  validateMotivoAdministrativo,
 } from './utils/inventarioHelpers';
+import { getInventoryPermissions, INVENTORY_ACTIONS } from './utils/inventarioPermissions';
 import './Inventario.css';
 
 const Inventario = () => {
   useScrollToTopOnMount();
 
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useToast();
+  const inventoryPermissions = useMemo(() => getInventoryPermissions(user), [user]);
 
   const { isSubmitting: isSavingArticulo, withSubmit: withArticuloSubmit } = useSubmitState();
   const { isSubmitting: isSavingMovimiento, withSubmit: withMovimientoSubmit } = useSubmitState();
   const { isSubmitting: isSavingBaja, withSubmit: withBajaSubmit } = useSubmitState();
+  const { isSubmitting: isSubmittingReason, withSubmit: withReasonSubmit } = useSubmitState();
   const { isSubmitting: isExportingArticulos, withSubmit: withArticulosExportSubmit } =
     useSubmitState();
   const { isSubmitting: isExportingBajas, withSubmit: withBajasExportSubmit } = useSubmitState();
@@ -66,10 +70,9 @@ const Inventario = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showMovimientosExportModal, setShowMovimientosExportModal] = useState(false);
   const [showBajasExportModal, setShowBajasExportModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleteCantidad, setDeleteCantidad] = useState(1);
-  const [showConfirmDeleteModal, setShowConfirmDeleteModal] = useState(false);
+  const [reasonAction, setReasonAction] = useState(null);
+  const [reasonMotivo, setReasonMotivo] = useState('');
+  const [regeneratingPdfId, setRegeneratingPdfId] = useState(null);
   const [showBajaModal, setShowBajaModal] = useState(false);
   const [editingArticulo, setEditingArticulo] = useState(null);
   const [bajaTarget, setBajaTarget] = useState(null);
@@ -119,9 +122,12 @@ const Inventario = () => {
     loadBajas,
   } = useInventarioData({ showMessage });
 
-  const canDeleteArticulo = hasPermission('eliminar_articulo');
-  const canDarBajaArticulo = hasPermission('dar_baja_articulo');
-  const canEditArticulo = hasPermission('crear_articulo');
+  const canCreateArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_CREATE);
+  const canCreateMovimiento = inventoryPermissions.can(INVENTORY_ACTIONS.MOVIMIENTOS_CREATE);
+  const canExport = inventoryPermissions.can(INVENTORY_ACTIONS.REPORTS_EXPORT);
+  const canDeleteArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_DELETE_ADMIN);
+  const canDarBajaArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_BAJA);
+  const canEditArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_EDIT);
   const showArticuloActions = canEditArticulo || canDeleteArticulo || canDarBajaArticulo;
   const articuloActionCount = [canEditArticulo, canDarBajaArticulo, canDeleteArticulo].filter(
     Boolean
@@ -147,6 +153,7 @@ const Inventario = () => {
 
   const movimientoFormState = useMovimientoForm({
     catalogArticulos,
+    canRegeneratePdf: inventoryPermissions.can(INVENTORY_ACTIONS.MOVIMIENTOS_PDF_REGENERATE),
     showMessage,
     onCreated: handleMovimientoCreated,
   });
@@ -284,14 +291,23 @@ const Inventario = () => {
   });
 
   const handleDeleteArticulo = (articulo) => {
-    if (isStockTipo(articulo.tipo_articulo) && articulo.cantidad && articulo.cantidad > 1) {
-      setDeleteTarget(articulo);
-      setDeleteCantidad(1);
-      setShowDeleteModal(true);
-      return;
-    }
-    setDeleteTarget(articulo);
-    setShowConfirmDeleteModal(true);
+    setReasonAction({
+      type: 'deleteArticulo',
+      title: 'Eliminar administrativamente',
+      confirmText: 'Eliminar administrativamente',
+      entityLabel: 'Artículo',
+      entityName:
+        articulo.nombre_articulo || articulo.numero_serie || articulo.codigo_radio || articulo.id,
+      target: articulo,
+      messages: [
+        'El artículo dejará de aparecer en listados operativos cuando el backend lo excluya.',
+        'El historial se conservará.',
+        'Esta acción no retira una cantidad parcial; para retirar unidades usa una baja o movimiento.',
+        'Se requiere un motivo administrativo.',
+      ],
+      placeholder: 'Describe el motivo administrativo de la eliminación',
+    });
+    setReasonMotivo('');
   };
 
   const handleOpenBaja = (articulo) => {
@@ -328,38 +344,173 @@ const Inventario = () => {
     }
   });
 
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
-    const result = await inventarioService.deleteArticulo(deleteTarget.id, deleteCantidad);
-    if (result.success) {
-      showMessage('success', 'Artículo eliminado');
-      await fetchArticulos(getActiveFilterParams(), true);
-    } else {
-      showMessage('error', result.message);
-    }
-    setShowDeleteModal(false);
-    setDeleteTarget(null);
-  };
-
-  const handleConfirmSimpleDelete = async () => {
-    if (!deleteTarget) return;
-    const result = await inventarioService.deleteArticulo(deleteTarget.id, null);
-    if (result.success) {
-      showMessage('success', 'Artículo eliminado');
-      await fetchArticulos(getActiveFilterParams(), true);
-    } else {
-      showMessage('error', result.message);
-    }
-    setShowConfirmDeleteModal(false);
-    setDeleteTarget(null);
-  };
-
   const handleDownloadPdf = async (movimiento) => {
     const result = await inventarioService.downloadMovimientoPdf(movimiento.id);
     if (!result.success) {
       showMessage('error', result.message);
+    } else if (result.cancelled) {
+      showMessage('info', 'Descarga cancelada');
     }
   };
+
+  const handleRegeneratePdf = async (movimiento) => {
+    setRegeneratingPdfId(movimiento.id);
+    const result = await inventarioService.regenerateMovimientoPdf(movimiento.id);
+    setRegeneratingPdfId(null);
+
+    if (result.success) {
+      showMessage('success', result.message || 'PDF regenerado correctamente');
+      await loadMovimientos();
+      return;
+    }
+
+    showMessage(
+      'error',
+      result.status === 403
+        ? 'No tienes permisos suficientes para regenerar el PDF.'
+        : result.message
+    );
+  };
+
+  const openReasonAction = (action) => {
+    setReasonAction(action);
+    setReasonMotivo('');
+  };
+
+  const closeReasonModal = () => {
+    if (isSubmittingReason) return;
+    setReasonAction(null);
+    setReasonMotivo('');
+  };
+
+  const handleVoidMovimiento = (movimiento) => {
+    openReasonAction({
+      type: 'voidMovimiento',
+      title: 'Anular movimiento',
+      confirmText: 'Anular movimiento',
+      entityLabel: 'Movimiento',
+      entityName: movimiento.articulos_movidos || `Movimiento ${movimiento.id}`,
+      target: movimiento,
+      messages: [
+        'La anulación intentará revertir el stock asociado a este movimiento.',
+        'El movimiento permanecerá visible como anulado.',
+        'Se requiere un motivo entre 10 y 500 caracteres.',
+      ],
+      placeholder: 'Describe el motivo de la anulación',
+    });
+  };
+
+  const handleDeleteMovimiento = (movimiento) => {
+    openReasonAction({
+      type: 'deleteMovimiento',
+      title: 'Eliminar movimiento administrativamente',
+      confirmText: 'Eliminar administrativamente',
+      entityLabel: 'Movimiento',
+      entityName: movimiento.articulos_movidos || `Movimiento ${movimiento.id}`,
+      target: movimiento,
+      messages: [
+        'Esta eliminación es administrativa y conserva el historial.',
+        'El movimiento debe estar anulado antes de eliminarse administrativamente.',
+        'Se requiere un motivo entre 10 y 500 caracteres.',
+      ],
+      placeholder: 'Describe el motivo administrativo',
+    });
+  };
+
+  const handleVoidBaja = (baja) => {
+    openReasonAction({
+      type: 'voidBaja',
+      title: 'Anular baja',
+      confirmText: 'Anular baja',
+      entityLabel: 'Baja',
+      entityName: baja.nombre_articulo || baja.numero_serie || baja.id,
+      target: baja,
+      messages: [
+        'La anulación intentará restaurar el stock asociado a esta baja.',
+        'La baja permanecerá visible como anulada.',
+        'Se requiere un motivo entre 10 y 500 caracteres.',
+      ],
+      placeholder: 'Describe el motivo de la anulación',
+    });
+  };
+
+  const handleDeleteBaja = (baja) => {
+    openReasonAction({
+      type: 'deleteBaja',
+      title: 'Eliminar baja administrativamente',
+      confirmText: 'Eliminar administrativamente',
+      entityLabel: 'Baja',
+      entityName: baja.nombre_articulo || baja.numero_serie || baja.id,
+      target: baja,
+      messages: [
+        'Esta eliminación es administrativa y conserva el historial.',
+        'La baja debe estar anulada antes de eliminarse administrativamente.',
+        'Se requiere un motivo entre 10 y 500 caracteres.',
+      ],
+      placeholder: 'Describe el motivo administrativo',
+    });
+  };
+
+  const handleConfirmReasonAction = withReasonSubmit(async () => {
+    if (!reasonAction) return;
+    const validationError = validateMotivoAdministrativo(reasonMotivo);
+    if (validationError) {
+      showMessage('error', validationError);
+      return;
+    }
+
+    const motivo = reasonMotivo.trim();
+    const targetId = reasonAction.target.id;
+    const operations = {
+      deleteArticulo: () => inventarioService.deleteArticulo(targetId, motivo),
+      voidMovimiento: () => inventarioService.anularMovimiento(targetId, motivo),
+      deleteMovimiento: () => inventarioService.eliminarMovimiento(targetId, motivo),
+      voidBaja: () => inventarioService.anularBaja(targetId, motivo),
+      deleteBaja: () => inventarioService.eliminarBaja(targetId, motivo),
+    };
+
+    const result = await operations[reasonAction.type]?.();
+    if (!result) return;
+
+    if (!result.success) {
+      showMessage(
+        'error',
+        result.status === 403 ? 'No tienes permisos suficientes para esta acción.' : result.message
+      );
+      return;
+    }
+
+    showMessage('success', result.message || 'Acción completada');
+    setReasonAction(null);
+    setReasonMotivo('');
+
+    if (reasonAction.type === 'deleteArticulo') {
+      await fetchArticulos(getActiveFilterParams(), true);
+      return;
+    }
+
+    if (reasonAction.type === 'voidMovimiento') {
+      await Promise.all([loadMovimientos(), fetchArticulos(getActiveFilterParams(), true)]);
+      return;
+    }
+
+    if (reasonAction.type === 'deleteMovimiento') {
+      await loadMovimientos();
+      return;
+    }
+
+    if (reasonAction.type === 'voidBaja') {
+      await Promise.all([
+        loadBajas(getActiveBajasFilterParams()),
+        fetchArticulos(getActiveFilterParams(), true),
+      ]);
+      return;
+    }
+
+    if (reasonAction.type === 'deleteBaja') {
+      await loadBajas(getActiveBajasFilterParams());
+    }
+  });
 
   const openExportModal = () => {
     setExportFilters({
@@ -466,13 +617,21 @@ const Inventario = () => {
   };
 
   // ── Render ───────────────────────────────────────
+  if (!inventoryPermissions.canAccessInventory) {
+    return (
+      <div className="inventario-container">
+        <div className="empty-state">No tienes acceso al módulo de Inventario.</div>
+      </div>
+    );
+  }
+
   return (
     <div className="inventario-container">
       <InventarioPageHeader
         activeTab={activeTab}
-        canCreateArticulo={hasPermission('crear_articulo')}
-        canCreateMovimiento={hasPermission('crear_movimiento')}
-        canExport={hasPermission('exportar')}
+        canCreateArticulo={canCreateArticulo}
+        canCreateMovimiento={canCreateMovimiento}
+        canExport={canExport}
         isExportingBajas={isExportingBajas}
         onBack={() => navigate('/')}
         onCreateArticulo={handleOpenCreate}
@@ -527,9 +686,12 @@ const Inventario = () => {
           bajas={bajas}
           bajasFiltersDraft={bajasFiltersDraft}
           bajasLoading={bajasLoading}
+          onDeleteBaja={handleDeleteBaja}
           onApplyFilters={handleApplyBajasFilters}
           onClearFilters={handleClearBajasFilters}
           onDraftChange={handleBajasDraftChange}
+          onVoidBaja={handleVoidBaja}
+          permissions={inventoryPermissions}
         />
       )}
 
@@ -542,11 +704,16 @@ const Inventario = () => {
           movimientosTotalPages={movimientosTotalPages}
           onApplyFilters={handleApplyMovimientosFilters}
           onClearFilters={handleClearMovimientosFilters}
+          onDeleteMovimiento={handleDeleteMovimiento}
           onDownloadPdf={handleDownloadPdf}
           onDraftChange={handleMovimientosDraftChange}
           onPageChange={setMovimientosPage}
+          onRegeneratePdf={handleRegeneratePdf}
           onSort={handleMovimientosSort}
+          onVoidMovimiento={handleVoidMovimiento}
           paginatedMovimientos={paginatedMovimientos}
+          permissions={inventoryPermissions}
+          regeneratingPdfId={regeneratingPdfId}
           sortedMovimientos={sortedMovimientos}
           ubicaciones={ubicaciones}
         />
@@ -620,16 +787,13 @@ const Inventario = () => {
         />
       )}
 
-      <InventarioDeleteDialogs
-        deleteCantidad={deleteCantidad}
-        deleteTarget={deleteTarget}
-        onCancelConfirmDelete={() => setShowConfirmDeleteModal(false)}
-        onCancelDeleteCantidad={() => setShowDeleteModal(false)}
-        onConfirmDeleteCantidad={handleConfirmDelete}
-        onConfirmSimpleDelete={handleConfirmSimpleDelete}
-        onDeleteCantidadChange={setDeleteCantidad}
-        showConfirmDeleteModal={showConfirmDeleteModal}
-        showDeleteModal={showDeleteModal}
+      <InventoryReasonModal
+        action={reasonAction}
+        isSubmitting={isSubmittingReason}
+        motivo={reasonMotivo}
+        onCancel={closeReasonModal}
+        onConfirm={handleConfirmReasonAction}
+        onMotivoChange={setReasonMotivo}
       />
     </div>
   );

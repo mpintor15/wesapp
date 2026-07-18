@@ -46,6 +46,38 @@ const logAudit = async (
   }
 };
 
+const logAuditStrict = async (
+  dbClient,
+  {
+    tabla,
+    operacion,
+    registro_id,
+    usuario_id = null,
+    usuario_nombre = null,
+    datos_anteriores = null,
+    datos_nuevos = null,
+    ip_address = null,
+    user_agent = null,
+  }
+) => {
+  await dbClient.query(
+    `INSERT INTO audit_log
+      (tabla, operacion, registro_id, usuario_id, usuario_nombre, datos_anteriores, datos_nuevos, ip_address, user_agent)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      tabla,
+      operacion,
+      registro_id || null,
+      usuario_id,
+      usuario_nombre,
+      datos_anteriores ? JSON.stringify(datos_anteriores) : null,
+      datos_nuevos ? JSON.stringify(datos_nuevos) : null,
+      ip_address,
+      user_agent,
+    ]
+  );
+};
+
 const auditFromReq = (req) => ({
   usuario_id: req.user?.id || null,
   usuario_nombre: req.user?.usuario || null,
@@ -53,4 +85,4 @@ const auditFromReq = (req) => ({
   user_agent: req.get('user-agent') || null,
 });
 
-module.exports = { logAudit, auditFromReq };
+module.exports = { logAudit, logAuditStrict, auditFromReq };

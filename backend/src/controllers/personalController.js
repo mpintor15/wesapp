@@ -15,19 +15,14 @@
  *                              (con los mismos filtros) en formato .xlsx.
  */
 const db = require('../config/database');
-const logger = require('../config/logger');
-const { createHttpError, handleControllerError } = require('../utils/http');
+const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAudit, auditFromReq } = require('../utils/audit');
+const {
+  parseStrictPositiveNumber,
+  validateRequiredDateString,
+} = require('../utils/inputValidation');
 const ESTADOS_COLABORADOR = new Set(['activo', 'inactivo']);
-
-const logControllerError = (message, error) => {
-  logger.error(message, {
-    message: error.message,
-    stack: error.stack,
-    code: error.code,
-  });
-};
 
 const buildColaboradoresQuery = ({ search, estado, cargo }) => {
   let query = 'SELECT * FROM colaboradores';
@@ -82,8 +77,7 @@ const getColaboradores = async (req, res) => {
     const result = await db.query(query, params);
     res.json({ success: true, data: result.rows });
   } catch (error) {
-    logControllerError('Error al obtener colaboradores:', error);
-    res.status(500).json({ success: false, message: 'Error en el servidor' });
+    return handleControllerError(res, error, 'Error al obtener colaboradores:');
   }
 };
 
@@ -113,11 +107,21 @@ const createColaborador = async (req, res) => {
       throw createHttpError(400, 'El estado debe ser activo o inactivo');
     }
 
-    const sueldoNormalizado =
-      sueldo === undefined || sueldo === null || sueldo === '' ? null : Number(sueldo);
+    const fechaValidation = validateRequiredDateString(
+      fecha_nacimiento,
+      'La fecha de nacimiento no es válida'
+    );
+    if (!fechaValidation.valid) {
+      throw createHttpError(fechaValidation.status, fechaValidation.message);
+    }
 
-    if (sueldoNormalizado !== null && !Number.isFinite(sueldoNormalizado)) {
-      throw createHttpError(400, 'El sueldo no es válido');
+    const sueldoNormalizado =
+      sueldo === undefined || sueldo === null || sueldo === ''
+        ? null
+        : parseStrictPositiveNumber(sueldo, 'El sueldo no es válido');
+
+    if (sueldoNormalizado !== null && !sueldoNormalizado.valid) {
+      throw createHttpError(sueldoNormalizado.status, sueldoNormalizado.message);
     }
 
     const result = await db.query(
@@ -141,7 +145,7 @@ const createColaborador = async (req, res) => {
         celular || null,
         banco || null,
         numero_cuenta || null,
-        sueldoNormalizado,
+        sueldoNormalizado ? sueldoNormalizado.value : null,
         estadoNormalizado,
       ]
     );
@@ -172,10 +176,7 @@ const createColaborador = async (req, res) => {
 
 const updateColaborador = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, 'El id del colaborador es inválido');
-    }
+    const id = parsePositiveInteger(req.params.id, 'El id del colaborador es inválido');
 
     const allowedFields = [
       'nombres_completos',
@@ -196,10 +197,11 @@ const updateColaborador = async (req, res) => {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         let value = req.body[field];
         if (field === 'sueldo' && value !== null && value !== undefined && value !== '') {
-          value = Number(value);
-          if (!Number.isFinite(value)) {
-            throw createHttpError(400, 'El sueldo no es válido');
+          const sueldoValidation = parseStrictPositiveNumber(value, 'El sueldo no es válido');
+          if (!sueldoValidation.valid) {
+            throw createHttpError(sueldoValidation.status, sueldoValidation.message);
           }
+          value = sueldoValidation.value;
         }
         if (typeof value === 'string') {
           value = value.trim();
@@ -208,6 +210,15 @@ const updateColaborador = async (req, res) => {
           value = String(value).toLowerCase();
           if (!ESTADOS_COLABORADOR.has(value)) {
             throw createHttpError(400, 'El estado debe ser activo o inactivo');
+          }
+        }
+        if (field === 'fecha_nacimiento' && value !== null && value !== undefined && value !== '') {
+          const fechaValidation = validateRequiredDateString(
+            value,
+            'La fecha de nacimiento no es válida'
+          );
+          if (!fechaValidation.valid) {
+            throw createHttpError(fechaValidation.status, fechaValidation.message);
           }
         }
         updates.push(`${field} = $${values.length + 1}`);
@@ -261,10 +272,7 @@ const updateColaborador = async (req, res) => {
 
 const deleteColaborador = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, 'El id del colaborador es inválido');
-    }
+    const id = parsePositiveInteger(req.params.id, 'El id del colaborador es inválido');
 
     const result = await db.query('DELETE FROM colaboradores WHERE id = $1 RETURNING *', [id]);
 

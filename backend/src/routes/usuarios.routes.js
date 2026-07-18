@@ -2,25 +2,44 @@ const express = require('express');
 const router = express.Router();
 const usuariosController = require('../controllers/usuariosController');
 const { verifyToken } = require('../middleware/auth');
-const { requireActive, requirePermission } = require('../middleware/permissions');
+const { requirePermission } = require('../middleware/permissions');
+const { PERMISSIONS } = require('../config/permissions');
 const { validateRequest } = require('../middleware/validation');
 const { usuarioCreateSchema, usuarioUpdateSchema } = require('../utils/validationSchemas');
 
-router.use(verifyToken, requireActive, requirePermission('usuarios'));
+router.use(verifyToken);
 
 // Listado
-router.get('/', usuariosController.getUsuarios);
+router.get('/', requirePermission(PERMISSIONS.USUARIOS_VER), usuariosController.getUsuarios);
 
 // Crear usuario
-router.post('/', validateRequest(usuarioCreateSchema), usuariosController.createUsuario);
+router.post(
+  '/',
+  requirePermission(PERMISSIONS.USUARIOS_CREAR),
+  validateRequest(usuarioCreateSchema),
+  usuariosController.createUsuario
+);
 
 // Actualizar usuario (tipo/activo)
-router.put('/:id', validateRequest(usuarioUpdateSchema), usuariosController.updateUsuario);
+router.put(
+  '/:id',
+  requirePermission(PERMISSIONS.USUARIOS_EDITAR),
+  validateRequest(usuarioUpdateSchema),
+  usuariosController.updateUsuario
+);
 
 // Regenerar invitación para usuarios pendientes
-router.post('/:id/invitacion', usuariosController.reenviarInvitacion);
+router.post(
+  '/:id/invitacion',
+  requirePermission(PERMISSIONS.USUARIOS_EDITAR),
+  usuariosController.reenviarInvitacion
+);
 
 // Eliminar usuario
-router.delete('/:id', usuariosController.deleteUsuario);
+router.delete(
+  '/:id',
+  requirePermission(PERMISSIONS.USUARIOS_ELIMINAR),
+  usuariosController.deleteUsuario
+);
 
 module.exports = router;

@@ -10,14 +10,16 @@ jest.mock('../utils/audit', () => ({
 const db = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const {
+  getColaboradores,
   createColaborador,
   updateColaborador,
   deleteColaborador,
 } = require('../controllers/personalController');
 
-const mockReq = ({ body = {}, params = {}, user = { id: 1 } } = {}) => ({
+const mockReq = ({ body = {}, params = {}, query = {}, user = { id: 1 } } = {}) => ({
   body,
   params,
+  query,
   user,
   ip: '127.0.0.1',
 });
@@ -36,6 +38,18 @@ const expectStatus = (res, status) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+describe('personalController.getColaboradores', () => {
+  test('filtro estado inválido responde 400 y no ejecuta query', async () => {
+    const res = mockRes();
+
+    await getColaboradores(mockReq({ query: { estado: 'suspendido' } }), res);
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/estado/i);
+    expect(db.query).not.toHaveBeenCalled();
+  });
 });
 
 describe('personalController.createColaborador', () => {
@@ -91,6 +105,26 @@ describe('personalController.createColaborador', () => {
     const body = expectStatus(res, 400);
     expect(body.message).toMatch(/cédula/i);
   });
+
+  test('rechaza fecha imposible sin ejecutar query', async () => {
+    const res = mockRes();
+
+    await createColaborador(
+      mockReq({
+        body: {
+          nombres_completos: 'Ana Torres',
+          cedula: '0102030405',
+          fecha_nacimiento: '2026-02-30',
+          cargo: 'Analista',
+        },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/fecha/i);
+    expect(db.query).not.toHaveBeenCalled();
+  });
 });
 
 describe('personalController.updateColaborador', () => {
@@ -118,6 +152,29 @@ describe('personalController.updateColaborador', () => {
     const body = expectStatus(res, 400);
     expect(body.message).toMatch(/No hay campos/);
   });
+
+  test('rechaza id alfanumérico sin ejecutar query', async () => {
+    const res = mockRes();
+
+    await updateColaborador(mockReq({ params: { id: '12abc' }, body: { estado: 'activo' } }), res);
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/id/i);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  test('rechaza fecha imposible en actualización', async () => {
+    const res = mockRes();
+
+    await updateColaborador(
+      mockReq({ params: { id: '3' }, body: { fecha_nacimiento: '2026-13-01' } }),
+      res
+    );
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/fecha/i);
+    expect(db.query).not.toHaveBeenCalled();
+  });
 });
 
 describe('personalController.deleteColaborador', () => {
@@ -129,5 +186,15 @@ describe('personalController.deleteColaborador', () => {
 
     const body = expectStatus(res, 404);
     expect(body.message).toMatch(/no encontrado/i);
+  });
+
+  test('rechaza id decimal sin ejecutar query', async () => {
+    const res = mockRes();
+
+    await deleteColaborador(mockReq({ params: { id: '1.5' } }), res);
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/id/i);
+    expect(db.query).not.toHaveBeenCalled();
   });
 });

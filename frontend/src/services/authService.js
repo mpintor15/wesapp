@@ -12,45 +12,8 @@
  *                                             del usuario con el token actual.
  *  - logout()                               : Elimina token y usuario del localStorage.
  */
-import axios from 'axios';
-import api, { API_URL } from './api';
+import api from './api';
 import { extractError } from './serviceUtils';
-
-const getFallbackApiUrls = () => {
-  const urls = [API_URL, 'http://localhost:3001/api', 'http://127.0.0.1:3001/api'];
-
-  return [...new Set(urls.map((value) => String(value || '').trim()).filter(Boolean))];
-};
-
-const tryLoginFallback = async (usuario, password) => {
-  const urls = getFallbackApiUrls();
-
-  for (const baseURL of urls) {
-    try {
-      const response = await axios.post(
-        `${baseURL}/auth/login`,
-        { usuario, password },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 8000,
-        }
-      );
-
-      if (response?.data?.success) {
-        const { token, user } = response.data.data;
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(user));
-        return { success: true, data: response.data.data };
-      }
-    } catch (error) {
-      if (error?.response?.status === 401) {
-        return { success: false, message: 'Usuario o contraseña incorrectos' };
-      }
-    }
-  }
-
-  return null;
-};
 
 const authService = {
   /**
@@ -80,11 +43,6 @@ const authService = {
       }
 
       if (!error?.response) {
-        const fallbackResult = await tryLoginFallback(usuario, password);
-        if (fallbackResult) {
-          return fallbackResult;
-        }
-
         return {
           success: false,
           message: 'No se pudo conectar con el servidor. Intenta nuevamente.',
@@ -144,7 +102,11 @@ const authService = {
 
       return { success: false };
     } catch (error) {
-      return { success: false };
+      return {
+        success: false,
+        status: error?.response?.status,
+        message: extractError(error, 'Error al verificar sesión'),
+      };
     }
   },
 

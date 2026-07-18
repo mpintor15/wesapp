@@ -2,7 +2,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import logo from '../assets/icons/wes-logo.png';
+import logo from '../assets/branding/logo_hexagono.png';
 import './ProtectedRoute.css';
 
 const ProtectedRoute = ({ children, requiredPermission = undefined }) => {
@@ -14,7 +14,13 @@ const ProtectedRoute = ({ children, requiredPermission = undefined }) => {
     return (
       <div className="app-splash">
         <div className="app-splash-card">
-          <img src={logo} alt="WES Security" className="app-splash-logo" />
+          <img
+            src={logo}
+            alt="WES Security Cía. Ltda."
+            className="app-splash-logo"
+            width="1187"
+            height="922"
+          />
           <span className="spinner app-splash-spinner" />
           <p className="app-splash-text">Verificando sesión…</p>
         </div>

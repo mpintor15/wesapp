@@ -11,7 +11,7 @@ const FacturasTab = ({
   currentPage,
   totalPages,
   totals,
-  isGerente,
+  canManageFacturas,
   onFilterChange,
   onApplyFilters,
   onClearFilters,
@@ -44,7 +44,7 @@ const FacturasTab = ({
       currentPage={currentPage}
       totalPages={totalPages}
       totals={totals}
-      isGerente={isGerente}
+      canManageFacturas={canManageFacturas}
       onSort={onSort}
       onShowAnulacion={onShowAnulacion}
       onEdit={onEdit}

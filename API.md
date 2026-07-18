@@ -513,9 +513,11 @@ Todos los errores siguen este formato:
 {
   "success": false,
   "message": "Descripción del error",
-  "error": "error_code (development only)"
+  "code": "CODIGO_DE_APLICACION_OPCIONAL"
 }
 ```
+
+Los errores internos no exponen stack traces, SQL, rutas internas ni detalles técnicos sensibles al cliente.
 
 ### HTTP Status Codes
 
@@ -523,12 +525,13 @@ Todos los errores siguen este formato:
 |------|---------|
 | `200` | OK - Solicitud exitosa |
 | `201` | Created - Recurso creado |
-| `400` | Bad Request - Datos inválidos |
-| `401` | Unauthorized - Token inválido/expirado |
-| `403` | Forbidden - Sin permisos |
+| `400` | Bad Request - Entrada inválida, parámetros inválidos, fechas reales inválidas o filtros fuera de rango |
+| `401` | Unauthorized - Autenticación requerida o token inválido/expirado |
+| `403` | Forbidden - Usuario deshabilitado o permisos insuficientes |
 | `404` | Not Found - Recurso no encontrado |
+| `409` | Conflict - Conflicto de negocio controlado |
 | `429` | Too Many Requests - Rate limit |
-| `500` | Internal Server Error |
+| `500` | Internal Server Error - Error interno no previsto |
 
 ---
 

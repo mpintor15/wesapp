@@ -12,6 +12,8 @@ const config = require('./config/config');
 const db = require('./config/database');
 const logger = require('./config/logger');
 const { runMigrations } = require('./config/migrations');
+const movementPdfStorage = require('./utils/movementPdfStorage');
+const { sanitizeError } = require('./utils/logSanitizer');
 
 const PORT = config.port;
 let server;
@@ -26,6 +28,9 @@ const startServer = async () => {
     await runMigrations();
     logger.info('✅ Migraciones de base de datos verificadas');
 
+    await movementPdfStorage.ensureReady();
+    logger.info('✅ Storage de PDFs verificado');
+
     // Iniciar servidor
     server = app.listen(PORT, () => {
       logger.info(`Servidor WESApp corriendo en puerto ${PORT}`);
@@ -34,7 +39,7 @@ const startServer = async () => {
       logger.info(`Health check: http://localhost:${PORT}/health`);
     });
   } catch (error) {
-    logger.error('❌ Error al conectar a la base de datos:', error);
+    logger.error('❌ Error al iniciar servidor:', sanitizeError(error));
     process.exit(1);
   }
 };
@@ -50,14 +55,14 @@ const shutdown = async (signal) => {
     await db.close();
     process.exit(0);
   } catch (error) {
-    logger.error('Error durante cierre ordenado:', error);
+    logger.error('Error durante cierre ordenado:', sanitizeError(error));
     process.exit(1);
   }
 };
 
 // Manejo de errores no capturados
 process.on('unhandledRejection', (err) => {
-  logger.error('❌ Error no manejado:', err);
+  logger.error('❌ Error no manejado:', sanitizeError(err));
   process.exit(1);
 });
 

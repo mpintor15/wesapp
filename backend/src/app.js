@@ -19,7 +19,10 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('node:path');
 const config = require('./config/config');
+const db = require('./config/database');
 const logger = require('./config/logger');
+const movementPdfStorage = require('./utils/movementPdfStorage');
+const { sanitizeError } = require('./utils/logSanitizer');
 const httpLogger = require('./middleware/httpLogger');
 
 // Importar rutas
@@ -102,6 +105,45 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.get('/health/live', (req, res) => {
+  res.json({
+    success: true,
+    status: 'live',
+  });
+});
+
+app.get('/health/ready', async (req, res) => {
+  const health = await db.healthCheck();
+
+  if (!health.healthy) {
+    return res.status(503).json({
+      success: false,
+      status: 'not_ready',
+    });
+  }
+
+  const pdfStorage = await movementPdfStorage.checkReady();
+  if (!pdfStorage.ready) {
+    return res.status(503).json({
+      success: false,
+      status: 'not_ready',
+      pdf_storage: 'unavailable',
+    });
+  }
+
+  return res.json({
+    success: true,
+    status: 'ready',
+    database: 'available',
+    pdf_storage: 'available',
+    pool: {
+      total: health.pool.total,
+      idle: health.pool.idle,
+      waiting: health.pool.waiting,
+    },
+  });
+});
+
 // Rutas de autenticación
 app.use('/api/auth', authRoutes);
 
@@ -153,10 +195,11 @@ app.use((err, req, res, _next) => {
   const status = err.status || 500;
   const level = status >= 500 ? 'error' : 'warn';
   logger[level](`${req.method} ${req.path} - Error`, {
-    message: err.message,
-    stack: err.stack,
-    code: err.code,
     status,
+    method: req.method,
+    path: req.path,
+    userId: req.user?.id,
+    error: sanitizeError(err),
   });
 
   res.status(status).json({

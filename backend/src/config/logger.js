@@ -1,6 +1,7 @@
 const winston = require('winston');
 const DailyRotateFile = require('winston-daily-rotate-file');
 const path = require('path');
+const { sanitizeLogMetadata } = require('../utils/logSanitizer');
 
 const logsDir = path.join(__dirname, '../../logs');
 const isProduction = process.env.NODE_ENV === 'production';
@@ -25,15 +26,20 @@ const colors = {
 winston.addColors(colors);
 
 const metadataFormat = winston.format((info) => {
-  if (info instanceof Error) {
-    return {
-      ...info,
-      message: info.message,
-      stack: info.stack,
-      code: info.code,
-      status: info.status,
-    };
+  const sanitized = sanitizeLogMetadata(info, {
+    includeStack: !isProduction,
+    production: isProduction,
+  });
+
+  if (sanitized && typeof sanitized === 'object') {
+    for (const key of Object.keys(info)) {
+      delete info[key];
+    }
+    Object.assign(info, sanitized);
+    return info;
   }
+
+  info.message = sanitized;
   return info;
 });
 
@@ -42,7 +48,6 @@ if (isProduction) {
   consoleFormat = winston.format.combine(
     metadataFormat(),
     winston.format.timestamp(),
-    winston.format.errors({ stack: true }),
     winston.format.json()
   );
 } else {

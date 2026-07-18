@@ -21,6 +21,118 @@ export const INVENTARIO_ESTADOS = [
 
 export const isStockTipo = (tipo) => tipo === 'equipo' || tipo === 'otro';
 
+export const ESTADO_OPERATIVO_LABELS = {
+  ACTIVO: 'Activo',
+  ANULADO: 'Anulado',
+  ELIMINADO: 'Eliminado administrativamente',
+};
+
+export const REVERSAL_STATUS_LABELS = {
+  COMPLETE: 'Reversible',
+  INCOMPLETE: 'Histórico no reversible',
+  ALREADY_VOIDED: 'Ya anulado',
+  ADMINISTRATIVELY_DELETED: 'Eliminado administrativamente',
+};
+
+export const getEstadoOperativo = (estado) => String(estado || 'ACTIVO').toUpperCase();
+
+export const getEstadoOperativoLabel = (estado) =>
+  ESTADO_OPERATIVO_LABELS[getEstadoOperativo(estado)] || getEstadoOperativo(estado);
+
+export const getEstadoOperativoClass = (estado) => {
+  const normalized = getEstadoOperativo(estado);
+  if (normalized === 'ANULADO') return 'status-badge--warning';
+  if (normalized === 'ELIMINADO') return 'status-badge--danger';
+  return 'status-badge--success';
+};
+
+export const getReversalStatus = (record) =>
+  String(record?.reversal_status || (record?.reversible ? 'COMPLETE' : 'INCOMPLETE')).toUpperCase();
+
+export const canVoidRecord = (record) =>
+  getEstadoOperativo(record?.estado) === 'ACTIVO' &&
+  record?.reversible === true &&
+  getReversalStatus(record) === 'COMPLETE';
+
+export const canDeleteAdminRecord = (record) => getEstadoOperativo(record?.estado) === 'ANULADO';
+
+export const getNonReversibleReason = (record, entity = 'movimiento') => {
+  const estado = getEstadoOperativo(record?.estado);
+  const status = getReversalStatus(record);
+  if (estado === 'ANULADO') return `Este ${entity} ya fue anulado.`;
+  if (estado === 'ELIMINADO') return `Este ${entity} fue eliminado administrativamente.`;
+  if (status === 'INCOMPLETE') {
+    return `Este ${entity} histórico no puede anularse automáticamente porque no contiene trazabilidad completa de stock.`;
+  }
+  return `Este ${entity} no puede anularse en su estado actual.`;
+};
+
+export const validateMotivoAdministrativo = (value) => {
+  const motivo = typeof value === 'string' ? value.trim() : '';
+  if (!motivo) return 'Ingresa un motivo';
+  if (motivo.length < 10) return 'El motivo debe tener al menos 10 caracteres';
+  if (motivo.length > 500) return 'El motivo no puede exceder 500 caracteres';
+  return '';
+};
+
+export const getMovimientoActionState = (movimiento, permissions) => {
+  if (getEstadoOperativo(movimiento?.estado) === 'ELIMINADO') {
+    return {
+      canDownloadPdf: false,
+      canRegeneratePdf: false,
+      canVoid: false,
+      canDelete: false,
+      showDisabledVoid: false,
+      disabledVoidReason: '',
+      hasAnyAction: false,
+    };
+  }
+
+  const canDownloadPdf = permissions.can('movimientos.pdf.download');
+  const canRegeneratePdf = permissions.can('movimientos.pdf.regenerate');
+  const canVoid = permissions.can('movimientos.void') && canVoidRecord(movimiento);
+  const canDelete = permissions.can('movimientos.deleteAdmin') && canDeleteAdminRecord(movimiento);
+  const showDisabledVoid =
+    permissions.can('movimientos.void') &&
+    getEstadoOperativo(movimiento?.estado) === 'ACTIVO' &&
+    !canVoid;
+
+  return {
+    canDownloadPdf,
+    canRegeneratePdf,
+    canVoid,
+    canDelete,
+    showDisabledVoid,
+    disabledVoidReason: showDisabledVoid ? getNonReversibleReason(movimiento, 'movimiento') : '',
+    hasAnyAction: canDownloadPdf || canRegeneratePdf || canVoid || canDelete || showDisabledVoid,
+  };
+};
+
+export const getBajaActionState = (baja, permissions) => {
+  if (getEstadoOperativo(baja?.estado) === 'ELIMINADO') {
+    return {
+      canVoid: false,
+      canDelete: false,
+      showDisabledVoid: false,
+      disabledVoidReason: '',
+      hasAnyAction: false,
+    };
+  }
+
+  const canVoid = permissions.can('bajas.void') && canVoidRecord(baja);
+  const canDelete = permissions.can('bajas.deleteAdmin') && canDeleteAdminRecord(baja);
+  const showDisabledVoid =
+    permissions.can('bajas.void') && getEstadoOperativo(baja?.estado) === 'ACTIVO' && !canVoid;
+
+  return {
+    canVoid,
+    canDelete,
+    showDisabledVoid,
+    disabledVoidReason: showDisabledVoid ? getNonReversibleReason(baja, 'baja') : '',
+    hasAnyAction: canVoid || canDelete || showDisabledVoid,
+  };
+};
+
 export const EMPTY_ARTICULO_FORM = {
   tipo_articulo: '',
   nombre_articulo: '',
@@ -291,10 +403,10 @@ export const validateBajaForm = (bajaTarget, bajaForm) => {
   const cantidad = isStockTipo(bajaTarget.tipo_articulo)
     ? Number.parseInt(bajaForm.cantidad, 10)
     : 1;
-  const motivo = bajaForm.motivo.trim();
+  const motivoError = validateMotivoAdministrativo(bajaForm.motivo);
 
-  if (!motivo) {
-    return { message: 'Ingresa el motivo de la baja' };
+  if (motivoError) {
+    return { message: motivoError };
   }
   if (!Number.isInteger(cantidad) || cantidad <= 0) {
     return { message: 'Ingresa una cantidad válida' };

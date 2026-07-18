@@ -13,42 +13,10 @@
  */
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const db = require('../config/database');
 const config = require('../config/config');
 const { createHttpError, handleControllerError } = require('../utils/http');
-
-const schemaCache = {};
-
-const tableColumnExists = async (tableName, columnName) => {
-  const key = `${tableName}.${columnName}`;
-  if (key in schemaCache) {
-    return schemaCache[key];
-  }
-
-  const result = await db.query(
-    `SELECT 1
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = $1
-       AND column_name = $2
-     LIMIT 1`,
-    [tableName, columnName]
-  );
-  schemaCache[key] = result.rowCount > 0;
-  return schemaCache[key];
-};
-
-const getUserIdentitySelect = async () => {
-  const [hasNombre, hasApellido] = await Promise.all([
-    tableColumnExists('usuarios', 'nombre'),
-    tableColumnExists('usuarios', 'apellido'),
-  ]);
-
-  return {
-    nombre: hasNombre ? 'nombre' : 'NULL::varchar AS nombre',
-    apellido: hasApellido ? 'apellido' : 'NULL::varchar AS apellido',
-  };
-};
+const { sendAuthenticationRequired, sendUserDisabled } = require('../utils/authErrorCodes');
+const authRepository = require('../repositories/authRepository');
 
 /**
  * Login de usuario
@@ -66,38 +34,22 @@ const login = async (req, res) => {
       });
     }
 
-    // Buscar usuario en la base de datos
-    const identitySelect = await getUserIdentitySelect();
-    const result = await db.query(
-      `SELECT id, usuario, ${identitySelect.nombre}, ${identitySelect.apellido}, tipo_usuario, primer_login, activo, password_hash FROM usuarios WHERE usuario = $1`,
-      [usuario]
-    );
+    const user = await authRepository.findUserForLogin(usuario);
 
-    if (result.rows.length === 0) {
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario o contraseña incorrectos',
-      });
+    if (!user) {
+      return sendAuthenticationRequired(res);
     }
-
-    const user = result.rows[0];
 
     // Verificar si el usuario está activo
     if (!user.activo) {
-      return res.status(403).json({
-        success: false,
-        message: 'Usuario desactivado. Contacta al administrador',
-      });
+      return sendUserDisabled(res);
     }
 
     // Verificar contraseña
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
-      return res.status(401).json({
-        success: false,
-        message: 'Usuario o contraseña incorrectos',
-      });
+      return sendAuthenticationRequired(res);
     }
 
     // Generar token JWT
@@ -144,7 +96,7 @@ const changePassword = async (req, res) => {
     const userId = Number(req.user?.id);
 
     if (!Number.isInteger(userId) || userId <= 0) {
-      throw createHttpError(401, 'Token inválido');
+      return sendAuthenticationRequired(res);
     }
 
     // Validar datos
@@ -171,16 +123,12 @@ const changePassword = async (req, res) => {
       });
     }
 
-    const currentPasswordResult = await db.query(
-      'SELECT password_hash FROM usuarios WHERE id = $1',
-      [userId]
-    );
+    const currentPasswordHash = await authRepository.findPasswordHashByUserId(userId);
 
-    if (currentPasswordResult.rowCount === 0) {
+    if (!currentPasswordHash) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
 
-    const currentPasswordHash = currentPasswordResult.rows[0].password_hash;
     const isSamePassword = await bcrypt.compare(nuevaPassword, currentPasswordHash);
     if (isSamePassword) {
       throw createHttpError(400, 'La nueva contraseña debe ser diferente a la actual');
@@ -191,12 +139,9 @@ const changePassword = async (req, res) => {
     const password_hash = await bcrypt.hash(nuevaPassword, saltRounds);
 
     // Actualizar contraseña y marcar primer_login como false
-    const result = await db.query(
-      'UPDATE usuarios SET password_hash = $1, primer_login = FALSE WHERE id = $2 RETURNING id',
-      [password_hash, userId]
-    );
+    const updated = await authRepository.updatePasswordAndClearFirstLogin(userId, password_hash);
 
-    if (result.rowCount === 0) {
+    if (!updated) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
 
@@ -216,30 +161,20 @@ const verifyToken = async (req, res) => {
   try {
     const userId = Number(req.user?.id);
     if (!Number.isInteger(userId) || userId <= 0) {
-      throw createHttpError(401, 'Token inválido');
+      return sendAuthenticationRequired(res);
     }
 
-    // Obtener datos actualizados del usuario
-    const identitySelect = await getUserIdentitySelect();
-    const result = await db.query(
-      `SELECT id, usuario, ${identitySelect.nombre}, ${identitySelect.apellido}, tipo_usuario, primer_login, activo FROM usuarios WHERE id = $1`,
-      [userId]
-    );
+    const user = await authRepository.findUserForSession(userId);
 
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(404).json({
         success: false,
         message: 'Usuario no encontrado',
       });
     }
 
-    const user = result.rows[0];
-
     if (!user.activo) {
-      return res.status(403).json({
-        success: false,
-        message: 'Usuario desactivado',
-      });
+      return sendUserDisabled(res);
     }
 
     res.json({

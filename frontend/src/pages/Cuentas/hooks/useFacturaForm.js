@@ -11,7 +11,13 @@ import {
 } from '../utils/cuentasFacturaForm';
 import { getInitialFacturaForm } from '../utils/cuentasState';
 
-const useFacturaForm = ({ clientes, reporte, isGerente, showToast, onCreated = () => {} }) => {
+const useFacturaForm = ({
+  clientes,
+  reporte,
+  canCreateFactura,
+  showToast,
+  onCreated = () => {},
+}) => {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState(getInitialFacturaForm());
   const [facturaErrors, setFacturaErrors] = useState({});
@@ -122,7 +128,7 @@ const useFacturaForm = ({ clientes, reporte, isGerente, showToast, onCreated = (
   const handleCreateFactura = useCallback(
     async (event) => {
       event.preventDefault();
-      if (!isGerente) {
+      if (!canCreateFactura) {
         showToast('Solo un usuario Gerente puede crear facturas', 'error');
         return;
       }
@@ -145,7 +151,7 @@ const useFacturaForm = ({ clientes, reporte, isGerente, showToast, onCreated = (
         showToast(result.message, 'error');
       }
     },
-    [close, existingInvoiceNumbers, formData, isGerente, onCreated, showToast]
+    [canCreateFactura, close, existingInvoiceNumbers, formData, onCreated, showToast]
   );
 
   return {

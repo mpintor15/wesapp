@@ -29,22 +29,27 @@
  *                         con cabecera azul y formato de moneda.
  */
 const db = require('../config/database');
-const logger = require('../config/logger');
+const cuentasAbonosRepository = require('../repositories/cuentasAbonosRepository');
+const cuentasClientesRepository = require('../repositories/cuentasClientesRepository');
+const cuentasFacturasRepository = require('../repositories/cuentasFacturasRepository');
+const cuentasPagosRepository = require('../repositories/cuentasPagosRepository');
 const { createHttpError, handleControllerError } = require('../utils/http');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
+const { validateOptionalDateRange } = require('../utils/inputValidation');
+const {
+  parsePositiveIntegerId,
+  validateBatchPaymentPayload,
+  validateClientePayload,
+  validateFacturaCancellationDetail,
+  validateFacturaCreatePayload,
+  validateFacturaUpdatePayload,
+} = require('../modules/cuentas/cuentas.validators');
+const { PAYMENT_METHODS } = require('../modules/cuentas/cuentas.constants');
 
 // Cache de introspección de esquema — se llena en el primer request y se reutiliza.
 // El servidor se reinicia con cada deploy, así que no hay riesgo de valores obsoletos.
 const _schemaCache = {};
-
-const logControllerError = (message, error) => {
-  logger.error(message, {
-    message: error.message,
-    stack: error.stack,
-    code: error.code,
-  });
-};
 
 const tableColumnExists = async (tableName, columnName) => {
   const key = `${tableName}.${columnName}`;
@@ -74,34 +79,46 @@ const tableExists = async (tableName) => {
   return _schemaCache[key];
 };
 
+const validateBooleanFilter = (value, message) => {
+  if (value === undefined || value === null || value === '') {
+    return;
+  }
+  if (value !== 'true' && value !== 'false') {
+    throw createHttpError(400, message);
+  }
+};
+
+const validateFechaInicioFin = (fecha_inicio, fecha_fin) => {
+  const validation = validateOptionalDateRange(fecha_inicio, fecha_fin, {
+    bothRequiredMessage: 'Debes enviar fecha_inicio y fecha_fin juntas',
+    invalidDateMessage: 'Las fechas deben tener formato YYYY-MM-DD y ser reales',
+    invertedRangeMessage: 'El rango de fechas es inválido',
+  });
+  if (!validation.valid) {
+    throw createHttpError(validation.status, validation.message);
+  }
+};
+
 // ============================================
 // CLIENTES
 // ============================================
 
 const getClientes = async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT id, nombre, identificacion FROM clientes ORDER BY nombre ASC'
-    );
+    const result = await cuentasClientesRepository.findAllClientes();
 
     res.json({
       success: true,
       data: result.rows,
     });
   } catch (error) {
-    logControllerError('Error al obtener clientes:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    return handleControllerError(res, error, 'Error al obtener clientes:');
   }
 };
 
 const exportClientesExcel = async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT nombre, identificacion FROM clientes ORDER BY nombre ASC'
-    );
+    const result = await cuentasClientesRepository.findClientesForExport();
 
     const { workbook, worksheet } = createWorkbook('Clientes', [
       { header: 'Cliente', key: 'cliente', width: 40 },
@@ -124,26 +141,15 @@ const exportClientesExcel = async (req, res) => {
 
 const createCliente = async (req, res) => {
   try {
-    const { nombre, identificacion } = req.body;
-
-    if (!nombre || !nombre.trim()) {
-      return res.status(400).json({
+    const validation = validateClientePayload(req.body);
+    if (!validation.valid) {
+      return res.status(validation.status).json({
         success: false,
-        message: 'El nombre del cliente es requerido',
+        message: validation.message,
       });
     }
 
-    if (!identificacion || !identificacion.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: 'La identificación del cliente es requerida',
-      });
-    }
-
-    const result = await db.query(
-      'INSERT INTO clientes (nombre, identificacion) VALUES ($1, $2) RETURNING id, nombre, identificacion',
-      [nombre.trim(), identificacion.trim()]
-    );
+    const result = await cuentasClientesRepository.createCliente(validation.value);
 
     await logAudit(db, {
       tabla: 'clientes',
@@ -165,22 +171,19 @@ const createCliente = async (req, res) => {
         message: 'Ya existe un cliente con ese nombre o identificación',
       });
     }
-    logControllerError('Error al crear cliente:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    return handleControllerError(res, error, 'Error al crear cliente:');
   }
 };
 
 const deleteCliente = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, 'El id del cliente es inválido');
+    const idValidation = parsePositiveIntegerId(req.params.id, 'El id del cliente es inválido');
+    if (!idValidation.valid) {
+      throw createHttpError(idValidation.status, idValidation.message);
     }
+    const id = idValidation.value;
 
-    const hasFacturas = await db.query('SELECT 1 FROM cuentas WHERE cliente_id = $1 LIMIT 1', [id]);
+    const hasFacturas = await cuentasClientesRepository.findClienteFacturasDependency(id);
 
     if (hasFacturas.rowCount > 0) {
       return res.status(400).json({
@@ -189,10 +192,7 @@ const deleteCliente = async (req, res) => {
       });
     }
 
-    const result = await db.query(
-      'DELETE FROM clientes WHERE id = $1 RETURNING id, nombre, identificacion',
-      [id]
-    );
+    const result = await cuentasClientesRepository.deleteClienteById(id);
 
     if (result.rowCount === 0) {
       return res.status(404).json({
@@ -220,11 +220,7 @@ const deleteCliente = async (req, res) => {
         message: 'No se puede eliminar el cliente porque tiene facturas asociadas',
       });
     }
-    logControllerError('Error al eliminar cliente:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    return handleControllerError(res, error, 'Error al eliminar cliente:');
   }
 };
 
@@ -234,63 +230,22 @@ const deleteCliente = async (req, res) => {
 
 const createFactura = async (req, res) => {
   try {
+    const validation = validateFacturaCreatePayload(req.body);
+    if (!validation.valid) {
+      return res.status(validation.status).json({
+        success: false,
+        message: validation.message,
+      });
+    }
     const {
-      num_factura,
-      cliente_id,
+      parsedNumFactura,
+      parsedClienteId,
+      parsedValorFactura,
       fecha_factura,
-      valor_factura,
       incluye_iva,
       incluye_retencion_fuente,
       incluye_retencion_iva,
-    } = req.body;
-
-    if (!num_factura || !cliente_id || !fecha_factura || !valor_factura) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'Todos los campos son requeridos: num_factura, cliente_id, fecha_factura, valor_factura',
-      });
-    }
-
-    const parsedNumFactura = Number(num_factura);
-    const parsedClienteId = Number(cliente_id);
-    const parsedValorFactura = Number(valor_factura);
-    const parsedFecha = new Date(`${fecha_factura}T00:00:00`);
-
-    if (!Number.isInteger(parsedNumFactura) || parsedNumFactura <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'El número de factura debe ser un entero mayor a 0',
-      });
-    }
-
-    if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'El cliente especificado no es válido',
-      });
-    }
-
-    if (!Number.isFinite(parsedValorFactura) || parsedValorFactura <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'El valor de la factura debe ser mayor a 0',
-      });
-    }
-
-    if (Number.isNaN(parsedFecha.getTime())) {
-      return res.status(400).json({
-        success: false,
-        message: 'La fecha de factura no es válida',
-      });
-    }
-
-    if (incluye_retencion_iva && !incluye_iva) {
-      return res.status(400).json({
-        success: false,
-        message: 'La retención de IVA requiere que IVA esté habilitado',
-      });
-    }
+    } = validation.value;
 
     const clienteExists = await db.query('SELECT id FROM clientes WHERE id = $1 LIMIT 1', [
       parsedClienteId,
@@ -303,20 +258,15 @@ const createFactura = async (req, res) => {
       });
     }
 
-    const result = await db.query(
-      `INSERT INTO cuentas (num_factura, cliente_id, fecha_factura, valor_factura, incluye_iva, incluye_retencion_fuente, incluye_retencion_iva)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING num_factura, cliente_id, fecha_factura, valor_factura, incluye_iva, incluye_retencion_fuente, incluye_retencion_iva`,
-      [
-        parsedNumFactura,
-        parsedClienteId,
-        fecha_factura,
-        parsedValorFactura,
-        !!incluye_iva,
-        !!incluye_retencion_fuente,
-        !!incluye_retencion_iva,
-      ]
-    );
+    const result = await cuentasFacturasRepository.createFactura({
+      numFactura: parsedNumFactura,
+      clienteId: parsedClienteId,
+      fechaFactura: fecha_factura,
+      valorFactura: parsedValorFactura,
+      incluyeIva: !!incluye_iva,
+      incluyeRetencionFuente: !!incluye_retencion_fuente,
+      incluyeRetencionIva: !!incluye_retencion_iva,
+    });
 
     await logAudit(db, {
       tabla: 'cuentas',
@@ -344,29 +294,22 @@ const createFactura = async (req, res) => {
         message: 'El cliente especificado no existe',
       });
     }
-    logControllerError('Error al crear factura:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    return handleControllerError(res, error, 'Error al crear factura:');
   }
 };
 
 const deleteFactura = async (req, res) => {
   try {
-    const parsedNumFactura = Number(req.params.num_factura);
-    if (!Number.isInteger(parsedNumFactura) || parsedNumFactura <= 0) {
-      throw createHttpError(400, 'El número de factura es inválido');
-    }
-
-    const result = await db.query(
-      `DELETE FROM cuentas
-       WHERE num_factura = $1
-       RETURNING num_factura, cliente_id, fecha_factura, valor_factura,
-                 incluye_iva, incluye_retencion_fuente, incluye_retencion_iva,
-                 cancelada, detalle_anulacion, fecha_anulacion`,
-      [parsedNumFactura]
+    const numFacturaValidation = parsePositiveIntegerId(
+      req.params.num_factura,
+      'El número de factura es inválido'
     );
+    if (!numFacturaValidation.valid) {
+      throw createHttpError(numFacturaValidation.status, numFacturaValidation.message);
+    }
+    const parsedNumFactura = numFacturaValidation.value;
+
+    const result = await cuentasFacturasRepository.deleteFacturaByNumero(parsedNumFactura);
 
     if (result.rowCount === 0) {
       return res.status(404).json({
@@ -394,28 +337,25 @@ const deleteFactura = async (req, res) => {
 
 const cancelFactura = async (req, res) => {
   try {
-    const parsedNumFactura = Number(req.params.num_factura);
-    const { detalle_anulacion } = req.body;
-
-    if (!Number.isInteger(parsedNumFactura) || parsedNumFactura <= 0) {
-      throw createHttpError(400, 'El número de factura es inválido');
+    const numFacturaValidation = parsePositiveIntegerId(
+      req.params.num_factura,
+      'El número de factura es inválido'
+    );
+    if (!numFacturaValidation.valid) {
+      throw createHttpError(numFacturaValidation.status, numFacturaValidation.message);
     }
-
-    if (!detalle_anulacion || !detalle_anulacion.trim()) {
+    const parsedNumFactura = numFacturaValidation.value;
+    const detailValidation = validateFacturaCancellationDetail(req.body.detalle_anulacion);
+    if (!detailValidation.valid) {
       return res.status(400).json({
         success: false,
-        message: 'El detalle de anulación es obligatorio',
+        message: detailValidation.message,
       });
     }
 
-    const result = await db.query(
-      `UPDATE cuentas
-       SET cancelada = TRUE,
-           detalle_anulacion = $2,
-           fecha_anulacion = CURRENT_TIMESTAMP
-      WHERE num_factura = $1
-       RETURNING num_factura, cancelada, detalle_anulacion, fecha_anulacion`,
-      [parsedNumFactura, detalle_anulacion.trim()]
+    const result = await cuentasFacturasRepository.cancelFacturaByNumero(
+      parsedNumFactura,
+      detailValidation.value
     );
 
     if (result.rowCount === 0) {
@@ -459,36 +399,16 @@ const cancelFactura = async (req, res) => {
 
 const getAbonosByFactura = async (req, res) => {
   try {
-    const parsedNumFactura = Number(req.params.num_factura);
-    if (!Number.isInteger(parsedNumFactura) || parsedNumFactura <= 0) {
-      throw createHttpError(400, 'El número de factura es inválido');
-    }
-
-    const result = await db.query(
-      `SELECT
-         a.id,
-         a.pago_id,
-         a.fecha_abono,
-         a.valor_abono,
-         p.fecha AS fecha_pago,
-         p.metodo_pago,
-         p.referencia,
-         p.notas,
-         p.total AS pago_total,
-         CASE
-           WHEN a.pago_id IS NULL THEN 1
-           ELSE (
-             SELECT COUNT(*)
-             FROM abonos a2
-             WHERE a2.pago_id = a.pago_id
-           )
-         END AS pago_facturas_count
-       FROM abonos a
-       LEFT JOIN pagos p ON p.id = a.pago_id
-       WHERE a.num_factura = $1
-       ORDER BY a.fecha_abono DESC, a.id DESC`,
-      [parsedNumFactura]
+    const numFacturaValidation = parsePositiveIntegerId(
+      req.params.num_factura,
+      'El número de factura es inválido'
     );
+    if (!numFacturaValidation.valid) {
+      throw createHttpError(numFacturaValidation.status, numFacturaValidation.message);
+    }
+    const parsedNumFactura = numFacturaValidation.value;
+
+    const result = await cuentasAbonosRepository.findAbonosByFactura(parsedNumFactura);
 
     res.json({
       success: true,
@@ -663,41 +583,18 @@ const getPagos = async (req, res) => {
 const exportPagosExcel = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, metodo_pago } = req.query;
-
-    const conditions = [];
-    const params = [];
-
-    if (fecha_inicio && fecha_fin) {
-      params.push(fecha_inicio, fecha_fin);
-      conditions.push(`p.fecha BETWEEN $${params.length - 1} AND $${params.length}`);
+    validateFechaInicioFin(fecha_inicio, fecha_fin);
+    const metodoPagoNormalizado = metodo_pago
+      ? String(metodo_pago).trim().toLowerCase()
+      : undefined;
+    if (metodoPagoNormalizado && !PAYMENT_METHODS.includes(metodoPagoNormalizado)) {
+      throw createHttpError(400, 'El método de pago no es válido');
     }
-    if (metodo_pago) {
-      params.push(metodo_pago.toLowerCase());
-      conditions.push(`LOWER(COALESCE(p.metodo_pago, '')) = $${params.length}`);
-    }
-
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    const result = await db.query(
-      `SELECT
-         p.id,
-         p.fecha,
-         COALESCE(cl.nombre, '-') AS cliente,
-         COALESCE(p.metodo_pago, '-') AS metodo_pago,
-         COALESCE(p.notas, '') AS notas,
-         p.total,
-         STRING_AGG(
-           '#' || a.num_factura::text || ' (' || TO_CHAR(a.valor_abono, 'FM999999990.00') || ')',
-           ', ' ORDER BY a.num_factura
-         ) AS facturas
-       FROM pagos p
-       JOIN clientes cl ON cl.id = p.cliente_id
-       LEFT JOIN abonos a ON a.pago_id = p.id
-       ${where}
-       GROUP BY p.id, cl.nombre
-       ORDER BY p.fecha DESC, p.id DESC`,
-      params
-    );
+    const result = await cuentasPagosRepository.findPagosForExport({
+      fecha_inicio,
+      fecha_fin,
+      metodo_pago: metodoPagoNormalizado,
+    });
 
     const { workbook, worksheet } = createWorkbook('Pagos', [
       { header: 'Pago', key: 'id', width: 12 },
@@ -736,6 +633,9 @@ const exportPagosExcel = async (req, res) => {
 const getReporte = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente } = req.query;
+    validateFechaInicioFin(fecha_inicio, fecha_fin);
+    validateBooleanFilter(solo_deudores, 'El filtro solo_deudores debe ser true o false');
+    validateBooleanFilter(agrupar_cliente, 'El filtro agrupar_cliente debe ser true o false');
     const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
     const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
 
@@ -748,10 +648,6 @@ const getReporte = async (req, res) => {
     JOIN cuentas c ON c.num_factura = v.num_factura`;
     const params = [];
     const conditions = [];
-
-    if ((fecha_inicio && !fecha_fin) || (!fecha_inicio && fecha_fin)) {
-      throw createHttpError(400, 'Debes enviar fecha_inicio y fecha_fin juntas');
-    }
 
     if (fecha_inicio && fecha_fin) {
       conditions.push(`v.fecha_factura BETWEEN $${params.length + 1} AND $${params.length + 2}`);
@@ -790,6 +686,9 @@ const getReporte = async (req, res) => {
 const exportReporteExcel = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente } = req.query;
+    validateFechaInicioFin(fecha_inicio, fecha_fin);
+    validateBooleanFilter(solo_deudores, 'El filtro solo_deudores debe ser true o false');
+    validateBooleanFilter(agrupar_cliente, 'El filtro agrupar_cliente debe ser true o false');
     const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
     const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
 
@@ -802,10 +701,6 @@ const exportReporteExcel = async (req, res) => {
     JOIN cuentas c ON c.num_factura = v.num_factura`;
     const params = [];
     const conditions = [];
-
-    if ((fecha_inicio && !fecha_fin) || (!fecha_inicio && fecha_fin)) {
-      throw createHttpError(400, 'Debes enviar fecha_inicio y fecha_fin juntas');
-    }
 
     if (fecha_inicio && fecha_fin) {
       conditions.push(`v.fecha_factura BETWEEN $${params.length + 1} AND $${params.length + 2}`);
@@ -885,99 +780,30 @@ const exportReporteExcel = async (req, res) => {
 };
 
 const createBatchAbono = async (req, res) => {
-  const { cliente_id, fecha, metodo_pago, referencia, notas, abonos } = req.body;
-
-  const parsedClienteId = Number(cliente_id);
-  const parsedFecha = fecha ? new Date(`${fecha}T00:00:00`) : null;
-  const metodoPagoNormalizado = metodo_pago ? String(metodo_pago).trim().toLowerCase() : null;
-  const metodosPermitidos = new Set(['efectivo', 'transferencia', 'cheque', 'otro']);
-  const referenciaNormalizada = typeof referencia === 'string' ? referencia.trim() : null;
-  const notasNormalizadas = typeof notas === 'string' ? notas.trim() : null;
-
-  if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
-    return res.status(400).json({
+  const validation = validateBatchPaymentPayload(req.body);
+  if (!validation.valid) {
+    return res.status(validation.status).json({
       success: false,
-      message: 'Se requiere un cliente válido para registrar el pago',
+      message: validation.message,
     });
   }
-
-  if (!fecha || Number.isNaN(parsedFecha?.getTime())) {
-    return res.status(400).json({
-      success: false,
-      message: 'La fecha del pago es obligatoria y debe ser válida',
-    });
-  }
-
-  if (metodoPagoNormalizado && !metodosPermitidos.has(metodoPagoNormalizado)) {
-    return res.status(400).json({
-      success: false,
-      message: 'El método de pago no es válido',
-    });
-  }
-
-  if (referenciaNormalizada && referenciaNormalizada.length > 100) {
-    return res.status(400).json({
-      success: false,
-      message: 'La referencia no puede superar los 100 caracteres',
-    });
-  }
-
-  if (notasNormalizadas && notasNormalizadas.length > 500) {
-    return res.status(400).json({
-      success: false,
-      message: 'Las notas no pueden superar los 500 caracteres',
-    });
-  }
-
-  if (!Array.isArray(abonos) || abonos.length === 0) {
-    return res.status(400).json({
-      success: false,
-      message: 'Debes seleccionar al menos una factura con monto',
-    });
-  }
-
-  const seenFacturas = new Set();
-  const abonosNormalizados = [];
-
-  for (const item of abonos) {
-    const numFactura = Number(item?.num_factura);
-    const valorAbono = Number(item?.valor_abono);
-
-    if (
-      !Number.isInteger(numFactura) ||
-      numFactura <= 0 ||
-      !Number.isFinite(valorAbono) ||
-      valorAbono <= 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: 'Cada abono debe tener num_factura y valor_abono mayor a 0',
-      });
-    }
-
-    if (seenFacturas.has(numFactura)) {
-      return res.status(400).json({
-        success: false,
-        message: `La factura #${numFactura} está repetida en la distribución`,
-      });
-    }
-
-    seenFacturas.add(numFactura);
-    abonosNormalizados.push({
-      num_factura: numFactura,
-      valor_abono: Math.round(valorAbono * 100) / 100,
-    });
-  }
-
-  const total =
-    Math.round(abonosNormalizados.reduce((sum, a) => sum + a.valor_abono, 0) * 100) / 100;
+  const {
+    parsedClienteId,
+    fecha,
+    metodoPagoNormalizado,
+    referenciaNormalizada,
+    notasNormalizadas,
+    abonosNormalizados,
+    total,
+  } = validation.value;
 
   let createdPago = null;
   try {
     await db.transaction(async (client) => {
-      const clienteResult = await client.query('SELECT id FROM clientes WHERE id = $1 LIMIT 1', [
+      const clienteResult = await cuentasClientesRepository.findClienteIdById(
         parsedClienteId,
-      ]);
+        client
+      );
 
       if (clienteResult.rowCount === 0) {
         const err = new Error('CLIENTE_NO_EXISTE');
@@ -986,24 +812,11 @@ const createBatchAbono = async (req, res) => {
       }
 
       const facturaIds = abonosNormalizados.map((a) => a.num_factura);
-      await client.query(
-        `SELECT num_factura
-         FROM cuentas
-         WHERE num_factura = ANY($1::int[])
-         FOR UPDATE`,
-        [facturaIds]
-      );
+      await cuentasFacturasRepository.lockFacturasByNumeros(facturaIds, client);
 
-      const facturasResult = await client.query(
-        `SELECT
-           c.num_factura,
-           c.cliente_id,
-           c.cancelada,
-           COALESCE(v.saldo_pendiente, 0) AS saldo_pendiente
-         FROM cuentas c
-         LEFT JOIN vista_reporte_cuentas v ON v.num_factura = c.num_factura
-         WHERE c.num_factura = ANY($1::int[])`,
-        [facturaIds]
+      const facturasResult = await cuentasFacturasRepository.findFacturasForPaymentValidation(
+        facturaIds,
+        client
       );
 
       const facturasMap = new Map(facturasResult.rows.map((r) => [Number(r.num_factura), r]));
@@ -1040,16 +853,16 @@ const createBatchAbono = async (req, res) => {
         }
       }
 
-      const pagoResult = await client.query(
-        'INSERT INTO pagos (cliente_id, fecha, metodo_pago, referencia, notas, total) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-        [
-          parsedClienteId,
+      const pagoResult = await cuentasPagosRepository.createPago(
+        {
+          clienteId: parsedClienteId,
           fecha,
-          metodoPagoNormalizado || null,
-          referenciaNormalizada || null,
-          notasNormalizadas || null,
+          metodoPago: metodoPagoNormalizado || null,
+          referencia: referenciaNormalizada || null,
+          notas: notasNormalizadas || null,
           total,
-        ]
+        },
+        client
       );
       const pago_id = pagoResult.rows[0].id;
       createdPago = {
@@ -1064,9 +877,14 @@ const createBatchAbono = async (req, res) => {
       };
 
       for (const abono of abonosNormalizados) {
-        await client.query(
-          'INSERT INTO abonos (pago_id, num_factura, fecha_abono, valor_abono) VALUES ($1, $2, $3, $4)',
-          [pago_id, abono.num_factura, fecha, abono.valor_abono]
+        await cuentasAbonosRepository.createAbono(
+          {
+            pagoId: pago_id,
+            numFactura: abono.num_factura,
+            fechaAbono: fecha,
+            valorAbono: abono.valor_abono,
+          },
+          client
         );
       }
     });
@@ -1120,19 +938,13 @@ const createBatchAbono = async (req, res) => {
         message: 'Una o más facturas especificadas no existen',
       });
     }
-    logControllerError('Error al crear abonos en batch:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error en el servidor',
-    });
+    return handleControllerError(res, error, 'Error al crear abonos en batch:');
   }
 };
 
 const getNextNumFactura = async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT COALESCE(MAX(num_factura), 0) + 1 AS next_num FROM cuentas'
-    );
+    const result = await cuentasFacturasRepository.findNextFacturaNumber();
     res.json({
       success: true,
       data: { next_num_factura: result.rows[0].next_num },
@@ -1144,39 +956,28 @@ const getNextNumFactura = async (req, res) => {
 
 const updateFactura = async (req, res) => {
   try {
-    const parsedNumFactura = Number(req.params.num_factura);
-    if (!Number.isInteger(parsedNumFactura) || parsedNumFactura <= 0) {
-      throw createHttpError(400, 'El número de factura es inválido');
-    }
-
-    const {
-      cliente_id,
-      fecha_factura,
-      valor_factura,
-      incluye_iva,
-      incluye_retencion_fuente,
-      incluye_retencion_iva,
-    } = req.body;
-
-    if (!cliente_id || !fecha_factura || !valor_factura) {
-      throw createHttpError(400, 'Campos requeridos: cliente_id, fecha_factura, valor_factura');
-    }
-
-    const parsedClienteId = Number(cliente_id);
-    const parsedValorFactura = Number(valor_factura);
-
-    if (!Number.isInteger(parsedClienteId) || parsedClienteId <= 0) {
-      throw createHttpError(400, 'El cliente especificado no es válido');
-    }
-
-    if (!Number.isFinite(parsedValorFactura) || parsedValorFactura <= 0) {
-      throw createHttpError(400, 'El valor de la factura debe ser mayor a 0');
-    }
-
-    const current = await db.query(
-      'SELECT num_factura, cancelada, cliente_id, fecha_factura, valor_factura, incluye_iva, incluye_retencion_fuente, incluye_retencion_iva FROM cuentas WHERE num_factura = $1',
-      [parsedNumFactura]
+    const numFacturaValidation = parsePositiveIntegerId(
+      req.params.num_factura,
+      'El número de factura es inválido'
     );
+    if (!numFacturaValidation.valid) {
+      throw createHttpError(numFacturaValidation.status, numFacturaValidation.message);
+    }
+    const parsedNumFactura = numFacturaValidation.value;
+    const validation = validateFacturaUpdatePayload(req.body);
+    if (!validation.valid) {
+      throw createHttpError(validation.status, validation.message);
+    }
+    const {
+      parsedClienteId,
+      parsedValorFactura,
+      fecha_factura,
+      incluye_iva: ivaFinal,
+      incluye_retencion_fuente,
+      incluye_retencion_iva: retencionIvaFinal,
+    } = validation.value;
+
+    const current = await cuentasFacturasRepository.findFacturaForUpdate(parsedNumFactura);
 
     if (current.rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Factura no encontrada' });
@@ -1188,25 +989,15 @@ const updateFactura = async (req, res) => {
         .json({ success: false, message: 'No se puede editar una factura anulada' });
     }
 
-    const ivaFinal = !!incluye_iva;
-    const retencionIvaFinal = ivaFinal ? !!incluye_retencion_iva : false;
-
-    const result = await db.query(
-      `UPDATE cuentas
-       SET cliente_id = $2, fecha_factura = $3, valor_factura = $4,
-           incluye_iva = $5, incluye_retencion_fuente = $6, incluye_retencion_iva = $7
-       WHERE num_factura = $1
-       RETURNING num_factura, cliente_id, fecha_factura, valor_factura, incluye_iva, incluye_retencion_fuente, incluye_retencion_iva`,
-      [
-        parsedNumFactura,
-        parsedClienteId,
-        fecha_factura,
-        parsedValorFactura,
-        ivaFinal,
-        !!incluye_retencion_fuente,
-        retencionIvaFinal,
-      ]
-    );
+    const result = await cuentasFacturasRepository.updateFacturaByNumero({
+      numFactura: parsedNumFactura,
+      clienteId: parsedClienteId,
+      fechaFactura: fecha_factura,
+      valorFactura: parsedValorFactura,
+      incluyeIva: ivaFinal,
+      incluyeRetencionFuente: incluye_retencion_fuente,
+      incluyeRetencionIva: retencionIvaFinal,
+    });
 
     await logAudit(db, {
       tabla: 'cuentas',
@@ -1229,44 +1020,19 @@ const updateFactura = async (req, res) => {
 
 const deletePago = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, 'El id del pago es inválido');
+    const idValidation = parsePositiveIntegerId(req.params.id, 'El id del pago es inválido');
+    if (!idValidation.valid) {
+      throw createHttpError(idValidation.status, idValidation.message);
     }
+    const id = idValidation.value;
 
-    const current = await db.query(
-      `SELECT
-         p.id,
-         p.cliente_id,
-         p.fecha,
-         p.metodo_pago,
-         p.referencia,
-         p.notas,
-         p.total,
-         COALESCE(
-           JSON_AGG(
-             JSON_BUILD_OBJECT(
-               'id', a.id,
-               'num_factura', a.num_factura,
-               'fecha_abono', a.fecha_abono,
-               'valor_abono', a.valor_abono
-             )
-             ORDER BY a.id
-           ) FILTER (WHERE a.id IS NOT NULL),
-           '[]'::json
-         ) AS abonos
-       FROM pagos p
-       LEFT JOIN abonos a ON a.pago_id = p.id
-       WHERE p.id = $1
-       GROUP BY p.id`,
-      [id]
-    );
+    const current = await cuentasPagosRepository.findPagoForDeletion(id);
 
     if (current.rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Pago no encontrado' });
     }
 
-    await db.query('DELETE FROM pagos WHERE id = $1', [id]);
+    await cuentasPagosRepository.deletePagoById(id);
 
     await logAudit(db, {
       tabla: 'pagos',
@@ -1284,15 +1050,13 @@ const deletePago = async (req, res) => {
 
 const deleteAbono = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) {
-      throw createHttpError(400, 'El id del abono es inválido');
+    const idValidation = parsePositiveIntegerId(req.params.id, 'El id del abono es inválido');
+    if (!idValidation.valid) {
+      throw createHttpError(idValidation.status, idValidation.message);
     }
+    const id = idValidation.value;
 
-    const current = await db.query(
-      'SELECT id, pago_id, num_factura, valor_abono FROM abonos WHERE id = $1',
-      [id]
-    );
+    const current = await cuentasAbonosRepository.findAbonoForDeletion(id);
 
     if (current.rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Abono no encontrado' });
@@ -1301,20 +1065,14 @@ const deleteAbono = async (req, res) => {
     const abono = current.rows[0];
 
     await db.transaction(async (client) => {
-      await client.query('DELETE FROM abonos WHERE id = $1', [id]);
+      await cuentasAbonosRepository.deleteAbonoById(id, client);
 
       if (abono.pago_id) {
-        const remaining = await client.query(
-          'SELECT COUNT(*) AS cnt FROM abonos WHERE pago_id = $1',
-          [abono.pago_id]
-        );
+        const remaining = await cuentasAbonosRepository.countAbonosByPagoId(abono.pago_id, client);
         if (Number(remaining.rows[0].cnt) === 0) {
-          await client.query('DELETE FROM pagos WHERE id = $1', [abono.pago_id]);
+          await cuentasPagosRepository.deletePagoById(abono.pago_id, client);
         } else {
-          await client.query(
-            'UPDATE pagos SET total = (SELECT COALESCE(SUM(valor_abono), 0) FROM abonos WHERE pago_id = $1) WHERE id = $1',
-            [abono.pago_id]
-          );
+          await cuentasPagosRepository.updatePagoTotalFromAbonos(abono.pago_id, client);
         }
       }
     });

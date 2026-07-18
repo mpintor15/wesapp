@@ -11,7 +11,7 @@ const PagosTab = ({
   sort,
   currentPage,
   totalPages,
-  isGerente,
+  canDeletePago,
   onFilterChange,
   onApplyFilters,
   onClearFilters,
@@ -41,7 +41,7 @@ const PagosTab = ({
       loading={loading}
       filters={filters}
       sort={sort}
-      isGerente={isGerente}
+      canDeletePago={canDeletePago}
       onSort={onSort}
       onOpenDetail={onOpenDetail}
       onDelete={onDelete}

@@ -2,17 +2,22 @@ const express = require('express');
 const router = express.Router();
 const personalController = require('../controllers/personalController');
 const { verifyToken } = require('../middleware/auth');
-const { requireActive, requirePermission } = require('../middleware/permissions');
+const { requirePermission } = require('../middleware/permissions');
+const { PERMISSIONS } = require('../config/permissions');
 const { validateRequest } = require('../middleware/validation');
 const { colaboradorCreateSchema, colaboradorUpdateSchema } = require('../utils/validationSchemas');
 
-router.use(verifyToken, requireActive, requirePermission('personal'));
+router.use(verifyToken);
 
 /**
  * @route   GET /api/personal/colaboradores
  * @desc    Obtener colaboradores
  */
-router.get('/colaboradores', personalController.getColaboradores);
+router.get(
+  '/colaboradores',
+  requirePermission(PERMISSIONS.PERSONAL_VER),
+  personalController.getColaboradores
+);
 
 /**
  * @route   POST /api/personal/colaboradores
@@ -20,6 +25,7 @@ router.get('/colaboradores', personalController.getColaboradores);
  */
 router.post(
   '/colaboradores',
+  requirePermission(PERMISSIONS.PERSONAL_CREAR),
   validateRequest(colaboradorCreateSchema),
   personalController.createColaborador
 );
@@ -30,6 +36,7 @@ router.post(
  */
 router.put(
   '/colaboradores/:id',
+  requirePermission(PERMISSIONS.PERSONAL_EDITAR),
   validateRequest(colaboradorUpdateSchema),
   personalController.updateColaborador
 );
@@ -38,7 +45,11 @@ router.put(
  * @route   DELETE /api/personal/colaboradores/:id
  * @desc    Eliminar colaborador
  */
-router.delete('/colaboradores/:id', personalController.deleteColaborador);
+router.delete(
+  '/colaboradores/:id',
+  requirePermission(PERMISSIONS.PERSONAL_ELIMINAR),
+  personalController.deleteColaborador
+);
 
 /**
  * @route   GET /api/personal/colaboradores/excel
@@ -46,7 +57,7 @@ router.delete('/colaboradores/:id', personalController.deleteColaborador);
  */
 router.get(
   '/colaboradores/excel',
-  requirePermission('exportar'),
+  requirePermission(PERMISSIONS.PERSONAL_REPORTES_EXPORTAR),
   personalController.exportColaboradoresExcel
 );
 

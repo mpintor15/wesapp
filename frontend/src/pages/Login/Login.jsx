@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { resetViewportScroll } from '../../hooks/useScrollToTopOnMount';
-import wesLogo from '../../assets/icons/wes-logo.png';
+import wesLogo from '../../assets/branding/logo_vertical.png';
 import './Login.css';
 
 const SVG_EYE_OPEN = (
@@ -92,7 +92,7 @@ const Login = () => {
       <div className="login-card">
         <div className="login-brand">
           <div className="login-brand-icon">
-            <img src={wesLogo} alt="WES Security" />
+            <img src={wesLogo} alt="WES Security Cía. Ltda." width="1000" height="1462" />
           </div>
           <h1 className="login-brand-name">WESApp</h1>
           <p className="login-brand-sub">WES Security — Sistema de Control</p>

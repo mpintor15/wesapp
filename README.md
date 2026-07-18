@@ -180,6 +180,7 @@ DB_NAME=wesapp
 DB_USER=<db-user>
 DB_PASSWORD=<secure-password>
 DB_SSL=true
+PDF_STORAGE_PATH=/data/wesapp/pdfs
 JWT_SECRET=<generate-random-256-bit-key>
 JWT_EXPIRATION=24h
 CORS_ORIGIN=https://your-domain.com
@@ -204,6 +205,12 @@ NODE_ENV=production
 - `audit_log` - Change tracking for compliance
 
 **Migraciones:** Versionadas en `database/migrations/`. Ejecutadas automáticamente al iniciar backend.
+
+**Backups y PDFs persistentes:** Revisar `docs/BACKUP_RESTORE.md` antes de cada release. En producción, `PDF_STORAGE_PATH` debe apuntar a un volumen persistente.
+
+**Sourcemaps y logs:** Los builds productivos usan `GENERATE_SOURCEMAP=false` y
+el guard del bundle bloquea sourcemaps públicos. La política operativa de logs
+sanitizados está documentada en `docs/BACKUP_RESTORE.md`.
 
 ---
 
