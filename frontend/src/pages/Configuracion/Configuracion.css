@@ -1,0 +1,130 @@
+/* ============================================
+   CONFIGURACION MODULE - WESApp
+   ============================================ */
+
+.configuracion-container {
+  box-sizing: border-box;
+  padding: 20px;
+  background-color: var(--color-bg);
+  min-height: 100vh;
+  width: min(96vw, 1760px);
+  max-width: 1760px;
+  margin: 0 auto;
+}
+
+.configuracion-breadcrumb {
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.configuracion-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  background-color: var(--color-surface);
+  border-radius: 10px 10px 0 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.configuracion-content {
+  min-height: 360px;
+}
+
+.configuracion-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.configuracion-summary > div {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-muted) 100%);
+  padding: 13px 15px;
+  min-width: 0;
+}
+
+.configuracion-summary span {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.configuracion-summary strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--color-text);
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.configuracion-load-error {
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.configuracion-ubicaciones-table th:first-child,
+.configuracion-ubicaciones-table td:first-child {
+  min-width: 280px;
+}
+
+.configuracion-ubicaciones-table th:nth-child(2),
+.configuracion-ubicaciones-table th:nth-child(3),
+.configuracion-ubicaciones-table td:nth-child(2),
+.configuracion-ubicaciones-table td:nth-child(3) {
+  width: 150px;
+  min-width: 150px;
+}
+
+.configuracion-delete-blocked {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  background: var(--color-surface-subtle);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.configuracion-ubicacion-modal .error-message {
+  margin-bottom: 14px;
+}
+
+.configuracion-field-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .configuracion-container {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .configuracion-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .configuracion-tabs .tab {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}

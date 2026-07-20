@@ -6,6 +6,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login/Login';
 import ChangePassword from './pages/Login/ChangePassword';
 import Dashboard from './pages/Dashboard/Dashboard';
+import Configuracion from './pages/Configuracion/Configuracion';
 import Cuentas from './pages/Cuentas/Cuentas';
 import Inventario from './pages/Inventario/Inventario';
 import Personal from './pages/Personal/Personal';
@@ -51,6 +52,14 @@ function App() {
               element={
                 <ProtectedRoute requiredPermission="cuentas">
                   <Cuentas />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/configuracion"
+              element={
+                <ProtectedRoute requiredPermission="inventario">
+                  <Configuracion />
                 </ProtectedRoute>
               }
             />
