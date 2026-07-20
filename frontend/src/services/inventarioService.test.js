@@ -34,6 +34,68 @@ describe('inventarioService', () => {
     });
   });
 
+  test('gestiona CRUD de ubicaciones con el cliente HTTP central', async () => {
+    api.get.mockResolvedValueOnce({
+      data: { success: true, data: [{ id: 1, nombre: 'Bodega' }] },
+    });
+    api.post.mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'Ubicación creada exitosamente',
+        data: { id: 2, nombre: 'Bodega Norte' },
+      },
+    });
+    api.put.mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'Ubicación actualizada exitosamente',
+        data: { id: 2, nombre: 'Bodega Sur' },
+      },
+    });
+    api.delete.mockResolvedValueOnce({
+      data: {
+        success: true,
+        message: 'Ubicación eliminada exitosamente',
+        data: { id: 2, nombre: 'Bodega Sur' },
+      },
+    });
+
+    await expect(inventarioService.getUbicaciones()).resolves.toEqual({
+      success: true,
+      data: [{ id: 1, nombre: 'Bodega' }],
+    });
+    await inventarioService.createUbicacion({ nombre: 'Bodega Norte' });
+    await inventarioService.updateUbicacion(2, { nombre: 'Bodega Sur' });
+    await inventarioService.deleteUbicacion(2);
+
+    expect(api.get).toHaveBeenCalledWith('/inventario/ubicaciones');
+    expect(api.post).toHaveBeenCalledWith('/inventario/ubicaciones', {
+      nombre: 'Bodega Norte',
+    });
+    expect(api.put).toHaveBeenCalledWith('/inventario/ubicaciones/2', {
+      nombre: 'Bodega Sur',
+    });
+    expect(api.delete).toHaveBeenCalledWith('/inventario/ubicaciones/2');
+  });
+
+  test('preserva error 409 al crear ubicación duplicada', async () => {
+    api.post.mockRejectedValue({
+      response: {
+        status: 409,
+        data: { message: 'Ya existe una ubicación con ese nombre' },
+      },
+    });
+
+    const result = await inventarioService.createUbicacion({ nombre: 'Bodega' });
+
+    expect(result).toEqual({
+      success: false,
+      code: undefined,
+      message: 'Ya existe una ubicación con ese nombre',
+      status: 409,
+    });
+  });
+
   test('anula y elimina movimientos con motivo', async () => {
     api.post.mockResolvedValue({ data: { success: true, message: 'anulado' } });
     api.delete.mockResolvedValue({ data: { success: true, message: 'eliminado' } });

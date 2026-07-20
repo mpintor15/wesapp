@@ -6,6 +6,9 @@
  *
  *  UBICACIONES
  *  - getUbicaciones()                   : GET /inventario/ubicaciones
+ *  - createUbicacion(data)              : POST /inventario/ubicaciones
+ *  - updateUbicacion(id, data)          : PUT  /inventario/ubicaciones/:id
+ *  - deleteUbicacion(id)                : DEL  /inventario/ubicaciones/:id
  *
  *  ARTÍCULOS
  *  - getArticulos(params)               : GET /inventario/articulos (filtros: tipo, ubicacion_id, estado, search)
@@ -56,9 +59,10 @@ const getInventoryErrorCode = (error) => error?.response?.data?.code;
 export const extractInventoryError = (error, fallback) => {
   const code = getInventoryErrorCode(error);
   const message = code ? INVENTARIO_ERROR_MESSAGES[code] : '';
+  const backendMessage = error?.response?.data?.message;
   return {
     code,
-    message: message || extractError(error, fallback),
+    message: message || backendMessage || extractError(error, fallback),
     status: error?.response?.status,
   };
 };
@@ -98,6 +102,45 @@ const inventarioService = {
       };
     } catch (error) {
       return failure(error, 'Error al obtener ubicaciones');
+    }
+  },
+
+  createUbicacion: async (data) => {
+    try {
+      const response = await api.post('/inventario/ubicaciones', data);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al crear ubicación');
+    }
+  },
+
+  updateUbicacion: async (id, data) => {
+    try {
+      const response = await api.put(`/inventario/ubicaciones/${id}`, data);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al actualizar ubicación');
+    }
+  },
+
+  deleteUbicacion: async (id) => {
+    try {
+      const response = await api.delete(`/inventario/ubicaciones/${id}`);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al eliminar ubicación');
     }
   },
 
