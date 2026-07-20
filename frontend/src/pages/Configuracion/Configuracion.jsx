@@ -284,6 +284,7 @@ const Configuracion = () => {
             className="btn btn-ghost btn-sm btn-icon-only"
             onClick={loadUbicaciones}
             title="Actualizar datos"
+            aria-label="Actualizar datos"
             type="button"
             disabled={loading}
           >
@@ -373,6 +374,7 @@ const Configuracion = () => {
                                       type="button"
                                       onClick={() => openEditModal(ubicacion)}
                                       title="Editar ubicación"
+                                      aria-label={`Editar ubicación ${ubicacion.nombre}`}
                                     >
                                       <svg
                                         viewBox="0 0 24 24"
@@ -396,6 +398,7 @@ const Configuracion = () => {
                                       type="button"
                                       onClick={() => requestDelete(ubicacion)}
                                       title="Eliminar ubicación"
+                                      aria-label={`Eliminar ubicación ${ubicacion.nombre}`}
                                     >
                                       <svg
                                         viewBox="0 0 24 24"

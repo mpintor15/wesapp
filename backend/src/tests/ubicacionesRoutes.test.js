@@ -213,6 +213,43 @@ describe('ubicaciones routes', () => {
     });
   });
 
+  test('responde 400 al editar con ID inválido', async () => {
+    const res = await requestWithAuth('put', '/api/inventario/ubicaciones/abc').send({
+      nombre: 'Bodega Fantasma',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      success: false,
+      message: 'La ubicación es inválida',
+    });
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('responde 500 controlado sin exponer detalles internos', async () => {
+    db.query.mockImplementation(async (sql) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [currentUser], rowCount: 1 };
+      }
+
+      if (query.includes('FROM ubicaciones u')) {
+        throw new Error('password=secret host=internal-db');
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/inventario/ubicaciones');
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'Error en el servidor',
+    });
+  });
+
   test('impide eliminar una ubicación con artículos asociados', async () => {
     const client = { query: jest.fn() };
     client.query

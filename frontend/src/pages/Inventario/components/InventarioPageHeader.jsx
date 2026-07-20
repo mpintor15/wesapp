@@ -66,6 +66,7 @@ const InventarioPageHeader = ({
         className="btn btn-ghost btn-sm btn-icon-only"
         onClick={onRefresh}
         title="Actualizar datos"
+        aria-label="Actualizar datos"
         type="button"
       >
         ↻
