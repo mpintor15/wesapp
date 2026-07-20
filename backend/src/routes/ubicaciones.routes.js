@@ -15,4 +15,20 @@ router.get(
 
 router.post(
   '/',
- 
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_CREAR),
+  ubicacionesController.createUbicacion
+);
+
+router.put(
+  '/:id',
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR),
+  ubicacionesController.updateUbicacion
+);
+
+router.delete(
+  '/:id',
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_ELIMINAR),
+  ubicacionesController.deleteUbicacion
+);
+
+module.exports = router;

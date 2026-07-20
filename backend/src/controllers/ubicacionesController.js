@@ -1,18 +1,22 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
+const { parseStrictPositiveInteger } = require('../utils/inputValidation');
 
-const normalizeName = (value) => (typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '');
+const normalizeName = (value) =>
+  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
 
 const parseId = (value) => {
-  const id = Number.parseInt(value, 10);
-  return Number.isInteger(id) && id > 0 ? id : null;
+  const result = parseStrictPositiveInteger(value, 'La ubicación es inválida');
+  return result.valid ? result.value : null;
 };
 
 const sendError = (res, error, fallback) => {
   logger.error(fallback, { message: error.message, code: error.code, status: error.status });
   if (error.code === '23505') {
-    return res.status(409).json({ success: false, message: 'Ya existe una ubicación con ese nombre' });
+    return res
+      .status(409)
+      .json({ success: false, message: 'Ya existe una ubicación con ese nombre' });
   }
   return res.status(error.status || 500).json({
     success: false,
@@ -138,7 +142,11 @@ const updateUbicacion = async (req, res) => {
       return result.rows[0];
     });
 
-    return res.json({ success: true, message: 'Ubicación actualizada exitosamente', data: updated });
+    return res.json({
+      success: true,
+      message: 'Ubicación actualizada exitosamente',
+      data: updated,
+    });
   } catch (error) {
     return sendError(res, error, 'Error al actualizar ubicación');
   }
