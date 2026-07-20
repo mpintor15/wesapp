@@ -91,6 +91,33 @@ const useInventarioData = ({ showMessage }) => {
     [showMessage]
   );
 
+  const upsertUbicacion = useCallback((ubicacion) => {
+    if (!ubicacion?.nombre) return;
+
+    const nextUbicacion = {
+      articulos_activos: 0,
+      articulos_totales: 0,
+      ...ubicacion,
+    };
+
+    setUbicaciones((prev) => {
+      const index = prev.findIndex((item) => item.id === nextUbicacion.id);
+      const next =
+        index >= 0
+          ? prev.map((item, itemIndex) =>
+              itemIndex === index ? { ...item, ...nextUbicacion } : item
+            )
+          : [...prev, nextUbicacion];
+
+      return next.sort((a, b) =>
+        String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es', {
+          sensitivity: 'base',
+          numeric: true,
+        })
+      );
+    });
+  }, []);
+
   useEffect(() => {
     loadInitialData();
     loadMovimientos();
@@ -112,6 +139,7 @@ const useInventarioData = ({ showMessage }) => {
     loadMovimientos,
     loadBajas,
     loadInitialData,
+    upsertUbicacion,
   };
 };
 

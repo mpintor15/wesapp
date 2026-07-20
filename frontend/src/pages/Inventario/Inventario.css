@@ -773,6 +773,47 @@
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14);
 }
 
+.inventory-location-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 18px;
+}
+
+.inventory-location-label-row label {
+  min-height: 0;
+}
+
+.inventory-location-create {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 0;
+  white-space: nowrap;
+}
+
+.inventory-location-create:hover,
+.inventory-location-create:focus-visible {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+  outline: none;
+}
+
+.inventory-location-field-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 5px;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
 .inventory-field-warning {
   display: flex;
   align-items: center;
@@ -1580,6 +1621,12 @@
   .inventario-articulos-filter-card .ff-state select {
     min-width: 0;
     max-width: 100%;
+  }
+
+  .inventory-location-label-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .inventario-bajas-filter-row {

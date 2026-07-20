@@ -15,6 +15,7 @@ import InventarioTabs from './components/InventarioTabs';
 import InventoryReasonModal from './components/InventoryReasonModal';
 import MovimientoModal from './components/MovimientoModal';
 import MovimientosTab from './components/MovimientosTab';
+import UbicacionQuickCreateModal from './components/UbicacionQuickCreateModal';
 import useInventarioData from './hooks/useInventarioData';
 import useMovimientoForm from './hooks/useMovimientoForm';
 import {
@@ -57,6 +58,7 @@ const Inventario = () => {
   const { isSubmitting: isSavingArticulo, withSubmit: withArticuloSubmit } = useSubmitState();
   const { isSubmitting: isSavingMovimiento, withSubmit: withMovimientoSubmit } = useSubmitState();
   const { isSubmitting: isSavingBaja, withSubmit: withBajaSubmit } = useSubmitState();
+  const { isSubmitting: isCreatingUbicacion, withSubmit: withUbicacionSubmit } = useSubmitState();
   const { isSubmitting: isSubmittingReason, withSubmit: withReasonSubmit } = useSubmitState();
   const { isSubmitting: isExportingArticulos, withSubmit: withArticulosExportSubmit } =
     useSubmitState();
@@ -70,6 +72,7 @@ const Inventario = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showMovimientosExportModal, setShowMovimientosExportModal] = useState(false);
   const [showBajasExportModal, setShowBajasExportModal] = useState(false);
+  const [showUbicacionModal, setShowUbicacionModal] = useState(false);
   const [reasonAction, setReasonAction] = useState(null);
   const [reasonMotivo, setReasonMotivo] = useState('');
   const [regeneratingPdfId, setRegeneratingPdfId] = useState(null);
@@ -81,6 +84,8 @@ const Inventario = () => {
   // Forms
   const [formData, setFormData] = useState(EMPTY_ARTICULO_FORM);
   const [articuloErrors, setArticuloErrors] = useState({});
+  const [ubicacionForm, setUbicacionForm] = useState({ nombre: '' });
+  const [ubicacionError, setUbicacionError] = useState('');
   const [filters, setFilters] = useState(EMPTY_ARTICULOS_FILTERS);
   const [movimientosFilters, setMovimientosFilters] = useState(EMPTY_MOVIMIENTOS_FILTERS);
   const [movimientosFiltersDraft, setMovimientosFiltersDraft] = useState(EMPTY_MOVIMIENTOS_FILTERS);
@@ -120,6 +125,7 @@ const Inventario = () => {
     fetchArticulos,
     loadMovimientos,
     loadBajas,
+    upsertUbicacion,
   } = useInventarioData({ showMessage });
 
   const canCreateArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_CREATE);
@@ -248,6 +254,8 @@ const Inventario = () => {
   const handleCancelArticulo = () => {
     setShowArticuloModal(false);
     setEditingArticulo(null);
+    setShowUbicacionModal(false);
+    setUbicacionError('');
   };
 
   const handleTipoChange = (e) => {
@@ -261,6 +269,55 @@ const Inventario = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
     setArticuloErrors((prev) => ({ ...prev, [name]: '' }));
   };
+
+  const handleOpenUbicacionModal = () => {
+    setUbicacionForm({ nombre: '' });
+    setUbicacionError('');
+    setShowUbicacionModal(true);
+  };
+
+  const handleCloseUbicacionModal = () => {
+    if (isCreatingUbicacion) return;
+    setShowUbicacionModal(false);
+    setUbicacionError('');
+  };
+
+  const handleCreateUbicacion = withUbicacionSubmit(async (e) => {
+    e.preventDefault();
+    const nombre = ubicacionForm.nombre.trim();
+
+    if (!nombre) {
+      setUbicacionError('El nombre de la ubicación es obligatorio.');
+      return;
+    }
+
+    if (nombre.length > 100) {
+      setUbicacionError('El nombre no puede exceder 100 caracteres.');
+      return;
+    }
+
+    setUbicacionError('');
+    const result = await inventarioService.createUbicacion({ nombre });
+
+    if (!result.success) {
+      setUbicacionError(result.message || 'Error al crear ubicación');
+      return;
+    }
+
+    const nuevaUbicacion = {
+      articulos_activos: 0,
+      articulos_totales: 0,
+      nombre,
+      ...result.data,
+    };
+
+    upsertUbicacion(nuevaUbicacion);
+    setFormData((prev) => ({ ...prev, ubicacion_nombre: nuevaUbicacion.nombre }));
+    setArticuloErrors((prev) => ({ ...prev, ubicacion_nombre: '' }));
+    setShowUbicacionModal(false);
+    setUbicacionForm({ nombre: '' });
+    showMessage('success', 'Ubicación creada exitosamente');
+  });
 
   const handleSaveArticulo = withArticuloSubmit(async (e) => {
     e.preventDefault();
@@ -722,15 +779,31 @@ const Inventario = () => {
       {showArticuloModal && (
         <ArticuloModal
           articuloErrors={articuloErrors}
+          canCreateUbicacion={canCreateArticulo}
           formData={formData}
           isEditing={Boolean(editingArticulo)}
           isSavingArticulo={isSavingArticulo}
           onCancel={handleCancelArticulo}
+          onCreateUbicacion={handleOpenUbicacionModal}
           onFormChange={handleFormChange}
           onSubmit={handleSaveArticulo}
           onTipoChange={handleTipoChange}
+          ubicaciones={ubicaciones}
         />
       )}
+
+      <UbicacionQuickCreateModal
+        error={ubicacionError}
+        form={ubicacionForm}
+        isOpen={showArticuloModal && showUbicacionModal}
+        isSubmitting={isCreatingUbicacion}
+        onChange={(nextForm) => {
+          setUbicacionForm(nextForm);
+          setUbicacionError('');
+        }}
+        onClose={handleCloseUbicacionModal}
+        onSubmit={handleCreateUbicacion}
+      />
 
       {movimientoFormState.isOpen && (
         <MovimientoModal

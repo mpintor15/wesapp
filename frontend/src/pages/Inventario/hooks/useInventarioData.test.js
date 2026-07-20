@@ -6,6 +6,7 @@ jest.mock('../../../services/inventarioService', () => ({
   __esModule: true,
   default: {
     getUbicaciones: jest.fn(),
+    createUbicacion: jest.fn(),
     getArticulos: jest.fn(),
     getMovimientos: jest.fn(),
     getBajasArticulos: jest.fn(),
@@ -99,6 +100,27 @@ describe('useInventarioData', () => {
     expect(inventarioService.getBajasArticulos).toHaveBeenCalledWith({ search: 'radio' });
     expect(hook.result.movimientos).toEqual([{ id: 40 }]);
     expect(hook.result.bajas).toEqual([{ id: 50 }]);
+
+    hook.unmount();
+  });
+
+  test('upsertUbicacion actualiza el catálogo local sin recargar ubicaciones', async () => {
+    const hook = renderHook(() => useInventarioData({ showMessage }));
+    await flushPromises();
+    jest.clearAllMocks();
+
+    act(() => {
+      hook.result.upsertUbicacion({
+        id: 2,
+        nombre: 'Patio',
+      });
+    });
+
+    expect(inventarioService.getUbicaciones).not.toHaveBeenCalled();
+    expect(hook.result.ubicaciones).toEqual([
+      { id: 1, nombre: 'Bodega' },
+      { id: 2, nombre: 'Patio', articulos_activos: 0, articulos_totales: 0 },
+    ]);
 
     hook.unmount();
   });
