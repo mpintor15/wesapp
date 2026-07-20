@@ -74,8 +74,8 @@ describe('ubicaciones routes', () => {
             {
               id: 1,
               nombre: 'Bodega',
-              articulos_activos: '2',
-              articulos_totales: '3',
+              articulos_activos: 2,
+              articulos_totales: 3,
             },
           ],
           rowCount: 1,
@@ -94,8 +94,8 @@ describe('ubicaciones routes', () => {
         {
           id: 1,
           nombre: 'Bodega',
-          articulos_activos: '2',
-          articulos_totales: '3',
+          articulos_activos: 2,
+          articulos_totales: 3,
         },
       ],
     });
@@ -119,7 +119,7 @@ describe('ubicaciones routes', () => {
     );
     expect(res.body).toMatchObject({
       success: true,
-      data: { id: 2, nombre: 'Bodega Norte' },
+      data: { id: 2, nombre: 'Bodega Norte', articulos_activos: 0, articulos_totales: 0 },
     });
   });
 
@@ -147,10 +147,28 @@ describe('ubicaciones routes', () => {
 
     expect(res.status).toBe(409);
     expect(client.query).toHaveBeenCalledWith(
-      'SELECT id FROM ubicaciones WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+      'SELECT id FROM ubicaciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1',
       ['bodega']
     );
     expect(res.body).toMatchObject({
+      success: false,
+      message: 'Ya existe una ubicación con ese nombre',
+    });
+  });
+
+  test('convierte duplicado detectado por PostgreSQL en 409 controlado', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockRejectedValueOnce({ code: '23505' });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('post', '/api/inventario/ubicaciones').send({
+      nombre: 'Bodega',
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
       success: false,
       message: 'Ya existe una ubicación con ese nombre',
     });
@@ -228,6 +246,23 @@ describe('ubicaciones routes', () => {
     expect(res.body).toMatchObject({
       success: true,
       data: { id: 5, nombre: 'Bodega Libre' },
+    });
+  });
+
+  test('convierte restricción de referencia al eliminar en 409 controlado', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 6, nombre: 'Bodega Referenciada' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ total: 0 }], rowCount: 1 })
+      .mockRejectedValueOnce({ code: '23503' });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('delete', '/api/inventario/ubicaciones/6');
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'No se puede eliminar la ubicación porque está asociada a registros de inventario.',
     });
   });
 });

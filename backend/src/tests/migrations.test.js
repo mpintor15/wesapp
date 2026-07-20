@@ -195,6 +195,19 @@ const expectStockEffectsModel = async (pool) => {
   expect(indexNames).toContain('idx_inventario_stock_efectos_articulo');
 };
 
+const expectUbicacionesCaseInsensitiveUniqueIndex = async (pool) => {
+  const indexes = await pool.query(`
+    SELECT indexname, indexdef
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'ubicaciones'
+      AND indexname = 'idx_ubicaciones_nombre_lower_unique'
+  `);
+
+  expect(indexes.rowCount).toBe(1);
+  expect(indexes.rows[0].indexdef).toMatch(/lower\(TRIM\(BOTH FROM nombre\)\)/i);
+};
+
 describe('database migrations', () => {
   test('have unique versions and are returned in ascending order', async () => {
     const migrations = await listMigrations();
@@ -203,7 +216,7 @@ describe('database migrations', () => {
     expect(versions).toEqual([...versions].sort((a, b) => a - b));
     expect(new Set(versions).size).toBe(versions.length);
     expect(versions).toContain(13);
-    expect(versions).toContain(16);
+    expect(versions).toContain(17);
   });
 
   test('each migration registers its own schema version', async () => {
@@ -253,13 +266,25 @@ describe('database migrations', () => {
     expect(sql).not.toMatch(/UPDATE movimientos\s+m\s+SET reversion_datos_completos = TRUE/i);
   });
 
-  test('scenario A: fresh schema has stock effects model and schema version 16', async () => {
+  test('ubicaciones migration enforces case-insensitive unique names safely', async () => {
+    const sql = await readMigration(17);
+
+    expect(sql).toContain('LOCK TABLE ubicaciones IN SHARE ROW EXCLUSIVE MODE');
+    expect(sql).toContain('LOWER(TRIM(nombre))');
+    expect(sql).toContain('HAVING COUNT(*) > 1');
+    expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_ubicaciones_nombre_lower_unique');
+    expect(sql).toContain('ubicaciones_duplicate_diagnostics.sql');
+    expect(sql).toMatch(/VALUES \(17, 'Case-insensitive unique normalized locations'\)/);
+  });
+
+  test('scenario A: fresh schema has stock effects model and schema version 17', async () => {
     await withTempDatabase('wesapp_migration_fresh', async (pool) => {
       const schemaSql = await fs.readFile(schemaPath, 'utf8');
       await pool.query(schemaSql);
 
       await expectStockEffectsModel(pool);
-      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 16');
+      await expectUbicacionesCaseInsensitiveUniqueIndex(pool);
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 17');
       expect(version.rowCount).toBe(1);
     });
   });
@@ -271,7 +296,8 @@ describe('database migrations', () => {
       await applyPendingMigrations(pool);
 
       await expectStockEffectsModel(pool);
-      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 16');
+      await expectUbicacionesCaseInsensitiveUniqueIndex(pool);
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 17');
       expect(version.rowCount).toBe(1);
 
       const bajas = await pool.query(

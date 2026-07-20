@@ -97,6 +97,9 @@ CREATE TABLE ubicaciones (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX idx_ubicaciones_nombre_lower_unique
+    ON ubicaciones (LOWER(TRIM(nombre)));
+
 CREATE TABLE articulos (
     id SERIAL PRIMARY KEY,
     tipo_articulo VARCHAR(20) NOT NULL CHECK (tipo_articulo IN ('equipo', 'placa_balistica', 'arma', 'radio', 'otro')),
@@ -471,7 +474,8 @@ INSERT INTO schema_version (version, description) VALUES
 (13, 'Reconcile production schema, constraints, triggers and indexes'),
 (14, 'Improve inventory table query performance'),
 (15, 'Inventory transactional integrity, voiding and logical deletion metadata'),
-(16, 'Inventory exact stock effects and reversible history markers');
+(16, 'Inventory exact stock effects and reversible history markers'),
+(17, 'Case-insensitive unique normalized locations');
 
 -- ============================================
 -- FINALIZADO

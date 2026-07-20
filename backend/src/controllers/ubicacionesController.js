@@ -18,6 +18,12 @@ const sendError = (res, error, fallback) => {
       .status(409)
       .json({ success: false, message: 'Ya existe una ubicación con ese nombre' });
   }
+  if (error.code === '23503') {
+    return res.status(409).json({
+      success: false,
+      message: 'No se puede eliminar la ubicación porque está asociada a registros de inventario.',
+    });
+  }
   return res.status(error.status || 500).json({
     success: false,
     message: error.status ? error.message : 'Error en el servidor',
@@ -45,8 +51,8 @@ const getUbicaciones = async (_req, res) => {
       SELECT
         u.id,
         u.nombre,
-        COUNT(a.id) FILTER (WHERE a.activo = TRUE) AS articulos_activos,
-        COUNT(a.id) AS articulos_totales
+        COUNT(a.id) FILTER (WHERE a.activo = TRUE)::int AS articulos_activos,
+        COUNT(a.id)::int AS articulos_totales
       FROM ubicaciones u
       LEFT JOIN articulos a ON a.ubicacion_id = u.id
       GROUP BY u.id, u.nombre
@@ -64,7 +70,7 @@ const createUbicacion = async (req, res) => {
     const nombre = validateName(req.body?.nombre);
     const created = await db.transaction(async (client) => {
       const duplicate = await client.query(
-        'SELECT id FROM ubicaciones WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
+        'SELECT id FROM ubicaciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) LIMIT 1',
         [nombre]
       );
       if (duplicate.rowCount > 0) {
@@ -91,7 +97,7 @@ const createUbicacion = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: 'Ubicación creada exitosamente',
-      data: { ...created, articulos_activos: '0', articulos_totales: '0' },
+      data: { ...created, articulos_activos: 0, articulos_totales: 0 },
     });
   } catch (error) {
     return sendError(res, error, 'Error al crear ubicación');
@@ -118,7 +124,7 @@ const updateUbicacion = async (req, res) => {
       }
 
       const duplicate = await client.query(
-        'SELECT id FROM ubicaciones WHERE LOWER(nombre) = LOWER($1) AND id <> $2 LIMIT 1',
+        'SELECT id FROM ubicaciones WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1)) AND id <> $2 LIMIT 1',
         [nombre, id]
       );
       if (duplicate.rowCount > 0) {
