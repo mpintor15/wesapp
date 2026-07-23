@@ -99,12 +99,15 @@ CREATE TABLE abonos (
 -- ============================================
 CREATE TABLE ubicaciones (
     id SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) UNIQUE NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    cliente_id INTEGER CONSTRAINT fk_ubicaciones_cliente REFERENCES clientes(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX idx_ubicaciones_nombre_lower_unique
-    ON ubicaciones (LOWER(TRIM(nombre)));
+CREATE INDEX idx_ubicaciones_cliente_id ON ubicaciones(cliente_id);
+CREATE UNIQUE INDEX idx_ubicaciones_cliente_nombre_lower_unique
+    ON ubicaciones(cliente_id, LOWER(TRIM(nombre)))
+    WHERE cliente_id IS NOT NULL;
 
 CREATE TABLE articulos (
     id SERIAL PRIMARY KEY,
@@ -437,9 +440,12 @@ SELECT
         WHEN a.fecha_caducidad < CURRENT_DATE THEN 'vencida'
         WHEN a.fecha_caducidad <= CURRENT_DATE + INTERVAL '30 days' THEN 'proxima_a_vencer'
         ELSE 'vigente'
-    END AS estado_caducidad
+    END AS estado_caducidad,
+    u.cliente_id,
+    c.nombre AS cliente_nombre
 FROM articulos a
 LEFT JOIN ubicaciones u ON a.ubicacion_id = u.id
+LEFT JOIN clientes c ON c.id = u.cliente_id
 WHERE a.activo = TRUE;
 
 -- ============================================
@@ -487,7 +493,8 @@ INSERT INTO schema_version (version, description) VALUES
 (15, 'Inventory transactional integrity, voiding and logical deletion metadata'),
 (16, 'Inventory exact stock effects and reversible history markers'),
 (17, 'Case-insensitive unique normalized locations'),
-(18, 'Clientes catalog normalization');
+(18, 'Clientes catalog normalization'),
+(19, 'Relate locations to clients with nullable cliente_id');
 
 -- ============================================
 -- FINALIZADO
