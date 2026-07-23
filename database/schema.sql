@@ -47,8 +47,14 @@ CREATE TABLE usuarios (
 -- ============================================
 CREATE TABLE clientes (
     id SERIAL PRIMARY KEY,
-    nombre TEXT UNIQUE NOT NULL,
-    identificacion TEXT UNIQUE NOT NULL,
+    nombre TEXT NOT NULL,
+    identificacion TEXT,
+    tipo_identificacion TEXT,
+    telefono TEXT,
+    correo TEXT,
+    direccion TEXT,
+    ciudad TEXT,
+    estado VARCHAR(20) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -273,6 +279,11 @@ CREATE INDEX idx_colaboradores_cedula ON colaboradores(cedula);
 CREATE INDEX idx_audit_tabla ON audit_log(tabla);
 CREATE INDEX idx_audit_fecha ON audit_log(created_at);
 CREATE INDEX idx_audit_usuario ON audit_log(usuario_id);
+CREATE INDEX idx_clientes_nombre_normalizado ON clientes(LOWER(TRIM(nombre)));
+CREATE INDEX idx_clientes_estado ON clientes(estado);
+CREATE UNIQUE INDEX idx_clientes_identificacion_normalizada_unique
+    ON clientes(LOWER(TRIM(identificacion)))
+    WHERE identificacion IS NOT NULL AND TRIM(identificacion) <> '';
 
 -- ============================================
 -- DATOS DE PRUEBA
@@ -475,7 +486,8 @@ INSERT INTO schema_version (version, description) VALUES
 (14, 'Improve inventory table query performance'),
 (15, 'Inventory transactional integrity, voiding and logical deletion metadata'),
 (16, 'Inventory exact stock effects and reversible history markers'),
-(17, 'Case-insensitive unique normalized locations');
+(17, 'Case-insensitive unique normalized locations'),
+(18, 'Clientes catalog normalization');
 
 -- ============================================
 -- FINALIZADO
