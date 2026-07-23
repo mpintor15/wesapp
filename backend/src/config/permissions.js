@@ -6,6 +6,11 @@ const ROLES = {
 };
 
 const PERMISSIONS = {
+  CLIENTES_VER: 'clientes.ver',
+  CLIENTES_CREAR: 'clientes.crear',
+  CLIENTES_EDITAR: 'clientes.editar',
+  CLIENTES_ELIMINAR: 'clientes.eliminar',
+
   CUENTAS_CLIENTES_VER: 'cuentas.clientes.ver',
   CUENTAS_CLIENTES_CREAR: 'cuentas.clientes.crear',
   CUENTAS_CLIENTES_EDITAR: 'cuentas.clientes.editar',
