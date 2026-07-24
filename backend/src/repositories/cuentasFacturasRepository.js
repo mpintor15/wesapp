@@ -58,16 +58,6 @@ const createFactura = (
     ]
   );
 
-const deleteFacturaByNumero = (numFactura, executor = db) =>
-  executor.query(
-    `DELETE FROM cuentas
-     WHERE num_factura = $1
-     RETURNING num_factura, cliente_id, fecha_factura, valor_factura,
-               incluye_iva, incluye_retencion_fuente, incluye_retencion_iva,
-               cancelada, detalle_anulacion, fecha_anulacion`,
-    [numFactura]
-  );
-
 const cancelFacturaByNumero = (numFactura, detalleAnulacion, executor = db) =>
   executor.query(
     `UPDATE cuentas
@@ -111,7 +101,6 @@ const updateFacturaByNumero = (
 module.exports = {
   cancelFacturaByNumero,
   createFactura,
-  deleteFacturaByNumero,
   findFacturaForUpdate,
   findFacturasForPaymentValidation,
   findNextFacturaNumber,

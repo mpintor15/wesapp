@@ -34,6 +34,9 @@ describe('permission matrix', () => {
   test('contador puede operar Cuentas y solo ver Personal', () => {
     expect(hasPermission('contador', PERMISSIONS.CUENTAS_FACTURAS_CREAR)).toBe(true);
     expect(hasPermission('contador', PERMISSIONS.CUENTAS_ABONOS_ELIMINAR)).toBe(true);
+    expect(hasPermission('contador', PERMISSIONS.CUENTAS_FACTURAS_CANCELAR)).toBe(false);
+    expect(hasPermission('contador', PERMISSIONS.CUENTAS_PAGOS_ANULAR)).toBe(false);
+    expect(hasPermission('gerente', PERMISSIONS.CUENTAS_PAGOS_ANULAR)).toBe(true);
     expect(hasPermission('contador', PERMISSIONS.PERSONAL_VER)).toBe(true);
     expect(hasPermission('contador', PERMISSIONS.PERSONAL_CREAR)).toBe(false);
   });

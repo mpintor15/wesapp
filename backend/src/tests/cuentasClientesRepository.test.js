@@ -12,8 +12,8 @@ describe('cuentasClientesRepository', () => {
     jest.clearAllMocks();
   });
 
-  test('findAllClientes usa consulta y ordenamiento esperados', async () => {
-    const expected = { rows: [{ id: 1, nombre: 'Ana', identificacion: '0101' }] };
+  test('findAllClientes usa consulta de clientes activos y ordenamiento esperado', async () => {
+    const expected = { rows: [{ id: 1, nombre: 'Ana', identificacion: '0101', estado: 'activo' }] };
     db.query.mockResolvedValueOnce(expected);
 
     const result = await cuentasClientesRepository.findAllClientes();
@@ -21,9 +21,9 @@ describe('cuentasClientesRepository', () => {
     expect(result).toBe(expected);
     expect(db.query).toHaveBeenCalledTimes(1);
     expect(normalizeSql(db.query.mock.calls[0][0])).toBe(
-      'SELECT id, nombre, identificacion FROM clientes ORDER BY nombre ASC'
+      'SELECT id, nombre, identificacion, estado FROM clientes WHERE estado = $1 ORDER BY nombre ASC'
     );
-    expect(db.query.mock.calls[0][1]).toBeUndefined();
+    expect(db.query.mock.calls[0][1]).toEqual(['activo']);
   });
 
   test('findClientesForExport conserva columnas y orden para Excel', async () => {
@@ -71,8 +71,8 @@ describe('cuentasClientesRepository', () => {
     expect(db.query.mock.calls[0][1]).toEqual([7]);
   });
 
-  test('findClienteIdById conserva lectura de cliente por id', async () => {
-    const expected = { rowCount: 1, rows: [{ id: 7 }] };
+  test('findClienteIdById conserva lectura de cliente y estado por id', async () => {
+    const expected = { rowCount: 1, rows: [{ id: 7, estado: 'activo' }] };
     db.query.mockResolvedValueOnce(expected);
 
     const result = await cuentasClientesRepository.findClienteIdById(7);
@@ -80,7 +80,7 @@ describe('cuentasClientesRepository', () => {
     expect(result).toBe(expected);
     expect(db.query).toHaveBeenCalledTimes(1);
     expect(normalizeSql(db.query.mock.calls[0][0])).toBe(
-      'SELECT id FROM clientes WHERE id = $1 LIMIT 1'
+      'SELECT id, estado FROM clientes WHERE id = $1 LIMIT 1'
     );
     expect(db.query.mock.calls[0][1]).toEqual([7]);
   });
@@ -105,18 +105,21 @@ describe('cuentasClientesRepository', () => {
     await cuentasClientesRepository.findAllClientes(executor);
 
     expect(executor.query).toHaveBeenCalledWith(
-      'SELECT id, nombre, identificacion FROM clientes ORDER BY nombre ASC'
+      'SELECT id, nombre, identificacion, estado FROM clientes WHERE estado = $1 ORDER BY nombre ASC',
+      ['activo']
     );
     expect(db.query).not.toHaveBeenCalled();
   });
 
   test('findClienteIdById permite executor explícito y propaga errores', async () => {
-    const executor = { query: jest.fn().mockResolvedValue({ rows: [{ id: 7 }] }) };
+    const executor = {
+      query: jest.fn().mockResolvedValue({ rows: [{ id: 7, estado: 'activo' }] }),
+    };
 
     await cuentasClientesRepository.findClienteIdById(7, executor);
 
     expect(executor.query).toHaveBeenCalledWith(
-      'SELECT id FROM clientes WHERE id = $1 LIMIT 1',
+      'SELECT id, estado FROM clientes WHERE id = $1 LIMIT 1',
       [7]
     );
     expect(db.query).not.toHaveBeenCalled();

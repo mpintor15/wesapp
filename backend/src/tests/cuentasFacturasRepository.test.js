@@ -141,20 +141,6 @@ describe('cuentasFacturasRepository', () => {
     expect(db.query.mock.calls[0][1]).toEqual([1001, 7, '2024-01-01', 500, true, false, true]);
   });
 
-  test('deleteFacturaByNumero conserva DELETE, WHERE, RETURNING y parámetros', async () => {
-    const expected = { rows: [{ num_factura: 1001 }], rowCount: 1 };
-    db.query.mockResolvedValueOnce(expected);
-
-    const result = await cuentasFacturasRepository.deleteFacturaByNumero(1001);
-
-    expect(result).toBe(expected);
-    expect(db.query).toHaveBeenCalledTimes(1);
-    expect(normalizeSql(db.query.mock.calls[0][0])).toBe(
-      'DELETE FROM cuentas WHERE num_factura = $1 RETURNING num_factura, cliente_id, fecha_factura, valor_factura, incluye_iva, incluye_retencion_fuente, incluye_retencion_iva, cancelada, detalle_anulacion, fecha_anulacion'
-    );
-    expect(db.query.mock.calls[0][1]).toEqual([1001]);
-  });
-
   test('cancelFacturaByNumero conserva UPDATE de anulación y parámetros', async () => {
     const expected = {
       rows: [{ num_factura: 1001, cancelada: true, detalle_anulacion: 'Duplicada' }],
@@ -197,11 +183,16 @@ describe('cuentasFacturasRepository', () => {
   test('las escrituras permiten usar un executor explícito', async () => {
     const executor = { query: jest.fn().mockResolvedValue({ rows: [{ num_factura: 1001 }] }) };
 
-    const result = await cuentasFacturasRepository.deleteFacturaByNumero(1001, executor);
+    const result = await cuentasFacturasRepository.cancelFacturaByNumero(
+      1001,
+      'Duplicada',
+      executor
+    );
 
     expect(result).toBe(await executor.query.mock.results[0].value);
     expect(executor.query).toHaveBeenCalledTimes(1);
-    expect(executor.query.mock.calls[0][1]).toEqual([1001]);
+    expect(executor.query.mock.calls[0][0]).not.toMatch(/DELETE FROM/i);
+    expect(executor.query.mock.calls[0][1]).toEqual([1001, 'Duplicada']);
     expect(db.query).not.toHaveBeenCalled();
   });
 

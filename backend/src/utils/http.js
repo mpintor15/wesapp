@@ -54,6 +54,9 @@ const handleControllerError = (res, error, defaultLogMessage) => {
   if (error.appCode) {
     body.code = error.appCode;
   }
+  if (error.details) {
+    body.details = error.details;
+  }
 
   return res.status(status).json(body);
 };

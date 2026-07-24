@@ -154,6 +154,21 @@ describe('cuentas permissions', () => {
     expectAllowedPastAuthorization(createAbono);
   });
 
+  test('contador no puede anular facturas ni pagos', async () => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const cancelFactura = await request(app)
+      .patch('/api/cuentas/facturas/1001/cancelar')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({ detalle_anulacion: 'Error contable documentado' });
+    const voidPago = await request(app)
+      .patch('/api/cuentas/pagos/10/anular')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`);
+
+    expect(cancelFactura.status).toBe(403);
+    expect(voidPago.status).toBe(403);
+  });
+
   test('supervisor recibe 403 en Cuentas', async () => {
     mockCurrentUser(userFromDb('supervisor'));
 
