@@ -35,6 +35,10 @@ const PERMISSIONS = {
   INVENTARIO_ARTICULOS_EDITAR: 'inventario.articulos.editar',
   INVENTARIO_ARTICULOS_ELIMINAR: 'inventario.articulos.eliminar',
   INVENTARIO_ARTICULOS_DAR_BAJA: 'inventario.articulos.dar_baja',
+  INVENTARIO_UBICACIONES_VER: 'inventario.ubicaciones.ver',
+  INVENTARIO_UBICACIONES_CREAR: 'inventario.ubicaciones.crear',
+  INVENTARIO_UBICACIONES_EDITAR: 'inventario.ubicaciones.editar',
+  INVENTARIO_UBICACIONES_ELIMINAR: 'inventario.ubicaciones.eliminar',
   INVENTARIO_MOVIMIENTOS_VER: 'inventario.movimientos.ver',
   INVENTARIO_MOVIMIENTOS_CREAR: 'inventario.movimientos.crear',
   INVENTARIO_MOVIMIENTOS_ANULAR: 'inventario.movimientos.anular',
@@ -89,6 +93,7 @@ const rolePermissions = {
     PERMISSIONS.CUENTAS_REPORTES_GENERAR,
     PERMISSIONS.CUENTAS_REPORTES_EXPORTAR,
     PERMISSIONS.INVENTARIO_ARTICULOS_VER,
+    PERMISSIONS.INVENTARIO_UBICACIONES_VER,
     PERMISSIONS.INVENTARIO_MOVIMIENTOS_VER,
     PERMISSIONS.INVENTARIO_MOVIMIENTOS_CREAR,
     PERMISSIONS.INVENTARIO_BAJAS_VER,
@@ -106,6 +111,9 @@ const rolePermissions = {
     PERMISSIONS.INVENTARIO_ARTICULOS_CREAR,
     PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR,
     PERMISSIONS.INVENTARIO_ARTICULOS_DAR_BAJA,
+    PERMISSIONS.INVENTARIO_UBICACIONES_VER,
+    PERMISSIONS.INVENTARIO_UBICACIONES_CREAR,
+    PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR,
     PERMISSIONS.INVENTARIO_MOVIMIENTOS_VER,
     PERMISSIONS.INVENTARIO_MOVIMIENTOS_CREAR,
     PERMISSIONS.INVENTARIO_MOVIMIENTOS_ANULAR,
@@ -119,7 +127,13 @@ const rolePermissions = {
   ],
 };
 
+const knownPermissions = new Set(Object.values(PERMISSIONS));
+
 const hasPermission = (role, permission) => {
+  if (!knownPermissions.has(permission)) {
+    return false;
+  }
+
   if (role === ROLES.GERENTE) {
     return true;
   }

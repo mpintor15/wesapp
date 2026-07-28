@@ -9,6 +9,7 @@ jest.mock('../config/database', () => ({
 const db = require('../config/database');
 const app = require('../app');
 const config = require('../config/config');
+const { PERMISSIONS, rolePermissions } = require('../config/permissions');
 
 const tokenFor = (tipo_usuario, id = 50) =>
   jwt.sign({ id, usuario: `token-${tipo_usuario}-${id}`, tipo_usuario }, config.jwt.secret, {
@@ -49,6 +50,7 @@ const expectAllowedPastAuthorization = (res) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  delete rolePermissions.custom_ubicaciones;
   mockCurrentUser(userFromDb('gerente'));
 });
 
@@ -181,6 +183,160 @@ describe('cuentas permissions', () => {
 });
 
 describe('inventario permissions', () => {
+  test.each([
+    ['GET', 'get', '/api/inventario/ubicaciones', PERMISSIONS.INVENTARIO_UBICACIONES_VER],
+    ['POST', 'post', '/api/inventario/ubicaciones', PERMISSIONS.INVENTARIO_UBICACIONES_CREAR],
+    ['PUT', 'put', '/api/inventario/ubicaciones/10', PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR],
+    [
+      'DELETE',
+      'delete',
+      '/api/inventario/ubicaciones/10',
+      PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR,
+    ],
+  ])(
+    '%s ubicaciones acepta permiso administrativo específico',
+    async (_label, method, url, permission) => {
+      rolePermissions.custom_ubicaciones = [permission];
+      mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+      const res = await request(app)
+        [method](url)
+        .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+        .send({});
+
+      expectAllowedPastAuthorization(res);
+    }
+  );
+
+  test.each([
+    ['artículos ver', PERMISSIONS.INVENTARIO_ARTICULOS_VER],
+    ['artículos crear', PERMISSIONS.INVENTARIO_ARTICULOS_CREAR],
+    ['movimientos ver', PERMISSIONS.INVENTARIO_MOVIMIENTOS_VER],
+    ['movimientos crear', PERMISSIONS.INVENTARIO_MOVIMIENTOS_CREAR],
+  ])('GET ubicaciones conserva catálogo operativo para %s', async (_label, permission) => {
+    rolePermissions.custom_ubicaciones = [permission];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const res = await request(app)
+      .get('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expectAllowedPastAuthorization(res);
+  });
+
+  test.each([
+    ['POST', 'post', '/api/inventario/ubicaciones', PERMISSIONS.INVENTARIO_ARTICULOS_CREAR],
+    ['PUT', 'put', '/api/inventario/ubicaciones/10', PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR],
+    [
+      'DELETE',
+      'delete',
+      '/api/inventario/ubicaciones/10',
+      PERMISSIONS.INVENTARIO_ARTICULOS_ELIMINAR,
+    ],
+  ])(
+    '%s ubicaciones rechaza permiso administrativo legacy de artículos',
+    async (_label, method, url, permission) => {
+      rolePermissions.custom_ubicaciones = [permission];
+      mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+      const res = await request(app)
+        [method](url)
+        .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+        .send({});
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('INSUFFICIENT_PERMISSIONS');
+    }
+  );
+
+  test.each([
+    ['GET', 'get', '/api/inventario/ubicaciones'],
+    ['POST', 'post', '/api/inventario/ubicaciones'],
+    ['PUT', 'put', '/api/inventario/ubicaciones/10'],
+    ['DELETE', 'delete', '/api/inventario/ubicaciones/10'],
+  ])('%s ubicaciones rechaza usuario sin permiso nuevo ni antiguo', async (_label, method, url) => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const res = await request(app)
+      [method](url)
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('GET ubicaciones sin usuario autenticado devuelve 401', async () => {
+    const res = await request(app).get('/api/inventario/ubicaciones');
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('AUTHENTICATION_REQUIRED');
+  });
+
+  test('GET ubicaciones rechaza permiso desconocido aunque coincida el prefijo', async () => {
+    rolePermissions.custom_ubicaciones = ['inventario.ubicaciones'];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const res = await request(app)
+      .get('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('INSUFFICIENT_PERMISSIONS');
+  });
+
+  test('secretario conserva acceso de lectura a ubicaciones', async () => {
+    mockCurrentUser(userFromDb('secretario'));
+
+    const res = await request(app)
+      .get('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('secretario')}`);
+
+    expectAllowedPastAuthorization(res);
+  });
+
+  test('supervisor conserva ver, crear y editar ubicaciones sin eliminar', async () => {
+    mockCurrentUser(userFromDb('supervisor'));
+
+    const list = await request(app)
+      .get('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('supervisor')}`);
+    const create = await request(app)
+      .post('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('supervisor')}`)
+      .send({});
+    const update = await request(app)
+      .put('/api/inventario/ubicaciones/10')
+      .set('Authorization', `Bearer ${tokenFor('supervisor')}`)
+      .send({});
+    const remove = await request(app)
+      .delete('/api/inventario/ubicaciones/10')
+      .set('Authorization', `Bearer ${tokenFor('supervisor')}`);
+
+    expectAllowedPastAuthorization(list);
+    expectAllowedPastAuthorization(create);
+    expectAllowedPastAuthorization(update);
+    expect(remove.status).toBe(403);
+  });
+
+  test('permiso administrativo de ubicaciones no concede crear artículos ni movimientos', async () => {
+    rolePermissions.custom_ubicaciones = [PERMISSIONS.INVENTARIO_UBICACIONES_CREAR];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const articulo = await request(app)
+      .post('/api/inventario/articulos')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+      .send({});
+    const movimiento = await request(app)
+      .post('/api/inventario/movimientos')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+      .send({});
+
+    expect(articulo.status).toBe(403);
+    expect(articulo.body.code).toBe('INSUFFICIENT_PERMISSIONS');
+    expect(movimiento.status).toBe(403);
+    expect(movimiento.body.code).toBe('INSUFFICIENT_PERMISSIONS');
+  });
+
   test('secretario puede ver y reportar artículos', async () => {
     mockCurrentUser(userFromDb('secretario'));
 
