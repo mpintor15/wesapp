@@ -43,7 +43,9 @@ const UbicacionQuickCreateModal = ({
             />
             <div className="inventory-location-field-meta">
               <span>
-                {isNameTooLong ? `Máximo ${MAX_NOMBRE_LENGTH} caracteres.` : 'Nombre obligatorio.'}
+                {isNameTooLong
+                  ? `Máximo ${MAX_NOMBRE_LENGTH} caracteres.`
+                  : 'Se creará como parte del artículo.'}
               </span>
               <span>{trimmedName.length}/100</span>
             </div>

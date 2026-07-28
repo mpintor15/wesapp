@@ -143,6 +143,8 @@ export const EMPTY_ARTICULO_FORM = {
   numero_serie: '',
   calibre: '',
   fecha_caducidad: '',
+  cliente_id: '',
+  ubicacion_id: '',
   ubicacion_nombre: '',
   codigo_pantalla: '',
   codigo_radio: '',
@@ -189,6 +191,8 @@ export const EMPTY_MOVIMIENTOS_EXPORT_FILTERS = {
 export const createMovimientoForm = () => ({
   tipo_movimiento: 'traslado',
   fecha_movimiento: getTodayLocalISO(),
+  cliente_destino_id: '',
+  ubicacion_destino_id: '',
   ubicacion_destino_nombre: '',
   items: [{ articulo_id: '', cantidad: 1, talla: '' }],
 });
@@ -311,7 +315,10 @@ export const validateArticuloForm = (formData) => {
   const errors = {};
   if (!formData.tipo_articulo) errors.tipo_articulo = 'Selecciona un tipo de artículo';
   if (!formData.nombre_articulo.trim()) errors.nombre_articulo = 'Ingresa el nombre del artículo';
-  if (!formData.ubicacion_nombre.trim()) errors.ubicacion_nombre = 'Ingresa la ubicación';
+  if (!formData.cliente_id && !formData.ubicacion_id) errors.cliente_id = 'Selecciona un cliente';
+  if (!formData.ubicacion_id && !formData.ubicacion_nombre.trim()) {
+    errors.ubicacion_nombre = 'Selecciona la ubicación';
+  }
   if (isStockTipo(formData.tipo_articulo) && !formData.cantidad) {
     errors.cantidad = 'Ingresa la cantidad';
   }
@@ -367,21 +374,34 @@ export const validateMovimientoForm = (movimientoForm) => {
   if (movimientoForm.items.some((item) => !item.articulo_id)) {
     errors.items = 'Selecciona los artículos del movimiento';
   }
-  if (!movimientoForm.ubicacion_destino_nombre.trim()) {
+  if (!movimientoForm.cliente_destino_id) {
+    errors.cliente_destino_id = 'Selecciona el cliente destino';
+  }
+  if (!movimientoForm.ubicacion_destino_id && !movimientoForm.ubicacion_destino_nombre.trim()) {
     errors.ubicacion_destino_nombre = 'Ingresa la ubicación destino';
   }
   return errors;
 };
 
-export const buildMovimientoPayload = (movimientoForm) => ({
-  ubicacion_destino_nombre: movimientoForm.ubicacion_destino_nombre,
-  fecha_movimiento: movimientoForm.fecha_movimiento,
-  items: movimientoForm.items.map((item) => ({
-    articulo_id: Number.parseInt(item.articulo_id, 10),
-    cantidad: item.cantidad ? Number.parseInt(item.cantidad, 10) : 1,
-    talla: item.talla || '',
-  })),
-});
+export const buildMovimientoPayload = (movimientoForm) => {
+  const payload = {
+    cliente_destino_id: Number.parseInt(movimientoForm.cliente_destino_id, 10),
+    fecha_movimiento: movimientoForm.fecha_movimiento,
+    items: movimientoForm.items.map((item) => ({
+      articulo_id: Number.parseInt(item.articulo_id, 10),
+      cantidad: item.cantidad ? Number.parseInt(item.cantidad, 10) : 1,
+      talla: item.talla || '',
+    })),
+  };
+
+  if (movimientoForm.ubicacion_destino_id) {
+    payload.ubicacion_destino_id = Number.parseInt(movimientoForm.ubicacion_destino_id, 10);
+  } else {
+    payload.ubicacion_destino_nombre = movimientoForm.ubicacion_destino_nombre;
+  }
+
+  return payload;
+};
 
 export const updateMovimientoItem = (items, index, field, value) =>
   items.map((item, idx) => (idx === index ? { ...item, [field]: value } : item));

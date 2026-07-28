@@ -23,7 +23,9 @@ const BajaArticuloModal = ({
       onClose={onCancel}
       title="Dar de baja artículo"
       size="md"
-      closeOnBackdrop
+      closeOnBackdrop={!isSavingBaja}
+      closeOnEscape={!isSavingBaja}
+      closeButtonDisabled={isSavingBaja}
       className="inventory-baja-modal"
     >
       <AppModal.Header />
@@ -58,6 +60,7 @@ const BajaArticuloModal = ({
               max={bajaTarget.cantidad}
               value={bajaForm.cantidad}
               onChange={(e) => onFormChange((prev) => ({ ...prev, cantidad: e.target.value }))}
+              disabled={isSavingBaja}
             />
             <p className="delete-hint">Disponible: {bajaTarget.cantidad} unidades</p>
           </div>
@@ -76,6 +79,7 @@ const BajaArticuloModal = ({
             aria-describedby="baja-motivo-help"
             aria-invalid={Boolean(motivoError)}
             required
+            disabled={isSavingBaja}
           />
           <div id="baja-motivo-help" className="reason-field-help">
             <span>{motivoError || 'Motivo válido.'}</span>

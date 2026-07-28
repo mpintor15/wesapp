@@ -12,11 +12,13 @@ jest.mock('./api', () => ({
   },
 }));
 
-jest.mock('./serviceUtils', () => ({
-  extractError: jest.fn((error, fallback) => error?.response?.data?.message || fallback),
-  getFilenameFromDisposition: jest.fn((_, fallback) => fallback),
-  saveBlobWithPickerOrDownload: jest.fn(),
-}));
+jest.mock('./serviceUtils', () => {
+  const actual = jest.requireActual('./serviceUtils');
+  return {
+    ...actual,
+    saveBlobWithPickerOrDownload: jest.fn(),
+  };
+});
 
 describe('inventarioService', () => {
   beforeEach(() => {
@@ -64,18 +66,32 @@ describe('inventarioService', () => {
       success: true,
       data: [{ id: 1, nombre: 'Bodega' }],
     });
-    await inventarioService.createUbicacion({ nombre: 'Bodega Norte' });
-    await inventarioService.updateUbicacion(2, { nombre: 'Bodega Sur' });
+    await inventarioService.createUbicacion({ nombre: 'Bodega Norte', cliente_id: 1 });
+    await inventarioService.updateUbicacion(2, { nombre: 'Bodega Sur', cliente_id: 1 });
     await inventarioService.deleteUbicacion(2);
 
-    expect(api.get).toHaveBeenCalledWith('/inventario/ubicaciones');
+    expect(api.get).toHaveBeenCalledWith('/inventario/ubicaciones', { params: {} });
     expect(api.post).toHaveBeenCalledWith('/inventario/ubicaciones', {
       nombre: 'Bodega Norte',
+      cliente_id: 1,
     });
     expect(api.put).toHaveBeenCalledWith('/inventario/ubicaciones/2', {
       nombre: 'Bodega Sur',
+      cliente_id: 1,
     });
     expect(api.delete).toHaveBeenCalledWith('/inventario/ubicaciones/2');
+  });
+
+  test('lista ubicaciones filtrando por cliente', async () => {
+    api.get.mockResolvedValueOnce({
+      data: { success: true, data: [] },
+    });
+
+    await inventarioService.getUbicaciones({ cliente_id: 10 });
+
+    expect(api.get).toHaveBeenCalledWith('/inventario/ubicaciones', {
+      params: { cliente_id: 10 },
+    });
   });
 
   test('preserva error 409 al crear ubicación duplicada', async () => {
@@ -86,14 +102,17 @@ describe('inventarioService', () => {
       },
     });
 
-    const result = await inventarioService.createUbicacion({ nombre: 'Bodega' });
+    const result = await inventarioService.createUbicacion({ nombre: 'Bodega', cliente_id: 1 });
 
-    expect(result).toEqual({
-      success: false,
-      code: undefined,
-      message: 'Ya existe una ubicación con ese nombre',
-      status: 409,
-    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: false,
+        code: undefined,
+        message: 'Ya existe una ubicación con ese nombre',
+        status: 409,
+        isNetworkError: false,
+      })
+    );
   });
 
   test('anula y elimina movimientos con motivo', async () => {

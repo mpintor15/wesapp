@@ -26,7 +26,9 @@ const RadioField = ({ error, formData, onChange, name, id, label, placeholder })
 
 const ArticuloModal = ({
   articuloErrors,
+  canCreateArticulo,
   canCreateUbicacion,
+  clientes,
   formData,
   isEditing,
   isSavingArticulo,
@@ -37,16 +39,18 @@ const ArticuloModal = ({
   onTipoChange,
   ubicaciones,
 }) => {
-  const locationOptions = [...ubicaciones];
-  const currentLocation = formData.ubicacion_nombre?.trim();
-  if (
-    currentLocation &&
-    !locationOptions.some(
-      (ubicacion) => ubicacion.nombre?.trim().toLowerCase() === currentLocation.toLowerCase()
-    )
-  ) {
-    locationOptions.push({ id: `current-${currentLocation}`, nombre: currentLocation });
-  }
+  const selectedClienteId = formData.cliente_id ? String(formData.cliente_id) : '';
+  const currentLocationId = formData.ubicacion_id ? String(formData.ubicacion_id) : '';
+  const currentLocation = ubicaciones.find(
+    (ubicacion) => String(ubicacion.id) === currentLocationId
+  );
+  const locationOptions = ubicaciones.filter((ubicacion) => {
+    if (!selectedClienteId) return String(ubicacion.id) === currentLocationId;
+    return String(ubicacion.cliente_id || '') === selectedClienteId;
+  });
+  const showHistoricalLocationNotice =
+    currentLocation && !currentLocation.cliente_id && !selectedClienteId;
+  const showExistingOnlyNotice = canCreateArticulo && !canCreateUbicacion && selectedClienteId;
 
   return (
     <AppModal
@@ -279,9 +283,28 @@ const ArticuloModal = ({
             )}
 
             <div className="form-group">
+              <label htmlFor="art-cliente">Cliente</label>
+              <select
+                id="art-cliente"
+                name="cliente_id"
+                value={formData.cliente_id}
+                onChange={onFormChange}
+                required
+              >
+                <option value="">Selecciona un cliente</option>
+                {clientes.map((cliente) => (
+                  <option key={cliente.id} value={cliente.id}>
+                    {cliente.nombre}
+                  </option>
+                ))}
+              </select>
+              <FieldError>{articuloErrors.cliente_id}</FieldError>
+            </div>
+
+            <div className="form-group">
               <div className="inventory-location-label-row">
                 <label htmlFor="art-ubicacion">Ubicación</label>
-                {canCreateUbicacion && (
+                {canCreateUbicacion && selectedClienteId && (
                   <button
                     type="button"
                     className="inventory-location-create"
@@ -293,18 +316,33 @@ const ArticuloModal = ({
               </div>
               <select
                 id="art-ubicacion"
-                name="ubicacion_nombre"
-                value={formData.ubicacion_nombre}
+                name="ubicacion_id"
+                value={formData.ubicacion_id}
                 onChange={onFormChange}
                 required
+                disabled={!selectedClienteId && !currentLocation}
               >
-                <option value="">Selecciona una ubicación</option>
+                <option value="">
+                  {selectedClienteId ? 'Selecciona una ubicación' : 'Selecciona primero un cliente'}
+                </option>
                 {locationOptions.map((ubicacion) => (
-                  <option key={ubicacion.id || ubicacion.nombre} value={ubicacion.nombre}>
+                  <option key={ubicacion.id} value={ubicacion.id}>
                     {ubicacion.nombre}
+                    {ubicacion.cliente_nombre ? ` - ${ubicacion.cliente_nombre}` : ''}
                   </option>
                 ))}
               </select>
+              {showHistoricalLocationNotice ? (
+                <span className="inventory-location-field-meta">
+                  Esta ubicación histórica todavía no tiene cliente asignado.
+                </span>
+              ) : null}
+              {showExistingOnlyNotice ? (
+                <span className="inventory-location-field-meta">
+                  Puedes seleccionar una ubicación existente, pero no crear una nueva desde este
+                  formulario.
+                </span>
+              ) : null}
               <FieldError>{articuloErrors.ubicacion_nombre}</FieldError>
             </div>
           </div>

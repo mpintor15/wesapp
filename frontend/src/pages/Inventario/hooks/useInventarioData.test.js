@@ -1,6 +1,14 @@
 import useInventarioData from './useInventarioData';
+import clientesService from '../../../services/clientesService';
 import inventarioService from '../../../services/inventarioService';
 import { act, flushPromises, renderHook } from '../../../testUtils/renderHook';
+
+jest.mock('../../../services/clientesService', () => ({
+  __esModule: true,
+  default: {
+    listClientes: jest.fn(),
+  },
+}));
 
 jest.mock('../../../services/inventarioService', () => ({
   __esModule: true,
@@ -21,6 +29,7 @@ describe('useInventarioData', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     inventarioService.getUbicaciones.mockResolvedValue(success([{ id: 1, nombre: 'Bodega' }]));
+    clientesService.listClientes.mockResolvedValue(success([{ id: 3, nombre: 'ACME' }]));
     inventarioService.getArticulos.mockResolvedValue(
       success([{ id: 10, nombre_articulo: 'Radio' }])
     );
@@ -34,10 +43,12 @@ describe('useInventarioData', () => {
     await flushPromises();
 
     expect(inventarioService.getUbicaciones).toHaveBeenCalledTimes(1);
+    expect(clientesService.listClientes).toHaveBeenCalledWith({ estado: 'activo' });
     expect(inventarioService.getArticulos).toHaveBeenCalledWith();
     expect(inventarioService.getMovimientos).toHaveBeenCalledTimes(1);
     expect(inventarioService.getBajasArticulos).toHaveBeenCalledWith({});
     expect(hook.result.ubicaciones).toEqual([{ id: 1, nombre: 'Bodega' }]);
+    expect(hook.result.clientes).toEqual([{ id: 3, nombre: 'ACME' }]);
     expect(hook.result.articulos).toEqual([{ id: 10, nombre_articulo: 'Radio' }]);
     expect(hook.result.catalogArticulos).toEqual([{ id: 10, nombre_articulo: 'Radio' }]);
     expect(hook.result.movimientos).toEqual([{ id: 20 }]);

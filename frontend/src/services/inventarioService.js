@@ -31,6 +31,7 @@ import api from './api';
 import {
   extractError,
   getFilenameFromDisposition,
+  normalizeServiceError,
   saveBlobWithPickerOrDownload,
 } from './serviceUtils';
 
@@ -59,11 +60,12 @@ const getInventoryErrorCode = (error) => error?.response?.data?.code;
 export const extractInventoryError = (error, fallback) => {
   const code = getInventoryErrorCode(error);
   const message = code ? INVENTARIO_ERROR_MESSAGES[code] : '';
+  const normalized = normalizeServiceError(error, fallback);
   const backendMessage = error?.response?.data?.message;
   return {
+    ...normalized,
     code,
     message: message || backendMessage || extractError(error, fallback),
-    status: error?.response?.status,
   };
 };
 
@@ -93,9 +95,9 @@ const failure = (error, fallback) => ({
 });
 
 const inventarioService = {
-  getUbicaciones: async () => {
+  getUbicaciones: async (params = {}) => {
     try {
-      const response = await api.get('/inventario/ubicaciones');
+      const response = await api.get('/inventario/ubicaciones', { params });
       return {
         success: response.data.success,
         data: response.data.data || [],

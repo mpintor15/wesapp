@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
+import clientesService from '../../../services/clientesService';
 import inventarioService from '../../../services/inventarioService';
 
 const useInventarioData = ({ showMessage }) => {
   const [articulos, setArticulos] = useState([]);
   const [catalogArticulos, setCatalogArticulos] = useState([]);
+  const [clientes, setClientes] = useState([]);
   const [ubicaciones, setUbicaciones] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
   const [bajas, setBajas] = useState([]);
@@ -16,20 +18,25 @@ const useInventarioData = ({ showMessage }) => {
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
-    const [ubicacionesRes, articulosRes] = await Promise.all([
+    const [ubicacionesRes, articulosRes, clientesRes] = await Promise.all([
       inventarioService.getUbicaciones(),
       inventarioService.getArticulos(),
+      clientesService.listClientes({ estado: 'activo' }),
     ]);
 
     if (ubicacionesRes.success) setUbicaciones(ubicacionesRes.data);
+    if (clientesRes.success) setClientes(clientesRes.data || []);
     if (articulosRes.success) {
       setArticulos(articulosRes.data);
       setCatalogArticulos(articulosRes.data);
     }
-    if (!ubicacionesRes.success || !articulosRes.success) {
+    if (!ubicacionesRes.success || !articulosRes.success || !clientesRes.success) {
       showMessage(
         'error',
-        ubicacionesRes.message || articulosRes.message || 'Error al cargar inventario'
+        ubicacionesRes.message ||
+          articulosRes.message ||
+          clientesRes.message ||
+          'Error al cargar inventario'
       );
     }
     setLoading(false);
@@ -127,6 +134,7 @@ const useInventarioData = ({ showMessage }) => {
   return {
     articulos,
     catalogArticulos,
+    clientes,
     ubicaciones,
     movimientos,
     bajas,

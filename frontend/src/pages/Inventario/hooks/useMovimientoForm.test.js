@@ -110,6 +110,7 @@ describe('useMovimientoForm', () => {
     expect(inventarioService.createMovimiento).not.toHaveBeenCalled();
     expect(hook.result.movimientoErrors).toEqual(
       expect.objectContaining({
+        cliente_destino_id: 'Selecciona el cliente destino',
         items: 'Selecciona los artículos del movimiento',
         ubicacion_destino_nombre: 'Ingresa la ubicación destino',
       })
@@ -125,6 +126,9 @@ describe('useMovimientoForm', () => {
     act(() => {
       hook.result.open();
       hook.result.handleMovimientoFormChange({
+        target: { name: 'cliente_destino_id', value: '4' },
+      });
+      hook.result.handleMovimientoFormChange({
         target: { name: 'ubicacion_destino_nombre', value: 'Bodega norte' },
       });
       hook.result.selectArticuloForItem(0, catalogArticulos[0]);
@@ -137,6 +141,7 @@ describe('useMovimientoForm', () => {
 
     expect(inventarioService.createMovimiento).toHaveBeenCalledWith(
       expect.objectContaining({
+        cliente_destino_id: 4,
         ubicacion_destino_nombre: 'Bodega norte',
         items: [{ articulo_id: 7, cantidad: 3, talla: 'M' }],
       })
@@ -169,6 +174,9 @@ describe('useMovimientoForm', () => {
 
     act(() => {
       hook.result.open();
+      hook.result.handleMovimientoFormChange({
+        target: { name: 'cliente_destino_id', value: '4' },
+      });
       hook.result.handleMovimientoFormChange({
         target: { name: 'ubicacion_destino_nombre', value: 'Bodega norte' },
       });

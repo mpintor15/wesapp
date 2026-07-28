@@ -2,6 +2,7 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import inventarioService from '../../services/inventarioService';
+import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -44,7 +45,12 @@ import {
   validateBajaForm,
   validateMotivoAdministrativo,
 } from './utils/inventarioHelpers';
-import { getInventoryPermissions, INVENTORY_ACTIONS } from './utils/inventarioPermissions';
+import {
+  canCreateLocationFromArticle,
+  canCreateLocationFromMovement,
+  getInventoryPermissions,
+  INVENTORY_ACTIONS,
+} from './utils/inventarioPermissions';
 import './Inventario.css';
 
 const Inventario = () => {
@@ -117,6 +123,7 @@ const Inventario = () => {
     ubicaciones,
     movimientos,
     bajas,
+    clientes,
     loading,
     movimientosLoading,
     bajasLoading,
@@ -134,6 +141,8 @@ const Inventario = () => {
   const canDeleteArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_DELETE_ADMIN);
   const canDarBajaArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_BAJA);
   const canEditArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_EDIT);
+  const canCreateUbicacionFromArticle = canCreateLocationFromArticle(user);
+  const canCreateUbicacionFromMovement = canCreateLocationFromMovement(user);
   const showArticuloActions = canEditArticulo || canDeleteArticulo || canDarBajaArticulo;
   const articuloActionCount = [canEditArticulo, canDarBajaArticulo, canDeleteArticulo].filter(
     Boolean
@@ -242,6 +251,8 @@ const Inventario = () => {
       numero_serie: articulo.numero_serie || '',
       calibre: articulo.calibre || '',
       fecha_caducidad: articulo.fecha_caducidad ? articulo.fecha_caducidad.slice(0, 10) : '',
+      cliente_id: articulo.cliente_id ? String(articulo.cliente_id) : '',
+      ubicacion_id: articulo.ubicacion_id ? String(articulo.ubicacion_id) : '',
       ubicacion_nombre: articulo.ubicacion_nombre || '',
       codigo_pantalla: articulo.codigo_pantalla || '',
       codigo_radio: articulo.codigo_radio || '',
@@ -266,11 +277,40 @@ const Inventario = () => {
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setArticuloErrors((prev) => ({ ...prev, [name]: '' }));
+    setFormData((prev) => {
+      if (name === 'cliente_id') {
+        return {
+          ...prev,
+          cliente_id: value,
+          ubicacion_id: '',
+          ubicacion_nombre: '',
+        };
+      }
+
+      if (name === 'ubicacion_id') {
+        const ubicacion = ubicaciones.find((item) => String(item.id) === String(value));
+        return {
+          ...prev,
+          ubicacion_id: value,
+          ubicacion_nombre: ubicacion?.nombre || '',
+        };
+      }
+
+      return { ...prev, [name]: value };
+    });
+    setArticuloErrors((prev) => ({
+      ...prev,
+      [name]: '',
+      ...(name === 'cliente_id' ? { ubicacion_nombre: '' } : {}),
+    }));
   };
 
   const handleOpenUbicacionModal = () => {
+    if (!formData.cliente_id) {
+      setArticuloErrors((prev) => ({ ...prev, cliente_id: 'Selecciona un cliente' }));
+      return;
+    }
+
     setUbicacionForm({ nombre: '' });
     setUbicacionError('');
     setShowUbicacionModal(true);
@@ -297,7 +337,10 @@ const Inventario = () => {
     }
 
     setUbicacionError('');
-    const result = await inventarioService.createUbicacion({ nombre });
+    const result = await inventarioService.createUbicacion({
+      nombre,
+      cliente_id: Number(formData.cliente_id),
+    });
 
     if (!result.success) {
       setUbicacionError(result.message || 'Error al crear ubicación');
@@ -307,12 +350,20 @@ const Inventario = () => {
     const nuevaUbicacion = {
       articulos_activos: 0,
       articulos_totales: 0,
+      cliente_id: Number(formData.cliente_id),
+      cliente_nombre:
+        clientes.find((cliente) => String(cliente.id) === String(formData.cliente_id))?.nombre ||
+        null,
       nombre,
       ...result.data,
     };
 
     upsertUbicacion(nuevaUbicacion);
-    setFormData((prev) => ({ ...prev, ubicacion_nombre: nuevaUbicacion.nombre }));
+    setFormData((prev) => ({
+      ...prev,
+      ubicacion_id: nuevaUbicacion.id ? String(nuevaUbicacion.id) : prev.ubicacion_id,
+      ubicacion_nombre: nuevaUbicacion.nombre,
+    }));
     setArticuloErrors((prev) => ({ ...prev, ubicacion_nombre: '' }));
     setShowUbicacionModal(false);
     setUbicacionForm({ nombre: '' });
@@ -376,6 +427,11 @@ const Inventario = () => {
     setShowBajaModal(true);
   };
 
+  const closeBajaModal = () => {
+    if (isSavingBaja) return;
+    setShowBajaModal(false);
+  };
+
   const handleConfirmBaja = withBajaSubmit(async () => {
     if (!bajaTarget) return;
     const bajaError = validateBajaForm(bajaTarget, bajaForm);
@@ -397,7 +453,7 @@ const Inventario = () => {
       if (bajasLoaded) requests.push(loadBajas(getActiveBajasFilterParams()));
       await Promise.all(requests);
     } else {
-      showMessage('error', result.message);
+      showMessage('error', getVisibleErrorMessage(result, 'Error al dar de baja artículo'));
     }
   });
 
@@ -530,10 +586,7 @@ const Inventario = () => {
     if (!result) return;
 
     if (!result.success) {
-      showMessage(
-        'error',
-        result.status === 403 ? 'No tienes permisos suficientes para esta acción.' : result.message
-      );
+      showMessage('error', getVisibleErrorMessage(result, 'Error al completar la acción'));
       return;
     }
 
@@ -779,7 +832,9 @@ const Inventario = () => {
       {showArticuloModal && (
         <ArticuloModal
           articuloErrors={articuloErrors}
-          canCreateUbicacion={canCreateArticulo}
+          canCreateUbicacion={canCreateUbicacionFromArticle}
+          canCreateArticulo={canCreateArticulo}
+          clientes={clientes}
           formData={formData}
           isEditing={Boolean(editingArticulo)}
           isSavingArticulo={isSavingArticulo}
@@ -808,6 +863,8 @@ const Inventario = () => {
       {movimientoFormState.isOpen && (
         <MovimientoModal
           catalogArticulos={catalogArticulos}
+          canCreateDestinoUbicacion={canCreateUbicacionFromMovement}
+          clientes={clientes}
           filterArticulos={movimientoFormState.filterArticulos}
           isSavingMovimiento={isSavingMovimiento}
           itemDropdownOpen={movimientoFormState.itemDropdownOpen}
@@ -824,6 +881,7 @@ const Inventario = () => {
           onSubmit={withMovimientoSubmit(movimientoFormState.handleCreateMovimiento)}
           setItemDropdownOpen={movimientoFormState.setItemDropdownOpen}
           setItemSearchTerms={movimientoFormState.setItemSearchTerms}
+          ubicaciones={ubicaciones}
         />
       )}
 
@@ -854,7 +912,7 @@ const Inventario = () => {
           bajaForm={bajaForm}
           bajaTarget={bajaTarget}
           isSavingBaja={isSavingBaja}
-          onCancel={() => setShowBajaModal(false)}
+          onCancel={closeBajaModal}
           onConfirm={handleConfirmBaja}
           onFormChange={setBajaForm}
         />

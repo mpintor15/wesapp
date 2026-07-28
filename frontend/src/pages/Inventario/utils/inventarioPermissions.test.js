@@ -1,4 +1,10 @@
-import { getInventoryPermissions, INVENTORY_ACTIONS } from './inventarioPermissions';
+import {
+  canCreateLocationFromArticle,
+  canCreateLocationFromMovement,
+  getInventoryPermissions,
+  INVENTORY_ACTIONS,
+  INVENTORY_RAW_PERMISSIONS,
+} from './inventarioPermissions';
 
 describe('inventarioPermissions', () => {
   test('gerente tiene acciones administrativas de inventario', () => {
@@ -36,5 +42,55 @@ describe('inventarioPermissions', () => {
 
     expect(permissions.canAccessInventory).toBe(false);
     expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_VIEW)).toBe(false);
+  });
+
+  test('permisos de ubicaciones no conceden acciones de artículos por accidente', () => {
+    const permissions = getInventoryPermissions({
+      tipo_usuario: 'custom',
+      permisos: ['inventario.ubicaciones.ver', 'inventario.ubicaciones.crear'],
+    });
+
+    expect(permissions.canAccessInventory).toBe(false);
+    expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_VIEW)).toBe(false);
+    expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_CREATE)).toBe(false);
+  });
+
+  test('crear ubicación desde artículo acepta permiso de ubicación o crear artículo', () => {
+    expect(
+      canCreateLocationFromArticle({
+        tipo_usuario: 'custom',
+        permisos: [INVENTORY_RAW_PERMISSIONS.UBICACIONES_CREATE],
+      })
+    ).toBe(true);
+    expect(
+      canCreateLocationFromArticle({
+        tipo_usuario: 'custom',
+        permisos: [INVENTORY_RAW_PERMISSIONS.ARTICULOS_CREATE],
+      })
+    ).toBe(true);
+  });
+
+  test('crear o editar artículos no habilita nueva ubicación si no está en la política OR', () => {
+    expect(
+      canCreateLocationFromArticle({
+        tipo_usuario: 'custom',
+        permisos: [INVENTORY_ACTIONS.ARTICULOS_CREATE, INVENTORY_RAW_PERMISSIONS.ARTICULOS_EDIT],
+      })
+    ).toBe(false);
+  });
+
+  test('crear ubicación desde movimiento exige permiso de ubicación', () => {
+    expect(
+      canCreateLocationFromMovement({
+        tipo_usuario: 'custom',
+        permisos: [INVENTORY_RAW_PERMISSIONS.UBICACIONES_CREATE],
+      })
+    ).toBe(true);
+    expect(
+      canCreateLocationFromMovement({
+        tipo_usuario: 'custom',
+        permisos: [INVENTORY_RAW_PERMISSIONS.MOVIMIENTOS_CREATE],
+      })
+    ).toBe(false);
   });
 });
