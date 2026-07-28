@@ -204,6 +204,7 @@ const articuloCreateSchema = z.object({
   calibre: optionalTrimmedString(100, 'Calibre'),
   fecha_caducidad: optionalDateString('Fecha de caducidad'),
   ubicacion_id: z.preprocess(emptyToUndefined, positiveInt('Ubicación ID').optional()),
+  cliente_id: z.preprocess(emptyToUndefined, positiveInt('Cliente ID').optional()),
   ubicacion_nombre: optionalTrimmedString(255, 'Ubicación'),
   codigo_pantalla: optionalTrimmedString(100, 'Código de pantalla'),
   codigo_radio: optionalTrimmedString(100, 'Código de radio'),
@@ -219,6 +220,7 @@ const articuloBajaSchema = z.object({
 
 const movimientoCreateSchema = z.object({
   ubicacion_destino_id: z.preprocess(emptyToUndefined, positiveInt('Ubicación destino').optional()),
+  cliente_destino_id: z.preprocess(emptyToUndefined, positiveInt('Cliente destino').optional()),
   ubicacion_destino_nombre: optionalTrimmedString(255, 'Ubicación destino'),
   fecha_movimiento: optionalDateString('Fecha de movimiento'),
   items: z

@@ -10,7 +10,7 @@
  *  - getArticulos     : Lista artículos con filtros de tipo, ubicación, estado y búsqueda.
  *  - createArticulo   : Crea un artículo (equipo, placa_balistica, arma, radio, otro).
  *                       Si se proporciona ubicacion_nombre en lugar de ID, crea
- *                       la ubicación automáticamente si no existe.
+ *                       la ubicación automáticamente para un cliente activo.
  *  - updateArticulo   : Actualiza campos permitidos de un artículo existente.
  *  - deleteArticulo   : Para equipos con stock > 1 descuenta cantidad; si el
  *                       stock queda en 0 hace un soft-delete (activo=FALSE).
@@ -45,7 +45,17 @@ const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const movementPdfStorage = require('../utils/movementPdfStorage');
 const { validateOptionalDateBounds } = require('../utils/inputValidation');
+const { assertClienteActivoForOperation } = require('../services/clientesStateService');
+const { PERMISSIONS } = require('../config/permissions');
+const { assertAnyPermission } = require('../middleware/permissions');
 const ALERTA_ESTADOS = new Set(['vencida', 'proxima_a_vencer', 'vigente']);
+
+// Contrato permanente: crear un articulo puede crear su ubicacion contextual.
+const ARTICULO_CONTEXTUAL_LOCATION_CREATE_PERMISSIONS = [
+  PERMISSIONS.INVENTARIO_UBICACIONES_CREAR,
+  PERMISSIONS.INVENTARIO_ARTICULOS_CREAR,
+];
+const MOVIMIENTO_LOCATION_CREATE_PERMISSIONS = [PERMISSIONS.INVENTARIO_UBICACIONES_CREAR];
 
 const logControllerError = (message, error) => {
   logger.error(message, {
@@ -250,6 +260,137 @@ const createAppError = (status, code, message) => {
   return error;
 };
 
+const normalizeLocationName = (value) =>
+  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+
+const findUbicacionByClienteAndName = async (client, clienteId, nombre) =>
+  client.query(
+    `SELECT id
+     FROM ubicaciones
+     WHERE cliente_id = $1
+       AND LOWER(TRIM(nombre)) = LOWER(TRIM($2))
+     LIMIT 1`,
+    [clienteId, nombre]
+  );
+
+const getOrCreateUbicacionForActiveCliente = async ({
+  client,
+  clienteId,
+  nombre,
+  requiredMessage,
+  user,
+  createPermissions = [],
+}) => {
+  if (!clienteId) {
+    throw createHttpError(400, requiredMessage);
+  }
+
+  const existente = await findUbicacionByClienteAndName(client, clienteId, nombre);
+  if (existente.rowCount > 0) {
+    await assertClienteActivoForOperation({
+      executor: client,
+      clienteId,
+      lockClause: 'FOR SHARE',
+    });
+    return existente.rows[0].id;
+  }
+
+  try {
+    assertAnyPermission(user, ...createPermissions);
+  } catch (permissionError) {
+    const afterPermissionRace = await findUbicacionByClienteAndName(client, clienteId, nombre);
+    if (afterPermissionRace.rowCount > 0) {
+      await assertClienteActivoForOperation({
+        executor: client,
+        clienteId,
+        lockClause: 'FOR SHARE',
+      });
+      return afterPermissionRace.rows[0].id;
+    }
+    throw permissionError;
+  }
+
+  await assertClienteActivoForOperation({
+    executor: client,
+    clienteId,
+    lockClause: 'FOR SHARE',
+  });
+
+  try {
+    const creado = await client.query(
+      'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2) RETURNING id',
+      [nombre, clienteId]
+    );
+    return creado.rows[0].id;
+  } catch (error) {
+    if (error.code !== '23505') {
+      throw error;
+    }
+    const afterRace = await findUbicacionByClienteAndName(client, clienteId, nombre);
+    if (afterRace.rowCount === 0) {
+      throw error;
+    }
+    return afterRace.rows[0].id;
+  }
+};
+
+const resolveMovimientoDestino = async ({
+  client,
+  ubicacionId,
+  ubicacionNombre,
+  clienteDestinoId,
+  user,
+}) => {
+  if (ubicacionId) {
+    const destinoId = Number(ubicacionId);
+    if (!Number.isInteger(destinoId) || destinoId <= 0) {
+      throw createHttpError(400, 'La ubicación destino es inválida');
+    }
+
+    const existente = await client.query(
+      `SELECT id, nombre, cliente_id
+       FROM ubicaciones
+       WHERE id = $1
+       FOR SHARE`,
+      [destinoId]
+    );
+    if (existente.rowCount === 0) {
+      throw createAppError(404, 'LOCATION_NOT_FOUND', 'Ubicación destino no encontrada');
+    }
+
+    const destino = existente.rows[0];
+    const persistedClienteId = destino.cliente_id === null ? null : Number(destino.cliente_id);
+    if (clienteDestinoId && persistedClienteId !== clienteDestinoId) {
+      throw createAppError(
+        409,
+        'LOCATION_CLIENT_MISMATCH',
+        'La ubicación destino no pertenece al cliente destino indicado'
+      );
+    }
+    if (ubicacionNombre && normalizeLocationName(destino.nombre) !== ubicacionNombre) {
+      throw createAppError(
+        409,
+        'LOCATION_PAYLOAD_CONFLICT',
+        'La ubicación destino no coincide con el nombre enviado'
+      );
+    }
+    return destinoId;
+  }
+
+  if (ubicacionNombre) {
+    return getOrCreateUbicacionForActiveCliente({
+      client,
+      clienteId: clienteDestinoId,
+      nombre: ubicacionNombre,
+      requiredMessage: 'El cliente destino es obligatorio para crear una ubicación nueva',
+      user,
+      createPermissions: MOVIMIENTO_LOCATION_CREATE_PERMISSIONS,
+    });
+  }
+
+  throw createHttpError(400, 'La ubicación destino es requerida para traslados');
+};
+
 const validateDetailedReason = (value, fieldName = 'motivo') => {
   if (typeof value !== 'string') {
     throw createHttpError(400, `El ${fieldName} es requerido`);
@@ -397,6 +538,7 @@ const createArticulo = async (req, res) => {
       calibre,
       fecha_caducidad,
       ubicacion_id,
+      cliente_id,
       ubicacion_nombre,
       codigo_pantalla,
       codigo_radio,
@@ -428,26 +570,42 @@ const createArticulo = async (req, res) => {
     }
 
     let ubicacionId = ubicacion_id;
-    const ubicacionNombre = ubicacion_nombre ? String(ubicacion_nombre).trim() : '';
+    const clienteId = cliente_id
+      ? parsePositiveInteger(cliente_id, 'El cliente es inválido')
+      : null;
+    const ubicacionNombre = normalizeLocationName(ubicacion_nombre);
 
     client = await db.getClient();
     await client.query('BEGIN');
     transactionStarted = true;
 
-    if (!ubicacionId && ubicacionNombre) {
-      const existente = await client.query(
-        'SELECT id FROM ubicaciones WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
-        [ubicacionNombre]
+    if (clienteId && (ubicacionId || !ubicacionNombre)) {
+      await assertClienteActivoForOperation({
+        executor: client,
+        clienteId,
+        lockClause: 'FOR SHARE',
+      });
+    }
+
+    if (ubicacionId && clienteId) {
+      const ubicacionClienteRes = await client.query(
+        'SELECT id FROM ubicaciones WHERE id = $1 AND cliente_id = $2',
+        [ubicacionId, clienteId]
       );
-      if (existente.rowCount > 0) {
-        ubicacionId = existente.rows[0].id;
-      } else {
-        const creado = await client.query(
-          'INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING id',
-          [ubicacionNombre]
-        );
-        ubicacionId = creado.rows[0].id;
+      if (ubicacionClienteRes.rowCount === 0) {
+        throw createHttpError(400, 'La ubicación no pertenece al cliente seleccionado');
       }
+    }
+
+    if (!ubicacionId && ubicacionNombre) {
+      ubicacionId = await getOrCreateUbicacionForActiveCliente({
+        client,
+        clienteId,
+        nombre: ubicacionNombre,
+        requiredMessage: 'El cliente es obligatorio para crear una ubicación nueva',
+        user: req.user,
+        createPermissions: ARTICULO_CONTEXTUAL_LOCATION_CREATE_PERMISSIONS,
+      });
     }
 
     if (!ubicacionId) {
@@ -1354,7 +1512,13 @@ const createMovimiento = async (req, res) => {
   let movimientoId;
 
   try {
-    const { ubicacion_destino_id, ubicacion_destino_nombre, items, fecha_movimiento } = req.body;
+    const {
+      ubicacion_destino_id,
+      ubicacion_destino_nombre,
+      cliente_destino_id,
+      items,
+      fecha_movimiento,
+    } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       throw createHttpError(400, 'Debes agregar al menos un artículo');
@@ -1378,36 +1542,22 @@ const createMovimiento = async (req, res) => {
     }
 
     let destinoId = ubicacion_destino_id;
-    const destinoNombre = ubicacion_destino_nombre ? String(ubicacion_destino_nombre).trim() : '';
+    const destinoNombre = normalizeLocationName(ubicacion_destino_nombre);
+    const clienteDestinoId = cliente_destino_id
+      ? parsePositiveInteger(cliente_destino_id, 'El cliente destino es inválido')
+      : null;
 
     client = await db.getClient();
     await client.query('BEGIN');
     transactionStarted = true;
 
-    if (!destinoId && destinoNombre) {
-      const existente = await client.query(
-        'SELECT id FROM ubicaciones WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
-        [destinoNombre]
-      );
-      if (existente.rowCount > 0) {
-        destinoId = existente.rows[0].id;
-      } else {
-        const creado = await client.query(
-          'INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING id',
-          [destinoNombre]
-        );
-        destinoId = creado.rows[0].id;
-      }
-    }
-
-    if (!destinoId) {
-      throw createHttpError(400, 'La ubicación destino es requerida para traslados');
-    }
-
-    destinoId = Number(destinoId);
-    if (!Number.isInteger(destinoId) || destinoId <= 0) {
-      throw createHttpError(400, 'La ubicación destino es inválida');
-    }
+    destinoId = await resolveMovimientoDestino({
+      client,
+      ubicacionId: destinoId,
+      ubicacionNombre: destinoNombre,
+      clienteDestinoId,
+      user: req.user,
+    });
 
     const lockedArticulos = await lockArticulosByIds(
       client,

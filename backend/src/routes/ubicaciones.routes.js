@@ -2,32 +2,38 @@ const express = require('express');
 const router = express.Router();
 const ubicacionesController = require('../controllers/ubicacionesController');
 const { verifyToken } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/permissions');
+const { requireAnyPermission, requirePermission } = require('../middleware/permissions');
 const { PERMISSIONS } = require('../config/permissions');
 
 router.use(verifyToken);
 
 router.get(
   '/',
-  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_VER),
+  requireAnyPermission(
+    PERMISSIONS.INVENTARIO_UBICACIONES_VER,
+    PERMISSIONS.INVENTARIO_ARTICULOS_VER,
+    PERMISSIONS.INVENTARIO_ARTICULOS_CREAR,
+    PERMISSIONS.INVENTARIO_MOVIMIENTOS_VER,
+    PERMISSIONS.INVENTARIO_MOVIMIENTOS_CREAR
+  ),
   ubicacionesController.getUbicaciones
 );
 
 router.post(
   '/',
-  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_CREAR),
+  requirePermission(PERMISSIONS.INVENTARIO_UBICACIONES_CREAR),
   ubicacionesController.createUbicacion
 );
 
 router.put(
   '/:id',
-  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR),
+  requirePermission(PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR),
   ubicacionesController.updateUbicacion
 );
 
 router.delete(
   '/:id',
-  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_ELIMINAR),
+  requirePermission(PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR),
   ubicacionesController.deleteUbicacion
 );
 

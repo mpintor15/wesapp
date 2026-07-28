@@ -148,6 +148,181 @@ describe('inventarioController.createArticulo', () => {
     expect(body.message).toMatch(/ubicación/i);
   });
 
+  test('crea ubicación de artículo solo con cliente activo', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    const articulo = {
+      id: 12,
+      tipo_articulo: 'equipo',
+      nombre_articulo: 'Casco',
+      cantidad: 1,
+      ubicacion_id: 9,
+    };
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, nombre: 'Cliente Activo', estado: 'activo' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 9 }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [articulo], rowCount: 1 })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createArticulo(
+      mockReq({
+        body: {
+          tipo_articulo: 'equipo',
+          nombre_articulo: 'Casco',
+          cantidad: 1,
+          cliente_id: 4,
+          ubicacion_nombre: '  Bodega   Cliente  ',
+        },
+        user: { id: 1, activo: true, tipo_usuario: 'supervisor' },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(client.query).toHaveBeenCalledWith(
+      'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2) RETURNING id',
+      ['Bodega Cliente', 4]
+    );
+    expect(res.json.mock.calls[0][0].data).toMatchObject(articulo);
+  });
+
+  test('usa ubicación existente por nombre sin exigir permiso adicional de ubicaciones', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    const articulo = {
+      id: 13,
+      tipo_articulo: 'equipo',
+      nombre_articulo: 'Casco',
+      cantidad: 1,
+      ubicacion_id: 9,
+    };
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 9 }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, nombre: 'Cliente Activo', estado: 'activo' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [articulo], rowCount: 1 })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createArticulo(
+      mockReq({
+        body: {
+          tipo_articulo: 'equipo',
+          nombre_articulo: 'Casco',
+          cantidad: 1,
+          cliente_id: 4,
+          ubicacion_nombre: 'Bodega Cliente',
+        },
+        user: { id: 1, activo: true, tipo_usuario: 'supervisor' },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
+      'INSERT INTO ubicaciones'
+    );
+  });
+
+  test('rechaza crear ubicación implícita de artículo sin permiso y hace rollback', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createArticulo(
+      mockReq({
+        body: {
+          tipo_articulo: 'equipo',
+          nombre_articulo: 'Casco',
+          cantidad: 1,
+          cliente_id: 4,
+          ubicacion_nombre: 'Bodega no autorizada',
+        },
+        user: { id: 2, activo: true, tipo_usuario: 'contador' },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 403);
+    expect(body.code).toBe('INSUFFICIENT_PERMISSIONS');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
+      'INSERT INTO ubicaciones'
+    );
+  });
+
+  test('rechaza crear ubicación de artículo sin cliente', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query.mockResolvedValueOnce({}).mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createArticulo(
+      mockReq({
+        body: {
+          tipo_articulo: 'equipo',
+          nombre_articulo: 'Casco',
+          cantidad: 1,
+          ubicacion_nombre: 'Bodega sin cliente',
+        },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toBe('El cliente es obligatorio para crear una ubicación nueva');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
+      'INSERT INTO ubicaciones'
+    );
+  });
+
+  test('rechaza crear ubicación de artículo con cliente inactivo', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, nombre: 'Cliente Inactivo', estado: 'inactivo' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createArticulo(
+      mockReq({
+        body: {
+          tipo_articulo: 'equipo',
+          nombre_articulo: 'Casco',
+          cantidad: 1,
+          cliente_id: 4,
+          ubicacion_nombre: 'Bodega bloqueada',
+        },
+        user: { id: 1, activo: true, tipo_usuario: 'supervisor' },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 409);
+    expect(body.code).toBe('CLIENT_INACTIVE');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+  });
+
   test('reporta duplicados de número de serie como error de validación', async () => {
     const client = makeClient();
     db.getClient.mockResolvedValue(client);
@@ -472,11 +647,418 @@ describe('inventarioController.createMovimiento', () => {
     expect(db.getClient).not.toHaveBeenCalled();
   });
 
+  test('rechaza crear destino de movimiento sin cliente destino', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query.mockResolvedValueOnce({}).mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          ubicacion_destino_nombre: 'Bodega nueva',
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 1 },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toBe('El cliente destino es obligatorio para crear una ubicación nueva');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
+      'INSERT INTO ubicaciones'
+    );
+  });
+
+  test('crea destino de movimiento bajo cliente activo y no reutiliza homónimos globales', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, nombre: 'Cliente Activo', estado: 'activo' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 8 }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 10,
+            tipo_articulo: 'arma',
+            nombre_articulo: 'Pistola',
+            cantidad: 1,
+            ubicacion_id: 2,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 44, fecha_movimiento: '2026-01-01' }], rowCount: 1 })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          cliente_destino_id: 4,
+          ubicacion_destino_nombre: 'Bodega compartida',
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 1, activo: true, tipo_usuario: 'supervisor' },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(client.query).toHaveBeenCalledWith(expect.stringContaining('WHERE cliente_id = $1'), [
+      4,
+      'Bodega compartida',
+    ]);
+    expect(client.query).toHaveBeenCalledWith(
+      'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2) RETURNING id',
+      ['Bodega compartida', 4]
+    );
+    expect(client.query).toHaveBeenCalledWith('COMMIT');
+  });
+
+  test('resuelve destino existente por nombre sin exigir permiso de crear ubicación', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 8 }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, nombre: 'Cliente Activo', estado: 'activo' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 10,
+            tipo_articulo: 'arma',
+            nombre_articulo: 'Pistola',
+            cantidad: 1,
+            ubicacion_id: 2,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 44, fecha_movimiento: '2026-01-01' }], rowCount: 1 })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          cliente_destino_id: 4,
+          ubicacion_destino_nombre: 'Bodega existente',
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 1, activo: true, tipo_usuario: 'contador' },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
+      'INSERT INTO ubicaciones'
+    );
+  });
+
+  test('rechaza crear destino implícito de movimiento sin permiso y hace rollback', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          cliente_destino_id: 4,
+          ubicacion_destino_nombre: 'Bodega no autorizada',
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 2, activo: true, tipo_usuario: 'contador' },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 403);
+    expect(body.code).toBe('INSUFFICIENT_PERMISSIONS');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
+      'INSERT INTO ubicaciones'
+    );
+  });
+
+  test('si otra transacción crea el destino por nombre, movimientos.crear puede reutilizarlo sin insertar', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ id: 8 }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, nombre: 'Cliente Activo', estado: 'activo' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 10,
+            tipo_articulo: 'arma',
+            nombre_articulo: 'Pistola',
+            cantidad: 1,
+            ubicacion_id: 2,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 44, fecha_movimiento: '2026-01-01' }], rowCount: 1 })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          cliente_destino_id: 4,
+          ubicacion_destino_nombre: 'Bodega carrera',
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 2, activo: true, tipo_usuario: 'secretario' },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
+      'INSERT INTO ubicaciones'
+    );
+  });
+
+  test('rechaza crear destino de movimiento con cliente inactivo', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, nombre: 'Cliente Inactivo', estado: 'inactivo' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          cliente_destino_id: 4,
+          ubicacion_destino_nombre: 'Bodega bloqueada',
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 1, activo: true, tipo_usuario: 'supervisor' },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 409);
+    expect(body.code).toBe('CLIENT_INACTIVE');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+  });
+
+  test('ubicacion_id existente sin cliente_destino_id usa la ubicación persistida', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 8, nombre: 'Destino', cliente_id: 4 }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 10,
+            tipo_articulo: 'arma',
+            nombre_articulo: 'Pistola',
+            cantidad: 1,
+            ubicacion_id: 2,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 44, fecha_movimiento: '2026-01-01' }], rowCount: 1 })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: { ubicacion_destino_id: 8, items: [{ articulo_id: 10, cantidad: 1 }] },
+        user: { id: 1 },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(client.query.mock.calls[1][0]).toContain('FROM ubicaciones');
+    expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('FROM clientes'), [
+      expect.anything(),
+    ]);
+    expect(client.query).not.toHaveBeenCalledWith(
+      'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2) RETURNING id',
+      expect.any(Array)
+    );
+  });
+
+  test('ubicacion_id existente con cliente_destino_id coincidente permite movimiento', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 8, nombre: 'Destino', cliente_id: 4 }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 10,
+            tipo_articulo: 'arma',
+            nombre_articulo: 'Pistola',
+            cantidad: 1,
+            ubicacion_id: 2,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 44, fecha_movimiento: '2026-01-01' }], rowCount: 1 })
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({});
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          ubicacion_destino_id: 8,
+          cliente_destino_id: 4,
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 1 },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(client.query).toHaveBeenCalledWith('COMMIT');
+  });
+
+  test('ubicacion_id existente con cliente_destino_id distinto rechaza payload', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 8, nombre: 'Destino', cliente_id: 4 }], rowCount: 1 })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          ubicacion_destino_id: 8,
+          cliente_destino_id: 5,
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 1 },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 409);
+    expect(body.code).toBe('LOCATION_CLIENT_MISMATCH');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
+      'FROM articulos'
+    );
+  });
+
+  test('ubicacion_id existente con nombre contradictorio rechaza payload ambiguo', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 8, nombre: 'Destino', cliente_id: 4 }], rowCount: 1 })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: {
+          ubicacion_destino_id: 8,
+          ubicacion_destino_nombre: 'Otro destino',
+          items: [{ articulo_id: 10, cantidad: 1 }],
+        },
+        user: { id: 1 },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 409);
+    expect(body.code).toBe('LOCATION_PAYLOAD_CONFLICT');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+  });
+
+  test('ubicacion_id inexistente devuelve error estructurado', async () => {
+    const client = makeClient();
+    db.getClient.mockResolvedValue(client);
+    client.query
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({});
+    const res = mockRes();
+
+    await createMovimiento(
+      mockReq({
+        body: { ubicacion_destino_id: 999, items: [{ articulo_id: 10, cantidad: 1 }] },
+        user: { id: 1 },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 404);
+    expect(body.code).toBe('LOCATION_NOT_FOUND');
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+  });
+
   test('hace rollback si destino coincide con origen', async () => {
     const client = makeClient();
     db.getClient.mockResolvedValue(client);
     client.query
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 2, nombre: 'Bodega', cliente_id: 4 }], rowCount: 1 })
       .mockResolvedValueOnce({
         rows: [{ id: 10, tipo_articulo: 'equipo', cantidad: 5, ubicacion_id: 2 }],
         rowCount: 1,
@@ -502,6 +1084,7 @@ describe('inventarioController.createMovimiento', () => {
     db.getClient.mockResolvedValue(client);
     client.query
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 2, nombre: 'Bodega', cliente_id: 4 }], rowCount: 1 })
       .mockResolvedValueOnce({
         rows: [{ id: 10, tipo_articulo: 'equipo', cantidad: 1, ubicacion_id: 1 }],
         rowCount: 1,
@@ -528,6 +1111,7 @@ describe('inventarioController.createMovimiento', () => {
     db.getClient.mockResolvedValue(client);
     client.query
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 2, nombre: 'Bodega', cliente_id: 4 }], rowCount: 1 })
       .mockResolvedValueOnce({
         rows: [
           {
@@ -571,6 +1155,7 @@ describe('inventarioController.createMovimiento', () => {
     db.getClient.mockResolvedValue(client);
     client.query
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 2, nombre: 'Bodega', cliente_id: 4 }], rowCount: 1 })
       .mockResolvedValueOnce({
         rows: [
           {
@@ -617,8 +1202,8 @@ describe('inventarioController.createMovimiento', () => {
       res
     );
 
-    expect(client.query.mock.calls[1][0]).toMatch(/FOR UPDATE/);
-    expect(client.query.mock.calls[1][1]).toEqual([[3, 8]]);
+    expect(client.query.mock.calls[2][0]).toMatch(/FOR UPDATE/);
+    expect(client.query.mock.calls[2][1]).toEqual([[3, 8]]);
     expectStatus(res, 201);
   });
 
@@ -628,6 +1213,7 @@ describe('inventarioController.createMovimiento', () => {
     logAuditStrict.mockRejectedValueOnce(new Error('audit down'));
     client.query
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{ id: 2, nombre: 'Bodega', cliente_id: 4 }], rowCount: 1 })
       .mockResolvedValueOnce({
         rows: [
           {
