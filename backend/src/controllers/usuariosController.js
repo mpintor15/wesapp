@@ -4,6 +4,7 @@ const db = require('../config/database');
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { clearActiveCache } = require('../middleware/permissions');
 const { logAudit, auditFromReq } = require('../utils/audit');
+const { assertUsuarioWithoutActivity } = require('../services/usuariosDeletionService');
 
 const ALLOWED_TYPES = new Set(['gerente', 'secretario', 'supervisor', 'contador']);
 const ROLE_GERENTE = 'gerente';
@@ -300,34 +301,60 @@ const deleteUsuario = async (req, res) => {
       throw createHttpError(400, 'No puedes eliminar tu propio usuario');
     }
 
-    const userToDelete = await getUsuarioSummaryById(id);
-    if (!userToDelete) {
-      throw createHttpError(404, 'Usuario no encontrado');
-    }
-
-    if (userToDelete.tipo_usuario === ROLE_GERENTE && userToDelete.activo) {
-      const activeGerentesCount = await getActiveGerentesCount();
-      if (activeGerentesCount <= 1) {
-        throw createHttpError(400, 'Debe existir al menos un gerente activo en el sistema');
+    let userToDelete = null;
+    await db.transaction(async (client) => {
+      const current = await client.query(
+        'SELECT id, tipo_usuario, activo FROM usuarios WHERE id = $1 FOR UPDATE',
+        [id]
+      );
+      userToDelete = current.rows[0] || null;
+      if (!userToDelete) {
+        throw createHttpError(404, 'Usuario no encontrado');
       }
-    }
 
-    const result = await db.query('DELETE FROM usuarios WHERE id = $1 RETURNING id', [id]);
-    if (result.rowCount === 0) {
-      throw createHttpError(404, 'Usuario no encontrado');
-    }
+      if (userToDelete.tipo_usuario === ROLE_GERENTE && userToDelete.activo) {
+        const activeGerentes = await client.query(
+          `SELECT id
+          FROM usuarios
+          WHERE tipo_usuario = $1
+            AND activo = TRUE
+          FOR UPDATE`,
+          [ROLE_GERENTE]
+        );
 
-    await logAudit(db, {
-      tabla: 'usuarios',
-      operacion: 'DELETE',
-      registro_id: String(id),
-      datos_anteriores: userToDelete,
-      ...auditFromReq(req),
+        if (activeGerentes.rowCount <= 1) {
+          throw createHttpError(400, 'Debe existir al menos un gerente activo en el sistema');
+        }
+      }
+
+      await assertUsuarioWithoutActivity(client, id);
+
+      const result = await client.query('DELETE FROM usuarios WHERE id = $1 RETURNING id', [id]);
+      if (result.rowCount === 0) {
+        throw createHttpError(404, 'Usuario no encontrado');
+      }
+
+      await logAudit(client, {
+        tabla: 'usuarios',
+        operacion: 'DELETE',
+        registro_id: String(id),
+        datos_anteriores: userToDelete,
+        ...auditFromReq(req),
+      });
     });
 
     clearActiveCache(id);
     res.json({ success: true, message: 'Usuario eliminado exitosamente' });
   } catch (error) {
+    if (error.code === '23503') {
+      const fkError = createHttpError(
+        409,
+        'El usuario tiene actividad registrada y no puede eliminarse. Desactívalo para conservar el historial.'
+      );
+      fkError.appCode = 'USER_HAS_ACTIVITY';
+      fkError.code = 'USER_HAS_ACTIVITY';
+      return handleControllerError(res, fkError, 'Error al eliminar usuario:');
+    }
     return handleControllerError(res, error, 'Error al eliminar usuario:');
   }
 };

@@ -1,5 +1,6 @@
 jest.mock('../config/database', () => ({
   query: jest.fn(),
+  transaction: jest.fn(),
 }));
 
 jest.mock('bcrypt', () => ({
@@ -41,6 +42,7 @@ const expectStatus = (res, status) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  db.transaction.mockImplementation(async (callback) => callback({ query: db.query }));
 });
 
 describe('usuariosController.createUsuario', () => {
@@ -198,6 +200,16 @@ describe('usuariosController.reenviarInvitacion', () => {
 });
 
 describe('usuariosController.deleteUsuario', () => {
+  const noActivity = {
+    movimientos: 0,
+    movimientos_anulados: 0,
+    movimientos_eliminados: 0,
+    bajas: 0,
+    bajas_anuladas: 0,
+    bajas_eliminadas: 0,
+    audit_log: 0,
+  };
+
   test('rechaza eliminar el propio usuario', async () => {
     const res = mockRes();
 
@@ -206,5 +218,168 @@ describe('usuariosController.deleteUsuario', () => {
     const body = expectStatus(res, 400);
     expect(body.message).toMatch(/propio usuario/i);
     expect(db.query).not.toHaveBeenCalled();
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('elimina correctamente un usuario secretario sin actividad histórica', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [noActivity], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'Usuario eliminado exitosamente',
+    });
+    const queries = client.query.mock.calls.map(([sql]) => String(sql).replace(/\s+/g, ' ').trim());
+    expect(queries.some((sql) => sql.includes('DELETE FROM usuarios'))).toBe(true);
+  });
+
+  test('rechaza eliminar un usuario que tiene movimientos', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ ...noActivity, movimientos: 1 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USER_HAS_ACTIVITY',
+      })
+    );
+    expect(client.query.mock.calls.map(([sql]) => String(sql)).join('\n')).not.toContain(
+      'DELETE FROM usuarios'
+    );
+  });
+
+  test('rechaza eliminar un usuario que tiene registros en audit_log', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ ...noActivity, audit_log: 1 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USER_HAS_ACTIVITY',
+      })
+    );
+    expect(client.query.mock.calls.map(([sql]) => String(sql)).join('\n')).not.toContain(
+      'DELETE FROM usuarios'
+    );
+  });
+
+  test('traduce error PostgreSQL 23503 a USER_HAS_ACTIVITY', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [noActivity], rowCount: 1 })
+      .mockRejectedValueOnce({ code: '23503' });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'USER_HAS_ACTIVITY',
+      })
+    );
+  });
+
+  test('permite eliminar un gerente cuando existen al menos dos gerentes activos', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'gerente', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 1 }, { id: 2 }], rowCount: 2 })
+      .mockResolvedValueOnce({ rows: [noActivity], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'Usuario eliminado exitosamente',
+    });
+    const queries = client.query.mock.calls.map(([sql]) => String(sql).replace(/\s+/g, ' ').trim());
+    expect(queries.some((sql) => sql.includes('DELETE FROM usuarios'))).toBe(true);
+  });
+
+  test('impide eliminar al último gerente activo', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'gerente', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/gerente activo/i);
+    expect(client.query.mock.calls.map(([sql]) => String(sql)).join('\n')).not.toContain(
+      'DELETE FROM usuarios'
+    );
+  });
+
+  test('bloquea la consulta de gerentes activos con FOR UPDATE', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'gerente', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 1 }, { id: 2 }], rowCount: 2 })
+      .mockResolvedValueOnce({ rows: [noActivity], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    const queries = client.query.mock.calls.map(([sql]) => String(sql).replace(/\s+/g, ' ').trim());
+    expect(
+      queries.some(
+        (sql) =>
+          /FROM usuarios/i.test(sql) &&
+          /tipo_usuario = \$1/i.test(sql) &&
+          /activo = TRUE/i.test(sql) &&
+          /FOR UPDATE/i.test(sql)
+      )
+    ).toBe(true);
   });
 });
