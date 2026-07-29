@@ -98,15 +98,20 @@ const Cuentas = () => {
   }, [clientesLoaded, facturaForm, loadClientes, permissions.canCreateFactura, showToast]);
 
   const openBatchPaymentModal = useCallback(async () => {
+    if (!permissions.canCreatePago) {
+      showToast('No tienes permisos para registrar pagos', 'error');
+      return;
+    }
     if (!clientesLoaded && !(await loadClientes())) return;
     batchPayment.open();
-  }, [batchPayment, clientesLoaded, loadClientes]);
+  }, [batchPayment, clientesLoaded, loadClientes, permissions.canCreatePago, showToast]);
 
   return (
     <div className="cuentas-container">
       <CuentasPageHeader
         activeTab={activeTab}
         canCreateFactura={permissions.canCreateFactura}
+        canCreatePago={permissions.canCreatePago}
         onBack={() => navigate('/')}
         onCreateFactura={openCreateFacturaModal}
         onShowFacturasReport={reports.facturas.open}

@@ -1,4 +1,4 @@
-const UsuariosPageHeader = ({ onBack, onCreate, onRefresh }) => (
+const UsuariosPageHeader = ({ canCreate, onBack, onCreate, onRefresh }) => (
   <header className="page-header">
     <div className="page-header-left">
       <button className="btn-back" onClick={onBack} type="button">
@@ -19,9 +19,11 @@ const UsuariosPageHeader = ({ onBack, onCreate, onRefresh }) => (
       <h1>Usuarios</h1>
     </div>
     <div className="page-header-actions">
-      <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
-        Crear nuevo usuario
-      </button>
+      {canCreate ? (
+        <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
+          Crear nuevo usuario
+        </button>
+      ) : null}
       <button
         className="btn btn-ghost btn-sm btn-icon-only"
         onClick={onRefresh}

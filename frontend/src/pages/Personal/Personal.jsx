@@ -6,6 +6,9 @@ import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { can } from '../../auth/authorization';
+import { PERMISSIONS } from '../../auth/permissions';
+import { useAuth } from '../../context/AuthContext';
 import PersonalExportModal from './components/PersonalExportModal';
 import PersonalFilters from './components/PersonalFilters';
 import PersonalFormModal from './components/PersonalFormModal';
@@ -33,6 +36,7 @@ const Personal = () => {
   useScrollToTopOnMount();
 
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [colaboradores, setColaboradores] = useState([]);
   const [cargos, setCargos] = useState([]);
@@ -116,6 +120,15 @@ const Personal = () => {
 
   const totalPages = getTotalPages(sortedColaboradores);
   const paginatedColaboradores = paginateRows(sortedColaboradores, currentPage);
+  const permissions = useMemo(
+    () => ({
+      canCreate: can(user, PERMISSIONS.PERSONAL_CREAR),
+      canEdit: can(user, PERMISSIONS.PERSONAL_EDITAR),
+      canDelete: can(user, PERMISSIONS.PERSONAL_ELIMINAR),
+      canExport: can(user, PERMISSIONS.PERSONAL_REPORTES_EXPORTAR),
+    }),
+    [user]
+  );
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -124,6 +137,10 @@ const Personal = () => {
   const resetForm = () => setFormData(EMPTY_COLABORADOR_FORM);
 
   const openCreate = () => {
+    if (!permissions.canCreate) {
+      showToast('No tienes permisos para crear colaboradores', 'error');
+      return;
+    }
     setEditingColaborador(null);
     resetForm();
     setFormErrors({});
@@ -131,6 +148,10 @@ const Personal = () => {
   };
 
   const openExportModal = () => {
+    if (!permissions.canExport) {
+      showToast('No tienes permisos para generar reportes de personal', 'error');
+      return;
+    }
     setExportFilters({
       estado: filters.estado,
       cargo: filters.cargo,
@@ -139,6 +160,10 @@ const Personal = () => {
   };
 
   const openEdit = (colaborador) => {
+    if (!permissions.canEdit) {
+      showToast('No tienes permisos para editar colaboradores', 'error');
+      return;
+    }
     setEditingColaborador(colaborador);
     setFormData(getColaboradorFormData(colaborador));
     setFormErrors({});
@@ -176,6 +201,11 @@ const Personal = () => {
 
   const handleDeleteConfirmed = async () => {
     if (!confirmTarget || isDeleting) return;
+    if (!permissions.canDelete) {
+      showToast('No tienes permisos para eliminar colaboradores', 'error');
+      setConfirmTarget(null);
+      return;
+    }
     setIsDeleting(true);
     try {
       const result = await personalService.deleteColaborador(confirmTarget.id);
@@ -200,6 +230,8 @@ const Personal = () => {
   return (
     <div className="page-container">
       <PersonalPageHeader
+        canCreate={permissions.canCreate}
+        canExport={permissions.canExport}
         onBack={() => navigate('/')}
         onCreate={openCreate}
         onExport={openExportModal}
@@ -228,6 +260,8 @@ const Personal = () => {
           </div>
 
           <PersonalTable
+            canDelete={permissions.canDelete}
+            canEdit={permissions.canEdit}
             colaboradores={sortedColaboradores}
             currentPage={currentPage}
             onDelete={setConfirmTarget}
@@ -244,6 +278,8 @@ const Personal = () => {
       {/* Mobile cards */}
       {!loading && sortedColaboradores.length > 0 && (
         <PersonalMobileCards
+          canDelete={permissions.canDelete}
+          canEdit={permissions.canEdit}
           colaboradores={paginatedColaboradores}
           onDelete={setConfirmTarget}
           onEdit={openEdit}

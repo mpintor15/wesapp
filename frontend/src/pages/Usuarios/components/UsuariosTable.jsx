@@ -15,7 +15,17 @@ const SortButton = ({ field, label, onSort, tableSort }) => (
   </button>
 );
 
-const UsuariosTable = ({ onDelete, onEdit, onInvite, onSort, tableSort, usuarios }) => (
+const UsuariosTable = ({
+  canDelete,
+  canEdit,
+  canInvite,
+  onDelete,
+  onEdit,
+  onInvite,
+  onSort,
+  tableSort,
+  usuarios,
+}) => (
   <div className="table-responsive app-table-shell usuarios-table-shell">
     <table className="app-table usuarios-table">
       <thead>
@@ -52,19 +62,21 @@ const UsuariosTable = ({ onDelete, onEdit, onInvite, onSort, tableSort, usuarios
               </td>
               <td className="center app-col-actions app-col-actions--triple">
                 <div className="action-buttons app-table-actions">
-                  <button
-                    className="action-btn action-btn-neutral"
-                    onClick={() => onEdit(usuario)}
-                    title="Editar"
-                    aria-label={`Editar ${fullName(usuario)}`}
-                    type="button"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z" />
-                      <path d="M14.5 5.5l3.5 3.5" />
-                    </svg>
-                  </button>
-                  {isPendingUser(usuario) && (
+                  {canEdit ? (
+                    <button
+                      className="action-btn action-btn-neutral"
+                      onClick={() => onEdit(usuario)}
+                      title="Editar"
+                      aria-label={`Editar ${fullName(usuario)}`}
+                      type="button"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z" />
+                        <path d="M14.5 5.5l3.5 3.5" />
+                      </svg>
+                    </button>
+                  ) : null}
+                  {canInvite && isPendingUser(usuario) && (
                     <button
                       className="action-btn action-btn-invite"
                       onClick={() => onInvite(usuario)}
@@ -78,20 +90,22 @@ const UsuariosTable = ({ onDelete, onEdit, onInvite, onSort, tableSort, usuarios
                       </svg>
                     </button>
                   )}
-                  <button
-                    className="action-btn action-btn-destructive"
-                    onClick={() => onDelete(usuario)}
-                    title="Eliminar"
-                    aria-label={`Eliminar ${fullName(usuario)}`}
-                    type="button"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                      <path d="M10 11v6M14 11v6" />
-                      <path d="M9 6V4h6v2" />
-                    </svg>
-                  </button>
+                  {canDelete ? (
+                    <button
+                      className="action-btn action-btn-destructive"
+                      onClick={() => onDelete(usuario)}
+                      title="Eliminar"
+                      aria-label={`Eliminar ${fullName(usuario)}`}
+                      type="button"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4h6v2" />
+                      </svg>
+                    </button>
+                  ) : null}
                 </div>
               </td>
             </tr>

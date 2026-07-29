@@ -6,6 +6,9 @@ import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { can } from '../../auth/authorization';
+import { PERMISSIONS } from '../../auth/permissions';
+import { useAuth } from '../../context/AuthContext';
 import UsuarioCreateModal from './components/UsuarioCreateModal';
 import UsuarioEditModal from './components/UsuarioEditModal';
 import UsuarioInvitationModal from './components/UsuarioInvitationModal';
@@ -31,6 +34,7 @@ const Usuarios = () => {
   useScrollToTopOnMount();
 
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { showToast } = useToast();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -92,14 +96,31 @@ const Usuarios = () => {
     () => sortByField(usuarios, tableSort.field, tableSort.direction),
     [usuarios, tableSort]
   );
+  const permissions = useMemo(
+    () => ({
+      canCreate: can(user, PERMISSIONS.USUARIOS_CREAR),
+      canEdit: can(user, PERMISSIONS.USUARIOS_EDITAR),
+      canInvite: can(user, PERMISSIONS.USUARIOS_EDITAR),
+      canDelete: can(user, PERMISSIONS.USUARIOS_ELIMINAR),
+    }),
+    [user]
+  );
 
   const openCreate = () => {
+    if (!permissions.canCreate) {
+      showToast('No tienes permisos para crear usuarios', 'error');
+      return;
+    }
     setFormData(EMPTY_CREATE_USER_FORM);
     setCreateErrors({});
     setShowCreateModal(true);
   };
 
   const openEdit = (usuario) => {
+    if (!permissions.canEdit) {
+      showToast('No tienes permisos para editar usuarios', 'error');
+      return;
+    }
     setSelectedUsuario(usuario);
     setEditData(getEditUserFormData(usuario));
     setShowEditModal(true);
@@ -152,6 +173,11 @@ const Usuarios = () => {
 
   const handleDeleteConfirmed = async () => {
     if (!confirmTarget || isDeleting) return;
+    if (!permissions.canDelete) {
+      showToast('No tienes permisos para eliminar usuarios', 'error');
+      setConfirmTarget(null);
+      return;
+    }
     setIsDeleting(true);
     try {
       const result = await usuariosService.deleteUsuario(confirmTarget.id);
@@ -168,6 +194,10 @@ const Usuarios = () => {
   };
 
   const handleReenviarInvitacion = async (usuario) => {
+    if (!permissions.canInvite) {
+      showToast('No tienes permisos para reenviar invitaciones', 'error');
+      return;
+    }
     const result = await usuariosService.reenviarInvitacion(usuario.id);
     if (result.success) {
       setInvitationData({
@@ -209,6 +239,7 @@ const Usuarios = () => {
   return (
     <div className="page-container">
       <UsuariosPageHeader
+        canCreate={permissions.canCreate}
         onBack={() => navigate('/')}
         onCreate={openCreate}
         onRefresh={refreshUsuarios}
@@ -232,6 +263,9 @@ const Usuarios = () => {
           <div className="table-result-count">Mostrando {sortedUsuarios.length} usuario(s)</div>
 
           <UsuariosTable
+            canDelete={permissions.canDelete}
+            canEdit={permissions.canEdit}
+            canInvite={permissions.canInvite}
             onDelete={setConfirmTarget}
             onEdit={openEdit}
             onInvite={handleReenviarInvitacion}
@@ -245,6 +279,9 @@ const Usuarios = () => {
       {/* Mobile cards */}
       {!loading && sortedUsuarios.length > 0 && (
         <UsuariosMobileCards
+          canDelete={permissions.canDelete}
+          canEdit={permissions.canEdit}
+          canInvite={permissions.canInvite}
           onDelete={setConfirmTarget}
           onEdit={openEdit}
           onInvite={handleReenviarInvitacion}

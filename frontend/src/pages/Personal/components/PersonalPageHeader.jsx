@@ -1,4 +1,4 @@
-const PersonalPageHeader = ({ onBack, onCreate, onExport, onRefresh }) => (
+const PersonalPageHeader = ({ canCreate, canExport, onBack, onCreate, onExport, onRefresh }) => (
   <header className="page-header">
     <div className="page-header-left">
       <button className="btn-back" onClick={onBack} type="button">
@@ -19,12 +19,16 @@ const PersonalPageHeader = ({ onBack, onCreate, onExport, onRefresh }) => (
       <h1>Personal</h1>
     </div>
     <div className="page-header-actions">
-      <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
-        Crear nuevo colaborador
-      </button>
-      <button className="btn btn-ghost btn-sm" onClick={onExport} type="button">
-        Generar reporte de Personal
-      </button>
+      {canCreate ? (
+        <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
+          Crear nuevo colaborador
+        </button>
+      ) : null}
+      {canExport ? (
+        <button className="btn btn-ghost btn-sm" onClick={onExport} type="button">
+          Generar reporte de Personal
+        </button>
+      ) : null}
       <button
         className="btn btn-ghost btn-sm btn-icon-only"
         onClick={onRefresh}

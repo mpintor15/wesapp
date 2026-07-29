@@ -1,6 +1,7 @@
 const CuentasPageHeader = ({
   activeTab,
   canCreateFactura,
+  canCreatePago,
   onBack,
   onCreateFactura,
   onShowFacturasReport,
@@ -52,9 +53,11 @@ const CuentasPageHeader = ({
 
     {activeTab === 'pagos' ? (
       <div className="page-header-actions">
-        <button className="btn btn-ghost btn-sm" onClick={onOpenBatchPayment} type="button">
-          Registrar pago
-        </button>
+        {canCreatePago ? (
+          <button className="btn btn-ghost btn-sm" onClick={onOpenBatchPayment} type="button">
+            Registrar pago
+          </button>
+        ) : null}
         <button className="btn btn-ghost btn-sm" onClick={onShowPagosReport} type="button">
           Generar reporte de Pagos
         </button>
