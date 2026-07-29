@@ -45,6 +45,7 @@ const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const movementPdfStorage = require('../utils/movementPdfStorage');
 const { validateOptionalDateBounds } = require('../utils/inputValidation');
+const { sanitizeError } = require('../utils/logSanitizer');
 const { assertClienteActivoForOperation } = require('../services/clientesStateService');
 const { PERMISSIONS } = require('../config/permissions');
 const { assertAnyPermission } = require('../middleware/permissions');
@@ -59,9 +60,7 @@ const MOVIMIENTO_LOCATION_CREATE_PERMISSIONS = [PERMISSIONS.INVENTARIO_UBICACION
 
 const logControllerError = (message, error) => {
   logger.error(message, {
-    message: error.message,
-    stack: error.stack,
-    code: error.code,
+    error: sanitizeError(error),
     status: error.status,
   });
 };

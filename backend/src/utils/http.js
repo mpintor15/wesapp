@@ -1,6 +1,7 @@
 const logger = require('../config/logger');
 const { AUTH_ERROR_CODES, AUTH_ERROR_MESSAGES } = require('./authErrorCodes');
 const { parseStrictPositiveInteger } = require('./inputValidation');
+const { sanitizeError } = require('./logSanitizer');
 
 const KNOWN_INPUT_OR_CONSTRAINT_CODES = new Set(['22P02', '23503', '23505', '23514']);
 
@@ -33,9 +34,7 @@ const handleControllerError = (res, error, defaultLogMessage) => {
   const message = status >= 500 ? 'Error en el servidor' : error.message || 'Solicitud inválida';
   const level = status >= 500 ? 'error' : 'warn';
   logger[level](defaultLogMessage, {
-    message: error.message,
-    stack: error.stack,
-    code: error.code,
+    error: sanitizeError(error),
     status,
   });
   if (status === 401) {

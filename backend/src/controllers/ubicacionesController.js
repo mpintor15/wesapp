@@ -2,6 +2,7 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const { parseStrictPositiveInteger } = require('../utils/inputValidation');
+const { sanitizeError } = require('../utils/logSanitizer');
 const { assertClienteActivoForOperation } = require('../services/clientesStateService');
 
 const normalizeName = (value) =>
@@ -68,7 +69,7 @@ const buildLocationDependencyError = (counts) => {
 };
 
 const sendError = (res, error, fallback) => {
-  logger.error(fallback, { message: error.message, code: error.code, status: error.status });
+  logger.error(fallback, { error: sanitizeError(error), status: error.status });
   if (error.appCode) {
     return res.status(error.status || 400).json({
       success: false,
