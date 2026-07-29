@@ -33,6 +33,7 @@ const cuentasAbonosRepository = require('../repositories/cuentasAbonosRepository
 const cuentasClientesRepository = require('../repositories/cuentasClientesRepository');
 const cuentasFacturasRepository = require('../repositories/cuentasFacturasRepository');
 const cuentasPagosRepository = require('../repositories/cuentasPagosRepository');
+const cuentasReadRepository = require('../repositories/cuentasReadRepository');
 const {
   CLIENT_HAS_RELATIONS_MESSAGE,
   deleteClienteWithoutRelations,
@@ -57,52 +58,11 @@ const {
   validateFacturaCreatePayload,
   validateFacturaUpdatePayload,
 } = require('../modules/cuentas/cuentas.validators');
-const { PAYMENT_METHODS } = require('../modules/cuentas/cuentas.constants');
-const FACTURAS_SORT_COLUMNS = Object.freeze({
-  num_factura: 'num_factura',
-  fecha_factura: 'fecha_factura',
-  cliente: 'cliente',
-  identificacion: 'identificacion',
-});
-const PAGOS_SORT_COLUMNS = Object.freeze({
-  fecha: 'fecha',
-  total: 'total',
-  cliente: 'cliente',
-  metodo_pago: 'metodo_pago',
-  created_at: 'created_at',
-});
-
-// Cache de introspección de esquema — se llena en el primer request y se reutiliza.
-// El servidor se reinicia con cada deploy, así que no hay riesgo de valores obsoletos.
-const _schemaCache = {};
-
-const tableColumnExists = async (tableName, columnName) => {
-  const key = `${tableName}.${columnName}`;
-  if (key in _schemaCache) {
-    return _schemaCache[key];
-  }
-  const result = await db.query(
-    `SELECT 1
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = $1
-       AND column_name = $2
-     LIMIT 1`,
-    [tableName, columnName]
-  );
-  _schemaCache[key] = result.rowCount > 0;
-  return _schemaCache[key];
-};
-
-const tableExists = async (tableName) => {
-  const key = `table::${tableName}`;
-  if (key in _schemaCache) {
-    return _schemaCache[key];
-  }
-  const result = await db.query('SELECT to_regclass($1) AS table_name', [`public.${tableName}`]);
-  _schemaCache[key] = Boolean(result.rows[0]?.table_name);
-  return _schemaCache[key];
-};
+const {
+  FACTURAS_SORT_COLUMNS,
+  PAGOS_SORT_COLUMNS,
+  PAYMENT_METHODS,
+} = require('../modules/cuentas/cuentas.constants');
 
 const validateBooleanFilter = (value, message) => {
   if (value === undefined || value === null || value === '') {
@@ -122,24 +82,6 @@ const validateFechaInicioFin = (fecha_inicio, fecha_fin) => {
   if (!validation.valid) {
     throw createHttpError(validation.status, validation.message);
   }
-};
-
-const applyPaginationToQuery = ({ baseQuery, conditions, params, pagination, orderByClause }) => {
-  const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
-  const dataParams = [...params, pagination.pageSize, pagination.offset];
-  const limitIndex = dataParams.length - 1;
-  const offsetIndex = dataParams.length;
-  const orderBy =
-    orderByClause || `ORDER BY ${pagination.sortExpression} ${pagination.sortOrder.toUpperCase()}`;
-
-  return {
-    countQuery: `SELECT COUNT(*)::int AS total FROM (${baseQuery}) paginated_source${where}`,
-    dataQuery: `SELECT * FROM (${baseQuery}) paginated_source${where}
-      ${orderBy}
-      LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
-    countParams: params,
-    dataParams,
-  };
 };
 
 // ============================================
@@ -458,210 +400,15 @@ const getPagos = async (req, res) => {
       sortBy: 'created_at',
       allowedSorts: PAGOS_SORT_COLUMNS,
     });
-    const pagosTableExists = await tableExists('pagos');
-    const [
-      abonosHasPagoId,
-      pagosHasClienteId,
-      pagosHasFecha,
-      pagosHasMetodoPago,
-      pagosHasReferencia,
-      pagosHasNotas,
-      pagosHasTotal,
-      pagosHasCreatedAt,
-      cuentasHasCancelada,
-      cuentasHasIncluyeIva,
-      cuentasHasIncluyeRetencionFuente,
-      cuentasHasIncluyeRetencionIva,
-    ] = await Promise.all([
-      tableColumnExists('abonos', 'pago_id'),
-      pagosTableExists ? tableColumnExists('pagos', 'cliente_id') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'fecha') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'metodo_pago') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'referencia') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'notas') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'created_at') : Promise.resolve(false),
-      tableColumnExists('cuentas', 'cancelada'),
-      tableColumnExists('cuentas', 'incluye_iva'),
-      tableColumnExists('cuentas', 'incluye_retencion_fuente'),
-      tableColumnExists('cuentas', 'incluye_retencion_iva'),
-    ]);
-
-    if (!pagosTableExists || !abonosHasPagoId) {
-      const legacyBaseQuery = `WITH totales_abonos AS (
-           SELECT num_factura, SUM(valor_abono) AS total_abonos
-           FROM abonos
-           GROUP BY num_factura
-         )
-         SELECT
-           a.id,
-           a.fecha_abono AS fecha,
-           NULL::varchar AS metodo_pago,
-           NULL::varchar AS referencia,
-           NULL::text AS notas,
-           a.valor_abono AS total,
-           a.created_at,
-           cl.id AS cliente_id,
-           cl.nombre AS cliente,
-           cl.identificacion,
-           1::int AS facturas_count,
-           JSON_BUILD_ARRAY(
-             JSON_BUILD_OBJECT(
-               'abono_id', a.id,
-               'num_factura', a.num_factura,
-               'fecha_factura', c.fecha_factura,
-               'valor_factura', c.valor_factura,
-               'valor_abono', a.valor_abono,
-               'cancelada', ${cuentasHasCancelada ? 'c.cancelada' : 'FALSE'},
-               'saldo_pendiente',
-                 CASE
-                   WHEN ${cuentasHasCancelada ? 'COALESCE(c.cancelada, FALSE)' : 'FALSE'} THEN 0
-                   ELSE (
-                     c.valor_factura
-                     + CASE WHEN ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
-                     - CASE WHEN ${cuentasHasIncluyeRetencionFuente ? 'COALESCE(c.incluye_retencion_fuente, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
-                     - CASE WHEN ${cuentasHasIncluyeRetencionIva ? 'COALESCE(c.incluye_retencion_iva, FALSE)' : 'FALSE'} AND ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
-                     - COALESCE(ta.total_abonos, 0)
-                   )
-                 END
-             )
-           ) AS facturas
-         FROM abonos a
-         JOIN cuentas c ON c.num_factura = a.num_factura
-         JOIN clientes cl ON cl.id = c.cliente_id
-         LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura`;
-      const conditions = [];
-      const params = [];
-
-      if (fecha_inicio && fecha_fin) {
-        params.push(fecha_inicio, fecha_fin);
-        conditions.push(`fecha BETWEEN $${params.length - 1} AND $${params.length}`);
-      }
-      if (metodoPagoNormalizado) {
-        params.push(metodoPagoNormalizado);
-        conditions.push(`LOWER(COALESCE(metodo_pago, '')) = $${params.length}`);
-      }
-      if (search) {
-        params.push(`%${String(search).trim()}%`);
-        conditions.push(`(cliente ILIKE $${params.length} OR total::text ILIKE $${params.length})`);
-      }
-
-      const { countQuery, dataQuery, countParams, dataParams } = applyPaginationToQuery({
-        baseQuery: legacyBaseQuery,
-        conditions,
-        params,
-        pagination,
-      });
-      const [countResult, legacyResult] = await Promise.all([
-        db.query(countQuery, countParams),
-        db.query(dataQuery, dataParams),
-      ]);
-
-      return res.json({
-        success: true,
-        data: legacyResult.rows,
-        pagination: buildPaginationMetadata({
-          page: pagination.page,
-          pageSize: pagination.pageSize,
-          totalItems: countResult.rows[0]?.total,
-        }),
-      });
-    }
-
-    const pagoFechaSelect = pagosHasFecha ? 'p.fecha' : 'MIN(a.fecha_abono)';
-    const pagoCreatedAtSelect = pagosHasCreatedAt ? 'p.created_at' : pagoFechaSelect;
-    const pagoMetodoSelect = pagosHasMetodoPago ? 'p.metodo_pago' : 'NULL::varchar';
-    const pagoReferenciaSelect = pagosHasReferencia ? 'p.referencia' : 'NULL::varchar';
-    const pagoNotasSelect = pagosHasNotas ? 'p.notas' : 'NULL::text';
-    const pagoTotalSelect = pagosHasTotal ? 'p.total' : 'COALESCE(SUM(a.valor_abono), 0)';
-    const pagoClienteIdSelect = pagosHasClienteId ? 'COALESCE(p.cliente_id, cl.id)' : 'cl.id';
-    const clienteJoinKey = pagosHasClienteId
-      ? 'COALESCE(p.cliente_id, c.cliente_id)'
-      : 'c.cliente_id';
-    const canceladaSelect = cuentasHasCancelada ? 'c.cancelada' : 'FALSE';
-    const incluyeIvaSelect = cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE';
-    const incluyeRetFuenteSelect = cuentasHasIncluyeRetencionFuente
-      ? 'COALESCE(c.incluye_retencion_fuente, FALSE)'
-      : 'FALSE';
-    const incluyeRetIvaSelect = cuentasHasIncluyeRetencionIva
-      ? 'COALESCE(c.incluye_retencion_iva, FALSE)'
-      : 'FALSE';
-
-    const pagosBaseQuery = `WITH totales_abonos AS (
-         SELECT num_factura, SUM(valor_abono) AS total_abonos
-         FROM abonos
-         GROUP BY num_factura
-       )
-       SELECT
-         p.id,
-         ${pagoFechaSelect} AS fecha,
-         ${pagoMetodoSelect} AS metodo_pago,
-         ${pagoReferenciaSelect} AS referencia,
-         ${pagoNotasSelect} AS notas,
-         ${pagoTotalSelect} AS total,
-         ${pagoCreatedAtSelect} AS created_at,
-         ${pagoClienteIdSelect} AS cliente_id,
-         cl.nombre AS cliente,
-         cl.identificacion,
-         COUNT(a.id)::int AS facturas_count,
-         COALESCE(
-           JSON_AGG(
-             JSON_BUILD_OBJECT(
-               'abono_id', a.id,
-               'num_factura', a.num_factura,
-               'fecha_factura', c.fecha_factura,
-               'valor_factura', c.valor_factura,
-               'valor_abono', a.valor_abono,
-               'cancelada', ${canceladaSelect},
-               'saldo_pendiente',
-                 CASE
-                   WHEN c.num_factura IS NULL THEN NULL
-                   WHEN ${canceladaSelect} THEN 0
-                   ELSE (
-                     c.valor_factura
-                     + CASE WHEN ${incluyeIvaSelect} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
-                     - CASE WHEN ${incluyeRetFuenteSelect} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
-                     - CASE WHEN ${incluyeRetIvaSelect} AND ${incluyeIvaSelect} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
-                     - COALESCE(ta.total_abonos, 0)
-                   )
-                 END
-             )
-             ORDER BY a.num_factura
-           ) FILTER (WHERE a.id IS NOT NULL),
-           '[]'::json
-         ) AS facturas
-       FROM pagos p
-       LEFT JOIN abonos a ON a.pago_id = p.id
-       LEFT JOIN cuentas c ON c.num_factura = a.num_factura
-       LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura
-       LEFT JOIN clientes cl ON cl.id = ${clienteJoinKey}
-       GROUP BY p.id, cl.id, cl.nombre, cl.identificacion`;
-    const conditions = [];
-    const params = [];
-
-    if (fecha_inicio && fecha_fin) {
-      params.push(fecha_inicio, fecha_fin);
-      conditions.push(`fecha BETWEEN $${params.length - 1} AND $${params.length}`);
-    }
-    if (metodoPagoNormalizado) {
-      params.push(metodoPagoNormalizado);
-      conditions.push(`LOWER(COALESCE(metodo_pago, '')) = $${params.length}`);
-    }
-    if (search) {
-      params.push(`%${String(search).trim()}%`);
-      conditions.push(`(cliente ILIKE $${params.length} OR total::text ILIKE $${params.length})`);
-    }
-
-    const { countQuery, dataQuery, countParams, dataParams } = applyPaginationToQuery({
-      baseQuery: pagosBaseQuery,
-      conditions,
-      params,
+    const { countResult, result } = await cuentasReadRepository.findPagos({
+      filters: {
+        fecha_inicio,
+        fecha_fin,
+        metodo_pago: metodoPagoNormalizado,
+        search,
+      },
       pagination,
     });
-    const [countResult, result] = await Promise.all([
-      db.query(countQuery, countParams),
-      db.query(dataQuery, dataParams),
-    ]);
 
     res.json({
       success: true,
@@ -727,28 +474,6 @@ const exportPagosExcel = async (req, res) => {
 // REPORTE
 // ============================================
 
-const buildReporteCuentasSelect = (cuentasHasDetalleAnulacion, cuentasHasFechaAnulacion) => `SELECT
-      v.num_factura,
-      c.cliente_id,
-      v.cliente,
-      v.identificacion,
-      v.fecha_factura,
-      COALESCE(v.cancelada, FALSE) AS cancelada,
-      ${cuentasHasDetalleAnulacion ? 'c.detalle_anulacion' : 'NULL::text'} AS detalle_anulacion,
-      ${cuentasHasFechaAnulacion ? 'c.fecha_anulacion' : 'NULL::timestamp'} AS fecha_anulacion,
-      v.incluye_iva,
-      v.incluye_retencion_fuente,
-      v.incluye_retencion_iva,
-      v.subtotal,
-      v.iva,
-      v.retencion_fuente,
-      v.retencion_iva,
-      CASE WHEN COALESCE(v.cancelada, FALSE) THEN 0 ELSE v.por_cobrar END AS por_cobrar,
-      v.total_abonos,
-      CASE WHEN COALESCE(v.cancelada, FALSE) THEN 0 ELSE v.saldo_pendiente END AS saldo_pendiente
-    FROM vista_reporte_cuentas v
-    JOIN cuentas c ON c.num_factura = v.num_factura`;
-
 const getReporte = async (req, res) => {
   try {
     const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente, estado, search } = req.query;
@@ -762,57 +487,18 @@ const getReporte = async (req, res) => {
       sortBy: agrupar_cliente === 'true' ? 'cliente' : 'num_factura',
       allowedSorts: FACTURAS_SORT_COLUMNS,
     });
-    const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
-    const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
-
-    const baseQuery = buildReporteCuentasSelect(
-      cuentasHasDetalleAnulacion,
-      cuentasHasFechaAnulacion
-    );
-    const params = [];
-    const conditions = [];
-
-    if (fecha_inicio && fecha_fin) {
-      conditions.push(`fecha_factura BETWEEN $${params.length + 1} AND $${params.length + 2}`);
-      params.push(fecha_inicio, fecha_fin);
-    }
-
-    if (solo_deudores === 'true') {
-      conditions.push('COALESCE(cancelada, FALSE) = FALSE');
-      conditions.push('saldo_pendiente > 0');
-    }
-
-    if (estado === 'activa') {
-      conditions.push('COALESCE(cancelada, FALSE) = FALSE');
-    }
-    if (estado === 'anulada') {
-      conditions.push('COALESCE(cancelada, FALSE) = TRUE');
-    }
-    if (search) {
-      params.push(`%${String(search).trim()}%`);
-      conditions.push(
-        `(num_factura::text ILIKE $${params.length} OR cliente ILIKE $${params.length})`
-      );
-    }
-
-    const { countQuery, dataQuery, countParams, dataParams } = applyPaginationToQuery({
-      baseQuery,
-      conditions,
-      params,
+    const { countResult, result } = await cuentasReadRepository.findReporte({
+      filters: {
+        fecha_inicio,
+        fecha_fin,
+        solo_deudores,
+        agrupar_cliente,
+        estado,
+        search,
+        sortBy: req.query.sortBy,
+      },
       pagination,
-      orderByClause:
-        agrupar_cliente === 'true' && !req.query.sortBy
-          ? `ORDER BY
-        MIN(num_factura) OVER (PARTITION BY COALESCE(identificacion, cliente)) ASC,
-        cliente ASC,
-        num_factura ASC`
-          : undefined,
     });
-
-    const [countResult, result] = await Promise.all([
-      db.query(countQuery, countParams),
-      db.query(dataQuery, dataParams),
-    ]);
     const data = result.rows;
 
     res.json({
@@ -831,12 +517,7 @@ const getReporte = async (req, res) => {
 
 const getFacturasCatalogo = async (req, res) => {
   try {
-    const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
-    const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
-    const query =
-      buildReporteCuentasSelect(cuentasHasDetalleAnulacion, cuentasHasFechaAnulacion) +
-      ' ORDER BY v.num_factura ASC';
-    const result = await db.query(query, []);
+    const result = await cuentasReadRepository.findFacturasCatalogo();
 
     res.json({
       success: true,
@@ -853,37 +534,12 @@ const exportReporteExcel = async (req, res) => {
     validateFechaInicioFin(fecha_inicio, fecha_fin);
     validateBooleanFilter(solo_deudores, 'El filtro solo_deudores debe ser true o false');
     validateBooleanFilter(agrupar_cliente, 'El filtro agrupar_cliente debe ser true o false');
-    const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
-    const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
-
-    let query = buildReporteCuentasSelect(cuentasHasDetalleAnulacion, cuentasHasFechaAnulacion);
-    const params = [];
-    const conditions = [];
-
-    if (fecha_inicio && fecha_fin) {
-      conditions.push(`v.fecha_factura BETWEEN $${params.length + 1} AND $${params.length + 2}`);
-      params.push(fecha_inicio, fecha_fin);
-    }
-
-    if (solo_deudores === 'true') {
-      conditions.push('COALESCE(v.cancelada, FALSE) = FALSE');
-      conditions.push('v.saldo_pendiente > 0');
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    if (agrupar_cliente === 'true') {
-      query += ` ORDER BY
-        MIN(v.num_factura) OVER (PARTITION BY COALESCE(v.identificacion, v.cliente)),
-        v.cliente ASC,
-        v.num_factura ASC`;
-    } else {
-      query += ' ORDER BY v.num_factura ASC';
-    }
-
-    const result = await db.query(query, params);
+    const result = await cuentasReadRepository.findReporteForExport({
+      fecha_inicio,
+      fecha_fin,
+      solo_deudores,
+      agrupar_cliente,
+    });
     const data = result.rows;
 
     const MONEY = '$#,##0.00';
