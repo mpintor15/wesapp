@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import usuariosService from '../../services/usuariosService';
+import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -41,6 +42,7 @@ const Usuarios = () => {
   const [copied, setCopied] = useState(false);
   const [selectedUsuario, setSelectedUsuario] = useState(null);
   const [confirmTarget, setConfirmTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formData, setFormData] = useState(EMPTY_CREATE_USER_FORM);
   const [createErrors, setCreateErrors] = useState({});
   const [editData, setEditData] = useState(EMPTY_EDIT_USER_FORM);
@@ -149,15 +151,20 @@ const Usuarios = () => {
   });
 
   const handleDeleteConfirmed = async () => {
-    if (!confirmTarget) return;
-    const result = await usuariosService.deleteUsuario(confirmTarget.id);
-    if (result.success) {
-      showToast('Usuario eliminado', 'success');
-      refreshUsuarios();
-    } else {
-      showToast(result.message, 'error');
+    if (!confirmTarget || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const result = await usuariosService.deleteUsuario(confirmTarget.id);
+      if (result.success) {
+        showToast('Usuario eliminado', 'success');
+        setConfirmTarget(null);
+        refreshUsuarios();
+      } else {
+        showToast(getVisibleErrorMessage(result, 'Error al eliminar usuario'), 'error');
+      }
+    } finally {
+      setIsDeleting(false);
     }
-    setConfirmTarget(null);
   };
 
   const handleReenviarInvitacion = async (usuario) => {
@@ -285,12 +292,14 @@ const Usuarios = () => {
         title="Eliminar usuario"
         message={
           confirmTarget
-            ? `¿Eliminar al usuario "${fullName(confirmTarget)}"? Esta acción no se puede deshacer.`
+            ? `Eliminarás al usuario "${fullName(confirmTarget)}" con rol "${confirmTarget.tipo_usuario}". Los usuarios con actividad deben desactivarse para conservar el historial. Esta acción no se puede deshacer cuando sea permitida.`
             : ''
         }
-        confirmText="Eliminar"
+        confirmText="Eliminar usuario"
+        processingText="Eliminando..."
         cancelText="Cancelar"
         variant="danger"
+        isSubmitting={isDeleting}
         onConfirm={handleDeleteConfirmed}
         onCancel={() => setConfirmTarget(null)}
       />

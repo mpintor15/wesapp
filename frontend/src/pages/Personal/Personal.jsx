@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import personalService from '../../services/personalService';
+import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -44,6 +45,7 @@ const Personal = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingColaborador, setEditingColaborador] = useState(null);
   const [confirmTarget, setConfirmTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [formData, setFormData] = useState(EMPTY_COLABORADOR_FORM);
 
@@ -173,15 +175,20 @@ const Personal = () => {
   });
 
   const handleDeleteConfirmed = async () => {
-    if (!confirmTarget) return;
-    const result = await personalService.deleteColaborador(confirmTarget.id);
-    if (result.success) {
-      showToast('Colaborador eliminado', 'success');
-      refreshColaboradores();
-    } else {
-      showToast(result.message, 'error');
+    if (!confirmTarget || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const result = await personalService.deleteColaborador(confirmTarget.id);
+      if (result.success) {
+        showToast('Colaborador eliminado', 'success');
+        setConfirmTarget(null);
+        refreshColaboradores();
+      } else {
+        showToast(getVisibleErrorMessage(result, 'Error al eliminar colaborador'), 'error');
+      }
+    } finally {
+      setIsDeleting(false);
     }
-    setConfirmTarget(null);
   };
 
   const handleExport = withExportSubmit(async () => {
@@ -274,12 +281,14 @@ const Personal = () => {
         title="Eliminar colaborador"
         message={
           confirmTarget
-            ? `¿Eliminar a ${confirmTarget.nombres_completos}? Esta acción no se puede deshacer.`
+            ? `Eliminarás a "${confirmTarget.nombres_completos}" del cargo "${confirmTarget.cargo || 'Sin cargo'}". Esta acción no se puede deshacer.`
             : ''
         }
-        confirmText="Eliminar"
+        confirmText="Eliminar colaborador"
+        processingText="Eliminando..."
         cancelText="Cancelar"
         variant="danger"
+        isSubmitting={isDeleting}
         onConfirm={handleDeleteConfirmed}
         onCancel={() => setConfirmTarget(null)}
       />

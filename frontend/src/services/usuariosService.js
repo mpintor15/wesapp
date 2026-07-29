@@ -16,7 +16,7 @@
  *  - deleteUsuario(id)          : DEL  /usuarios/:id
  */
 import api from './api';
-import { extractError } from './serviceUtils';
+import { buildServiceFailure } from './serviceUtils';
 
 const usuariosService = {
   getUsuarios: async (params = {}) => {
@@ -24,7 +24,7 @@ const usuariosService = {
       const response = await api.get('/usuarios', { params });
       return { success: response.data.success, data: response.data.data || [] };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al obtener usuarios') };
+      return buildServiceFailure(error, 'Error al obtener usuarios');
     }
   },
 
@@ -37,7 +37,7 @@ const usuariosService = {
         data: response.data.data,
       };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al crear usuario') };
+      return buildServiceFailure(error, 'Error al crear usuario');
     }
   },
 
@@ -50,7 +50,7 @@ const usuariosService = {
         data: response.data.data,
       };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al actualizar usuario') };
+      return buildServiceFailure(error, 'Error al actualizar usuario');
     }
   },
 
@@ -63,7 +63,7 @@ const usuariosService = {
         data: response.data.data,
       };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al reenviar invitación') };
+      return buildServiceFailure(error, 'Error al reenviar invitación');
     }
   },
 
@@ -72,7 +72,7 @@ const usuariosService = {
       const response = await api.delete(`/usuarios/${id}`);
       return { success: response.data.success, message: response.data.message };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al eliminar usuario') };
+      return buildServiceFailure(error, 'Error al eliminar usuario');
     }
   },
 };

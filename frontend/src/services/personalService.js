@@ -13,7 +13,7 @@
  */
 import api from './api';
 import {
-  extractError,
+  buildServiceFailure,
   getFilenameFromDisposition,
   saveBlobWithPickerOrDownload,
 } from './serviceUtils';
@@ -27,10 +27,7 @@ const personalService = {
         data: response.data.data || [],
       };
     } catch (error) {
-      return {
-        success: false,
-        message: extractError(error, 'Error al obtener colaboradores'),
-      };
+      return buildServiceFailure(error, 'Error al obtener colaboradores');
     }
   },
 
@@ -43,10 +40,7 @@ const personalService = {
         data: response.data.data,
       };
     } catch (error) {
-      return {
-        success: false,
-        message: extractError(error, 'Error al crear colaborador'),
-      };
+      return buildServiceFailure(error, 'Error al crear colaborador');
     }
   },
 
@@ -59,10 +53,7 @@ const personalService = {
         data: response.data.data,
       };
     } catch (error) {
-      return {
-        success: false,
-        message: extractError(error, 'Error al actualizar colaborador'),
-      };
+      return buildServiceFailure(error, 'Error al actualizar colaborador');
     }
   },
 
@@ -74,10 +65,7 @@ const personalService = {
         message: response.data.message,
       };
     } catch (error) {
-      return {
-        success: false,
-        message: extractError(error, 'Error al eliminar colaborador'),
-      };
+      return buildServiceFailure(error, 'Error al eliminar colaborador');
     }
   },
 
@@ -96,7 +84,7 @@ const personalService = {
         accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al exportar Excel') };
+      return buildServiceFailure(error, 'Error al exportar Excel');
     }
   },
 };
