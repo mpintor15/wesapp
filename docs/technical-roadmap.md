@@ -12,7 +12,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 |---|---|---|---|
 | Backend HTTP | `backend/src/routes`, `backend/src/app.js` | Rutas Express, middlewares, health checks, CORS, rate limit | CI ya cubre lint/tests, pero E2E no es obligatorio. |
 | Backend dominio | `backend/src/controllers`, `backend/src/services`, `backend/src/modules` | Reglas de negocio, transacciones, validaciones y exportaciones | Controladores de Inventario y Cuentas concentran demasiada lógica. |
-| Backend persistencia | `backend/src/repositories`, `backend/src/config/database.js` | SQL, pool, transacciones y health checks | Inventario y Cuentas ya tienen listados críticos paginados; Personal queda pendiente para una rama posterior. |
+| Backend persistencia | `backend/src/repositories`, `backend/src/config/database.js` | SQL, pool, transacciones y health checks | Inventario, Cuentas y lecturas de Personal ya tienen repositorios enfocados; comandos transaccionales quedan como riesgo residual. |
 | Base de datos | `database/schema.sql`, `database/migrations` | Esquema local, migraciones, índices y restricciones | Buenas guardas en migraciones recientes; rollback operativo no está estandarizado por cambio. |
 | Frontend app | `frontend/src/App.jsx`, `frontend/src/context`, `frontend/src/auth` | Rutas, sesión, permisos y estado global | Autorización centralizada; tokens persisten en `localStorage`. |
 | Frontend módulos | `frontend/src/pages`, `frontend/src/components`, `frontend/src/hooks` | Pantallas, formularios, tablas, modales y servicios HTTP | Algunas páginas y CSS son grandes; hay duplicación visual en tablas/filtros/modales. |
@@ -27,7 +27,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | CI-002 | CI/CD | P2 | El hook pre-push ejecutaba el build raíz, que invocaba instalación. | `.husky/pre-push`; script raíz `build`. | Hooks podían modificar dependencias o fallar por entorno inseguro. | XS | Bajo | Ninguna | corregido |
 | BE-001 | Arquitectura backend | P2 | `inventarioController.js` concentra reglas, SQL, transacciones, PDF y Excel. | PR #20 extrajo constantes de dominio y repositorio de lectura para artículos, catálogo/exportación de artículos y movimientos. | Menor acoplamiento en lecturas; comandos, bajas, PDF y reportes quedan como riesgo residual. | L | Medio | Cobertura existente de inventario | parcialmente corregido |
 | BE-002 | Arquitectura backend | P2 | `cuentasController.js` mezclaba control HTTP, reportes, queries dinámicas y Excel. | PR #22 extrajo lecturas de pagos, reporte, catálogo de facturas y exportación de reporte a `cuentasReadRepository`; comandos transaccionales quedaron fuera de alcance. | Menor acoplamiento en lecturas; riesgo residual en creación/edición/anulación/eliminación transaccional. | M | Medio | Repositorios de cuentas existentes | parcialmente corregido |
-| BE-003 | Rendimiento | P2 | Listados/reportes consultaban conjuntos completos sin límite uniforme. | PR #18 agregó contrato compartido, `LIMIT/OFFSET`, totales y metadata para Inventario y Cuentas. Personal queda pendiente. | Riesgo reducido en artículos, movimientos, facturas y pagos; riesgo residual en Personal. | M | Medio | Contrato frontend/backend de paginación | parcialmente corregido |
+| BE-003 | Rendimiento | P2 | Listados/reportes consultaban conjuntos completos sin límite uniforme. | PR #18 agregó contrato compartido, `LIMIT/OFFSET`, totales y metadata para Inventario y Cuentas. PR #24 aisló lecturas/exportación de Personal sin introducir paginación nueva. | Riesgo reducido en artículos, movimientos, facturas, pagos y lecturas de colaboradores; riesgo residual en tablas de Personal si crecen sin contrato paginado. | M | Medio | Contrato frontend/backend de paginación | parcialmente corregido |
 | BE-004 | Base de datos | P2 | Rollback de migraciones no está documentado por migración. | Migraciones aplican cambios seguros, pero no cada una documenta reversión operativa. | Menor capacidad de recuperación ante despliegue fallido. | M | Medio | Política de releases | documentar |
 | FE-001 | Arquitectura frontend | P2 | `Configuracion.jsx` e `Inventario.jsx` siguen siendo páginas orquestadoras grandes. | Archivos cercanos o superiores a 900 líneas. | Cambios visuales o funcionales tienen alto radio de impacto. | L | Medio | Componentes actuales | implementar |
 | FE-002 | UX | P2 | Tablas/filtros dependían mayormente de estado cliente y scroll horizontal. | PR #18 movió búsqueda, filtros, ordenamiento y paginación visible de Inventario/Cuentas al backend. | Menor carga cliente en módulos operativos; siguen pendientes mejoras visuales/responsive. | M | Medio | Paginación backend | parcialmente corregido |
@@ -59,7 +59,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | 1 | CI integración | `fix/ci-integration-validation` | Validar PRs hacia integración | Workflow CI y hook pre-push | Ninguna | Checks en `feat/gestion-ubicaciones` y backend tests con PostgreSQL | CI verde, backend tests, frontend build | Bajo | XS | PR fusionado y checks remotos verdes |
 | 2 | Roadmap | `docs/technical-roadmap` | Consolidar plan ejecutable | Este documento | Integración validada | Roadmap, DoR, DoD, backlog | Format check si aplica, diff limpio | Bajo | XS | Documento fusionado |
 | 3 | Contratos de paginación | `refactor/contracts-paginated-lists` | Definir contrato común de listados | Inventario y Cuentas; Personal contemplado para adopción posterior | Roadmap | Contrato común, defaults, límites, metadata, allowlists, catálogos no paginados para formularios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #18 |
-| 4 | Paginación backend crítica residual | `refactor/backend-paginate-personal-lists` | Evitar cargas completas restantes | Listados de Personal y consumidores que aún requieran contrato remoto | PR 3 | `limit`, `offset`, totales y filtros compatibles con el contrato común | Backend tests y frontend unit si aplica | Medio | S | Personal adopta el contrato sin cambiar reglas |
+| 4 | Paginación backend crítica residual | `refactor/backend-paginate-personal-lists` | Evitar cargas completas restantes | Listados de Personal y consumidores que aún requieran contrato remoto | PR 3, PR #24 | `limit`, `offset`, totales y filtros compatibles con el contrato común cuando se decida paginar Personal | Backend tests y frontend unit si aplica | Medio | S | Personal adopta el contrato sin cambiar reglas |
 | 5 | Paginación frontend residual | `refactor/frontend-paginated-personal-tables` | Consumir paginación del backend restante | Tablas de Personal | PR 4 | Hooks y controles de paginación remota | Frontend unit, E2E smoke si aplica | Medio | S | UI mantiene filtros/sort sin cargar todo |
 | 6 | Inventario dominio | `refactor/backend-inventario-services` | Extraer primera capa backend de inventario | Lecturas de artículos, catálogo/exportación de artículos y movimientos | Cobertura actual | Constantes de dominio, repositorio de lectura y tests unitarios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #20 |
 | 7 | Cuentas dominio | `refactor/backend-cuentas-services` | Aislar reportes y exportaciones | Lecturas de pagos, reporte, catálogo de facturas y exportación de reporte | PR 3 | Repositorio de lectura, allowlists compartidas y tests unitarios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #22 |
@@ -104,7 +104,7 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 
 | Métrica | Objetivo inicial |
 |---|---|
-| Backend tests | 28 suites y 551 tests verdes en entorno `_test`. |
+| Backend tests | 30 suites y 560 tests verdes en entorno `_test`. |
 | Frontend unit | 44 suites y 272 tests verdes. |
 | Bundle productivo | Sin endpoints locales funcionales ni sourcemaps públicos. |
 | CI | Checks en PR hacia `feat/gestion-ubicaciones` y `main`. |
@@ -113,16 +113,16 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 
 ## Siguiente rama recomendada
 
-La siguiente rama pendiente recomendada es `refactor/backend-personal-services`.
+La siguiente rama pendiente recomendada es `test/contracts-list-regressions`.
 
-Objetivo: extraer de forma funcionalmente neutra la primera capa backend de Personal, manteniendo reglas, permisos, filtros y contrato HTTP.
+Objetivo: consolidar regresiones contractuales de listados y verificar que Inventario, Cuentas y los puntos preparados de Personal mantengan contratos compatibles.
 
-Archivos probables iniciales: `backend/src/controllers/personalController.js`, tests de Personal y utilidades/repositorios que ya existan para consultas de colaboradores.
+Archivos probables iniciales: pruebas de contratos de listados, utilidades de paginación y servicios frontend/backend que consumen listados paginados.
 
 ## Decisiones de negocio pendientes
 
 | Pregunta | Motivo | Opciones | Impacto | Fase afectada |
 |---|---|---|---|---|
-| ¿Cómo debe adoptar Personal el contrato paginado? | Personal no se migró en PR #18 por decisión de alcance. | Rama dedicada backend primero, frontend después si aplica. | Completa la reducción de listados sin límite. | PRs 4-5 |
+| ¿Cómo debe adoptar Personal el contrato paginado? | PR #24 extrajo lecturas/exportación sin introducir paginación nueva por alcance conservador. | Rama dedicada backend primero, frontend después si aplica. | Completa la reducción de listados sin límite si el volumen de Personal lo exige. | PRs 4-5 |
 | ¿La sesión debe migrar de `localStorage` a cookie HttpOnly? | Reduce riesgo ante XSS, pero cambia auth/despliegue. | Mantener, migrar completo, estrategia híbrida. | Cambia backend, frontend y CSRF. | SEC-001 |
 | ¿Qué proveedor será fuente de observabilidad? | Health checks existen, pero alertas dependen del entorno. | Railway logs, proveedor externo, mínimo manual. | Define métricas y alertas. | PR 14 |
