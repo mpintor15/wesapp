@@ -117,6 +117,54 @@ describe('inventarioReadRepository', () => {
     expect(db.query).not.toHaveBeenCalled();
   });
 
+  test('findArticulos mantiene filtros idénticos entre COUNT y datos', async () => {
+    const executor = {
+      query: jest
+        .fn()
+        .mockResolvedValueOnce({ rows: [{ total: 0 }] })
+        .mockResolvedValueOnce({ rows: [] }),
+    };
+
+    await inventarioReadRepository.findArticulos(
+      {
+        filters: {
+          tipo: 'arma',
+          ubicacion_id: '8',
+          estado: 'por_vencer',
+          search: 'serie-123',
+        },
+        pagination: {
+          pageSize: 10,
+          offset: 20,
+          sortExpression: 'nombre_articulo',
+          sortOrder: 'asc',
+        },
+      },
+      executor
+    );
+
+    const [countSql, dataSql] = executor.query.mock.calls.map(([sql]) => normalizeSql(sql));
+    expect(countSql).toContain('tipo_articulo = $1');
+    expect(countSql).toContain('ubicacion_id = $2');
+    expect(countSql).toContain('estado_caducidad = $3');
+    expect(countSql).toContain('nombre_articulo ILIKE $4');
+    expect(countSql).not.toMatch(/\bLIMIT\b|\bOFFSET\b/i);
+    expect(dataSql).toContain('tipo_articulo = $1');
+    expect(dataSql).toContain('ubicacion_id = $2');
+    expect(dataSql).toContain('estado_caducidad = $3');
+    expect(dataSql).toContain('nombre_articulo ILIKE $4');
+    expect(dataSql).toContain('ORDER BY nombre_articulo ASC LIMIT $5 OFFSET $6');
+    expect(executor.query.mock.calls[0][1]).toEqual(['arma', 8, 'por_vencer', '%serie-123%']);
+    expect(executor.query.mock.calls[1][1]).toEqual([
+      'arma',
+      8,
+      'por_vencer',
+      '%serie-123%',
+      10,
+      20,
+    ]);
+  });
+
   test('findArticulosCatalogo conserva consulta sin paginación', async () => {
     db.query.mockResolvedValueOnce({ rows: [{ id: 1 }] });
 
@@ -199,6 +247,36 @@ describe('inventarioReadRepository', () => {
     expect(result.result.rows[0].reversal_status).toBe('COMPLETE');
     expect(executor.query).toHaveBeenCalledTimes(2);
     expect(db.query).not.toHaveBeenCalled();
+  });
+
+  test('buildMovimientosListQuery aplica filtros iguales en COUNT y datos sin paginar COUNT', () => {
+    const query = inventarioReadRepository.buildMovimientosListQuery({
+      search: 'Patio',
+      destino_id: '4',
+      from: '2026-04-01',
+      to: '2026-04-30',
+      pagination: {
+        pageSize: 100,
+        offset: 100,
+        sortExpression: 'id',
+        sortOrder: 'desc',
+      },
+    });
+    const countSql = normalizeSql(query.countQuery);
+    const dataSql = normalizeSql(query.dataQuery);
+
+    expect(countSql).toContain('articulos_movidos ILIKE $1');
+    expect(countSql).toContain('ubicacion_destino_id = $2');
+    expect(countSql).toContain('fecha_movimiento::date >= $3::date');
+    expect(countSql).toContain('fecha_movimiento::date <= $4::date');
+    expect(countSql).not.toMatch(/\bLIMIT\b|\bOFFSET\b/i);
+    expect(dataSql).toContain('articulos_movidos ILIKE $1');
+    expect(dataSql).toContain('ubicacion_destino_id = $2');
+    expect(dataSql).toContain('fecha_movimiento::date >= $3::date');
+    expect(dataSql).toContain('fecha_movimiento::date <= $4::date');
+    expect(dataSql).toContain('ORDER BY id DESC LIMIT $5 OFFSET $6');
+    expect(query.countParams).toEqual(['%Patio%', 4, '2026-04-01', '2026-04-30']);
+    expect(query.dataParams).toEqual(['%Patio%', 4, '2026-04-01', '2026-04-30', 100, 100]);
   });
 
   test('propaga errores de base de datos sin transformarlos', async () => {

@@ -84,4 +84,46 @@ describe('usePagosTableState', () => {
 
     hook.unmount();
   });
+
+  test('usa metadata del backend y construye parámetros para pagos paginados', () => {
+    const hook = renderHook(() =>
+      usePagosTableState(makePagos(2), {
+        page: 1,
+        pageSize: 25,
+        totalItems: 64,
+        totalPages: 3,
+        hasNextPage: true,
+        hasPreviousPage: false,
+      })
+    );
+
+    expect(hook.result.rows).toHaveLength(2);
+    expect(hook.result.totalItems).toBe(64);
+    expect(hook.result.totalPages).toBe(3);
+
+    act(() => {
+      hook.result.handleFilterChange({
+        target: { name: 'metodoPago', value: 'transferencia' },
+      });
+      hook.result.handleFilterChange({
+        target: { name: 'search', value: 'Luis' },
+      });
+    });
+    act(() => {
+      hook.result.applyFilters();
+      hook.result.setPageSize(100);
+      hook.result.setCurrentPage(2);
+    });
+
+    expect(hook.result.params).toEqual({
+      page: 2,
+      pageSize: 100,
+      sortBy: 'cliente',
+      sortOrder: 'asc',
+      metodo_pago: 'transferencia',
+      search: 'Luis',
+    });
+
+    hook.unmount();
+  });
 });

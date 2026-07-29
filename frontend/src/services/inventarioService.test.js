@@ -94,6 +94,98 @@ describe('inventarioService', () => {
     });
   });
 
+  test('getArticulos conserva parámetros y metadata de paginación del backend', async () => {
+    api.get.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: [{ id: 1, nombre_articulo: 'Radio' }],
+        pagination: {
+          page: 2,
+          pageSize: 50,
+          totalItems: 76,
+          totalPages: 2,
+          hasNextPage: false,
+          hasPreviousPage: true,
+        },
+      },
+    });
+
+    const result = await inventarioService.getArticulos({
+      page: 2,
+      pageSize: 50,
+      search: 'Radio',
+      sortBy: 'nombre_articulo',
+      sortOrder: 'asc',
+    });
+
+    expect(api.get).toHaveBeenCalledWith('/inventario/articulos', {
+      params: {
+        page: 2,
+        pageSize: 50,
+        search: 'Radio',
+        sortBy: 'nombre_articulo',
+        sortOrder: 'asc',
+      },
+    });
+    expect(result.pagination).toEqual({
+      page: 2,
+      pageSize: 50,
+      totalItems: 76,
+      totalPages: 2,
+      hasNextPage: false,
+      hasPreviousPage: true,
+    });
+  });
+
+  test('getMovimientos conserva parámetros paginados y metadata vacía', async () => {
+    api.get.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: [],
+        pagination: {
+          page: 3,
+          pageSize: 25,
+          totalItems: 0,
+          totalPages: 0,
+          hasNextPage: false,
+          hasPreviousPage: true,
+        },
+      },
+    });
+
+    const result = await inventarioService.getMovimientos({
+      page: 3,
+      pageSize: 25,
+      destino_id: 4,
+      from: '2026-01-01',
+      to: '2026-01-31',
+    });
+
+    expect(api.get).toHaveBeenCalledWith('/inventario/movimientos', {
+      params: {
+        page: 3,
+        pageSize: 25,
+        destino_id: 4,
+        from: '2026-01-01',
+        to: '2026-01-31',
+      },
+    });
+    expect(result.data).toEqual([]);
+    expect(result.pagination.totalPages).toBe(0);
+    expect(result.pagination.totalItems).toBe(0);
+  });
+
+  test('catálogo de artículos no usa parámetros de paginación', async () => {
+    api.get.mockResolvedValueOnce({
+      data: { success: true, data: [{ id: 5, nombre_articulo: 'Casco' }] },
+    });
+
+    const result = await inventarioService.getArticulosCatalogo();
+
+    expect(result.data).toEqual([{ id: 5, nombre_articulo: 'Casco' }]);
+    expect(api.get).toHaveBeenCalledWith('/inventario/articulos/catalogo');
+  });
+
   test('preserva error 409 al crear ubicación duplicada', async () => {
     api.post.mockRejectedValue({
       response: {
@@ -168,6 +260,26 @@ describe('inventarioService', () => {
 
     expect(result.success).toBe(true);
     expect(api.post).toHaveBeenCalledWith('/inventario/movimientos/9/pdf/regenerar');
+  });
+
+  test('exportaciones de inventario conservan filtros sin page ni pageSize implícitos', async () => {
+    api.get.mockResolvedValue({
+      data: new Blob(['excel']),
+      headers: {},
+    });
+    saveBlobWithPickerOrDownload.mockResolvedValue({ success: true });
+
+    await inventarioService.exportArticulosExcel({ tipo: 'equipo', search: 'radio' });
+    await inventarioService.exportMovimientosExcel({ destino_id: 7, from: '2026-01-01' });
+
+    expect(api.get).toHaveBeenNthCalledWith(1, '/inventario/articulos/excel', {
+      params: { tipo: 'equipo', search: 'radio' },
+      responseType: 'blob',
+    });
+    expect(api.get).toHaveBeenNthCalledWith(2, '/inventario/movimientos/excel', {
+      params: { destino_id: 7, from: '2026-01-01' },
+      responseType: 'blob',
+    });
   });
 
   test('preserva código estable de error del backend', async () => {

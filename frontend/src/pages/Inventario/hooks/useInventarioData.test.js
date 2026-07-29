@@ -64,6 +64,59 @@ describe('useInventarioData', () => {
     hook.unmount();
   });
 
+  test('conserva metadata paginada de artículos y movimientos', async () => {
+    inventarioService.getArticulos.mockResolvedValue(
+      success([{ id: 10, nombre_articulo: 'Radio' }])
+    );
+    inventarioService.getArticulos.mockResolvedValueOnce({
+      success: true,
+      data: [{ id: 10, nombre_articulo: 'Radio' }],
+      pagination: {
+        page: 1,
+        pageSize: 25,
+        totalItems: 31,
+        totalPages: 2,
+        hasNextPage: true,
+        hasPreviousPage: false,
+      },
+    });
+    inventarioService.getMovimientos.mockResolvedValueOnce({
+      success: true,
+      data: [{ id: 20 }],
+      pagination: {
+        page: 2,
+        pageSize: 10,
+        totalItems: 11,
+        totalPages: 2,
+        hasNextPage: false,
+        hasPreviousPage: true,
+      },
+    });
+
+    const hook = renderHook(() => useInventarioData({ showMessage }));
+
+    await flushPromises();
+
+    expect(hook.result.articulosPagination).toEqual({
+      page: 1,
+      pageSize: 25,
+      totalItems: 31,
+      totalPages: 2,
+      hasNextPage: true,
+      hasPreviousPage: false,
+    });
+    expect(hook.result.movimientosPagination).toEqual({
+      page: 2,
+      pageSize: 10,
+      totalItems: 11,
+      totalPages: 2,
+      hasNextPage: false,
+      hasPreviousPage: true,
+    });
+
+    hook.unmount();
+  });
+
   test('permite cargar inventario con opciones limitadas de clientes', async () => {
     clientesService.listOpcionesUbicaciones.mockResolvedValue(
       success([
@@ -160,6 +213,39 @@ describe('useInventarioData', () => {
     expect(inventarioService.getBajasArticulos).toHaveBeenCalledWith({ search: 'radio' });
     expect(hook.result.movimientos).toEqual([{ id: 40 }]);
     expect(hook.result.bajas).toEqual([{ id: 50 }]);
+
+    hook.unmount();
+  });
+
+  test('fetchArticulos y loadMovimientos pasan parámetros paginados sin transformar', async () => {
+    const hook = renderHook(() => useInventarioData({ showMessage }));
+    await flushPromises();
+    jest.clearAllMocks();
+
+    inventarioService.getArticulos.mockResolvedValueOnce(
+      success([{ id: 13, nombre_articulo: 'Radio' }])
+    );
+    inventarioService.getMovimientos.mockResolvedValueOnce(success([{ id: 41 }]));
+
+    await act(async () => {
+      await hook.result.fetchArticulos(
+        { page: 2, pageSize: 50, sortBy: 'nombre_articulo', search: 'Radio' },
+        false
+      );
+      await hook.result.loadMovimientos({ page: 3, pageSize: 25, destino_id: 4 });
+    });
+
+    expect(inventarioService.getArticulos).toHaveBeenCalledWith({
+      page: 2,
+      pageSize: 50,
+      sortBy: 'nombre_articulo',
+      search: 'Radio',
+    });
+    expect(inventarioService.getMovimientos).toHaveBeenCalledWith({
+      page: 3,
+      pageSize: 25,
+      destino_id: 4,
+    });
 
     hook.unmount();
   });
