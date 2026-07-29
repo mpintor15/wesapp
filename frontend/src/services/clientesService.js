@@ -11,6 +11,15 @@ const clientesService = {
     }
   },
 
+  async listOpcionesUbicaciones() {
+    try {
+      const response = await api.get('/clientes/opciones-ubicaciones');
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener clientes para ubicaciones');
+    }
+  },
+
   async getCliente(id) {
     try {
       const response = await api.get(`/clientes/${id}`);

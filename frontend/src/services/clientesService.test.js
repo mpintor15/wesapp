@@ -19,6 +19,7 @@ describe('clientesService', () => {
   test('usa el cliente HTTP central para CRUD de clientes', async () => {
     api.get
       .mockResolvedValueOnce({ data: { success: true, data: [{ id: 1, nombre: 'ACME' }] } })
+      .mockResolvedValueOnce({ data: { success: true, data: [{ id: 1, nombre: 'ACME' }] } })
       .mockResolvedValueOnce({ data: { success: true, data: { id: 1, nombre: 'ACME' } } });
     api.post.mockResolvedValueOnce({
       data: { success: true, data: { id: 2, nombre: 'Nuevo' } },
@@ -29,6 +30,7 @@ describe('clientesService', () => {
     api.delete.mockResolvedValueOnce({ data: { success: true } });
 
     await clientesService.listClientes({ search: 'acme', estado: 'activo' });
+    await clientesService.listOpcionesUbicaciones();
     await clientesService.getCliente(1);
     await clientesService.createCliente({ nombre: 'Nuevo' });
     await clientesService.updateCliente(2, { nombre: 'Editado' });
@@ -37,7 +39,8 @@ describe('clientesService', () => {
     expect(api.get).toHaveBeenNthCalledWith(1, '/clientes', {
       params: { search: 'acme', estado: 'activo' },
     });
-    expect(api.get).toHaveBeenNthCalledWith(2, '/clientes/1');
+    expect(api.get).toHaveBeenNthCalledWith(2, '/clientes/opciones-ubicaciones');
+    expect(api.get).toHaveBeenNthCalledWith(3, '/clientes/1');
     expect(api.post).toHaveBeenCalledWith('/clientes', { nombre: 'Nuevo' });
     expect(api.put).toHaveBeenCalledWith('/clientes/2', { nombre: 'Editado' });
     expect(api.delete).toHaveBeenCalledWith('/clientes/2');

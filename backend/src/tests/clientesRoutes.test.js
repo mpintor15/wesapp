@@ -36,6 +36,21 @@ const secretarioToken = jwt.sign(
   config.jwt.secret,
   { expiresIn: '1h' }
 );
+const supervisorToken = jwt.sign(
+  { id: 52, usuario: 'supervisor', tipo_usuario: 'supervisor' },
+  config.jwt.secret,
+  { expiresIn: '1h' }
+);
+const contadorToken = jwt.sign(
+  { id: 53, usuario: 'contador', tipo_usuario: 'contador' },
+  config.jwt.secret,
+  { expiresIn: '1h' }
+);
+const sinPermisosToken = jwt.sign(
+  { id: 54, usuario: 'sin_permisos', tipo_usuario: 'sin_permisos' },
+  config.jwt.secret,
+  { expiresIn: '1h' }
+);
 
 const gerenteUser = {
   id: 50,
@@ -54,13 +69,41 @@ const secretarioUser = {
   tipo_usuario: 'secretario',
 };
 
+const supervisorUser = {
+  ...gerenteUser,
+  id: 52,
+  usuario: 'supervisor',
+  tipo_usuario: 'supervisor',
+};
+
+const contadorUser = {
+  ...gerenteUser,
+  id: 53,
+  usuario: 'contador',
+  tipo_usuario: 'contador',
+};
+
+const sinPermisosUser = {
+  ...gerenteUser,
+  id: 54,
+  usuario: 'sin_permisos',
+  tipo_usuario: 'sin_permisos',
+};
+
 const authorizeUser = () => {
   db.query.mockImplementation(async (sql, params = []) => {
     const query = String(sql);
 
     if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+      const usersById = new Map([
+        [50, gerenteUser],
+        [51, secretarioUser],
+        [52, supervisorUser],
+        [53, contadorUser],
+        [54, sinPermisosUser],
+      ]);
       return {
-        rows: [params[0] === 51 ? secretarioUser : gerenteUser],
+        rows: [usersById.get(params[0]) || gerenteUser],
         rowCount: 1,
       };
     }
@@ -78,6 +121,51 @@ beforeEach(() => {
 });
 
 describe('clientes routes', () => {
+  test('lista opciones mínimas para ubicaciones con permiso de crear ubicaciones', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [supervisorUser], rowCount: 1 };
+      }
+
+      if (query.includes('SELECT id, nombre, estado') && query.includes('FROM clientes')) {
+        expect(params).toEqual(['activo']);
+        expect(query).toContain('WHERE estado = $1');
+        expect(query).not.toContain('identificacion');
+        expect(query).not.toContain('correo');
+        expect(query).not.toContain('telefono');
+        expect(query).not.toContain('direccion');
+        return {
+          rows: [{ id: 1, nombre: 'ACME', estado: 'activo' }],
+          rowCount: 1,
+        };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/clientes/opciones-ubicaciones', supervisorToken);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      data: [{ id: 1, nombre: 'ACME', estado: 'activo' }],
+    });
+    expect(res.body.data[0]).not.toHaveProperty('identificacion');
+    expect(res.body.data[0]).not.toHaveProperty('correo');
+  });
+
+  test('rechaza opciones de ubicaciones para rol sin permisos relevantes', async () => {
+    const res = await requestWithAuth(
+      'get',
+      '/api/clientes/opciones-ubicaciones',
+      sinPermisosToken
+    );
+
+    expect(res.status).toBe(403);
+  });
+
   test('lista clientes con totales útiles', async () => {
     db.query.mockImplementation(async (sql, params = []) => {
       const query = String(sql);
@@ -319,13 +407,60 @@ describe('clientes routes', () => {
     );
   });
 
-  test('solo gerente puede administrar clientes', async () => {
-    const res = await requestWithAuth('post', '/api/clientes', secretarioToken).send({
+  test('permiso de ubicaciones no concede crear, editar ni eliminar clientes', async () => {
+    const create = await requestWithAuth('post', '/api/clientes', supervisorToken).send({
+      nombre: 'Cliente Supervisor',
+    });
+    const update = await requestWithAuth('put', '/api/clientes/1', supervisorToken).send({
+      nombre: 'Cliente Supervisor',
+    });
+    const remove = await requestWithAuth('delete', '/api/clientes/1', supervisorToken);
+
+    expect(create.status).toBe(403);
+    expect(update.status).toBe(403);
+    expect(remove.status).toBe(403);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('secretario conserva creación de clientes sin edición ni eliminación administrativa', async () => {
+    const create = await requestWithAuth('post', '/api/clientes', secretarioToken).send({});
+    const update = await requestWithAuth('put', '/api/clientes/1', secretarioToken).send({
       nombre: 'Cliente Secretario',
     });
+    const remove = await requestWithAuth('delete', '/api/clientes/1', secretarioToken);
 
-    expect(res.status).toBe(403);
-    expect(db.transaction).not.toHaveBeenCalled();
+    expect(create.status).not.toBe(403);
+    expect(update.status).toBe(403);
+    expect(remove.status).toBe(403);
+  });
+
+  test('contador conserva acceso al catálogo administrativo de clientes', async () => {
+    db.query.mockImplementation(async (sql) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [contadorUser], rowCount: 1 };
+      }
+
+      if (query.includes('COUNT(*) OVER()::int')) {
+        return {
+          rows: [{ id: 1, nombre: 'ACME', estado: 'activo', total_filtrado: 1 }],
+          rowCount: 1,
+        };
+      }
+
+      if (query.includes('COUNT(*) FILTER')) {
+        return { rows: [{ total: 1, activos: 1, inactivos: 0 }], rowCount: 1 };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/clientes', contadorToken);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data[0]).toMatchObject({ id: 1, nombre: 'ACME', estado: 'activo' });
   });
 
   test('responde 500 controlado sin exponer detalles internos', async () => {

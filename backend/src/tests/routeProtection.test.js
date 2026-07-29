@@ -182,6 +182,55 @@ describe('cuentas permissions', () => {
   });
 });
 
+describe('clientes permissions', () => {
+  test('opciones de clientes para ubicaciones acepta permiso mínimo de ubicaciones', async () => {
+    rolePermissions.custom_ubicaciones = [PERMISSIONS.INVENTARIO_UBICACIONES_VER];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const res = await request(app)
+      .get('/api/clientes/opciones-ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expectAllowedPastAuthorization(res);
+  });
+
+  test('permiso de ubicaciones no concede administración de clientes', async () => {
+    rolePermissions.custom_ubicaciones = [PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const create = await request(app)
+      .post('/api/clientes')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+      .send({});
+    const update = await request(app)
+      .put('/api/clientes/1')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+      .send({});
+    const remove = await request(app)
+      .delete('/api/clientes/1')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expect(create.status).toBe(403);
+    expect(update.status).toBe(403);
+    expect(remove.status).toBe(403);
+  });
+
+  test('contador conserva acceso al catálogo administrativo de clientes sin ubicaciones', async () => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const clientes = await request(app)
+      .get('/api/clientes')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`);
+    const ubicaciones = await request(app)
+      .post('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({});
+
+    expectAllowedPastAuthorization(clientes);
+    expect(ubicaciones.status).toBe(403);
+  });
+});
+
 describe('inventario permissions', () => {
   test.each([
     ['GET', 'get', '/api/inventario/ubicaciones', PERMISSIONS.INVENTARIO_UBICACIONES_VER],

@@ -77,11 +77,16 @@ describe('permission matrix', () => {
     expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_BAJAS_ELIMINAR)).toBe(false);
   });
 
-  test('catálogo de clientes queda restringido a gerente en esta fase', () => {
+  test('catálogo de clientes conserva administración para gerente y contador sin abrir supervisor', () => {
     expect(hasPermission('gerente', PERMISSIONS.CLIENTES_VER)).toBe(true);
     expect(hasPermission('gerente', PERMISSIONS.CLIENTES_CREAR)).toBe(true);
-    expect(hasPermission('secretario', PERMISSIONS.CLIENTES_CREAR)).toBe(false);
-    expect(hasPermission('contador', PERMISSIONS.CLIENTES_EDITAR)).toBe(false);
+    expect(hasPermission('contador', PERMISSIONS.CLIENTES_VER)).toBe(true);
+    expect(hasPermission('contador', PERMISSIONS.CLIENTES_CREAR)).toBe(true);
+    expect(hasPermission('contador', PERMISSIONS.CLIENTES_EDITAR)).toBe(true);
+    expect(hasPermission('contador', PERMISSIONS.CLIENTES_ELIMINAR)).toBe(true);
+    expect(hasPermission('secretario', PERMISSIONS.CLIENTES_VER)).toBe(true);
+    expect(hasPermission('secretario', PERMISSIONS.CLIENTES_CREAR)).toBe(true);
+    expect(hasPermission('secretario', PERMISSIONS.CLIENTES_EDITAR)).toBe(false);
     expect(hasPermission('supervisor', PERMISSIONS.CLIENTES_ELIMINAR)).toBe(false);
   });
 

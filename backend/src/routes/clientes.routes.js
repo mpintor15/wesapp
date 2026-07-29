@@ -2,10 +2,21 @@ const express = require('express');
 const router = express.Router();
 const clientesController = require('../controllers/clientesController');
 const { verifyToken } = require('../middleware/auth');
-const { requirePermission } = require('../middleware/permissions');
+const { requireAnyPermission, requirePermission } = require('../middleware/permissions');
 const { PERMISSIONS } = require('../config/permissions');
 
 router.use(verifyToken);
+
+router.get(
+  '/opciones-ubicaciones',
+  requireAnyPermission(
+    PERMISSIONS.CLIENTES_VER,
+    PERMISSIONS.INVENTARIO_UBICACIONES_VER,
+    PERMISSIONS.INVENTARIO_UBICACIONES_CREAR,
+    PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR
+  ),
+  clientesController.getClientesOpcionesUbicaciones
+);
 
 router.get('/', requirePermission(PERMISSIONS.CLIENTES_VER), clientesController.getClientes);
 

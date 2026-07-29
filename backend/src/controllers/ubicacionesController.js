@@ -161,13 +161,14 @@ const getUbicaciones = async (req, res) => {
         u.nombre,
         u.cliente_id,
         c.nombre AS cliente_nombre,
+        c.estado AS cliente_estado,
         COUNT(a.id) FILTER (WHERE a.activo = TRUE)::int AS articulos_activos,
         COUNT(a.id)::int AS articulos_totales
       FROM ubicaciones u
       LEFT JOIN clientes c ON c.id = u.cliente_id
       LEFT JOIN articulos a ON a.ubicacion_id = u.id
       ${where}
-      GROUP BY u.id, u.nombre, u.cliente_id, c.nombre
+      GROUP BY u.id, u.nombre, u.cliente_id, c.nombre, c.estado
       ORDER BY c.nombre ASC NULLS LAST, u.nombre ASC
     `,
       params

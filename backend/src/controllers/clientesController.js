@@ -203,6 +203,25 @@ const getClientes = async (req, res) => {
   }
 };
 
+const getClientesOpcionesUbicaciones = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, nombre, estado
+       FROM clientes
+       WHERE estado = $1
+       ORDER BY nombre ASC, id ASC`,
+      ['activo']
+    );
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    return handleClienteError(res, error, 'Error al obtener opciones de clientes');
+  }
+};
+
 const getClienteById = async (req, res) => {
   const idValidation = parseClienteId(req.params.id);
   if (!idValidation.valid) {
@@ -387,5 +406,6 @@ module.exports = {
   deleteCliente,
   getClienteById,
   getClientes,
+  getClientesOpcionesUbicaciones,
   updateCliente,
 };

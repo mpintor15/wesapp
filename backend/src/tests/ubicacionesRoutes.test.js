@@ -77,11 +77,30 @@ describe('ubicaciones routes', () => {
               nombre: 'Bodega',
               cliente_id: 10,
               cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
               articulos_activos: 2,
               articulos_totales: 3,
             },
+            {
+              id: 2,
+              nombre: 'Archivo',
+              cliente_id: 11,
+              cliente_nombre: 'Cliente Inactivo',
+              cliente_estado: 'inactivo',
+              articulos_activos: 0,
+              articulos_totales: 0,
+            },
+            {
+              id: 3,
+              nombre: 'Histórica',
+              cliente_id: null,
+              cliente_nombre: null,
+              cliente_estado: null,
+              articulos_activos: 0,
+              articulos_totales: 0,
+            },
           ],
-          rowCount: 1,
+          rowCount: 3,
         };
       }
 
@@ -99,11 +118,54 @@ describe('ubicaciones routes', () => {
           nombre: 'Bodega',
           cliente_id: 10,
           cliente_nombre: 'ACME',
+          cliente_estado: 'activo',
           articulos_activos: 2,
           articulos_totales: 3,
         },
+        {
+          id: 2,
+          nombre: 'Archivo',
+          cliente_id: 11,
+          cliente_nombre: 'Cliente Inactivo',
+          cliente_estado: 'inactivo',
+          articulos_activos: 0,
+          articulos_totales: 0,
+        },
+        {
+          id: 3,
+          nombre: 'Histórica',
+          cliente_id: null,
+          cliente_nombre: null,
+          cliente_estado: null,
+          articulos_activos: 0,
+          articulos_totales: 0,
+        },
       ],
     });
+  });
+
+  test('consulta cliente_estado sin romper LEFT JOIN ni conteos', async () => {
+    db.query.mockImplementation(async (sql) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [currentUser], rowCount: 1 };
+      }
+
+      if (query.includes('FROM ubicaciones u')) {
+        expect(query).toContain('LEFT JOIN clientes c ON c.id = u.cliente_id');
+        expect(query).toContain('c.estado AS cliente_estado');
+        expect(query).toContain('COUNT(a.id) FILTER (WHERE a.activo = TRUE)::int');
+        expect(query).toContain('GROUP BY u.id, u.nombre, u.cliente_id, c.nombre, c.estado');
+        return { rows: [], rowCount: 0 };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/inventario/ubicaciones');
+
+    expect(res.status).toBe(200);
   });
 
   test('filtra ubicaciones por cliente', async () => {
@@ -127,6 +189,32 @@ describe('ubicaciones routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true, data: [] });
+  });
+
+  test('combina búsqueda parametrizada con filtro por cliente', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [currentUser], rowCount: 1 };
+      }
+
+      if (query.includes('FROM ubicaciones u')) {
+        expect(query).toContain('u.cliente_id = $1');
+        expect(query).toContain('u.nombre ILIKE $2 OR c.nombre ILIKE $2');
+        expect(params).toEqual([10, '%bodega%']);
+        return { rows: [], rowCount: 0 };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth(
+      'get',
+      '/api/inventario/ubicaciones?cliente_id=10&search=bodega'
+    );
+
+    expect(res.status).toBe(200);
   });
 
   test('filtra ubicaciones históricas sin cliente', async () => {
