@@ -52,22 +52,33 @@ const PagoDetailModal = ({ pago, onClose }) => {
                 <th className="col-money">Valor factura</th>
                 <th className="col-money">Aplicado</th>
                 <th className="col-money">Saldo</th>
+                <th>Estado</th>
               </tr>
             </thead>
             <tbody>
               {pago.facturas?.length > 0 ? (
                 pago.facturas.map((factura) => (
-                  <tr key={`${pago.id}-${factura.abono_id || factura.num_factura}`}>
+                  <tr
+                    key={`${pago.id}-${factura.abono_id || factura.num_factura}`}
+                    className={factura.cancelada ? 'row-canceled' : ''}
+                  >
                     <td className="cell-factura">#{factura.num_factura}</td>
                     <td className="app-cell-date">{formatDate(factura.fecha_factura)}</td>
                     <td className="col-money">{formatMoney(factura.valor_factura)}</td>
                     <td className="col-money">{formatMoney(factura.valor_abono)}</td>
                     <td className="col-money">{formatMoney(factura.saldo_pendiente)}</td>
+                    <td>
+                      <span
+                        className={`badge ${factura.cancelada ? 'badge-inactive' : 'badge-active'}`}
+                      >
+                        {factura.cancelada ? 'Anulada' : 'Activa'}
+                      </span>
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="5" className="text-center">
+                  <td colSpan="6" className="text-center">
                     Este pago no tiene facturas asociadas
                   </td>
                 </tr>

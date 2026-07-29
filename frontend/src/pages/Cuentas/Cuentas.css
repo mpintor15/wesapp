@@ -578,6 +578,10 @@
   background: var(--color-surface-muted);
 }
 
+.cuentas-table tbody tr.row-canceled .badge {
+  color: var(--color-danger-text) !important;
+}
+
 .cuentas-table tfoot td {
   background: var(--color-surface-muted);
   border-top: 2px solid var(--color-border);
@@ -587,6 +591,26 @@
 .cuentas-table .totals-label {
   color: var(--color-text-secondary);
   letter-spacing: 0.08em;
+}
+
+.cuentas-tab-summary {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.payment-history-note,
+.modal-help-text {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.payment-history-note {
+  max-width: 460px;
+  text-align: right;
 }
 
 /* ============================================

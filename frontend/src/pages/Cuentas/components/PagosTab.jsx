@@ -11,14 +11,12 @@ const PagosTab = ({
   sort,
   currentPage,
   totalPages,
-  canDeletePago,
   onFilterChange,
   onApplyFilters,
   onClearFilters,
   onToggleFilter,
   onSort,
   onOpenDetail,
-  onDelete,
   onPageChange,
 }) => (
   <div className="tab-content">
@@ -31,8 +29,13 @@ const PagosTab = ({
     />
 
     {!loading ? (
-      <div className="table-result-count">
-        Mostrando {rows.length} de {filteredCount} pago(s)
+      <div className="cuentas-tab-summary">
+        <span className="table-result-count">
+          Mostrando {rows.length} de {filteredCount} pago(s)
+        </span>
+        <span className="payment-history-note" title="Los pagos no se anulan desde esta vista.">
+          Los pagos registrados se conservan como parte del historial contable.
+        </span>
       </div>
     ) : null}
 
@@ -41,10 +44,8 @@ const PagosTab = ({
       loading={loading}
       filters={filters}
       sort={sort}
-      canDeletePago={canDeletePago}
       onSort={onSort}
       onOpenDetail={onOpenDetail}
-      onDelete={onDelete}
     />
 
     {!loading && totalPages > 1 ? (

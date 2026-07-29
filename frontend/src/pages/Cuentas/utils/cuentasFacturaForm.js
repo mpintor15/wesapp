@@ -1,10 +1,16 @@
+export const isClienteActivoForOperation = (cliente) => cliente.estado !== 'inactivo';
+
 export const filterClientesBySearch = (clientes, search) => {
   const normalizedSearch = search.toLowerCase();
-  return clientes.filter(
-    (cliente) =>
+  return clientes.filter((cliente) => {
+    if (!isClienteActivoForOperation(cliente)) return false;
+    return (
       cliente.nombre.toLowerCase().includes(normalizedSearch) ||
-      cliente.identificacion.toLowerCase().includes(normalizedSearch)
-  );
+      String(cliente.identificacion || '')
+        .toLowerCase()
+        .includes(normalizedSearch)
+    );
+  });
 };
 
 export const getExistingInvoiceNumbers = (reporte) =>

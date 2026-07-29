@@ -8,7 +8,6 @@ describe('useCuentasReports', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     cuentasService.exportExcel.mockResolvedValue({ success: true });
-    cuentasService.exportClientesExcel.mockResolvedValue({ success: true });
     cuentasService.exportPagosExcel.mockResolvedValue({ success: true });
   });
 
@@ -60,14 +59,12 @@ describe('useCuentasReports', () => {
     hook.unmount();
   });
 
-  test('ignora cancelación de clientes y pagos sin mostrar error', async () => {
+  test('ignora cancelación de pagos sin mostrar error', async () => {
     const showToast = jest.fn();
-    cuentasService.exportClientesExcel.mockResolvedValue({ success: false, cancelled: true });
     cuentasService.exportPagosExcel.mockResolvedValue({ success: false, cancelled: true });
     const hook = renderHook(() => useCuentasReports({ showToast }));
 
     await act(async () => {
-      await hook.result.clientes.export();
       await hook.result.pagos.export();
     });
 
