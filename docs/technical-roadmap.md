@@ -25,7 +25,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 |---|---|---|---|---|---|---|---|---|---|
 | CI-001 | CI/CD | P2 | La integración necesitaba checks sobre `feat/gestion-ubicaciones` y PostgreSQL local en backend tests. | `.github/workflows/ci.yml` antes solo observaba `main`; backend tests crean bases temporales. | PRs hacia integración podían quedar sin validación remota. | XS | Bajo | Ninguna | corregido |
 | CI-002 | CI/CD | P2 | El hook pre-push ejecutaba el build raíz, que invocaba instalación. | `.husky/pre-push`; script raíz `build`. | Hooks podían modificar dependencias o fallar por entorno inseguro. | XS | Bajo | Ninguna | corregido |
-| BE-001 | Arquitectura backend | P2 | `inventarioController.js` concentra reglas, SQL, transacciones, PDF y Excel. | Archivo sobre 2k líneas. | Mayor costo de cambio y riesgo de regresión en inventario. | L | Medio | Cobertura existente de inventario | implementar |
+| BE-001 | Arquitectura backend | P2 | `inventarioController.js` concentra reglas, SQL, transacciones, PDF y Excel. | PR #20 extrajo constantes de dominio y repositorio de lectura para artículos, catálogo/exportación de artículos y movimientos. | Menor acoplamiento en lecturas; comandos, bajas, PDF y reportes quedan como riesgo residual. | L | Medio | Cobertura existente de inventario | parcialmente corregido |
 | BE-002 | Arquitectura backend | P2 | `cuentasController.js` aún mezcla control HTTP, reportes, queries dinámicas y Excel. | Archivo sobre 1k líneas. | Dificulta aislar contratos y probar reportes complejos. | M | Medio | Repositorios de cuentas existentes | implementar |
 | BE-003 | Rendimiento | P2 | Listados/reportes consultaban conjuntos completos sin límite uniforme. | PR #18 agregó contrato compartido, `LIMIT/OFFSET`, totales y metadata para Inventario y Cuentas. Personal queda pendiente. | Riesgo reducido en artículos, movimientos, facturas y pagos; riesgo residual en Personal. | M | Medio | Contrato frontend/backend de paginación | parcialmente corregido |
 | BE-004 | Base de datos | P2 | Rollback de migraciones no está documentado por migración. | Migraciones aplican cambios seguros, pero no cada una documenta reversión operativa. | Menor capacidad de recuperación ante despliegue fallido. | M | Medio | Política de releases | documentar |
@@ -61,8 +61,8 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | 3 | Contratos de paginación | `refactor/contracts-paginated-lists` | Definir contrato común de listados | Inventario y Cuentas; Personal contemplado para adopción posterior | Roadmap | Contrato común, defaults, límites, metadata, allowlists, catálogos no paginados para formularios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #18 |
 | 4 | Paginación backend crítica residual | `refactor/backend-paginate-personal-lists` | Evitar cargas completas restantes | Listados de Personal y consumidores que aún requieran contrato remoto | PR 3 | `limit`, `offset`, totales y filtros compatibles con el contrato común | Backend tests y frontend unit si aplica | Medio | S | Personal adopta el contrato sin cambiar reglas |
 | 5 | Paginación frontend residual | `refactor/frontend-paginated-personal-tables` | Consumir paginación del backend restante | Tablas de Personal | PR 4 | Hooks y controles de paginación remota | Frontend unit, E2E smoke si aplica | Medio | S | UI mantiene filtros/sort sin cargar todo |
-| 6 | Inventario dominio | `refactor/backend-inventory-services` | Extraer dominio de inventario | Movimiento, baja, PDF, Excel | Cobertura actual | Servicios/repositories por flujo | Backend tests existentes + casos nuevos | Alto | L | Controlador reducido sin cambios funcionales |
-| 7 | Cuentas dominio | `refactor/backend-cuentas-report-services` | Aislar reportes y exportaciones | Cuentas controller, report services | PR 3 | Servicios de reporte/exportación | Backend tests de reportes/export | Medio | M | Controller delega reglas principales |
+| 6 | Inventario dominio | `refactor/backend-inventario-services` | Extraer primera capa backend de inventario | Lecturas de artículos, catálogo/exportación de artículos y movimientos | Cobertura actual | Constantes de dominio, repositorio de lectura y tests unitarios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #20 |
+| 7 | Cuentas dominio | `refactor/backend-cuentas-services` | Aislar reportes y exportaciones | Cuentas controller, report services | PR 3 | Servicios de reporte/exportación | Backend tests de reportes/export | Medio | M | Controller delega reglas principales |
 | 8 | Frontend Inventario shell | `refactor/frontend-inventory-shell` | Reducir orquestación de página | `Inventario.jsx`, hooks y tabs | PR 5 | Hooks por flujo y componentes contenedores | Frontend unit + visual smoke | Medio | L | Página más pequeña y comportamiento igual |
 | 9 | Frontend Configuración shell | `refactor/frontend-configuracion-shell` | Separar directorio y ubicaciones | `Configuracion.jsx`, `ClientesCatalog` | PR 5 | Hooks y componentes por catálogo | Frontend unit + responsive smoke | Medio | L | Menor acoplamiento entre clientes/ubicaciones |
 | 10 | E2E CI smoke | `test/e2e-ci-smoke` | Automatizar flujos mínimos | Playwright smoke/auth | Datos E2E estables | Job CI opcional o required según duración | CI smoke verde | Medio | M | Smoke corre en PR sin flakes |
@@ -104,7 +104,7 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 
 | Métrica | Objetivo inicial |
 |---|---|
-| Backend tests | 25 suites y 520 tests verdes en entorno `_test`. |
+| Backend tests | 27 suites y 542 tests verdes en entorno `_test`. |
 | Frontend unit | 44 suites y 272 tests verdes. |
 | Bundle productivo | Sin endpoints locales funcionales ni sourcemaps públicos. |
 | CI | Checks en PR hacia `feat/gestion-ubicaciones` y `main`. |
@@ -113,11 +113,11 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 
 ## Siguiente rama recomendada
 
-La siguiente rama pendiente recomendada es `refactor/backend-inventario-services`.
+La siguiente rama pendiente recomendada es `refactor/backend-cuentas-services`.
 
-Objetivo: extraer de forma funcionalmente neutra servicios y repositorios de Inventario, empezando por movimientos, bajas, PDF y Excel, ahora que los listados críticos ya tienen contrato paginado común.
+Objetivo: extraer de forma funcionalmente neutra servicios y repositorios de Cuentas, priorizando reportes y exportaciones sin modificar montos, saldos, estados, permisos ni transacciones.
 
-Archivos probables iniciales: `backend/src/controllers/inventarioController.js`, nuevos servicios/repositories de Inventario, tests existentes de inventario y cobertura nueva enfocada por flujo.
+Archivos probables iniciales: `backend/src/controllers/cuentasController.js`, repositories/services existentes de Cuentas, tests de reportes/exportaciones y cobertura nueva enfocada por flujo.
 
 ## Decisiones de negocio pendientes
 
