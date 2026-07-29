@@ -27,7 +27,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | CI-002 | CI/CD | P2 | El hook pre-push ejecutaba el build raíz, que invocaba instalación. | `.husky/pre-push`; script raíz `build`. | Hooks podían modificar dependencias o fallar por entorno inseguro. | XS | Bajo | Ninguna | corregido |
 | BE-001 | Arquitectura backend | P2 | `inventarioController.js` concentra reglas, SQL, transacciones, PDF y Excel. | PR #20 extrajo constantes de dominio y repositorio de lectura para artículos, catálogo/exportación de artículos y movimientos. | Menor acoplamiento en lecturas; comandos, bajas, PDF y reportes quedan como riesgo residual. | L | Medio | Cobertura existente de inventario | parcialmente corregido |
 | BE-002 | Arquitectura backend | P2 | `cuentasController.js` mezclaba control HTTP, reportes, queries dinámicas y Excel. | PR #22 extrajo lecturas de pagos, reporte, catálogo de facturas y exportación de reporte a `cuentasReadRepository`; comandos transaccionales quedaron fuera de alcance. | Menor acoplamiento en lecturas; riesgo residual en creación/edición/anulación/eliminación transaccional. | M | Medio | Repositorios de cuentas existentes | parcialmente corregido |
-| BE-003 | Rendimiento | P2 | Listados/reportes consultaban conjuntos completos sin límite uniforme. | PR #18 agregó contrato compartido, `LIMIT/OFFSET`, totales y metadata para Inventario y Cuentas. PR #24 aisló lecturas/exportación de Personal sin introducir paginación nueva. | Riesgo reducido en artículos, movimientos, facturas, pagos y lecturas de colaboradores; riesgo residual en tablas de Personal si crecen sin contrato paginado. | M | Medio | Contrato frontend/backend de paginación | parcialmente corregido |
+| BE-003 | Rendimiento | P2 | Listados/reportes consultaban conjuntos completos sin límite uniforme. | PR #18 agregó contrato compartido, `LIMIT/OFFSET`, totales y metadata para Inventario y Cuentas. PR #24 aisló lecturas/exportación de Personal sin introducir paginación nueva. PR #26 reforzó regresiones de contratos, catálogos y exportaciones. | Riesgo reducido en artículos, movimientos, facturas, pagos y lecturas de colaboradores; riesgo residual en tablas de Personal si crecen sin contrato paginado. | M | Medio | Contrato frontend/backend de paginación | parcialmente corregido |
 | BE-004 | Base de datos | P2 | Rollback de migraciones no está documentado por migración. | Migraciones aplican cambios seguros, pero no cada una documenta reversión operativa. | Menor capacidad de recuperación ante despliegue fallido. | M | Medio | Política de releases | documentar |
 | FE-001 | Arquitectura frontend | P2 | `Configuracion.jsx` e `Inventario.jsx` siguen siendo páginas orquestadoras grandes. | Archivos cercanos o superiores a 900 líneas. | Cambios visuales o funcionales tienen alto radio de impacto. | L | Medio | Componentes actuales | implementar |
 | FE-002 | UX | P2 | Tablas/filtros dependían mayormente de estado cliente y scroll horizontal. | PR #18 movió búsqueda, filtros, ordenamiento y paginación visible de Inventario/Cuentas al backend. | Menor carga cliente en módulos operativos; siguen pendientes mejoras visuales/responsive. | M | Medio | Paginación backend | parcialmente corregido |
@@ -63,6 +63,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | 5 | Paginación frontend residual | `refactor/frontend-paginated-personal-tables` | Consumir paginación del backend restante | Tablas de Personal | PR 4 | Hooks y controles de paginación remota | Frontend unit, E2E smoke si aplica | Medio | S | UI mantiene filtros/sort sin cargar todo |
 | 6 | Inventario dominio | `refactor/backend-inventario-services` | Extraer primera capa backend de inventario | Lecturas de artículos, catálogo/exportación de artículos y movimientos | Cobertura actual | Constantes de dominio, repositorio de lectura y tests unitarios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #20 |
 | 7 | Cuentas dominio | `refactor/backend-cuentas-services` | Aislar reportes y exportaciones | Lecturas de pagos, reporte, catálogo de facturas y exportación de reporte | PR 3 | Repositorio de lectura, allowlists compartidas y tests unitarios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #22 |
+| 7.1 | Regresiones de contratos | `test/contracts-list-regressions` | Cerrar vacíos de cobertura de listados | Tests backend/frontend de contratos, catálogos y exportaciones | PRs #18, #20, #22, #24 | Cobertura de COUNT/DATA, metadata, parámetros frontend y separación de exportaciones | Backend/frontend lint, backend tests, frontend unit, bundle validator, build | Bajo | S | Completado en PR #26 |
 | 8 | Frontend Inventario shell | `refactor/frontend-inventory-shell` | Reducir orquestación de página | `Inventario.jsx`, hooks y tabs | PR 5 | Hooks por flujo y componentes contenedores | Frontend unit + visual smoke | Medio | L | Página más pequeña y comportamiento igual |
 | 9 | Frontend Configuración shell | `refactor/frontend-configuracion-shell` | Separar directorio y ubicaciones | `Configuracion.jsx`, `ClientesCatalog` | PR 5 | Hooks y componentes por catálogo | Frontend unit + responsive smoke | Medio | L | Menor acoplamiento entre clientes/ubicaciones |
 | 10 | E2E CI smoke | `test/e2e-ci-smoke` | Automatizar flujos mínimos | Playwright smoke/auth | Datos E2E estables | Job CI opcional o required según duración | CI smoke verde | Medio | M | Smoke corre en PR sin flakes |
@@ -104,8 +105,8 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 
 | Métrica | Objetivo inicial |
 |---|---|
-| Backend tests | 30 suites y 560 tests verdes en entorno `_test`. |
-| Frontend unit | 44 suites y 272 tests verdes. |
+| Backend tests | 30 suites y 565 tests verdes en entorno `_test`. |
+| Frontend unit | 45 suites y 291 tests verdes. |
 | Bundle productivo | Sin endpoints locales funcionales ni sourcemaps públicos. |
 | CI | Checks en PR hacia `feat/gestion-ubicaciones` y `main`. |
 | Tamaño de módulos | Reducir controladores/páginas más grandes por PRs funcionalmente neutros. |
@@ -113,11 +114,11 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 
 ## Siguiente rama recomendada
 
-La siguiente rama pendiente recomendada es `test/contracts-list-regressions`.
+La siguiente rama pendiente recomendada es `refactor/frontend-list-hooks`.
 
-Objetivo: consolidar regresiones contractuales de listados y verificar que Inventario, Cuentas y los puntos preparados de Personal mantengan contratos compatibles.
+Objetivo: reducir duplicación en hooks y estados frontend de listados paginados sin cambiar contratos, permisos ni diseño visual.
 
-Archivos probables iniciales: pruebas de contratos de listados, utilidades de paginación y servicios frontend/backend que consumen listados paginados.
+Archivos probables iniciales: hooks de Inventario y Cuentas que consumen listados paginados, componentes de paginación compartidos y pruebas frontend existentes.
 
 ## Decisiones de negocio pendientes
 
