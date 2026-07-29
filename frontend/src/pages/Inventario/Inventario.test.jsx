@@ -26,6 +26,7 @@ jest.mock('../../services/clientesService', () => ({
   __esModule: true,
   default: {
     listClientes: jest.fn(),
+    listOpcionesUbicaciones: jest.fn(),
   },
 }));
 
@@ -103,13 +104,32 @@ describe('Inventario ubicación inline en formulario de artículos', () => {
       user: { id: 1, usuario: 'gerente', tipo_usuario: 'gerente' },
     });
     useToast.mockReturnValue({ showToast: jest.fn() });
-    clientesService.listClientes.mockResolvedValue(success([{ id: 10, nombre: 'ACME' }]));
+    clientesService.listOpcionesUbicaciones.mockResolvedValue(
+      success([{ id: 10, nombre: 'ACME', estado: 'activo' }])
+    );
     inventarioService.getUbicaciones.mockResolvedValue(
       success([{ id: 1, nombre: 'Bodega', cliente_id: 10, cliente_nombre: 'ACME' }])
     );
     inventarioService.getArticulos.mockResolvedValue(success([]));
     inventarioService.getMovimientos.mockResolvedValue(success([]));
     inventarioService.getBajasArticulos.mockResolvedValue(success([]));
+  });
+
+  test('supervisor carga inventario con opciones limitadas de clientes', async () => {
+    useAuth.mockReturnValue({
+      user: { id: 2, usuario: 'supervisor', tipo_usuario: 'supervisor' },
+    });
+
+    const page = await renderPage();
+
+    expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(1);
+    expect(clientesService.listClientes).not.toHaveBeenCalled();
+
+    await page.click(page.button('Crear artículo'));
+
+    expect(page.query('#art-cliente').textContent).toContain('ACME');
+
+    page.unmount();
   });
 
   test('crea una ubicación desde el formulario y conserva los datos del artículo', async () => {

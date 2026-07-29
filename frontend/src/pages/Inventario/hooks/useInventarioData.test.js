@@ -7,6 +7,7 @@ jest.mock('../../../services/clientesService', () => ({
   __esModule: true,
   default: {
     listClientes: jest.fn(),
+    listOpcionesUbicaciones: jest.fn(),
   },
 }));
 
@@ -29,7 +30,9 @@ describe('useInventarioData', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     inventarioService.getUbicaciones.mockResolvedValue(success([{ id: 1, nombre: 'Bodega' }]));
-    clientesService.listClientes.mockResolvedValue(success([{ id: 3, nombre: 'ACME' }]));
+    clientesService.listOpcionesUbicaciones.mockResolvedValue(
+      success([{ id: 3, nombre: 'ACME', estado: 'activo' }])
+    );
     inventarioService.getArticulos.mockResolvedValue(
       success([{ id: 10, nombre_articulo: 'Radio' }])
     );
@@ -43,12 +46,13 @@ describe('useInventarioData', () => {
     await flushPromises();
 
     expect(inventarioService.getUbicaciones).toHaveBeenCalledTimes(1);
-    expect(clientesService.listClientes).toHaveBeenCalledWith({ estado: 'activo' });
+    expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(1);
+    expect(clientesService.listClientes).not.toHaveBeenCalled();
     expect(inventarioService.getArticulos).toHaveBeenCalledWith();
     expect(inventarioService.getMovimientos).toHaveBeenCalledTimes(1);
     expect(inventarioService.getBajasArticulos).toHaveBeenCalledWith({});
     expect(hook.result.ubicaciones).toEqual([{ id: 1, nombre: 'Bodega' }]);
-    expect(hook.result.clientes).toEqual([{ id: 3, nombre: 'ACME' }]);
+    expect(hook.result.clientes).toEqual([{ id: 3, nombre: 'ACME', estado: 'activo' }]);
     expect(hook.result.articulos).toEqual([{ id: 10, nombre_articulo: 'Radio' }]);
     expect(hook.result.catalogArticulos).toEqual([{ id: 10, nombre_articulo: 'Radio' }]);
     expect(hook.result.movimientos).toEqual([{ id: 20 }]);
@@ -56,6 +60,30 @@ describe('useInventarioData', () => {
     expect(hook.result.loading).toBe(false);
     expect(hook.result.movimientosLoaded).toBe(true);
     expect(hook.result.bajasLoaded).toBe(true);
+
+    hook.unmount();
+  });
+
+  test('permite cargar inventario con opciones limitadas de clientes', async () => {
+    clientesService.listOpcionesUbicaciones.mockResolvedValue(
+      success([
+        { id: 3, nombre: 'ACME', estado: 'activo' },
+        { id: 4, nombre: 'Cliente histórico', estado: 'inactivo' },
+      ])
+    );
+
+    const hook = renderHook(() => useInventarioData({ showMessage }));
+
+    await flushPromises();
+
+    expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(1);
+    expect(clientesService.listClientes).not.toHaveBeenCalled();
+    expect(hook.result.clientes).toEqual([
+      { id: 3, nombre: 'ACME', estado: 'activo' },
+      { id: 4, nombre: 'Cliente histórico', estado: 'inactivo' },
+    ]);
+    expect(hook.result.loading).toBe(false);
+    expect(showMessage).not.toHaveBeenCalled();
 
     hook.unmount();
   });
@@ -69,6 +97,27 @@ describe('useInventarioData', () => {
     await flushPromises();
 
     expect(showMessage).toHaveBeenCalledWith('error', 'Error al cargar inventario');
+    expect(hook.result.loading).toBe(false);
+
+    hook.unmount();
+  });
+
+  test('maneja error de opciones limitadas sin dejar loader infinito', async () => {
+    clientesService.listOpcionesUbicaciones.mockResolvedValue({
+      success: false,
+      message: 'Error al obtener clientes para ubicaciones',
+    });
+
+    const hook = renderHook(() => useInventarioData({ showMessage }));
+
+    await flushPromises();
+
+    expect(clientesService.listClientes).not.toHaveBeenCalled();
+    expect(hook.result.clientes).toEqual([]);
+    expect(hook.result.ubicaciones).toEqual([{ id: 1, nombre: 'Bodega' }]);
+    expect(hook.result.articulos).toEqual([{ id: 10, nombre_articulo: 'Radio' }]);
+    expect(showMessage).toHaveBeenCalledWith('error', 'Error al obtener clientes para ubicaciones');
+    expect(hook.result.loading).toBe(false);
 
     hook.unmount();
   });

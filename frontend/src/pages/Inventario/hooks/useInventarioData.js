@@ -21,7 +21,7 @@ const useInventarioData = ({ showMessage }) => {
     const [ubicacionesRes, articulosRes, clientesRes] = await Promise.all([
       inventarioService.getUbicaciones(),
       inventarioService.getArticulos(),
-      clientesService.listClientes({ estado: 'activo' }),
+      clientesService.listOpcionesUbicaciones(),
     ]);
 
     if (ubicacionesRes.success) setUbicaciones(ubicacionesRes.data);
