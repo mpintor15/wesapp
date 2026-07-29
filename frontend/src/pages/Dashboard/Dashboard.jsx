@@ -9,6 +9,7 @@ import iconCuentas from '../../assets/icons/invoice.png';
 import iconInventario from '../../assets/icons/inventory.png';
 import iconPersonal from '../../assets/icons/audience.png';
 import iconUsuarios from '../../assets/icons/user.png';
+import { MODULE_ACCESS_PERMISSIONS } from '../../auth/modulePermissions';
 
 const MODULE_META = {
   cuentas: { description: 'Control de facturas, pagos y clientes' },
@@ -21,17 +22,41 @@ const MODULE_META = {
 };
 
 const DASHBOARD_MODULES = [
-  { key: 'cuentas', label: 'Cuentas', icon: iconCuentas, path: '/cuentas' },
+  {
+    key: 'cuentas',
+    permission: MODULE_ACCESS_PERMISSIONS.cuentas,
+    label: 'Cuentas',
+    icon: iconCuentas,
+    path: '/cuentas',
+  },
   {
     key: 'configuracion',
-    permission: 'configuracion',
+    permission: MODULE_ACCESS_PERMISSIONS.configuracion,
     label: 'Clientes',
     icon: iconInventario,
     path: '/configuracion',
   },
-  { key: 'inventario', label: 'Inventario', icon: iconInventario, path: '/inventario' },
-  { key: 'personal', label: 'Personal', icon: iconPersonal, path: '/personal' },
-  { key: 'usuarios', label: 'Usuarios', icon: iconUsuarios, path: '/usuarios' },
+  {
+    key: 'inventario',
+    permission: MODULE_ACCESS_PERMISSIONS.inventario,
+    label: 'Inventario',
+    icon: iconInventario,
+    path: '/inventario',
+  },
+  {
+    key: 'personal',
+    permission: MODULE_ACCESS_PERMISSIONS.personal,
+    label: 'Personal',
+    icon: iconPersonal,
+    path: '/personal',
+  },
+  {
+    key: 'usuarios',
+    permission: MODULE_ACCESS_PERMISSIONS.usuarios,
+    label: 'Usuarios',
+    icon: iconUsuarios,
+    path: '/usuarios',
+  },
 ];
 
 const Dashboard = () => {
@@ -55,7 +80,7 @@ const Dashboard = () => {
     navigate(module.path);
   };
 
-  const modules = DASHBOARD_MODULES.filter((m) => hasPermission(m.permission || m.key));
+  const modules = DASHBOARD_MODULES.filter((m) => hasPermission(m.permission));
 
   const roleLabel =
     {

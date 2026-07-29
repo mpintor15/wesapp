@@ -8,6 +8,8 @@ const SortButton = ({ field, label, onSort, tableSort }) => (
 );
 
 const PersonalTable = ({
+  canDelete,
+  canEdit,
   colaboradores,
   currentPage,
   onDelete,
@@ -69,32 +71,36 @@ const PersonalTable = ({
               </td>
               <td className="center col-actions app-col-actions app-col-actions--double">
                 <div className="action-buttons app-table-actions">
-                  <button
-                    className="action-btn action-btn-neutral"
-                    onClick={() => onEdit(c)}
-                    title="Editar"
-                    aria-label={`Editar ${c.nombres_completos}`}
-                    type="button"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z" />
-                      <path d="M14.5 5.5l3.5 3.5" />
-                    </svg>
-                  </button>
-                  <button
-                    className="action-btn action-btn-destructive"
-                    onClick={() => onDelete(c)}
-                    title="Eliminar"
-                    aria-label={`Eliminar ${c.nombres_completos}`}
-                    type="button"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                      <path d="M10 11v6M14 11v6" />
-                      <path d="M9 6V4h6v2" />
-                    </svg>
-                  </button>
+                  {canEdit ? (
+                    <button
+                      className="action-btn action-btn-neutral"
+                      onClick={() => onEdit(c)}
+                      title="Editar"
+                      aria-label={`Editar ${c.nombres_completos}`}
+                      type="button"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z" />
+                        <path d="M14.5 5.5l3.5 3.5" />
+                      </svg>
+                    </button>
+                  ) : null}
+                  {canDelete ? (
+                    <button
+                      className="action-btn action-btn-destructive"
+                      onClick={() => onDelete(c)}
+                      title="Eliminar"
+                      aria-label={`Eliminar ${c.nombres_completos}`}
+                      type="button"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4h6v2" />
+                      </svg>
+                    </button>
+                  ) : null}
                 </div>
               </td>
             </tr>

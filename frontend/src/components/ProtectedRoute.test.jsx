@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter, Route, Routes, useNavigationType } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
 import { useAuth } from '../context/AuthContext';
+import { canAny } from '../auth/authorization';
+import { MODULE_ACCESS_PERMISSIONS } from '../auth/modulePermissions';
+import { PERMISSIONS } from '../auth/permissions';
 
 jest.mock('../context/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -116,6 +119,24 @@ describe('ProtectedRoute', () => {
     view.unmount();
   });
 
+  test('renderiza el contenido protegido con lista any concedida', () => {
+    const hasPermission = jest.fn(() => true);
+    const requiredPermission = ['usuarios.ver', 'clientes.ver'];
+    const view = renderProtectedRoute(
+      {
+        isAuthenticated: true,
+        user: { id: 1, primer_login: false },
+        hasPermission,
+      },
+      { requiredPermission }
+    );
+
+    expect(view.get('protected-content')?.textContent).toBe('Contenido protegido');
+    expect(hasPermission).toHaveBeenCalledWith(requiredPermission);
+
+    view.unmount();
+  });
+
   test('muestra acceso denegado y conserva el botón de volver cuando falta el permiso', () => {
     const view = renderProtectedRoute(
       {
@@ -139,6 +160,29 @@ describe('ProtectedRoute', () => {
     });
 
     expect(view.get('previous-page')).not.toBeNull();
+
+    view.unmount();
+  });
+
+  test('no permite entrar a inventario con solo permiso de ubicaciones', () => {
+    const user = {
+      id: 1,
+      usuario: 'ubicaciones',
+      tipo_usuario: 'custom',
+      activo: true,
+      permisos: [PERMISSIONS.INVENTARIO_UBICACIONES_VER],
+    };
+    const view = renderProtectedRoute(
+      {
+        isAuthenticated: true,
+        user: { id: 1, primer_login: false },
+        hasPermission: jest.fn((permissions) => canAny(user, permissions)),
+      },
+      { requiredPermission: MODULE_ACCESS_PERMISSIONS.inventario }
+    );
+
+    expect(view.queryText('Acceso Denegado')).not.toBeUndefined();
+    expect(view.get('protected-content')).toBeNull();
 
     view.unmount();
   });

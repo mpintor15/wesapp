@@ -8,7 +8,7 @@ import {
   getInitialPagosReportFilters,
 } from '../utils/cuentasReportParams';
 
-const useCuentasReports = ({ showToast }) => {
+const useCuentasReports = ({ canExportReportes = true, showToast }) => {
   const { isSubmitting: isExportingFacturas, withSubmit: withFacturasExportSubmit } =
     useSubmitState();
   const { isSubmitting: isExportingPagos, withSubmit: withPagosExportSubmit } = useSubmitState();
@@ -44,6 +44,8 @@ const useCuentasReports = ({ showToast }) => {
   }, []);
 
   const exportFacturas = withFacturasExportSubmit(async () => {
+    if (!canExportReportes) return;
+
     const result = await cuentasService.exportExcel(buildFacturasReportParams(facturasFilters));
     if (result.success) {
       showToast('Reporte exportado exitosamente', 'success');
@@ -53,6 +55,8 @@ const useCuentasReports = ({ showToast }) => {
   });
 
   const exportPagos = withPagosExportSubmit(async () => {
+    if (!canExportReportes) return;
+
     const result = await cuentasService.exportPagosExcel(buildPagosReportParams(pagosFilters));
     if (result.success) {
       showToast('Reporte de pagos exportado exitosamente', 'success');
@@ -69,7 +73,10 @@ const useCuentasReports = ({ showToast }) => {
       isOpen: showFacturasReportModal,
       filters: facturasFilters,
       isExporting: isExportingFacturas,
-      open: () => setShowFacturasReportModal(true),
+      open: () => {
+        if (!canExportReportes) return;
+        setShowFacturasReportModal(true);
+      },
       close: () => setShowFacturasReportModal(false),
       handleFilterChange: handleFacturasFilterChange,
       toggleSoloDeudores: () => toggleFacturasFilter('soloDeudores'),
@@ -81,7 +88,10 @@ const useCuentasReports = ({ showToast }) => {
       isOpen: showPagosReportModal,
       filters: pagosFilters,
       isExporting: isExportingPagos,
-      open: () => setShowPagosReportModal(true),
+      open: () => {
+        if (!canExportReportes) return;
+        setShowPagosReportModal(true);
+      },
       close: () => setShowPagosReportModal(false),
       handleFilterChange: handlePagosFilterChange,
       clear: clearPagosFilters,
