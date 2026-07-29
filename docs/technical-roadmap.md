@@ -12,7 +12,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 |---|---|---|---|
 | Backend HTTP | `backend/src/routes`, `backend/src/app.js` | Rutas Express, middlewares, health checks, CORS, rate limit | CI ya cubre lint/tests, pero E2E no es obligatorio. |
 | Backend dominio | `backend/src/controllers`, `backend/src/services`, `backend/src/modules` | Reglas de negocio, transacciones, validaciones y exportaciones | Controladores de Inventario y Cuentas concentran demasiada lógica. |
-| Backend persistencia | `backend/src/repositories`, `backend/src/config/database.js` | SQL, pool, transacciones y health checks | Consultas sin paginación en listados/exportaciones deben medirse antes de crecer. |
+| Backend persistencia | `backend/src/repositories`, `backend/src/config/database.js` | SQL, pool, transacciones y health checks | Inventario y Cuentas ya tienen listados críticos paginados; Personal queda pendiente para una rama posterior. |
 | Base de datos | `database/schema.sql`, `database/migrations` | Esquema local, migraciones, índices y restricciones | Buenas guardas en migraciones recientes; rollback operativo no está estandarizado por cambio. |
 | Frontend app | `frontend/src/App.jsx`, `frontend/src/context`, `frontend/src/auth` | Rutas, sesión, permisos y estado global | Autorización centralizada; tokens persisten en `localStorage`. |
 | Frontend módulos | `frontend/src/pages`, `frontend/src/components`, `frontend/src/hooks` | Pantallas, formularios, tablas, modales y servicios HTTP | Algunas páginas y CSS son grandes; hay duplicación visual en tablas/filtros/modales. |
@@ -27,10 +27,10 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | CI-002 | CI/CD | P2 | El hook pre-push ejecutaba el build raíz, que invocaba instalación. | `.husky/pre-push`; script raíz `build`. | Hooks podían modificar dependencias o fallar por entorno inseguro. | XS | Bajo | Ninguna | corregido |
 | BE-001 | Arquitectura backend | P2 | `inventarioController.js` concentra reglas, SQL, transacciones, PDF y Excel. | Archivo sobre 2k líneas. | Mayor costo de cambio y riesgo de regresión en inventario. | L | Medio | Cobertura existente de inventario | implementar |
 | BE-002 | Arquitectura backend | P2 | `cuentasController.js` aún mezcla control HTTP, reportes, queries dinámicas y Excel. | Archivo sobre 1k líneas. | Dificulta aislar contratos y probar reportes complejos. | M | Medio | Repositorios de cuentas existentes | implementar |
-| BE-003 | Rendimiento | P2 | Listados/reportes consultan conjuntos completos sin límite uniforme. | Consultas en personal, inventario y cuentas sin `LIMIT/OFFSET` consistente. | Riesgo al crecer clientes, facturas, movimientos e inventario. | M | Medio | Contrato frontend/backend de paginación | medir |
+| BE-003 | Rendimiento | P2 | Listados/reportes consultaban conjuntos completos sin límite uniforme. | PR #18 agregó contrato compartido, `LIMIT/OFFSET`, totales y metadata para Inventario y Cuentas. Personal queda pendiente. | Riesgo reducido en artículos, movimientos, facturas y pagos; riesgo residual en Personal. | M | Medio | Contrato frontend/backend de paginación | parcialmente corregido |
 | BE-004 | Base de datos | P2 | Rollback de migraciones no está documentado por migración. | Migraciones aplican cambios seguros, pero no cada una documenta reversión operativa. | Menor capacidad de recuperación ante despliegue fallido. | M | Medio | Política de releases | documentar |
 | FE-001 | Arquitectura frontend | P2 | `Configuracion.jsx` e `Inventario.jsx` siguen siendo páginas orquestadoras grandes. | Archivos cercanos o superiores a 900 líneas. | Cambios visuales o funcionales tienen alto radio de impacto. | L | Medio | Componentes actuales | implementar |
-| FE-002 | UX | P2 | Tablas/filtros dependen mayormente de estado cliente y scroll horizontal. | CSS y componentes de Cuentas/Inventario tienen múltiples overrides responsive. | En datos grandes se degrada usabilidad y rendimiento. | M | Medio | Paginación backend | diseñar |
+| FE-002 | UX | P2 | Tablas/filtros dependían mayormente de estado cliente y scroll horizontal. | PR #18 movió búsqueda, filtros, ordenamiento y paginación visible de Inventario/Cuentas al backend. | Menor carga cliente en módulos operativos; siguen pendientes mejoras visuales/responsive. | M | Medio | Paginación backend | parcialmente corregido |
 | SEC-001 | Seguridad | P2 | JWT en `localStorage` expone sesión ante XSS. | `frontend/src/services/authService.js` guarda `token` en `localStorage`. | Riesgo plausible si una vulnerabilidad XSS aparece. | M | Medio | Decisión de arquitectura de sesión | investigar |
 | SEC-002 | Seguridad | P2 | No se observaron headers CSP específicos. | Express usa Helmet por defecto. | Hardening incompleto frente a inyección de scripts. | S | Bajo | Inventario de assets externos | implementar |
 | TEST-001 | Pruebas | P2 | E2E visual/responsive existe pero no corre en CI. | Scripts Playwright en frontend; workflow CI no los ejecuta. | Regresiones visuales pueden entrar por PR. | M | Medio | Datos E2E estables | implementar |
@@ -58,9 +58,9 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | CI integración | `fix/ci-integration-validation` | Validar PRs hacia integración | Workflow CI y hook pre-push | Ninguna | Checks en `feat/gestion-ubicaciones` y backend tests con PostgreSQL | CI verde, backend tests, frontend build | Bajo | XS | PR fusionado y checks remotos verdes |
 | 2 | Roadmap | `docs/technical-roadmap` | Consolidar plan ejecutable | Este documento | Integración validada | Roadmap, DoR, DoD, backlog | Format check si aplica, diff limpio | Bajo | XS | Documento fusionado |
-| 3 | Contratos de paginación | `refactor/contracts-paginated-lists` | Definir contrato común de listados | Cuentas, inventario, personal, clientes | Roadmap | Especificación de query params y response metadata | Tests de contrato backend/frontend | Medio | M | Contrato documentado y probado |
-| 4 | Paginación backend crítica | `refactor/backend-paginate-operational-lists` | Evitar cargas completas | Listados de inventario, cuentas, personal | PR 3 | `limit`, `offset`, totales, índices revisados | Backend tests, EXPLAIN manual documentado | Medio | M | Listados tienen límites y tests |
-| 5 | Paginación frontend crítica | `refactor/frontend-paginated-tables` | Consumir paginación del backend | Tablas de Cuentas/Inventario/Personal | PR 4 | Hooks y controles de paginación remota | Frontend unit, E2E smoke | Medio | M | UI mantiene filtros/sort sin cargar todo |
+| 3 | Contratos de paginación | `refactor/contracts-paginated-lists` | Definir contrato común de listados | Inventario y Cuentas; Personal contemplado para adopción posterior | Roadmap | Contrato común, defaults, límites, metadata, allowlists, catálogos no paginados para formularios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #18 |
+| 4 | Paginación backend crítica residual | `refactor/backend-paginate-personal-lists` | Evitar cargas completas restantes | Listados de Personal y consumidores que aún requieran contrato remoto | PR 3 | `limit`, `offset`, totales y filtros compatibles con el contrato común | Backend tests y frontend unit si aplica | Medio | S | Personal adopta el contrato sin cambiar reglas |
+| 5 | Paginación frontend residual | `refactor/frontend-paginated-personal-tables` | Consumir paginación del backend restante | Tablas de Personal | PR 4 | Hooks y controles de paginación remota | Frontend unit, E2E smoke si aplica | Medio | S | UI mantiene filtros/sort sin cargar todo |
 | 6 | Inventario dominio | `refactor/backend-inventory-services` | Extraer dominio de inventario | Movimiento, baja, PDF, Excel | Cobertura actual | Servicios/repositories por flujo | Backend tests existentes + casos nuevos | Alto | L | Controlador reducido sin cambios funcionales |
 | 7 | Cuentas dominio | `refactor/backend-cuentas-report-services` | Aislar reportes y exportaciones | Cuentas controller, report services | PR 3 | Servicios de reporte/exportación | Backend tests de reportes/export | Medio | M | Controller delega reglas principales |
 | 8 | Frontend Inventario shell | `refactor/frontend-inventory-shell` | Reducir orquestación de página | `Inventario.jsx`, hooks y tabs | PR 5 | Hooks por flujo y componentes contenedores | Frontend unit + visual smoke | Medio | L | Página más pequeña y comportamiento igual |
@@ -111,19 +111,18 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 | Tamaño de módulos | Reducir controladores/páginas más grandes por PRs funcionalmente neutros. |
 | E2E | Smoke estable antes de exigir visual completo en CI. |
 
-## Primera rama recomendada
+## Siguiente rama recomendada
 
-La primera rama pendiente recomendada es `refactor/contracts-paginated-lists`.
+La siguiente rama pendiente recomendada es `refactor/backend-inventario-services`.
 
-Objetivo: definir y probar el contrato de paginación/filtros para listados operativos antes de implementar nuevas funcionalidades sobre datos crecientes.
+Objetivo: extraer de forma funcionalmente neutra servicios y repositorios de Inventario, empezando por movimientos, bajas, PDF y Excel, ahora que los listados críticos ya tienen contrato paginado común.
 
-Archivos probables iniciales: rutas y controladores de Cuentas, Inventario y Personal; servicios frontend correspondientes; tests de servicios y controladores; documentación de contrato si se crea una ubicación específica.
+Archivos probables iniciales: `backend/src/controllers/inventarioController.js`, nuevos servicios/repositories de Inventario, tests existentes de inventario y cobertura nueva enfocada por flujo.
 
 ## Decisiones de negocio pendientes
 
 | Pregunta | Motivo | Opciones | Impacto | Fase afectada |
 |---|---|---|---|---|
-| ¿Qué listados deben paginarse primero y con qué tamaño por defecto? | Evita cambiar UX operacional sin acuerdo. | 25/50/100 filas; por módulo; preferencia persistida. | Define contrato y UI inicial. | PRs 3-5 |
+| ¿Cómo debe adoptar Personal el contrato paginado? | Personal no se migró en PR #18 por decisión de alcance. | Rama dedicada backend primero, frontend después si aplica. | Completa la reducción de listados sin límite. | PRs 4-5 |
 | ¿La sesión debe migrar de `localStorage` a cookie HttpOnly? | Reduce riesgo ante XSS, pero cambia auth/despliegue. | Mantener, migrar completo, estrategia híbrida. | Cambia backend, frontend y CSRF. | SEC-001 |
 | ¿Qué proveedor será fuente de observabilidad? | Health checks existen, pero alertas dependen del entorno. | Railway logs, proveedor externo, mínimo manual. | Define métricas y alertas. | PR 14 |
-
