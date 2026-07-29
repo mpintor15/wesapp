@@ -50,31 +50,12 @@ const { sanitizeError } = require('../utils/logSanitizer');
 const { assertClienteActivoForOperation } = require('../services/clientesStateService');
 const { PERMISSIONS } = require('../config/permissions');
 const { assertAnyPermission } = require('../middleware/permissions');
-const ALERTA_ESTADOS = new Set(['vencida', 'proxima_a_vencer', 'vigente']);
-const ARTICULOS_SORT_COLUMNS = Object.freeze({
-  tipo_articulo: 'tipo_articulo',
-  nombre_articulo: 'nombre_articulo',
-  serie: 'CONCAT(COALESCE(codigo_radio, numero_serie))',
-  cantidad: 'cantidad',
-  talla: 'talla',
-  marca: 'marca',
-  modelo: 'modelo',
-  calibre: 'calibre',
-  codigo_pantalla: 'codigo_pantalla',
-  version: 'version',
-  fecha_caducidad: 'fecha_caducidad',
-  ubicacion_nombre: 'ubicacion_nombre',
-  estado: 'estado',
-  created_at: 'created_at',
-});
-const MOVIMIENTOS_SORT_COLUMNS = Object.freeze({
-  fecha_movimiento: 'fecha_movimiento',
-  items: 'items',
-  articulos_movidos: 'articulos_movidos',
-  ubicacion_origen: 'ubicacion_origen',
-  ubicacion_destino: 'ubicacion_destino',
-  usuario: 'usuario',
-});
+const {
+  ALERTA_ESTADOS,
+  ARTICULOS_SORT_COLUMNS,
+  MOVIMIENTOS_SORT_COLUMNS,
+} = require('../services/inventario/inventarioDomain');
+const inventarioReadRepository = require('../repositories/inventario/inventarioReadRepository');
 
 // Contrato permanente: crear un articulo puede crear su ubicacion contextual.
 const ARTICULO_CONTEXTUAL_LOCATION_CREATE_PERMISSIONS = [
@@ -98,160 +79,6 @@ const validateInventoryDateBounds = (from, to) => {
   if (!validation.valid) {
     throw createHttpError(validation.status, validation.message);
   }
-};
-
-const buildInventarioAlertasQuery = ({ tipo, ubicacion_id, estado, search }) => {
-  const params = [];
-  const conditions = [];
-
-  if (tipo) {
-    params.push(tipo);
-    conditions.push(`tipo_articulo = $${params.length}`);
-  }
-
-  if (ubicacion_id) {
-    params.push(parsePositiveInteger(ubicacion_id, 'El filtro ubicación es inválido'));
-    conditions.push(`ubicacion_id = $${params.length}`);
-  }
-
-  if (estado) {
-    params.push(estado);
-    conditions.push(`estado_caducidad = $${params.length}`);
-  }
-
-  if (search) {
-    params.push(`%${search}%`);
-    conditions.push(`(
-      nombre_articulo ILIKE $${params.length} OR
-      numero_serie ILIKE $${params.length} OR
-      marca ILIKE $${params.length} OR
-      modelo ILIKE $${params.length} OR
-      calibre ILIKE $${params.length} OR
-      codigo_pantalla ILIKE $${params.length} OR
-      codigo_radio ILIKE $${params.length} OR
-      version ILIKE $${params.length}
-    )`);
-  }
-
-  const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
-  return { where, params };
-};
-
-const getInventarioAlertasListQuery = ({ pagination, filters }) => {
-  const { where, params } = buildInventarioAlertasQuery(filters);
-  const dataParams = [...params, pagination.pageSize, pagination.offset];
-  const limitIndex = dataParams.length - 1;
-  const offsetIndex = dataParams.length;
-  return {
-    countQuery: `SELECT COUNT(*)::int AS total FROM vista_inventario_alertas${where}`,
-    dataQuery: `SELECT * FROM vista_inventario_alertas${where}
-      ORDER BY ${pagination.sortExpression} ${pagination.sortOrder.toUpperCase()}
-      LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
-    countParams: params,
-    dataParams,
-  };
-};
-
-const buildMovimientosBaseQuery = () => `SELECT
-    m.id,
-    m.fecha_movimiento,
-    m.pdf_path,
-    m.estado,
-    m.anulado_por,
-    m.anulado_en,
-    m.motivo_anulacion,
-    (
-      COALESCE(m.estado, 'ACTIVO') = 'ACTIVO'
-      AND COALESCE(m.reversion_datos_completos, FALSE) = TRUE
-      AND EXISTS (
-        SELECT 1
-        FROM inventario_stock_efectos e
-        WHERE e.movimiento_id = m.id
-      )
-    ) AS reversible,
-    CASE
-      WHEN COALESCE(m.estado, 'ACTIVO') = 'ANULADO' THEN 'ALREADY_VOIDED'
-      WHEN COALESCE(m.estado, 'ACTIVO') = 'ELIMINADO' THEN 'ADMINISTRATIVELY_DELETED'
-      WHEN COALESCE(m.reversion_datos_completos, FALSE) = TRUE
-        AND EXISTS (
-          SELECT 1
-          FROM inventario_stock_efectos e
-          WHERE e.movimiento_id = m.id
-        ) THEN 'COMPLETE'
-      ELSE 'INCOMPLETE'
-    END AS reversal_status,
-    u.usuario,
-    COALESCE(SUM(d.cantidad), 0)::INT AS items,
-    STRING_AGG(
-      DISTINCT COALESCE(NULLIF(a.nombre_articulo, ''), NULLIF(a.numero_serie, ''), 'Artículo')
-      , ', '
-      ORDER BY COALESCE(NULLIF(a.nombre_articulo, ''), NULLIF(a.numero_serie, ''), 'Artículo')
-    ) AS articulos_movidos,
-    CASE
-      WHEN BOOL_AND(d.ubicacion_origen_id IS NULL) THEN 'entrada'
-      WHEN BOOL_AND(d.ubicacion_destino_id IS NULL) THEN 'salida'
-      ELSE 'traslado'
-    END AS tipo_movimiento,
-    STRING_AGG(DISTINCT ao.nombre, ', ' ORDER BY ao.nombre) AS ubicacion_origen,
-    CASE
-      WHEN COUNT(DISTINCT d.ubicacion_destino_id) = 1 THEN MAX(ad.nombre)
-      ELSE NULL
-    END AS ubicacion_destino,
-    CASE
-      WHEN COUNT(DISTINCT d.ubicacion_destino_id) = 1 THEN MAX(d.ubicacion_destino_id)
-      ELSE NULL
-    END AS ubicacion_destino_id
-  FROM movimientos m
-  LEFT JOIN detalle_movimientos d ON d.movimiento_id = m.id
-  LEFT JOIN articulos a ON d.articulo_id = a.id
-  LEFT JOIN usuarios u ON m.usuario_id = u.id
-  LEFT JOIN ubicaciones ao ON d.ubicacion_origen_id = ao.id
-  LEFT JOIN ubicaciones ad ON d.ubicacion_destino_id = ad.id
-  WHERE COALESCE(m.estado, 'ACTIVO') <> 'ELIMINADO'
-  GROUP BY m.id, u.usuario`;
-
-const buildMovimientosListQuery = ({ search, destino_id, from, to, pagination }) => {
-  const params = [];
-  const conditions = [];
-
-  if (search) {
-    params.push(`%${String(search).trim()}%`);
-    conditions.push(`(
-      articulos_movidos ILIKE $${params.length} OR
-      ubicacion_origen ILIKE $${params.length} OR
-      usuario ILIKE $${params.length}
-    )`);
-  }
-
-  if (destino_id) {
-    params.push(parsePositiveInteger(destino_id, 'El filtro destino es inválido'));
-    conditions.push(`ubicacion_destino_id = $${params.length}`);
-  }
-
-  if (from) {
-    params.push(from);
-    conditions.push(`fecha_movimiento::date >= $${params.length}::date`);
-  }
-
-  if (to) {
-    params.push(to);
-    conditions.push(`fecha_movimiento::date <= $${params.length}::date`);
-  }
-
-  const base = `FROM (${buildMovimientosBaseQuery()}) movimientos_list`;
-  const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
-  const dataParams = [...params, pagination.pageSize, pagination.offset];
-  const limitIndex = dataParams.length - 1;
-  const offsetIndex = dataParams.length;
-
-  return {
-    countQuery: `SELECT COUNT(*)::int AS total ${base}${where}`,
-    dataQuery: `SELECT * ${base}${where}
-      ORDER BY ${pagination.sortExpression} ${pagination.sortOrder.toUpperCase()}
-      LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
-    countParams: params,
-    dataParams,
-  };
 };
 
 const buildBajasArticulosQuery = ({ search, from, to }) => {
@@ -357,7 +184,7 @@ const getArticulos = async (req, res) => {
       sortBy: 'created_at',
       allowedSorts: ARTICULOS_SORT_COLUMNS,
     });
-    const { countQuery, dataQuery, countParams, dataParams } = getInventarioAlertasListQuery({
+    const { countResult, result } = await inventarioReadRepository.findArticulos({
       filters: {
         tipo,
         ubicacion_id,
@@ -366,11 +193,6 @@ const getArticulos = async (req, res) => {
       },
       pagination,
     });
-
-    const [countResult, result] = await Promise.all([
-      db.query(countQuery, countParams),
-      db.query(dataQuery, dataParams),
-    ]);
 
     res.json({
       success: true,
@@ -392,11 +214,7 @@ const getArticulos = async (req, res) => {
 
 const getArticulosCatalogo = async (req, res) => {
   try {
-    const { where, params } = buildInventarioAlertasQuery({});
-    const result = await db.query(
-      `SELECT * FROM vista_inventario_alertas${where} ORDER BY nombre_articulo ASC, id ASC`,
-      params
-    );
+    const result = await inventarioReadRepository.findArticulosCatalogo();
 
     res.json({
       success: true,
@@ -1252,17 +1070,13 @@ const getMovimientos = async (req, res) => {
       sortBy: 'fecha_movimiento',
       allowedSorts: MOVIMIENTOS_SORT_COLUMNS,
     });
-    const { countQuery, dataQuery, countParams, dataParams } = buildMovimientosListQuery({
+    const { countResult, result } = await inventarioReadRepository.findMovimientos({
       search,
       destino_id,
       from,
       to,
       pagination,
     });
-    const [countResult, result] = await Promise.all([
-      db.query(countQuery, countParams),
-      db.query(dataQuery, dataParams),
-    ]);
 
     res.json({
       success: true,
@@ -1391,17 +1205,12 @@ const exportArticulosExcel = async (req, res) => {
     if (estado && !ALERTA_ESTADOS.has(normalizedEstado)) {
       throw createHttpError(400, 'El filtro estado no es válido');
     }
-    const { where, params } = buildInventarioAlertasQuery({
+    const result = await inventarioReadRepository.findArticulosForExport({
       tipo,
       ubicacion_id,
       search,
       estado: estado ? normalizedEstado : undefined,
     });
-
-    const result = await db.query(
-      `SELECT * FROM vista_inventario_alertas${where} ORDER BY created_at DESC`,
-      params
-    );
 
     const { workbook, worksheet } = createWorkbook('Inventario', [
       { header: 'Tipo', key: 'tipo', width: 16 },
