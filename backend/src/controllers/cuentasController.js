@@ -48,6 +48,7 @@ const { createHttpError, handleControllerError } = require('../utils/http');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { validateOptionalDateRange } = require('../utils/inputValidation');
+const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const {
   parsePositiveIntegerId,
   validateBatchPaymentPayload,
@@ -57,6 +58,19 @@ const {
   validateFacturaUpdatePayload,
 } = require('../modules/cuentas/cuentas.validators');
 const { PAYMENT_METHODS } = require('../modules/cuentas/cuentas.constants');
+const FACTURAS_SORT_COLUMNS = Object.freeze({
+  num_factura: 'num_factura',
+  fecha_factura: 'fecha_factura',
+  cliente: 'cliente',
+  identificacion: 'identificacion',
+});
+const PAGOS_SORT_COLUMNS = Object.freeze({
+  fecha: 'fecha',
+  total: 'total',
+  cliente: 'cliente',
+  metodo_pago: 'metodo_pago',
+  created_at: 'created_at',
+});
 
 // Cache de introspección de esquema — se llena en el primer request y se reutiliza.
 // El servidor se reinicia con cada deploy, así que no hay riesgo de valores obsoletos.
@@ -108,6 +122,24 @@ const validateFechaInicioFin = (fecha_inicio, fecha_fin) => {
   if (!validation.valid) {
     throw createHttpError(validation.status, validation.message);
   }
+};
+
+const applyPaginationToQuery = ({ baseQuery, conditions, params, pagination, orderByClause }) => {
+  const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+  const dataParams = [...params, pagination.pageSize, pagination.offset];
+  const limitIndex = dataParams.length - 1;
+  const offsetIndex = dataParams.length;
+  const orderBy =
+    orderByClause || `ORDER BY ${pagination.sortExpression} ${pagination.sortOrder.toUpperCase()}`;
+
+  return {
+    countQuery: `SELECT COUNT(*)::int AS total FROM (${baseQuery}) paginated_source${where}`,
+    dataQuery: `SELECT * FROM (${baseQuery}) paginated_source${where}
+      ${orderBy}
+      LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
+    countParams: params,
+    dataParams,
+  };
 };
 
 // ============================================
@@ -414,6 +446,18 @@ const getAbonosByFactura = async (req, res) => {
 
 const getPagos = async (req, res) => {
   try {
+    const { fecha_inicio, fecha_fin, metodo_pago, search } = req.query;
+    validateFechaInicioFin(fecha_inicio, fecha_fin);
+    const metodoPagoNormalizado = metodo_pago
+      ? String(metodo_pago).trim().toLowerCase()
+      : undefined;
+    if (metodoPagoNormalizado && !PAYMENT_METHODS.includes(metodoPagoNormalizado)) {
+      throw createHttpError(400, 'El método de pago no es válido');
+    }
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: 'created_at',
+      allowedSorts: PAGOS_SORT_COLUMNS,
+    });
     const pagosTableExists = await tableExists('pagos');
     const [
       abonosHasPagoId,
@@ -444,8 +488,7 @@ const getPagos = async (req, res) => {
     ]);
 
     if (!pagosTableExists || !abonosHasPagoId) {
-      const legacyResult = await db.query(
-        `WITH totales_abonos AS (
+      const legacyBaseQuery = `WITH totales_abonos AS (
            SELECT num_factura, SUM(valor_abono) AS total_abonos
            FROM abonos
            GROUP BY num_factura
@@ -486,13 +529,42 @@ const getPagos = async (req, res) => {
          FROM abonos a
          JOIN cuentas c ON c.num_factura = a.num_factura
          JOIN clientes cl ON cl.id = c.cliente_id
-         LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura
-         ORDER BY a.created_at DESC, a.fecha_abono DESC, a.id DESC`
-      );
+         LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura`;
+      const conditions = [];
+      const params = [];
+
+      if (fecha_inicio && fecha_fin) {
+        params.push(fecha_inicio, fecha_fin);
+        conditions.push(`fecha BETWEEN $${params.length - 1} AND $${params.length}`);
+      }
+      if (metodoPagoNormalizado) {
+        params.push(metodoPagoNormalizado);
+        conditions.push(`LOWER(COALESCE(metodo_pago, '')) = $${params.length}`);
+      }
+      if (search) {
+        params.push(`%${String(search).trim()}%`);
+        conditions.push(`(cliente ILIKE $${params.length} OR total::text ILIKE $${params.length})`);
+      }
+
+      const { countQuery, dataQuery, countParams, dataParams } = applyPaginationToQuery({
+        baseQuery: legacyBaseQuery,
+        conditions,
+        params,
+        pagination,
+      });
+      const [countResult, legacyResult] = await Promise.all([
+        db.query(countQuery, countParams),
+        db.query(dataQuery, dataParams),
+      ]);
 
       return res.json({
         success: true,
         data: legacyResult.rows,
+        pagination: buildPaginationMetadata({
+          page: pagination.page,
+          pageSize: pagination.pageSize,
+          totalItems: countResult.rows[0]?.total,
+        }),
       });
     }
 
@@ -515,8 +587,7 @@ const getPagos = async (req, res) => {
       ? 'COALESCE(c.incluye_retencion_iva, FALSE)'
       : 'FALSE';
 
-    const result = await db.query(
-      `WITH totales_abonos AS (
+    const pagosBaseQuery = `WITH totales_abonos AS (
          SELECT num_factura, SUM(valor_abono) AS total_abonos
          FROM abonos
          GROUP BY num_factura
@@ -564,13 +635,42 @@ const getPagos = async (req, res) => {
        LEFT JOIN cuentas c ON c.num_factura = a.num_factura
        LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura
        LEFT JOIN clientes cl ON cl.id = ${clienteJoinKey}
-       GROUP BY p.id, cl.id, cl.nombre, cl.identificacion
-       ORDER BY created_at DESC, fecha DESC, p.id DESC`
-    );
+       GROUP BY p.id, cl.id, cl.nombre, cl.identificacion`;
+    const conditions = [];
+    const params = [];
+
+    if (fecha_inicio && fecha_fin) {
+      params.push(fecha_inicio, fecha_fin);
+      conditions.push(`fecha BETWEEN $${params.length - 1} AND $${params.length}`);
+    }
+    if (metodoPagoNormalizado) {
+      params.push(metodoPagoNormalizado);
+      conditions.push(`LOWER(COALESCE(metodo_pago, '')) = $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${String(search).trim()}%`);
+      conditions.push(`(cliente ILIKE $${params.length} OR total::text ILIKE $${params.length})`);
+    }
+
+    const { countQuery, dataQuery, countParams, dataParams } = applyPaginationToQuery({
+      baseQuery: pagosBaseQuery,
+      conditions,
+      params,
+      pagination,
+    });
+    const [countResult, result] = await Promise.all([
+      db.query(countQuery, countParams),
+      db.query(dataQuery, dataParams),
+    ]);
 
     res.json({
       success: true,
       data: result.rows,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: countResult.rows[0]?.total,
+      }),
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener pagos:');
@@ -651,49 +751,99 @@ const buildReporteCuentasSelect = (cuentasHasDetalleAnulacion, cuentasHasFechaAn
 
 const getReporte = async (req, res) => {
   try {
-    const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente } = req.query;
+    const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente, estado, search } = req.query;
     validateFechaInicioFin(fecha_inicio, fecha_fin);
     validateBooleanFilter(solo_deudores, 'El filtro solo_deudores debe ser true o false');
     validateBooleanFilter(agrupar_cliente, 'El filtro agrupar_cliente debe ser true o false');
+    if (estado && !['activa', 'anulada'].includes(String(estado))) {
+      throw createHttpError(400, 'El filtro estado no es válido');
+    }
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: agrupar_cliente === 'true' ? 'cliente' : 'num_factura',
+      allowedSorts: FACTURAS_SORT_COLUMNS,
+    });
     const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
     const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
 
-    let query = buildReporteCuentasSelect(cuentasHasDetalleAnulacion, cuentasHasFechaAnulacion);
+    const baseQuery = buildReporteCuentasSelect(
+      cuentasHasDetalleAnulacion,
+      cuentasHasFechaAnulacion
+    );
     const params = [];
     const conditions = [];
 
     if (fecha_inicio && fecha_fin) {
-      conditions.push(`v.fecha_factura BETWEEN $${params.length + 1} AND $${params.length + 2}`);
+      conditions.push(`fecha_factura BETWEEN $${params.length + 1} AND $${params.length + 2}`);
       params.push(fecha_inicio, fecha_fin);
     }
 
     if (solo_deudores === 'true') {
-      conditions.push('COALESCE(v.cancelada, FALSE) = FALSE');
-      conditions.push('v.saldo_pendiente > 0');
+      conditions.push('COALESCE(cancelada, FALSE) = FALSE');
+      conditions.push('saldo_pendiente > 0');
     }
 
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
+    if (estado === 'activa') {
+      conditions.push('COALESCE(cancelada, FALSE) = FALSE');
+    }
+    if (estado === 'anulada') {
+      conditions.push('COALESCE(cancelada, FALSE) = TRUE');
+    }
+    if (search) {
+      params.push(`%${String(search).trim()}%`);
+      conditions.push(
+        `(num_factura::text ILIKE $${params.length} OR cliente ILIKE $${params.length})`
+      );
     }
 
-    if (agrupar_cliente === 'true') {
-      query += ` ORDER BY
-        MIN(v.num_factura) OVER (PARTITION BY COALESCE(v.identificacion, v.cliente)),
-        v.cliente ASC,
-        v.num_factura ASC`;
-    } else {
-      query += ' ORDER BY v.num_factura ASC';
-    }
+    const { countQuery, dataQuery, countParams, dataParams } = applyPaginationToQuery({
+      baseQuery,
+      conditions,
+      params,
+      pagination,
+      orderByClause:
+        agrupar_cliente === 'true' && !req.query.sortBy
+          ? `ORDER BY
+        MIN(num_factura) OVER (PARTITION BY COALESCE(identificacion, cliente)) ASC,
+        cliente ASC,
+        num_factura ASC`
+          : undefined,
+    });
 
-    const result = await db.query(query, params);
+    const [countResult, result] = await Promise.all([
+      db.query(countQuery, countParams),
+      db.query(dataQuery, dataParams),
+    ]);
     const data = result.rows;
 
     res.json({
       success: true,
       data,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: countResult.rows[0]?.total,
+      }),
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al generar reporte:');
+  }
+};
+
+const getFacturasCatalogo = async (req, res) => {
+  try {
+    const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
+    const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
+    const query =
+      buildReporteCuentasSelect(cuentasHasDetalleAnulacion, cuentasHasFechaAnulacion) +
+      ' ORDER BY v.num_factura ASC';
+    const result = await db.query(query, []);
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al obtener catálogo de facturas:');
   }
 };
 
@@ -1082,6 +1232,7 @@ module.exports = {
   exportPagosExcel,
   createBatchAbono,
   getReporte,
+  getFacturasCatalogo,
   exportReporteExcel,
   getNextNumFactura,
   updateFactura,

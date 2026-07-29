@@ -79,6 +79,12 @@ router.get(
   cuentasController.getNextNumFactura
 );
 
+router.get(
+  '/facturas/catalogo',
+  requirePermission(PERMISSIONS.CUENTAS_REPORTES_GENERAR),
+  cuentasController.getFacturasCatalogo
+);
+
 /**
  * @route   POST /api/cuentas/facturas
  * @desc    Crear una factura

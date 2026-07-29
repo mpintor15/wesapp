@@ -33,7 +33,10 @@ const Cuentas = () => {
   const {
     clientes,
     reporte,
+    facturasCatalogo,
     pagos,
+    reportePagination,
+    pagosPagination,
     loading,
     clientesLoaded,
     pagosLoading,
@@ -45,23 +48,20 @@ const Cuentas = () => {
     refreshFinancialData,
   } = useCuentasData({ showToast });
 
-  const refreshActiveTab = useCallback(() => {
-    if (activeTab === 'pagos') return loadPagos();
-    return loadReporte();
-  }, [activeTab, loadPagos, loadReporte]);
+  const facturasTable = useFacturasTableState(reporte, reportePagination);
+  const pagosTable = usePagosTableState(pagos, pagosPagination);
 
-  useEffect(() => {
-    if (activeTab === 'pagos' && !pagosLoaded && !pagosLoading) {
-      loadPagos();
-    }
-  }, [activeTab, loadPagos, pagosLoaded, pagosLoading]);
+  const refreshActiveTab = useCallback(() => {
+    if (activeTab === 'pagos') return loadPagos(pagosTable.params);
+    return loadReporte(facturasTable.params);
+  }, [activeTab, facturasTable.params, loadPagos, loadReporte, pagosTable.params]);
 
   const facturaForm = useFacturaForm({
     clientes,
-    reporte,
+    reporte: facturasCatalogo,
     canCreateFactura: permissions.canCreateFactura,
     showToast,
-    onCreated: refreshFinancialData,
+    onCreated: () => refreshFinancialData(facturasTable.params, pagosTable.params),
   });
   const facturaFormModal = {
     ...facturaForm,
@@ -71,15 +71,13 @@ const Cuentas = () => {
   const facturaEditing = useFacturaEditing({
     canEditFactura: permissions.canEditFactura,
     showToast,
-    onUpdated: refreshFinancialData,
+    onUpdated: () => refreshFinancialData(facturasTable.params, pagosTable.params),
   });
-  const facturasTable = useFacturasTableState(reporte);
-  const pagosTable = usePagosTableState(pagos);
-  const batchPayment = useBatchPaymentState({ clientes, reporte });
+  const batchPayment = useBatchPaymentState({ clientes, reporte: facturasCatalogo });
   const batchPaymentSubmission = useBatchPaymentSubmission({
     batchPayment,
     showToast,
-    onCreated: refreshFinancialData,
+    onCreated: () => refreshFinancialData(facturasTable.params, pagosTable.params),
   });
   const reports = useCuentasReports({
     canExportReportes: permissions.canExportReportes,
@@ -88,8 +86,18 @@ const Cuentas = () => {
   const administrativeActions = useCuentasAdministrativeActions({
     permissions,
     showToast,
-    onRefresh: refreshFinancialData,
+    onRefresh: () => refreshFinancialData(facturasTable.params, pagosTable.params),
   });
+
+  useEffect(() => {
+    loadReporte(facturasTable.params);
+  }, [facturasTable.params, loadReporte]);
+
+  useEffect(() => {
+    if (activeTab === 'pagos' || pagosLoaded) {
+      loadPagos(pagosTable.params);
+    }
+  }, [activeTab, loadPagos, pagosLoaded, pagosTable.params]);
 
   const openCreateFacturaModal = useCallback(async () => {
     if (!permissions.canCreateFactura) {
@@ -119,10 +127,10 @@ const Cuentas = () => {
         onBack={() => navigate('/')}
         onCreateFactura={openCreateFacturaModal}
         onShowFacturasReport={reports.facturas.open}
-        onRefreshFacturas={loadReporte}
+        onRefreshFacturas={() => loadReporte(facturasTable.params)}
         onOpenBatchPayment={openBatchPaymentModal}
         onShowPagosReport={reports.pagos.open}
-        onRefreshPagos={loadPagos}
+        onRefreshPagos={() => loadPagos(pagosTable.params)}
       />
 
       {loading ? (
@@ -132,7 +140,10 @@ const Cuentas = () => {
           <CuentasErrorBanner message={loadError} onRetry={refreshActiveTab} />
           <CuentasTabs
             activeTab={activeTab}
-            counts={{ facturas: reporte.length, pagos: pagos.length }}
+            counts={{
+              facturas: facturasTable.totalItems,
+              pagos: pagosTable.totalItems,
+            }}
             onChange={setActiveTab}
           />
 
@@ -141,7 +152,8 @@ const Cuentas = () => {
               filtersDraft={facturasTable.filtersDraft}
               filters={facturasTable.filters}
               rows={facturasTable.rows}
-              filteredCount={facturasTable.filteredRows.length}
+              filteredCount={facturasTable.totalItems}
+              pageSize={facturasTable.pageSize}
               sort={facturasTable.sort}
               currentPage={facturasTable.currentPage}
               totalPages={facturasTable.totalPages}
@@ -156,6 +168,10 @@ const Cuentas = () => {
               onEdit={facturaEditing.open}
               onCancel={administrativeActions.openCancelFacturaModal}
               onPageChange={facturasTable.setCurrentPage}
+              onPageSizeChange={(pageSize) => {
+                facturasTable.setPageSize(pageSize);
+                facturasTable.setCurrentPage(1);
+              }}
             />
           )}
 
@@ -164,7 +180,8 @@ const Cuentas = () => {
               filtersDraft={pagosTable.filtersDraft}
               filters={pagosTable.filters}
               rows={pagosTable.rows}
-              filteredCount={pagosTable.filteredRows.length}
+              filteredCount={pagosTable.totalItems}
+              pageSize={pagosTable.pageSize}
               loading={pagosLoading}
               sort={pagosTable.sort}
               currentPage={pagosTable.currentPage}
@@ -176,6 +193,10 @@ const Cuentas = () => {
               onSort={pagosTable.handleSort}
               onOpenDetail={administrativeActions.openPagoDetailModal}
               onPageChange={pagosTable.setCurrentPage}
+              onPageSizeChange={(pageSize) => {
+                pagosTable.setPageSize(pageSize);
+                pagosTable.setCurrentPage(1);
+              }}
             />
           )}
 
