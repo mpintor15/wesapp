@@ -2,6 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import clientesService from '../../../services/clientesService';
 import inventarioService from '../../../services/inventarioService';
 
+const loadArticulosCatalogo = () =>
+  inventarioService.getArticulosCatalogo
+    ? inventarioService.getArticulosCatalogo()
+    : inventarioService.getArticulos();
+
 const useInventarioData = ({ showMessage }) => {
   const [articulos, setArticulos] = useState([]);
   const [catalogArticulos, setCatalogArticulos] = useState([]);
@@ -9,6 +14,8 @@ const useInventarioData = ({ showMessage }) => {
   const [ubicaciones, setUbicaciones] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
   const [bajas, setBajas] = useState([]);
+  const [articulosPagination, setArticulosPagination] = useState(null);
+  const [movimientosPagination, setMovimientosPagination] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [movimientosLoading, setMovimientosLoading] = useState(false);
@@ -18,9 +25,10 @@ const useInventarioData = ({ showMessage }) => {
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
-    const [ubicacionesRes, articulosRes, clientesRes] = await Promise.all([
+    const [ubicacionesRes, articulosRes, catalogRes, clientesRes] = await Promise.all([
       inventarioService.getUbicaciones(),
       inventarioService.getArticulos(),
+      loadArticulosCatalogo(),
       clientesService.listOpcionesUbicaciones(),
     ]);
 
@@ -28,13 +36,20 @@ const useInventarioData = ({ showMessage }) => {
     if (clientesRes.success) setClientes(clientesRes.data || []);
     if (articulosRes.success) {
       setArticulos(articulosRes.data);
-      setCatalogArticulos(articulosRes.data);
+      setArticulosPagination(articulosRes.pagination);
     }
-    if (!ubicacionesRes.success || !articulosRes.success || !clientesRes.success) {
+    if (catalogRes.success) setCatalogArticulos(catalogRes.data);
+    if (
+      !ubicacionesRes.success ||
+      !articulosRes.success ||
+      !catalogRes.success ||
+      !clientesRes.success
+    ) {
       showMessage(
         'error',
         ubicacionesRes.message ||
           articulosRes.message ||
+          catalogRes.message ||
           clientesRes.message ||
           'Error al cargar inventario'
       );
@@ -45,15 +60,15 @@ const useInventarioData = ({ showMessage }) => {
   const fetchArticulos = useCallback(
     async (params = {}, refreshCatalog = false, options = {}) => {
       if (options.showLoading) setLoading(true);
-      const shouldFetchCatalog = refreshCatalog && Object.keys(params).length > 0;
+      const shouldFetchCatalog = refreshCatalog;
       try {
         const [res, catalogRes] = await Promise.all([
           inventarioService.getArticulos(params),
-          shouldFetchCatalog ? inventarioService.getArticulos() : Promise.resolve(null),
+          shouldFetchCatalog ? loadArticulosCatalogo() : Promise.resolve(null),
         ]);
         if (res.success) {
           setArticulos(res.data);
-          if (refreshCatalog && !shouldFetchCatalog) setCatalogArticulos(res.data);
+          setArticulosPagination(res.pagination);
         } else {
           showMessage('error', res.message);
         }
@@ -71,17 +86,21 @@ const useInventarioData = ({ showMessage }) => {
     [showMessage]
   );
 
-  const loadMovimientos = useCallback(async () => {
-    setMovimientosLoading(true);
-    const res = await inventarioService.getMovimientos();
-    if (res.success) {
-      setMovimientos(res.data);
-      setMovimientosLoaded(true);
-    } else {
-      showMessage('error', res.message);
-    }
-    setMovimientosLoading(false);
-  }, [showMessage]);
+  const loadMovimientos = useCallback(
+    async (params = {}) => {
+      setMovimientosLoading(true);
+      const res = await inventarioService.getMovimientos(params);
+      if (res.success) {
+        setMovimientos(res.data);
+        setMovimientosPagination(res.pagination);
+        setMovimientosLoaded(true);
+      } else {
+        showMessage('error', res.message);
+      }
+      setMovimientosLoading(false);
+    },
+    [showMessage]
+  );
 
   const loadBajas = useCallback(
     async (params = {}) => {
@@ -138,6 +157,8 @@ const useInventarioData = ({ showMessage }) => {
     ubicaciones,
     movimientos,
     bajas,
+    articulosPagination,
+    movimientosPagination,
     loading,
     movimientosLoading,
     bajasLoading,

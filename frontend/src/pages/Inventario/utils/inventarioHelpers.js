@@ -470,6 +470,7 @@ export const buildArticulosExportParams = (filters) => {
 
 export const buildMovimientosExportParams = (filters) => {
   const params = {};
+  if (filters.search) params.search = filters.search;
   if (filters.destino_id) params.destino_id = filters.destino_id;
   if (filters.from) params.from = filters.from;
   if (filters.to) params.to = filters.to;

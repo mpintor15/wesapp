@@ -14,6 +14,7 @@ const MovimientosTab = ({
   movimientosFiltersDraft,
   movimientosLoading,
   movimientosPage,
+  movimientosPageSize,
   movimientosSort,
   movimientosTotalPages,
   onApplyFilters,
@@ -22,6 +23,7 @@ const MovimientosTab = ({
   onDownloadPdf,
   onDraftChange,
   onPageChange,
+  onPageSizeChange,
   onRegeneratePdf,
   onSort,
   onVoidMovimiento,
@@ -338,8 +340,10 @@ const MovimientosTab = ({
         {movimientosTotalPages > 1 && (
           <PaginationControls
             page={movimientosPage}
+            pageSize={movimientosPageSize}
             totalPages={movimientosTotalPages}
             onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
           />
         )}
       </>
