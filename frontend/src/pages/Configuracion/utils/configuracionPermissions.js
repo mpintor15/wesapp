@@ -1,32 +1,15 @@
-export const CONFIGURACION_ACTIONS = {
-  CLIENTES_VIEW: 'clientes.ver',
-  CLIENTES_CREATE: 'clientes.crear',
-  CLIENTES_EDIT: 'clientes.editar',
-  CLIENTES_DELETE: 'clientes.eliminar',
-  UBICACIONES_VIEW: 'inventario.ubicaciones.ver',
-  UBICACIONES_CREATE: 'inventario.ubicaciones.crear',
-  UBICACIONES_EDIT: 'inventario.ubicaciones.editar',
-  UBICACIONES_DELETE: 'inventario.ubicaciones.eliminar',
-};
+import { can } from '../../../auth/authorization';
+import { PERMISSIONS } from '../../../auth/permissions';
 
-const ROLE_ACTIONS = {
-  gerente: Object.values(CONFIGURACION_ACTIONS),
-  contador: [
-    CONFIGURACION_ACTIONS.CLIENTES_VIEW,
-    CONFIGURACION_ACTIONS.CLIENTES_CREATE,
-    CONFIGURACION_ACTIONS.CLIENTES_EDIT,
-    CONFIGURACION_ACTIONS.CLIENTES_DELETE,
-  ],
-  secretario: [
-    CONFIGURACION_ACTIONS.CLIENTES_VIEW,
-    CONFIGURACION_ACTIONS.CLIENTES_CREATE,
-    CONFIGURACION_ACTIONS.UBICACIONES_VIEW,
-  ],
-  supervisor: [
-    CONFIGURACION_ACTIONS.UBICACIONES_VIEW,
-    CONFIGURACION_ACTIONS.UBICACIONES_CREATE,
-    CONFIGURACION_ACTIONS.UBICACIONES_EDIT,
-  ],
+export const CONFIGURACION_ACTIONS = {
+  CLIENTES_VIEW: PERMISSIONS.CLIENTES_VER,
+  CLIENTES_CREATE: PERMISSIONS.CLIENTES_CREAR,
+  CLIENTES_EDIT: PERMISSIONS.CLIENTES_EDITAR,
+  CLIENTES_DELETE: PERMISSIONS.CLIENTES_ELIMINAR,
+  UBICACIONES_VIEW: PERMISSIONS.INVENTARIO_UBICACIONES_VER,
+  UBICACIONES_CREATE: PERMISSIONS.INVENTARIO_UBICACIONES_CREAR,
+  UBICACIONES_EDIT: PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR,
+  UBICACIONES_DELETE: PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR,
 };
 
 export const canViewLocations = (can) => can(CONFIGURACION_ACTIONS.UBICACIONES_VIEW);
@@ -37,25 +20,18 @@ export const canEditLocations = (can) => can(CONFIGURACION_ACTIONS.UBICACIONES_E
 
 export const canDeleteLocations = (can) => can(CONFIGURACION_ACTIONS.UBICACIONES_DELETE);
 
-const getExplicitPermissions = (user) => {
-  const permissions = user?.permisos || user?.permissions;
-  return Array.isArray(permissions) ? permissions : null;
-};
-
 export const getConfiguracionPermissions = (user) => {
-  const explicitPermissions = getExplicitPermissions(user);
-  const allowedActions = new Set(explicitPermissions || ROLE_ACTIONS[user?.tipo_usuario] || []);
-  const can = (action) => allowedActions.has(action);
+  const canAction = (action) => can(user, action);
 
   return {
-    can,
-    canViewClientes: can(CONFIGURACION_ACTIONS.CLIENTES_VIEW),
-    canCreateCliente: can(CONFIGURACION_ACTIONS.CLIENTES_CREATE),
-    canEditCliente: can(CONFIGURACION_ACTIONS.CLIENTES_EDIT),
-    canDeleteCliente: can(CONFIGURACION_ACTIONS.CLIENTES_DELETE),
-    canViewUbicaciones: canViewLocations(can),
-    canCreateUbicacion: canCreateLocations(can),
-    canEditUbicacion: canEditLocations(can),
-    canDeleteUbicacion: canDeleteLocations(can),
+    can: canAction,
+    canViewClientes: canAction(CONFIGURACION_ACTIONS.CLIENTES_VIEW),
+    canCreateCliente: canAction(CONFIGURACION_ACTIONS.CLIENTES_CREATE),
+    canEditCliente: canAction(CONFIGURACION_ACTIONS.CLIENTES_EDIT),
+    canDeleteCliente: canAction(CONFIGURACION_ACTIONS.CLIENTES_DELETE),
+    canViewUbicaciones: canViewLocations(canAction),
+    canCreateUbicacion: canCreateLocations(canAction),
+    canEditUbicacion: canEditLocations(canAction),
+    canDeleteUbicacion: canDeleteLocations(canAction),
   };
 };

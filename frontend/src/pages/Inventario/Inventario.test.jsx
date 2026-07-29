@@ -182,19 +182,21 @@ describe('Inventario ubicación inline en formulario de artículos', () => {
     page.unmount();
   });
 
-  test('no muestra creación rápida si solo puede usar ubicaciones existentes', async () => {
+  test('permite creación rápida con permiso backend de crear artículo', async () => {
     useAuth.mockReturnValue({
-      user: { id: 3, usuario: 'operador', tipo_usuario: 'custom', permisos: ['articulos.create'] },
+      user: {
+        id: 3,
+        usuario: 'operador',
+        tipo_usuario: 'custom',
+        permisos: ['inventario.articulos.crear'],
+      },
     });
     const page = await renderPage();
 
     await page.click(page.button('Crear artículo'));
     page.change('#art-cliente', '10');
 
-    expect(page.button('+ Nueva ubicación')).toBeFalsy();
-    expect(page.text()).toContain(
-      'Puedes seleccionar una ubicación existente, pero no crear una nueva desde este formulario.'
-    );
+    expect(page.button('+ Nueva ubicación')).toBeTruthy();
     expect(page.query('#art-ubicacion')).not.toBeNull();
 
     page.unmount();
@@ -206,7 +208,7 @@ describe('Inventario ubicación inline en formulario de artículos', () => {
         id: 4,
         usuario: 'operador',
         tipo_usuario: 'custom',
-        permisos: ['articulos.create', 'inventario.ubicaciones.crear'],
+        permisos: ['inventario.articulos.crear', 'inventario.ubicaciones.crear'],
       },
     });
     const page = await renderPage();
