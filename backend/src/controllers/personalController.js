@@ -22,40 +22,14 @@ const {
   parseStrictPositiveNumber,
   validateRequiredDateString,
 } = require('../utils/inputValidation');
-const ESTADOS_COLABORADOR = new Set(['activo', 'inactivo']);
-
-const buildColaboradoresQuery = ({ search, estado, cargo }) => {
-  let query = 'SELECT * FROM colaboradores';
-  const params = [];
-  const conditions = [];
-
-  if (search) {
-    params.push(`%${search}%`);
-    conditions.push(`(
-      nombres_completos ILIKE $${params.length}
-      OR cedula ILIKE $${params.length}
-      OR celular ILIKE $${params.length}
-      OR numero_cuenta ILIKE $${params.length}
-    )`);
-  }
-
-  if (estado) {
-    params.push(estado);
-    conditions.push(`estado = $${params.length}`);
-  }
-
-  if (cargo) {
-    params.push(cargo);
-    conditions.push(`cargo ILIKE $${params.length}`);
-  }
-
-  if (conditions.length > 0) {
-    query += ' WHERE ' + conditions.join(' AND ');
-  }
-
-  query += ' ORDER BY nombres_completos ASC';
-  return { query, params };
-};
+const { COLABORADORES_EXCEL_COLUMNS } = require('../modules/personal/personal.constants');
+const {
+  buildColaboradorExcelRow,
+  buildColaboradoresFilters,
+  isValidEstadoColaborador,
+  normalizeEstadoColaborador,
+} = require('../modules/personal/personal.domain');
+const personalReadRepository = require('../repositories/personal/personalReadRepository');
 
 // ============================================
 // COLABORADORES
@@ -64,17 +38,17 @@ const buildColaboradoresQuery = ({ search, estado, cargo }) => {
 const getColaboradores = async (req, res) => {
   try {
     const { search, estado, cargo } = req.query;
-    const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : '';
-    if (estado && !ESTADOS_COLABORADOR.has(estadoNormalizado)) {
+    const estadoNormalizado = normalizeEstadoColaborador(estado);
+    if (estado && !isValidEstadoColaborador(estadoNormalizado)) {
       throw createHttpError(400, 'El filtro estado debe ser activo o inactivo');
     }
-    const { query, params } = buildColaboradoresQuery({
+    const filters = buildColaboradoresFilters({
       search,
-      estado: estado ? estadoNormalizado : undefined,
+      estado,
       cargo,
     });
 
-    const result = await db.query(query, params);
+    const result = await personalReadRepository.findColaboradores(filters);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener colaboradores:');
@@ -103,7 +77,7 @@ const createColaborador = async (req, res) => {
       });
     }
 
-    if (!ESTADOS_COLABORADOR.has(estadoNormalizado)) {
+    if (!isValidEstadoColaborador(estadoNormalizado)) {
       throw createHttpError(400, 'El estado debe ser activo o inactivo');
     }
 
@@ -208,7 +182,7 @@ const updateColaborador = async (req, res) => {
         }
         if (field === 'estado' && value !== null && value !== undefined && value !== '') {
           value = String(value).toLowerCase();
-          if (!ESTADOS_COLABORADOR.has(value)) {
+          if (!isValidEstadoColaborador(value)) {
             throw createHttpError(400, 'El estado debe ser activo o inactivo');
           }
         }
@@ -297,45 +271,21 @@ const deleteColaborador = async (req, res) => {
 const exportColaboradoresExcel = async (req, res) => {
   try {
     const { search, estado, cargo } = req.query;
-    const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : '';
-    if (estado && !ESTADOS_COLABORADOR.has(estadoNormalizado)) {
+    const estadoNormalizado = normalizeEstadoColaborador(estado);
+    if (estado && !isValidEstadoColaborador(estadoNormalizado)) {
       throw createHttpError(400, 'El filtro estado debe ser activo o inactivo');
     }
-    const { query, params } = buildColaboradoresQuery({
+    const filters = buildColaboradoresFilters({
       search,
-      estado: estado ? estadoNormalizado : undefined,
+      estado,
       cargo,
     });
 
-    const result = await db.query(query, params);
+    const result = await personalReadRepository.findColaboradoresForExport(filters);
 
-    const { workbook, worksheet } = createWorkbook('Colaboradores', [
-      { header: 'Nombres', key: 'nombres_completos', width: 30 },
-      { header: 'Cédula', key: 'cedula', width: 15 },
-      { header: 'Fecha Nacimiento', key: 'fecha_nacimiento', width: 16 },
-      { header: 'Cargo', key: 'cargo', width: 20 },
-      { header: 'Celular', key: 'celular', width: 15 },
-      { header: 'Banco', key: 'banco', width: 20 },
-      { header: 'Cuenta', key: 'numero_cuenta', width: 20 },
-      { header: 'Sueldo', key: 'sueldo', width: 14, numFmt: '$#,##0.00' },
-      { header: 'Estado', key: 'estado', width: 12 },
-    ]);
+    const { workbook, worksheet } = createWorkbook('Colaboradores', COLABORADORES_EXCEL_COLUMNS);
 
-    result.rows.forEach((row) =>
-      worksheet.addRow({
-        nombres_completos: row.nombres_completos,
-        cedula: row.cedula,
-        fecha_nacimiento: row.fecha_nacimiento
-          ? new Date(row.fecha_nacimiento).toLocaleDateString('es-EC')
-          : '',
-        cargo: row.cargo,
-        celular: row.celular || '',
-        banco: row.banco || '',
-        numero_cuenta: row.numero_cuenta || '',
-        sueldo: row.sueldo ? Number.parseFloat(row.sueldo) : '',
-        estado: row.estado,
-      })
-    );
+    result.rows.forEach((row) => worksheet.addRow(buildColaboradorExcelRow(row)));
 
     worksheet.getColumn('sueldo').numFmt = '$#,##0.00';
     styleDataRows(worksheet);
