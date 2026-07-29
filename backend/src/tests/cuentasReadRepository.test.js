@@ -99,6 +99,38 @@ describe('cuentasReadRepository', () => {
     ]);
   });
 
+  test('buildPagosListQuery no pagina COUNT y mantiene los mismos filtros que datos', () => {
+    const query = cuentasReadRepository.buildPagosListQuery({
+      filters: {
+        fecha_inicio: '2024-05-01',
+        fecha_fin: '2024-05-31',
+        metodo_pago: 'efectivo',
+        search: '300',
+      },
+      pagination: {
+        ...pagination,
+        pageSize: 100,
+        offset: 200,
+        sortExpression: 'total',
+        sortOrder: 'asc',
+      },
+      schema: fullSchema,
+    });
+
+    const countSql = normalizeSql(query.countQuery);
+    const dataSql = normalizeSql(query.dataQuery);
+    expect(countSql).toContain('fecha BETWEEN $1 AND $2');
+    expect(countSql).toContain('LOWER(COALESCE(metodo_pago, ' + emptySqlString + ')) = $3');
+    expect(countSql).toContain('(cliente ILIKE $4 OR total::text ILIKE $4)');
+    expect(countSql).not.toMatch(/\bLIMIT\b|\bOFFSET\b/i);
+    expect(dataSql).toContain('fecha BETWEEN $1 AND $2');
+    expect(dataSql).toContain('LOWER(COALESCE(metodo_pago, ' + emptySqlString + ')) = $3');
+    expect(dataSql).toContain('(cliente ILIKE $4 OR total::text ILIKE $4)');
+    expect(dataSql).toContain('ORDER BY total ASC LIMIT $5 OFFSET $6');
+    expect(query.countParams).toEqual(['2024-05-01', '2024-05-31', 'efectivo', '%300%']);
+    expect(query.dataParams).toEqual(['2024-05-01', '2024-05-31', 'efectivo', '%300%', 100, 200]);
+  });
+
   test('buildPagosListQuery conserva camino legacy cuando no existe tabla pagos', () => {
     const query = cuentasReadRepository.buildPagosListQuery({
       filters: {},
@@ -157,6 +189,39 @@ describe('cuentasReadRepository', () => {
     });
 
     expect(normalizeSql(query.dataQuery)).toContain('ORDER BY cliente ASC LIMIT $1 OFFSET $2');
+  });
+
+  test('buildReporteListQuery no pagina COUNT y mantiene filtros independientes de pagos', () => {
+    const query = cuentasReadRepository.buildReporteListQuery({
+      filters: {
+        fecha_inicio: '2024-06-01',
+        fecha_fin: '2024-06-30',
+        estado: 'anulada',
+        search: 'Acme',
+      },
+      pagination: {
+        ...pagination,
+        pageSize: 50,
+        offset: 150,
+        sortExpression: 'fecha_factura',
+        sortOrder: 'desc',
+      },
+      schema: fullSchema,
+    });
+
+    const countSql = normalizeSql(query.countQuery);
+    const dataSql = normalizeSql(query.dataQuery);
+    expect(countSql).toContain('fecha_factura BETWEEN $1 AND $2');
+    expect(countSql).toContain('COALESCE(cancelada, FALSE) = TRUE');
+    expect(countSql).toContain('(num_factura::text ILIKE $3 OR cliente ILIKE $3)');
+    expect(countSql).not.toMatch(/metodo_pago/i);
+    expect(countSql).not.toMatch(/\bLIMIT\b|\bOFFSET\b/i);
+    expect(dataSql).toContain('fecha_factura BETWEEN $1 AND $2');
+    expect(dataSql).toContain('COALESCE(cancelada, FALSE) = TRUE');
+    expect(dataSql).toContain('(num_factura::text ILIKE $3 OR cliente ILIKE $3)');
+    expect(dataSql).toContain('ORDER BY fecha_factura DESC LIMIT $4 OFFSET $5');
+    expect(query.countParams).toEqual(['2024-06-01', '2024-06-30', '%Acme%']);
+    expect(query.dataParams).toEqual(['2024-06-01', '2024-06-30', '%Acme%', 50, 150]);
   });
 
   test('buildReporteExportQuery conserva exportación completa sin LIMIT ni OFFSET', () => {
@@ -240,6 +305,38 @@ describe('cuentasReadRepository', () => {
     expect(finalSql).toContain('ORDER BY v.num_factura ASC');
     expect(finalSql).not.toMatch(/\bLIMIT\b|\bOFFSET\b/i);
     expect(executor.query.mock.calls.at(-1)[1]).toEqual([]);
+  });
+
+  test('findReporteForExport conserva executor y no hereda paginación visible', async () => {
+    const executor = {
+      query: jest.fn(async (sql) => {
+        const normalized = normalizeSql(sql);
+        if (normalized.includes('to_regclass')) {
+          return { rows: [{ table_name: 'pagos' }] };
+        }
+        if (normalized.includes('information_schema.columns')) {
+          return { rowCount: 1, rows: [] };
+        }
+        return { rows: [{ num_factura: 2001 }] };
+      }),
+    };
+
+    const result = await cuentasReadRepository.findReporteForExport(
+      {
+        fecha_inicio: '2024-07-01',
+        fecha_fin: '2024-07-31',
+        solo_deudores: 'true',
+      },
+      executor
+    );
+
+    expect(result.rows).toEqual([{ num_factura: 2001 }]);
+    const finalSql = normalizeSql(executor.query.mock.calls.at(-1)[0]);
+    expect(finalSql).toContain('v.fecha_factura BETWEEN $1 AND $2');
+    expect(finalSql).toContain('v.saldo_pendiente > 0');
+    expect(finalSql).not.toMatch(/\bLIMIT\b|\bOFFSET\b/i);
+    expect(executor.query.mock.calls.at(-1)[1]).toEqual(['2024-07-01', '2024-07-31']);
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   test('propaga errores de base de datos sin transformarlos', async () => {

@@ -76,4 +76,46 @@ describe('useFacturasTableState', () => {
 
     hook.unmount();
   });
+
+  test('usa metadata del backend y construye parámetros para facturas paginadas', () => {
+    const hook = renderHook(() =>
+      useFacturasTableState(makeFacturas(2), {
+        page: 2,
+        pageSize: 25,
+        totalItems: 80,
+        totalPages: 4,
+        hasNextPage: true,
+        hasPreviousPage: true,
+      })
+    );
+
+    expect(hook.result.rows).toHaveLength(2);
+    expect(hook.result.totalItems).toBe(80);
+    expect(hook.result.totalPages).toBe(4);
+
+    act(() => {
+      hook.result.handleFilterChange({ target: { name: 'search', value: 'Acme', type: 'text' } });
+      hook.result.toggleFilter('ordenAlfabetico');
+      hook.result.handleFilterChange({
+        target: { name: 'estado', value: 'anulada', type: 'select-one' },
+      });
+    });
+    act(() => {
+      hook.result.applyFilters();
+      hook.result.setPageSize(50);
+      hook.result.setCurrentPage(3);
+    });
+
+    expect(hook.result.params).toEqual({
+      page: 3,
+      pageSize: 50,
+      sortBy: 'cliente',
+      sortOrder: 'asc',
+      solo_deudores: 'true',
+      estado: 'anulada',
+      search: 'Acme',
+    });
+
+    hook.unmount();
+  });
 });
