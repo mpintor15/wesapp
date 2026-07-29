@@ -47,6 +47,26 @@ const readMigration = async (version) => {
   return fs.readFile(path.join(migrationsDir, migration.fileName), 'utf8');
 };
 
+const normalizeSqlWhitespace = (sql) => sql.replace(/\s+/g, ' ').trim();
+
+const hasSchemaVersionRegistration = (sql, version) => {
+  const normalized = normalizeSqlWhitespace(sql);
+  const versionTuple = String.raw`\(\s*${version}\s*,\s*'[^']+'\s*\)`;
+  const pattern = new RegExp(
+    String.raw`\bINSERT\s+INTO\s+schema_version\s*\(\s*version\s*,\s*description\s*\)\s+VALUES\b.*${versionTuple}`,
+    'i'
+  );
+
+  return pattern.test(normalized);
+};
+
+const hasDropUbicacionesNombreConstraint = (sql) => {
+  const normalized = normalizeSqlWhitespace(sql);
+  return /\bALTER\s+TABLE\s+ubicaciones\s+DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+ubicaciones_nombre_key\b/i.test(
+    normalized
+  );
+};
+
 const applyPendingMigrations = async (pool) => {
   const migrations = await listMigrations();
   const appliedResult = await pool.query('SELECT version FROM schema_version');
@@ -59,6 +79,18 @@ const applyPendingMigrations = async (pool) => {
     const sql = await fs.readFile(path.join(migrationsDir, migration.fileName), 'utf8');
     await pool.query(sql);
     applied.add(migration.version);
+  }
+};
+
+const applyMigrationInTransaction = async (pool, version) => {
+  const sql = await readMigration(version);
+  await pool.query('BEGIN');
+  try {
+    await pool.query(sql);
+    await pool.query('COMMIT');
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    throw error;
   }
 };
 
@@ -78,6 +110,17 @@ const createPre015OriginalSchema = async (pool) => {
       tipo_articulo TEXT,
       nombre_articulo TEXT,
       cantidad INTEGER DEFAULT 1,
+      talla TEXT,
+      marca TEXT,
+      modelo TEXT,
+      numero_serie TEXT,
+      calibre TEXT,
+      fecha_caducidad DATE,
+      codigo_pantalla TEXT,
+      codigo_radio TEXT,
+      version TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       activo BOOLEAN DEFAULT TRUE,
       ubicacion_id INTEGER REFERENCES ubicaciones(id)
     );
@@ -143,6 +186,122 @@ const createPre015OriginalSchema = async (pool) => {
   `);
 };
 
+const createPre018ClientesSchema = async (pool, { duplicatedIdentification = false } = {}) => {
+  await pool.query(`
+    CREATE TABLE clientes (
+      id SERIAL PRIMARY KEY,
+      nombre TEXT UNIQUE NOT NULL,
+      identificacion TEXT UNIQUE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE cuentas (
+      num_factura INTEGER PRIMARY KEY,
+      cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+      fecha_factura DATE NOT NULL,
+      valor_factura NUMERIC(10,2) NOT NULL CHECK (valor_factura > 0),
+      incluye_iva BOOLEAN DEFAULT FALSE,
+      incluye_retencion_fuente BOOLEAN DEFAULT FALSE,
+      incluye_retencion_iva BOOLEAN DEFAULT FALSE,
+      cancelada BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE schema_version (
+      version INTEGER PRIMARY KEY,
+      description TEXT NOT NULL,
+      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO schema_version (version, description)
+    SELECT version, 'already applied'
+    FROM generate_series(2, 17) AS version;
+  `);
+
+  if (duplicatedIdentification) {
+    await pool.query(`
+      INSERT INTO clientes (nombre, identificacion)
+      VALUES ('Cliente Uno', 'ABC-001'), ('Cliente Dos', ' abc-001 ');
+    `);
+  } else {
+    await pool.query(`
+      INSERT INTO clientes (nombre, identificacion)
+      VALUES
+        ('Cliente Historico', '  ABC-001  '),
+        ('Cliente Identificacion Vacia', ''),
+        ('Cliente Facturado', 'FAC-001');
+      INSERT INTO cuentas (num_factura, cliente_id, fecha_factura, valor_factura)
+      VALUES (1001, 3, '2026-01-10', 150.00);
+    `);
+  }
+};
+
+const createPre019UbicacionesSchema = async (pool) => {
+  await pool.query(`
+    CREATE TABLE clientes (
+      id SERIAL PRIMARY KEY,
+      nombre TEXT UNIQUE NOT NULL,
+      identificacion TEXT,
+      estado VARCHAR(20) NOT NULL DEFAULT 'activo'
+    );
+    CREATE TABLE cuentas (
+      num_factura INTEGER PRIMARY KEY,
+      cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+      fecha_factura DATE NOT NULL,
+      valor_factura NUMERIC(10,2) NOT NULL CHECK (valor_factura > 0)
+    );
+    CREATE TABLE pagos (
+      id SERIAL PRIMARY KEY,
+      cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+      fecha DATE NOT NULL,
+      metodo_pago TEXT,
+      total NUMERIC(10,2) NOT NULL
+    );
+    CREATE TABLE ubicaciones (
+      id SERIAL PRIMARY KEY,
+      nombre VARCHAR(100) UNIQUE NOT NULL
+    );
+    CREATE TABLE articulos (
+      id SERIAL PRIMARY KEY,
+      tipo_articulo TEXT,
+      nombre_articulo TEXT,
+      cantidad INTEGER DEFAULT 1,
+      talla TEXT,
+      marca TEXT,
+      modelo TEXT,
+      numero_serie TEXT,
+      calibre TEXT,
+      fecha_caducidad DATE,
+      codigo_pantalla TEXT,
+      codigo_radio TEXT,
+      version TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      activo BOOLEAN DEFAULT TRUE,
+      ubicacion_id INTEGER REFERENCES ubicaciones(id)
+    );
+    CREATE TABLE schema_version (
+      version INTEGER PRIMARY KEY,
+      description TEXT NOT NULL,
+      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX idx_ubicaciones_nombre_lower_unique
+      ON ubicaciones (LOWER(TRIM(nombre)));
+    INSERT INTO schema_version (version, description)
+    SELECT version, 'already applied'
+    FROM generate_series(2, 18) AS version;
+    INSERT INTO clientes (nombre, identificacion)
+    VALUES ('Cliente Norte', 'NORTE'), ('Cliente Sur', 'SUR');
+    INSERT INTO cuentas (num_factura, cliente_id, fecha_factura, valor_factura)
+    VALUES (1001, 1, '2026-01-01', 200.00);
+    INSERT INTO pagos (cliente_id, fecha, metodo_pago, total)
+    VALUES (2, '2026-01-02', 'transferencia', 50.00);
+    INSERT INTO ubicaciones (nombre)
+    VALUES ('Bodega Norte'), ('Bodega Sur');
+    INSERT INTO articulos (tipo_articulo, nombre_articulo, cantidad, ubicacion_id)
+    VALUES ('equipo', 'Chaleco', 2, 1);
+  `);
+};
+
 const expectStockEffectsModel = async (pool) => {
   const table = await pool.query(
     'SELECT to_regclass($$public.inventario_stock_efectos$$) AS table'
@@ -195,17 +354,78 @@ const expectStockEffectsModel = async (pool) => {
   expect(indexNames).toContain('idx_inventario_stock_efectos_articulo');
 };
 
-const expectUbicacionesCaseInsensitiveUniqueIndex = async (pool) => {
+const expectUbicacionesClienteModel = async (pool) => {
+  const columns = await pool.query(`
+    SELECT column_name, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'ubicaciones'
+  `);
+  const columnMap = new Map(columns.rows.map((row) => [row.column_name, row]));
+  expect(columnMap.get('cliente_id')).toMatchObject({ is_nullable: 'YES' });
+
+  const foreignKeys = await pool.query(`
+    SELECT conname, confdeltype
+    FROM pg_constraint
+    WHERE conrelid = 'public.ubicaciones'::regclass
+      AND contype = 'f'
+      AND conname = 'fk_ubicaciones_cliente'
+  `);
+  expect(foreignKeys.rowCount).toBe(1);
+  expect(foreignKeys.rows[0].confdeltype).toBe('r');
+
   const indexes = await pool.query(`
     SELECT indexname, indexdef
     FROM pg_indexes
     WHERE schemaname = 'public'
       AND tablename = 'ubicaciones'
-      AND indexname = 'idx_ubicaciones_nombre_lower_unique'
   `);
+  const indexMap = new Map(indexes.rows.map((row) => [row.indexname, row.indexdef]));
 
-  expect(indexes.rowCount).toBe(1);
-  expect(indexes.rows[0].indexdef).toMatch(/lower\(TRIM\(BOTH FROM nombre\)\)/i);
+  expect(indexMap.has('idx_ubicaciones_nombre_lower_unique')).toBe(false);
+  expect(indexMap.get('idx_ubicaciones_cliente_id')).toContain('cliente_id');
+  expect(indexMap.get('idx_ubicaciones_cliente_nombre_lower_unique')).toMatch(
+    /cliente_id, lower\(TRIM\(BOTH FROM nombre\)\)/i
+  );
+  expect(indexMap.get('idx_ubicaciones_cliente_nombre_lower_unique')).toMatch(
+    /WHERE \(cliente_id IS NOT NULL\)/i
+  );
+};
+
+const expectClientesCatalogModel = async (pool) => {
+  const table = await pool.query('SELECT to_regclass($$public.clientes$$) AS table');
+  expect(table.rows[0].table).toBe('clientes');
+
+  const columns = await pool.query(`
+    SELECT column_name, is_nullable, column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'clientes'
+  `);
+  const columnMap = new Map(columns.rows.map((row) => [row.column_name, row]));
+  expect(columnMap.get('nombre')).toMatchObject({ is_nullable: 'NO' });
+  expect(columnMap.get('identificacion')).toMatchObject({ is_nullable: 'YES' });
+  expect(columnMap.get('tipo_identificacion')).toBeDefined();
+  expect(columnMap.get('telefono')).toBeDefined();
+  expect(columnMap.get('correo')).toBeDefined();
+  expect(columnMap.get('direccion')).toBeDefined();
+  expect(columnMap.get('ciudad')).toBeDefined();
+  expect(columnMap.get('estado')).toMatchObject({ is_nullable: 'NO' });
+
+  const indexes = await pool.query(`
+    SELECT indexname, indexdef
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'clientes'
+  `);
+  const indexMap = new Map(indexes.rows.map((row) => [row.indexname, row.indexdef]));
+  expect(indexMap.get('idx_clientes_nombre_normalizado')).toMatch(
+    /lower\(TRIM\(BOTH FROM nombre\)\)/i
+  );
+  expect(indexMap.get('idx_clientes_estado')).toContain('estado');
+  expect(indexMap.get('idx_clientes_identificacion_normalizada_unique')).toMatch(
+    /lower\(TRIM\(BOTH FROM identificacion\)\)/i
+  );
 };
 
 describe('database migrations', () => {
@@ -216,7 +436,85 @@ describe('database migrations', () => {
     expect(versions).toEqual([...versions].sort((a, b) => a - b));
     expect(new Set(versions).size).toBe(versions.length);
     expect(versions).toContain(13);
-    expect(versions).toContain(17);
+    expect(versions).toContain(18);
+    expect(versions).toContain(19);
+  });
+
+  test('schema version registration matcher is strict but whitespace tolerant', () => {
+    const descriptionLiteral = [
+      String.fromCharCode(39),
+      'Description',
+      String.fromCharCode(39),
+    ].join('');
+
+    expect(
+      hasSchemaVersionRegistration(
+        'INSERT INTO schema_version (version, description) VALUES (19, ' + descriptionLiteral + ')',
+        19
+      )
+    ).toBe(true);
+    expect(
+      hasSchemaVersionRegistration(
+        `
+          INSERT INTO schema_version (
+            version,
+            description
+          )
+          VALUES (
+            19,
+            'Description'
+          )
+        `,
+        19
+      )
+    ).toBe(true);
+    expect(
+      hasSchemaVersionRegistration(
+        'INSERT  INTO  schema_version  ( version , description )  VALUES  ( 19 , ' +
+          descriptionLiteral +
+          ' )',
+        19
+      )
+    ).toBe(true);
+
+    expect(
+      hasSchemaVersionRegistration(
+        'INSERT INTO schema_version (version, description) VALUES (18, ' + descriptionLiteral + ')',
+        19
+      )
+    ).toBe(false);
+    expect(
+      hasSchemaVersionRegistration(
+        'INSERT INTO schema_version (version, description) VALUES (19, NULL)',
+        19
+      )
+    ).toBe(false);
+  });
+
+  test('ubicaciones constraint drop matcher is strict but whitespace tolerant', () => {
+    expect(
+      hasDropUbicacionesNombreConstraint(
+        'ALTER TABLE ubicaciones DROP CONSTRAINT IF EXISTS ubicaciones_nombre_key'
+      )
+    ).toBe(true);
+    expect(
+      hasDropUbicacionesNombreConstraint(`
+        ALTER TABLE ubicaciones
+          DROP CONSTRAINT IF EXISTS ubicaciones_nombre_key
+      `)
+    ).toBe(true);
+    expect(
+      hasDropUbicacionesNombreConstraint(
+        'ALTER   TABLE   ubicaciones   DROP   CONSTRAINT   IF   EXISTS   ubicaciones_nombre_key'
+      )
+    ).toBe(true);
+
+    expect(
+      hasDropUbicacionesNombreConstraint(
+        'ALTER TABLE ubicaciones DROP CONSTRAINT IF EXISTS otra_constraint'
+      )
+    ).toBe(false);
+    expect(hasDropUbicacionesNombreConstraint('SELECT 1')).toBe(false);
   });
 
   test('each migration registers its own schema version', async () => {
@@ -228,7 +526,7 @@ describe('database migrations', () => {
         'utf8'
       );
       expect(sql).toContain('schema_version');
-      expect(sql).toMatch(new RegExp(`\\(${migration.version},\\s*'`));
+      expect(hasSchemaVersionRegistration(sql, migration.version)).toBe(true);
     }
   });
 
@@ -277,14 +575,164 @@ describe('database migrations', () => {
     expect(sql).toMatch(/VALUES \(17, 'Case-insensitive unique normalized locations'\)/);
   });
 
-  test('scenario A: fresh schema has stock effects model and schema version 17', async () => {
+  test('clientes migration prepares catalog fields and normalized identification uniqueness', async () => {
+    const sql = await readMigration(18);
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS clientes');
+    expect(sql).toContain('LOWER(TRIM(identificacion))');
+    expect(sql).toContain('HAVING COUNT(*) > 1');
+    expect(sql).toContain('idx_clientes_identificacion_normalizada_unique');
+    expect(sql).toMatch(/VALUES \(18, 'Clientes catalog normalization'\)/);
+    expect(sql).not.toMatch(/DELETE FROM clientes/i);
+    expect(sql).not.toMatch(/nombre\s*=\s*TRIM\(nombre\)/i);
+    expect(sql).not.toMatch(/correo\s*=\s*NULLIF/i);
+  });
+
+  test('ubicaciones-clientes migration keeps historical locations nullable and scopes uniqueness by client', async () => {
+    const sql = await readMigration(19);
+    const normalizedSql = normalizeSqlWhitespace(sql);
+
+    expect(hasSchemaVersionRegistration(sql, 19)).toBe(true);
+    expect(normalizedSql).toContain('ADD COLUMN IF NOT EXISTS cliente_id INTEGER NULL');
+    expect(hasDropUbicacionesNombreConstraint(sql)).toBe(true);
+    expect(normalizedSql).toContain('FOREIGN KEY (cliente_id)');
+    expect(normalizedSql).toMatch(
+      /\bDROP INDEX IF EXISTS (public\.)?idx_ubicaciones_nombre_lower_unique\b/i
+    );
+    expect(normalizedSql).toContain('idx_ubicaciones_cliente_nombre_lower_unique');
+    expect(normalizedSql).toMatch(/WHERE cliente_id IS NOT NULL/i);
+    expect(sql).not.toMatch(/UPDATE ubicaciones\s+SET cliente_id/i);
+    expect(sql).not.toMatch(/cliente_id\s+INTEGER\s+NOT NULL/i);
+
+    await withTempDatabase('wesapp_migration_ubicaciones_019', async (pool) => {
+      await createPre019UbicacionesSchema(pool);
+
+      await applyMigrationInTransaction(pool, 19);
+      await expectUbicacionesClienteModel(pool);
+
+      const historicas = await pool.query(
+        'SELECT COUNT(*)::int AS total FROM ubicaciones WHERE cliente_id IS NULL'
+      );
+      expect(historicas.rows[0].total).toBe(2);
+
+      await pool.query('INSERT INTO clientes (nombre, identificacion) VALUES ($1, $2)', [
+        'Cliente Norte',
+        'NORTE-2',
+      ]);
+
+      await pool.query('UPDATE ubicaciones SET cliente_id = 1 WHERE id = 1');
+      await pool.query('UPDATE ubicaciones SET cliente_id = 2 WHERE id = 2');
+      await pool.query('INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2)', [
+        'Bodega Norte',
+        2,
+      ]);
+      await expect(
+        pool.query('INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2)', [
+          ' bodega norte ',
+          1,
+        ])
+      ).rejects.toMatchObject({ code: '23505' });
+
+      await expect(pool.query('DELETE FROM clientes WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+
+      const factura = await pool.query('SELECT cliente_id FROM cuentas WHERE num_factura = 1001');
+      expect(factura.rows[0].cliente_id).toBe(1);
+
+      const pago = await pool.query('SELECT cliente_id FROM pagos WHERE id = 1');
+      expect(pago.rows[0].cliente_id).toBe(2);
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 19');
+      expect(version.rowCount).toBe(1);
+    });
+  });
+
+  test('clientes migration 018 preserves historical cuentas data and allows optional identification', async () => {
+    await withTempDatabase('wesapp_migration_clientes_018', async (pool) => {
+      await createPre018ClientesSchema(pool);
+
+      await applyMigrationInTransaction(pool, 18);
+      await expectClientesCatalogModel(pool);
+
+      const historical = await pool.query(
+        `SELECT nombre, identificacion, estado
+         FROM clientes
+         WHERE nombre = 'Cliente Historico'`
+      );
+      expect(historical.rows[0]).toMatchObject({
+        nombre: 'Cliente Historico',
+        identificacion: '  ABC-001  ',
+        estado: 'activo',
+      });
+
+      const emptyIdentification = await pool.query(
+        `SELECT identificacion
+         FROM clientes
+         WHERE nombre = 'Cliente Identificacion Vacia'`
+      );
+      expect(emptyIdentification.rows[0].identificacion).toBeNull();
+
+      const factura = await pool.query(
+        `SELECT c.num_factura, cl.nombre
+         FROM cuentas c
+         JOIN clientes cl ON cl.id = c.cliente_id
+         WHERE c.num_factura = 1001`
+      );
+      expect(factura.rows[0]).toEqual({
+        num_factura: 1001,
+        nombre: 'Cliente Facturado',
+      });
+
+      await pool.query('INSERT INTO clientes (nombre, identificacion) VALUES ($1, NULL)', [
+        'Sin Ident 1',
+      ]);
+      await pool.query('INSERT INTO clientes (nombre, identificacion) VALUES ($1, NULL)', [
+        'Sin Ident 2',
+      ]);
+      await expect(
+        pool.query('INSERT INTO clientes (nombre, identificacion) VALUES ($1, $2)', [
+          'Duplicado',
+          'abc-001',
+        ])
+      ).rejects.toMatchObject({ code: '23505' });
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 18');
+      expect(version.rowCount).toBe(1);
+    });
+  });
+
+  test('clientes migration 018 fails transactionally when normalized identifications are duplicated', async () => {
+    await withTempDatabase('wesapp_migration_clientes_018_dup', async (pool) => {
+      await createPre018ClientesSchema(pool, { duplicatedIdentification: true });
+
+      await expect(applyMigrationInTransaction(pool, 18)).rejects.toThrow(
+        /identificaciones duplicadas/
+      );
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 18');
+      expect(version.rowCount).toBe(0);
+
+      const columns = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'clientes'
+          AND column_name = 'estado'
+      `);
+      expect(columns.rowCount).toBe(0);
+    });
+  });
+
+  test('scenario A: fresh schema has stock effects model and schema version 19', async () => {
     await withTempDatabase('wesapp_migration_fresh', async (pool) => {
       const schemaSql = await fs.readFile(schemaPath, 'utf8');
       await pool.query(schemaSql);
 
       await expectStockEffectsModel(pool);
-      await expectUbicacionesCaseInsensitiveUniqueIndex(pool);
-      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 17');
+      await expectUbicacionesClienteModel(pool);
+      await expectClientesCatalogModel(pool);
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 19');
       expect(version.rowCount).toBe(1);
     });
   });
@@ -296,8 +744,9 @@ describe('database migrations', () => {
       await applyPendingMigrations(pool);
 
       await expectStockEffectsModel(pool);
-      await expectUbicacionesCaseInsensitiveUniqueIndex(pool);
-      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 17');
+      await expectUbicacionesClienteModel(pool);
+      await expectClientesCatalogModel(pool);
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 19');
       expect(version.rowCount).toBe(1);
 
       const bajas = await pool.query(
