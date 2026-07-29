@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { act, flushPromises } from '../../testUtils/renderHook';
 import Dashboard from './Dashboard';
 import { useAuth } from '../../context/AuthContext';
+import { PERMISSIONS } from '../../auth/permissions';
 
 const mockNavigate = jest.fn();
 
@@ -72,8 +73,10 @@ describe('Dashboard', () => {
     useAuth.mockReturnValue({
       user: { usuario: 'contador', tipo_usuario: 'contador' },
       logout: jest.fn(),
-      hasPermission: jest.fn(
-        (permission) => permission === 'cuentas' || permission === 'configuracion'
+      hasPermission: jest.fn((permissions) =>
+        permissions.some((permission) =>
+          [PERMISSIONS.CUENTAS_FACTURAS_VER, PERMISSIONS.CLIENTES_VER].includes(permission)
+        )
       ),
     });
     const page = await renderDashboard();

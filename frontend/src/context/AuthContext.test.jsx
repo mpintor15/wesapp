@@ -8,6 +8,7 @@ import {
   getInventoryPermissions,
   INVENTORY_ACTIONS,
 } from '../pages/Inventario/utils/inventarioPermissions';
+import { MODULE_ACCESS_PERMISSIONS } from '../auth/modulePermissions';
 
 jest.mock('../services/authService', () => ({
   __esModule: true,
@@ -49,7 +50,9 @@ const renderAuth = () => {
           {String(permissions.can(INVENTORY_ACTIONS.MOVIMIENTOS_PDF_DOWNLOAD))}
         </span>
         <span data-testid="can-access">{String(permissions.canAccessInventory)}</span>
-        <span data-testid="can-configuracion">{String(hasPermission('configuracion'))}</span>
+        <span data-testid="can-configuracion">
+          {String(hasPermission(MODULE_ACCESS_PERMISSIONS.configuracion))}
+        </span>
       </div>
     );
   };

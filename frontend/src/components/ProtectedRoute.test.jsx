@@ -116,6 +116,24 @@ describe('ProtectedRoute', () => {
     view.unmount();
   });
 
+  test('renderiza el contenido protegido con lista any concedida', () => {
+    const hasPermission = jest.fn(() => true);
+    const requiredPermission = ['usuarios.ver', 'clientes.ver'];
+    const view = renderProtectedRoute(
+      {
+        isAuthenticated: true,
+        user: { id: 1, primer_login: false },
+        hasPermission,
+      },
+      { requiredPermission }
+    );
+
+    expect(view.get('protected-content')?.textContent).toBe('Contenido protegido');
+    expect(hasPermission).toHaveBeenCalledWith(requiredPermission);
+
+    view.unmount();
+  });
+
   test('muestra acceso denegado y conserva el botón de volver cuando falta el permiso', () => {
     const view = renderProtectedRoute(
       {
