@@ -2,6 +2,7 @@ const CuentasPageHeader = ({
   activeTab,
   canCreateFactura,
   canCreatePago,
+  canExportReportes,
   onBack,
   onCreateFactura,
   onShowFacturasReport,
@@ -37,9 +38,11 @@ const CuentasPageHeader = ({
             Crear nueva factura
           </button>
         ) : null}
-        <button className="btn btn-ghost btn-sm" onClick={onShowFacturasReport} type="button">
-          Generar reporte de Facturas
-        </button>
+        {canExportReportes ? (
+          <button className="btn btn-ghost btn-sm" onClick={onShowFacturasReport} type="button">
+            Generar reporte de Facturas
+          </button>
+        ) : null}
         <button
           className="btn btn-ghost btn-sm btn-icon-only"
           onClick={onRefreshFacturas}
@@ -58,9 +61,11 @@ const CuentasPageHeader = ({
             Registrar pago
           </button>
         ) : null}
-        <button className="btn btn-ghost btn-sm" onClick={onShowPagosReport} type="button">
-          Generar reporte de Pagos
-        </button>
+        {canExportReportes ? (
+          <button className="btn btn-ghost btn-sm" onClick={onShowPagosReport} type="button">
+            Generar reporte de Pagos
+          </button>
+        ) : null}
         <button
           className="btn btn-ghost btn-sm btn-icon-only"
           onClick={onRefreshPagos}

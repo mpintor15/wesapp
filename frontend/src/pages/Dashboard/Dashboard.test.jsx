@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { act, flushPromises } from '../../testUtils/renderHook';
 import Dashboard from './Dashboard';
 import { useAuth } from '../../context/AuthContext';
+import { canAny } from '../../auth/authorization';
 import { PERMISSIONS } from '../../auth/permissions';
 
 const mockNavigate = jest.fn();
@@ -78,6 +79,27 @@ describe('Dashboard', () => {
           [PERMISSIONS.CUENTAS_FACTURAS_VER, PERMISSIONS.CLIENTES_VER].includes(permission)
         )
       ),
+    });
+    const page = await renderDashboard();
+
+    expect(page.button('Clientes')).not.toBeNull();
+    expect(page.button('Inventario')).toBeUndefined();
+
+    page.unmount();
+  });
+
+  test('permiso de ubicaciones no muestra tarjeta de Inventario pero mantiene Clientes', async () => {
+    const user = {
+      id: 1,
+      usuario: 'ubicaciones',
+      tipo_usuario: 'custom',
+      activo: true,
+      permisos: [PERMISSIONS.INVENTARIO_UBICACIONES_VER],
+    };
+    useAuth.mockReturnValue({
+      user,
+      logout: jest.fn(),
+      hasPermission: jest.fn((permissions) => canAny(user, permissions)),
     });
     const page = await renderDashboard();
 

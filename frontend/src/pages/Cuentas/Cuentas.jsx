@@ -81,7 +81,10 @@ const Cuentas = () => {
     showToast,
     onCreated: refreshFinancialData,
   });
-  const reports = useCuentasReports({ showToast });
+  const reports = useCuentasReports({
+    canExportReportes: permissions.canExportReportes,
+    showToast,
+  });
   const administrativeActions = useCuentasAdministrativeActions({
     permissions,
     showToast,
@@ -112,6 +115,7 @@ const Cuentas = () => {
         activeTab={activeTab}
         canCreateFactura={permissions.canCreateFactura}
         canCreatePago={permissions.canCreatePago}
+        canExportReportes={permissions.canExportReportes}
         onBack={() => navigate('/')}
         onCreateFactura={openCreateFacturaModal}
         onShowFacturasReport={reports.facturas.open}

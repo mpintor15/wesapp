@@ -60,6 +60,26 @@ describe('cuentasPermissions', () => {
     expect(permissions.canCreateFactura).toBe(false);
   });
 
+  test('lectura de cuentas no concede exportación de reportes', () => {
+    const facturas = getCuentasPermissions(
+      user('custom', { permisos: [PERMISSIONS.CUENTAS_FACTURAS_VER] })
+    );
+    const pagos = getCuentasPermissions(
+      user('custom', { permisos: [PERMISSIONS.CUENTAS_PAGOS_VER] })
+    );
+
+    expect(facturas.canExportReportes).toBe(false);
+    expect(pagos.canExportReportes).toBe(false);
+  });
+
+  test('permiso explícito de exportar reportes concede la acción', () => {
+    const permissions = getCuentasPermissions(
+      user('custom', { permisos: [PERMISSIONS.CUENTAS_REPORTES_EXPORTAR] })
+    );
+
+    expect(permissions.canExportReportes).toBe(true);
+  });
+
   test('usuario ausente no obtiene capacidades administrativas', () => {
     const permissions = getCuentasPermissions(null);
 

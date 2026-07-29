@@ -95,4 +95,42 @@ describe('useCuentasReports', () => {
 
     hook.unmount();
   });
+
+  test('no abre ni exporta facturas sin permiso de reportes', async () => {
+    const showToast = jest.fn();
+    const hook = renderHook(() => useCuentasReports({ canExportReportes: false, showToast }));
+
+    act(() => {
+      hook.result.facturas.open();
+    });
+
+    await act(async () => {
+      await hook.result.facturas.export();
+    });
+
+    expect(hook.result.facturas.isOpen).toBe(false);
+    expect(cuentasService.exportExcel).not.toHaveBeenCalled();
+    expect(showToast).not.toHaveBeenCalled();
+
+    hook.unmount();
+  });
+
+  test('no abre ni exporta pagos sin permiso de reportes', async () => {
+    const showToast = jest.fn();
+    const hook = renderHook(() => useCuentasReports({ canExportReportes: false, showToast }));
+
+    act(() => {
+      hook.result.pagos.open();
+    });
+
+    await act(async () => {
+      await hook.result.pagos.export();
+    });
+
+    expect(hook.result.pagos.isOpen).toBe(false);
+    expect(cuentasService.exportPagosExcel).not.toHaveBeenCalled();
+    expect(showToast).not.toHaveBeenCalled();
+
+    hook.unmount();
+  });
 });
