@@ -29,8 +29,8 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | BE-002 | Arquitectura backend | P2 | `cuentasController.js` mezclaba control HTTP, reportes, queries dinámicas y Excel. | PR #22 extrajo lecturas de pagos, reporte, catálogo de facturas y exportación de reporte a `cuentasReadRepository`; comandos transaccionales quedaron fuera de alcance. | Menor acoplamiento en lecturas; riesgo residual en creación/edición/anulación/eliminación transaccional. | M | Medio | Repositorios de cuentas existentes | parcialmente corregido |
 | BE-003 | Rendimiento | P2 | Listados/reportes consultaban conjuntos completos sin límite uniforme. | PR #18 agregó contrato compartido, `LIMIT/OFFSET`, totales y metadata para Inventario y Cuentas. PR #24 aisló lecturas/exportación de Personal sin introducir paginación nueva. PR #26 reforzó regresiones de contratos, catálogos y exportaciones. | Riesgo reducido en artículos, movimientos, facturas, pagos y lecturas de colaboradores; riesgo residual en tablas de Personal si crecen sin contrato paginado. | M | Medio | Contrato frontend/backend de paginación | parcialmente corregido |
 | BE-004 | Base de datos | P2 | Rollback de migraciones no está documentado por migración. | Migraciones aplican cambios seguros, pero no cada una documenta reversión operativa. | Menor capacidad de recuperación ante despliegue fallido. | M | Medio | Política de releases | documentar |
-| FE-001 | Arquitectura frontend | P2 | `Configuracion.jsx` e `Inventario.jsx` siguen siendo páginas orquestadoras grandes. | Archivos cercanos o superiores a 900 líneas. | Cambios visuales o funcionales tienen alto radio de impacto. | L | Medio | Componentes actuales | implementar |
-| FE-002 | UX | P2 | Tablas/filtros dependían mayormente de estado cliente y scroll horizontal. | PR #18 movió búsqueda, filtros, ordenamiento y paginación visible de Inventario/Cuentas al backend. | Menor carga cliente en módulos operativos; siguen pendientes mejoras visuales/responsive. | M | Medio | Paginación backend | parcialmente corregido |
+| FE-001 | Arquitectura frontend | P2 | `Configuracion.jsx` e `Inventario.jsx` siguen siendo páginas orquestadoras grandes. | Archivos cercanos o superiores a 900 líneas; PR #28 consolidó estado paginado común de Facturas/Pagos en Cuentas. | Cambios visuales o funcionales tienen alto radio de impacto; duplicación de estado reducida en Cuentas. | L | Medio | Componentes actuales | parcialmente corregido |
+| FE-002 | UX | P2 | Tablas/filtros dependían mayormente de estado cliente y scroll horizontal. | PR #18 movió búsqueda, filtros, ordenamiento y paginación visible de Inventario/Cuentas al backend. PR #28 redujo duplicación de filtros, sort y paginación en hooks de Cuentas sin rediseño visual. | Menor carga cliente en módulos operativos; siguen pendientes mejoras visuales/responsive. | M | Medio | Paginación backend | parcialmente corregido |
 | SEC-001 | Seguridad | P2 | JWT en `localStorage` expone sesión ante XSS. | `frontend/src/services/authService.js` guarda `token` en `localStorage`. | Riesgo plausible si una vulnerabilidad XSS aparece. | M | Medio | Decisión de arquitectura de sesión | investigar |
 | SEC-002 | Seguridad | P2 | No se observaron headers CSP específicos. | Express usa Helmet por defecto. | Hardening incompleto frente a inyección de scripts. | S | Bajo | Inventario de assets externos | implementar |
 | TEST-001 | Pruebas | P2 | E2E visual/responsive existe pero no corre en CI. | Scripts Playwright en frontend; workflow CI no los ejecuta. | Regresiones visuales pueden entrar por PR. | M | Medio | Datos E2E estables | implementar |
@@ -64,6 +64,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | 6 | Inventario dominio | `refactor/backend-inventario-services` | Extraer primera capa backend de inventario | Lecturas de artículos, catálogo/exportación de artículos y movimientos | Cobertura actual | Constantes de dominio, repositorio de lectura y tests unitarios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #20 |
 | 7 | Cuentas dominio | `refactor/backend-cuentas-services` | Aislar reportes y exportaciones | Lecturas de pagos, reporte, catálogo de facturas y exportación de reporte | PR 3 | Repositorio de lectura, allowlists compartidas y tests unitarios | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, CI remoto | Medio | M | Completado en PR #22 |
 | 7.1 | Regresiones de contratos | `test/contracts-list-regressions` | Cerrar vacíos de cobertura de listados | Tests backend/frontend de contratos, catálogos y exportaciones | PRs #18, #20, #22, #24 | Cobertura de COUNT/DATA, metadata, parámetros frontend y separación de exportaciones | Backend/frontend lint, backend tests, frontend unit, bundle validator, build | Bajo | S | Completado en PR #26 |
+| 7.2 | Hooks frontend de listados | `refactor/frontend-list-hooks` | Reducir duplicación real en estado paginado frontend | Hook compartido para Facturas/Pagos en Cuentas; Inventario queda fuera por mayor acoplamiento de carga y catálogos | PRs #18 y #26 | `usePaginatedTableState`, migración conservadora de Cuentas y cobertura unitaria | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, format check | Bajo | S | Completado en PR #28 |
 | 8 | Frontend Inventario shell | `refactor/frontend-inventory-shell` | Reducir orquestación de página | `Inventario.jsx`, hooks y tabs | PR 5 | Hooks por flujo y componentes contenedores | Frontend unit + visual smoke | Medio | L | Página más pequeña y comportamiento igual |
 | 9 | Frontend Configuración shell | `refactor/frontend-configuracion-shell` | Separar directorio y ubicaciones | `Configuracion.jsx`, `ClientesCatalog` | PR 5 | Hooks y componentes por catálogo | Frontend unit + responsive smoke | Medio | L | Menor acoplamiento entre clientes/ubicaciones |
 | 10 | E2E CI smoke | `test/e2e-ci-smoke` | Automatizar flujos mínimos | Playwright smoke/auth | Datos E2E estables | Job CI opcional o required según duración | CI smoke verde | Medio | M | Smoke corre en PR sin flakes |
@@ -106,7 +107,7 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 | Métrica | Objetivo inicial |
 |---|---|
 | Backend tests | 30 suites y 565 tests verdes en entorno `_test`. |
-| Frontend unit | 45 suites y 291 tests verdes. |
+| Frontend unit | 46 suites y 301 tests verdes. |
 | Bundle productivo | Sin endpoints locales funcionales ni sourcemaps públicos. |
 | CI | Checks en PR hacia `feat/gestion-ubicaciones` y `main`. |
 | Tamaño de módulos | Reducir controladores/páginas más grandes por PRs funcionalmente neutros. |
@@ -114,11 +115,11 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 
 ## Siguiente rama recomendada
 
-La siguiente rama pendiente recomendada es `refactor/frontend-list-hooks`.
+La siguiente rama pendiente recomendada es `test/e2e-critical-flows`.
 
-Objetivo: reducir duplicación en hooks y estados frontend de listados paginados sin cambiar contratos, permisos ni diseño visual.
+Objetivo: cubrir flujos críticos E2E antes de continuar con refactors visuales o de shells grandes.
 
-Archivos probables iniciales: hooks de Inventario y Cuentas que consumen listados paginados, componentes de paginación compartidos y pruebas frontend existentes.
+Archivos probables iniciales: configuración Playwright existente, flujos de autenticación, navegación principal y acciones críticas de Inventario/Cuentas con datos locales controlados.
 
 ## Decisiones de negocio pendientes
 
