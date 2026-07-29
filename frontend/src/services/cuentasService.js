@@ -32,6 +32,7 @@ import {
   getFilenameFromDisposition,
   saveBlobWithPickerOrDownload,
 } from './serviceUtils';
+import { normalizePagination } from '../utils/pagination';
 
 const cuentasService = {
   // ============================================
@@ -141,10 +142,15 @@ const cuentasService = {
   // ABONOS
   // ============================================
 
-  getPagos: async () => {
+  getPagos: async (params = {}) => {
     try {
-      const response = await api.get('/cuentas/pagos');
-      return { success: response.data.success, data: response.data.data || [] };
+      const response = await api.get('/cuentas/pagos', { params });
+      const data = response.data.data || [];
+      return {
+        success: response.data.success,
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
+      };
     } catch (error) {
       return buildServiceFailure(error, 'Error al obtener pagos');
     }
@@ -191,9 +197,23 @@ const cuentasService = {
   getReporte: async (params = {}) => {
     try {
       const response = await api.get('/cuentas/reporte', { params });
-      return { success: response.data.success, data: response.data.data || [] };
+      const data = response.data.data || [];
+      return {
+        success: response.data.success,
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
+      };
     } catch (error) {
       return buildServiceFailure(error, 'Error al obtener reporte');
+    }
+  },
+
+  getFacturasCatalogo: async () => {
+    try {
+      const response = await api.get('/cuentas/facturas/catalogo');
+      return { success: response.data.success, data: response.data.data || [] };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener catálogo de facturas');
     }
   },
 

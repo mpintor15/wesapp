@@ -937,18 +937,24 @@ describe('reportes de Cuentas', () => {
     );
     expect(reportSql).toContain('v.total_abonos');
     expect(reportSql).not.toContain('WHERE COALESCE(v.cancelada, FALSE) = FALSE');
-    expect(res.json).toHaveBeenCalledWith({
-      success: true,
-      data: [
-        {
-          num_factura: 1001,
-          cancelada: true,
-          por_cobrar: '0',
-          total_abonos: '25.00',
-          saldo_pendiente: '0',
-        },
-      ],
-    });
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        data: [
+          {
+            num_factura: 1001,
+            cancelada: true,
+            por_cobrar: '0',
+            total_abonos: '25.00',
+            saldo_pendiente: '0',
+          },
+        ],
+        pagination: expect.objectContaining({
+          page: 1,
+          pageSize: 25,
+        }),
+      })
+    );
   });
 
   test('solo_deudores excluye anuladas de cuentas pendientes', async () => {
@@ -966,8 +972,8 @@ describe('reportes de Cuentas', () => {
     const reportSql = db.query.mock.calls
       .map((call) => call[0])
       .find((sql) => sql.includes('vista_reporte_cuentas'));
-    expect(reportSql).toContain('COALESCE(v.cancelada, FALSE) = FALSE');
-    expect(reportSql).toContain('v.saldo_pendiente > 0');
+    expect(reportSql).toContain('COALESCE(cancelada, FALSE) = FALSE');
+    expect(reportSql).toContain('saldo_pendiente > 0');
   });
 });
 

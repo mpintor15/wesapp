@@ -36,6 +36,12 @@ router.get(
   inventarioController.getArticulos
 );
 
+router.get(
+  '/articulos/catalogo',
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_VER),
+  inventarioController.getArticulosCatalogo
+);
+
 /**
  * @route   GET /api/inventario/articulos/bajas
  * @desc    Obtener historial de bajas de artículos

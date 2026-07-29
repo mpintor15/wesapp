@@ -38,8 +38,8 @@ describe('useFacturasTableState', () => {
   test('limpia filtros, ordena, pagina y calcula totales filtrados', () => {
     const hook = renderHook(() => useFacturasTableState(makeFacturas(55)));
 
-    expect(hook.result.totalPages).toBe(1);
-    expect(hook.result.rows).toHaveLength(28);
+    expect(hook.result.totalPages).toBe(2);
+    expect(hook.result.rows).toHaveLength(25);
     expect(hook.result.totals.subtotal).toBe(2800);
 
     act(() => {
@@ -50,8 +50,8 @@ describe('useFacturasTableState', () => {
       hook.result.setCurrentPage(2);
     });
 
-    expect(hook.result.totalPages).toBe(2);
-    expect(hook.result.rows).toHaveLength(5);
+    expect(hook.result.totalPages).toBe(3);
+    expect(hook.result.rows).toHaveLength(25);
 
     act(() => {
       hook.result.handleSort('num_factura');

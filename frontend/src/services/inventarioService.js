@@ -34,6 +34,7 @@ import {
   normalizeServiceError,
   saveBlobWithPickerOrDownload,
 } from './serviceUtils';
+import { normalizePagination } from '../utils/pagination';
 
 export const INVENTARIO_ERROR_MESSAGES = {
   INSUFFICIENT_STOCK: 'No existe stock suficiente para completar la operación.',
@@ -149,12 +150,26 @@ const inventarioService = {
   getArticulos: async (params = {}) => {
     try {
       const response = await api.get('/inventario/articulos', { params });
+      const data = response.data.data || [];
+      return {
+        success: response.data.success,
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
+      };
+    } catch (error) {
+      return failure(error, 'Error al obtener articulos');
+    }
+  },
+
+  getArticulosCatalogo: async () => {
+    try {
+      const response = await api.get('/inventario/articulos/catalogo');
       return {
         success: response.data.success,
         data: response.data.data || [],
       };
     } catch (error) {
-      return failure(error, 'Error al obtener articulos');
+      return failure(error, 'Error al obtener catálogo de artículos');
     }
   },
 
@@ -222,12 +237,14 @@ const inventarioService = {
     }
   },
 
-  getMovimientos: async () => {
+  getMovimientos: async (params = {}) => {
     try {
-      const response = await api.get('/inventario/movimientos');
+      const response = await api.get('/inventario/movimientos', { params });
+      const data = response.data.data || [];
       return {
         success: response.data.success,
-        data: response.data.data || [],
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
       };
     } catch (error) {
       return failure(error, 'Error al obtener movimientos');

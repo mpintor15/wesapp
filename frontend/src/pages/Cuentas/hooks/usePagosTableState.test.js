@@ -44,8 +44,8 @@ describe('usePagosTableState', () => {
       hook.result.setCurrentPage(2);
     });
 
-    expect(hook.result.totalPages).toBe(2);
-    expect(hook.result.rows).toHaveLength(5);
+    expect(hook.result.totalPages).toBe(3);
+    expect(hook.result.rows).toHaveLength(25);
 
     act(() => {
       hook.result.handleFilterChange({

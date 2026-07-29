@@ -33,14 +33,9 @@ import {
   EMPTY_BAJAS_FILTERS,
   EMPTY_MOVIMIENTOS_EXPORT_FILTERS,
   EMPTY_MOVIMIENTOS_FILTERS,
-  filterMovimientos,
   getArticuloTypeFormData,
   getNextSortState,
-  getTotalPages,
   isStockTipo,
-  paginateRows,
-  sortArticulos,
-  sortMovimientos,
   validateArticuloForm,
   validateBajaForm,
   validateMotivoAdministrativo,
@@ -51,6 +46,7 @@ import {
   getInventoryPermissions,
   INVENTORY_ACTIONS,
 } from './utils/inventarioPermissions';
+import { DEFAULT_PAGINATION, withPaginationParams } from '../../utils/pagination';
 import './Inventario.css';
 
 const Inventario = () => {
@@ -104,7 +100,9 @@ const Inventario = () => {
   const [bajasExportFilters, setBajasExportFilters] = useState(EMPTY_BAJAS_EXPORT_FILTERS);
   const [articulosSort, setArticulosSort] = useState({ field: 'tipo_articulo', direction: 'asc' });
   const [articulosPage, setArticulosPage] = useState(1);
+  const [articulosPageSize, setArticulosPageSize] = useState(25);
   const [movimientosPage, setMovimientosPage] = useState(1);
+  const [movimientosPageSize, setMovimientosPageSize] = useState(25);
   const [movimientosSort, setMovimientosSort] = useState({
     field: 'fecha_movimiento',
     direction: 'desc',
@@ -129,6 +127,8 @@ const Inventario = () => {
     bajasLoading,
     movimientosLoaded,
     bajasLoaded,
+    articulosPagination,
+    movimientosPagination,
     fetchArticulos,
     loadMovimientos,
     loadBajas,
@@ -161,10 +161,36 @@ const Inventario = () => {
 
   const getActiveFilterParams = useCallback(() => buildArticuloFilterParams(filters), [filters]);
 
+  const getArticulosListParams = useCallback(
+    (overrides = {}) =>
+      withPaginationParams({
+        page: articulosPage,
+        pageSize: articulosPageSize,
+        sortBy: articulosSort.field,
+        sortOrder: articulosSort.direction,
+        filters: getActiveFilterParams(),
+        ...overrides,
+      }),
+    [articulosPage, articulosPageSize, articulosSort, getActiveFilterParams]
+  );
+
+  const getMovimientosListParams = useCallback(
+    (overrides = {}) =>
+      withPaginationParams({
+        page: movimientosPage,
+        pageSize: movimientosPageSize,
+        sortBy: movimientosSort.field,
+        sortOrder: movimientosSort.direction,
+        filters: buildMovimientosExportParams(movimientosFilters),
+        ...overrides,
+      }),
+    [movimientosFilters, movimientosPage, movimientosPageSize, movimientosSort]
+  );
+
   const handleMovimientoCreated = useCallback(async () => {
-    await fetchArticulos(getActiveFilterParams(), true);
-    await loadMovimientos();
-  }, [fetchArticulos, getActiveFilterParams, loadMovimientos]);
+    await fetchArticulos(getArticulosListParams(), true);
+    await loadMovimientos(getMovimientosListParams());
+  }, [fetchArticulos, getArticulosListParams, getMovimientosListParams, loadMovimientos]);
 
   const movimientoFormState = useMovimientoForm({
     catalogArticulos,
@@ -181,13 +207,15 @@ const Inventario = () => {
 
   const handleApplyFilters = async () => {
     setArticulosPage(1);
-    await fetchArticulos(getActiveFilterParams(), false, { showLoading: true });
+    await fetchArticulos(getArticulosListParams({ page: 1 }), false, { showLoading: true });
   };
 
   const handleClearFilters = async () => {
     setFilters(EMPTY_ARTICULOS_FILTERS);
     setArticulosPage(1);
-    await fetchArticulos({}, true, { showLoading: true });
+    await fetchArticulos(getArticulosListParams({ page: 1, filters: {} }), true, {
+      showLoading: true,
+    });
   };
 
   const handleMovimientosDraftChange = (e) => {
@@ -195,15 +223,28 @@ const Inventario = () => {
     setMovimientosFiltersDraft((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleApplyMovimientosFilters = () => {
-    setMovimientosFilters({ ...movimientosFiltersDraft });
+  const handleApplyMovimientosFilters = async () => {
+    const nextFilters = { ...movimientosFiltersDraft };
+    setMovimientosFilters(nextFilters);
     setMovimientosPage(1);
+    await loadMovimientos(
+      getMovimientosListParams({
+        page: 1,
+        filters: buildMovimientosExportParams(nextFilters),
+      })
+    );
   };
 
-  const handleClearMovimientosFilters = () => {
+  const handleClearMovimientosFilters = async () => {
     setMovimientosFiltersDraft(EMPTY_MOVIMIENTOS_FILTERS);
     setMovimientosFilters(EMPTY_MOVIMIENTOS_FILTERS);
     setMovimientosPage(1);
+    await loadMovimientos(
+      getMovimientosListParams({
+        page: 1,
+        filters: {},
+      })
+    );
   };
 
   const handleBajasDraftChange = (e) => {
@@ -392,7 +433,7 @@ const Inventario = () => {
       );
       setShowArticuloModal(false);
       setEditingArticulo(null);
-      await fetchArticulos(getActiveFilterParams(), true);
+      await fetchArticulos(getArticulosListParams(), true);
     } else {
       showMessage('error', result.message);
     }
@@ -449,7 +490,7 @@ const Inventario = () => {
       showMessage('success', result.message || 'Artículo dado de baja');
       setShowBajaModal(false);
       setBajaTarget(null);
-      const requests = [fetchArticulos(getActiveFilterParams(), true)];
+      const requests = [fetchArticulos(getArticulosListParams(), true)];
       if (bajasLoaded) requests.push(loadBajas(getActiveBajasFilterParams()));
       await Promise.all(requests);
     } else {
@@ -473,7 +514,7 @@ const Inventario = () => {
 
     if (result.success) {
       showMessage('success', result.message || 'PDF regenerado correctamente');
-      await loadMovimientos();
+      await loadMovimientos(getMovimientosListParams());
       return;
     }
 
@@ -595,24 +636,27 @@ const Inventario = () => {
     setReasonMotivo('');
 
     if (reasonAction.type === 'deleteArticulo') {
-      await fetchArticulos(getActiveFilterParams(), true);
+      await fetchArticulos(getArticulosListParams(), true);
       return;
     }
 
     if (reasonAction.type === 'voidMovimiento') {
-      await Promise.all([loadMovimientos(), fetchArticulos(getActiveFilterParams(), true)]);
+      await Promise.all([
+        loadMovimientos(getMovimientosListParams()),
+        fetchArticulos(getArticulosListParams(), true),
+      ]);
       return;
     }
 
     if (reasonAction.type === 'deleteMovimiento') {
-      await loadMovimientos();
+      await loadMovimientos(getMovimientosListParams());
       return;
     }
 
     if (reasonAction.type === 'voidBaja') {
       await Promise.all([
         loadBajas(getActiveBajasFilterParams()),
-        fetchArticulos(getActiveFilterParams(), true),
+        fetchArticulos(getArticulosListParams(), true),
       ]);
       return;
     }
@@ -686,40 +730,68 @@ const Inventario = () => {
     return 'No hay artículos registrados en inventario.';
   }, [filters]);
 
-  const sortedArticulos = useMemo(
-    () => sortArticulos(articulos, articulosSort),
-    [articulos, articulosSort]
-  );
-
-  const articulosTotalPages = getTotalPages(sortedArticulos);
-  const paginatedArticulos = paginateRows(sortedArticulos, articulosPage);
-
-  const handleArticulosSort = (field) => {
-    setArticulosSort((prev) => getNextSortState(prev, field));
+  const articulosMeta = articulosPagination || DEFAULT_PAGINATION;
+  const articulosTotalPages = articulosMeta.totalPages;
+  const handleArticulosSort = async (field) => {
+    const nextSort = getNextSortState(articulosSort, field);
+    setArticulosSort(nextSort);
     setArticulosPage(1);
+    await fetchArticulos(
+      getArticulosListParams({
+        page: 1,
+        sortBy: nextSort.field,
+        sortOrder: nextSort.direction,
+      }),
+      false,
+      { showLoading: true }
+    );
   };
 
-  const filteredMovimientos = useMemo(
-    () => filterMovimientos(movimientos, movimientosFilters),
-    [movimientos, movimientosFilters]
-  );
-
-  const sortedMovimientos = useMemo(
-    () => sortMovimientos(filteredMovimientos, movimientosSort),
-    [filteredMovimientos, movimientosSort]
-  );
-
-  const movimientosTotalPages = getTotalPages(sortedMovimientos);
-  const paginatedMovimientos = paginateRows(sortedMovimientos, movimientosPage);
-  const handleMovimientosSort = (field) => {
-    setMovimientosSort((prev) => getNextSortState(prev, field));
+  const movimientosMeta = movimientosPagination || DEFAULT_PAGINATION;
+  const movimientosTotalPages = movimientosMeta.totalPages;
+  const handleMovimientosSort = async (field) => {
+    const nextSort = getNextSortState(movimientosSort, field);
+    setMovimientosSort(nextSort);
     setMovimientosPage(1);
+    await loadMovimientos(
+      getMovimientosListParams({
+        page: 1,
+        sortBy: nextSort.field,
+        sortOrder: nextSort.direction,
+      })
+    );
+  };
+
+  const handleArticulosPageChange = async (updater) => {
+    const nextPage = typeof updater === 'function' ? updater(articulosPage) : updater;
+    setArticulosPage(nextPage);
+    await fetchArticulos(getArticulosListParams({ page: nextPage }), false, { showLoading: true });
+  };
+
+  const handleArticulosPageSizeChange = async (nextPageSize) => {
+    setArticulosPageSize(nextPageSize);
+    setArticulosPage(1);
+    await fetchArticulos(getArticulosListParams({ page: 1, pageSize: nextPageSize }), false, {
+      showLoading: true,
+    });
+  };
+
+  const handleMovimientosPageChange = async (updater) => {
+    const nextPage = typeof updater === 'function' ? updater(movimientosPage) : updater;
+    setMovimientosPage(nextPage);
+    await loadMovimientos(getMovimientosListParams({ page: nextPage }));
+  };
+
+  const handleMovimientosPageSizeChange = async (nextPageSize) => {
+    setMovimientosPageSize(nextPageSize);
+    setMovimientosPage(1);
+    await loadMovimientos(getMovimientosListParams({ page: 1, pageSize: nextPageSize }));
   };
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === 'movimientos' && !movimientosLoaded && !movimientosLoading) {
-      loadMovimientos();
+      loadMovimientos(getMovimientosListParams());
     }
     if (tab === 'bajas' && !bajasLoaded && !bajasLoading) {
       loadBajas(getActiveBajasFilterParams());
@@ -750,8 +822,8 @@ const Inventario = () => {
         onExportBajas={openBajasExportModal}
         onExportMovimientos={openMovimientosExportModal}
         onRefresh={() => {
-          if (activeTab === 'articulos') return fetchArticulos(getActiveFilterParams(), true);
-          if (activeTab === 'movimientos') return loadMovimientos();
+          if (activeTab === 'articulos') return fetchArticulos(getArticulosListParams(), true);
+          if (activeTab === 'movimientos') return loadMovimientos(getMovimientosListParams());
           return loadBajas(getActiveBajasFilterParams());
         }}
       />
@@ -768,6 +840,7 @@ const Inventario = () => {
         <ArticulosTab
           articuloActionsClass={articuloActionsClass}
           articulosPage={articulosPage}
+          articulosPageSize={articulosPageSize}
           articulosSort={articulosSort}
           articulosTotalPages={articulosTotalPages}
           canDarBajaArticulo={canDarBajaArticulo}
@@ -782,11 +855,12 @@ const Inventario = () => {
           onDelete={handleDeleteArticulo}
           onEdit={handleOpenEdit}
           onFilterChange={handleFilterChange}
-          onPageChange={setArticulosPage}
+          onPageChange={handleArticulosPageChange}
+          onPageSizeChange={handleArticulosPageSizeChange}
           onSort={handleArticulosSort}
-          paginatedArticulos={paginatedArticulos}
+          paginatedArticulos={articulos}
           showArticuloActions={showArticuloActions}
-          sortedArticulos={sortedArticulos}
+          sortedArticulos={articulos}
           ubicaciones={ubicaciones}
         />
       )}
@@ -810,6 +884,7 @@ const Inventario = () => {
           movimientosFiltersDraft={movimientosFiltersDraft}
           movimientosLoading={movimientosLoading}
           movimientosPage={movimientosPage}
+          movimientosPageSize={movimientosPageSize}
           movimientosSort={movimientosSort}
           movimientosTotalPages={movimientosTotalPages}
           onApplyFilters={handleApplyMovimientosFilters}
@@ -817,14 +892,15 @@ const Inventario = () => {
           onDeleteMovimiento={handleDeleteMovimiento}
           onDownloadPdf={handleDownloadPdf}
           onDraftChange={handleMovimientosDraftChange}
-          onPageChange={setMovimientosPage}
+          onPageChange={handleMovimientosPageChange}
+          onPageSizeChange={handleMovimientosPageSizeChange}
           onRegeneratePdf={handleRegeneratePdf}
           onSort={handleMovimientosSort}
           onVoidMovimiento={handleVoidMovimiento}
-          paginatedMovimientos={paginatedMovimientos}
+          paginatedMovimientos={movimientos}
           permissions={inventoryPermissions}
           regeneratingPdfId={regeneratingPdfId}
-          sortedMovimientos={sortedMovimientos}
+          sortedMovimientos={movimientos}
           ubicaciones={ubicaciones}
         />
       )}

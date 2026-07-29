@@ -1,31 +1,58 @@
 import { useEffect, useMemo, useState } from 'react';
 import { filterAndSortPagos, paginateRows } from '../utils/cuentasFilters';
 import { DEFAULT_PAGO_FILTERS, PAGOS_ROWS_PER_PAGE } from '../utils/cuentasState';
+import { withPaginationParams } from '../../../utils/pagination';
 
-const usePagosTableState = (pagos) => {
+const buildPagosFilters = (filters) => {
+  const params = {};
+  if (filters.fechaInicio && filters.fechaFin) {
+    params.fecha_inicio = filters.fechaInicio;
+    params.fecha_fin = filters.fechaFin;
+  }
+  if (filters.metodoPago) params.metodo_pago = filters.metodoPago;
+  if (filters.search) params.search = filters.search;
+  return params;
+};
+
+const usePagosTableState = (pagos, pagination = null) => {
   const [filters, setFilters] = useState(DEFAULT_PAGO_FILTERS);
   const [filtersDraft, setFiltersDraft] = useState(DEFAULT_PAGO_FILTERS);
   const [sort, setSort] = useState({ field: 'fecha', direction: 'desc' });
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGOS_ROWS_PER_PAGE);
 
-  const filteredRows = useMemo(
-    () => filterAndSortPagos(pagos, filters, sort),
-    [filters, pagos, sort]
+  const localRows = useMemo(
+    () => (pagination ? pagos : filterAndSortPagos(pagos, filters, sort)),
+    [filters, pagination, pagos, sort]
   );
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGOS_ROWS_PER_PAGE));
-  const rows = paginateRows(filteredRows, currentPage, PAGOS_ROWS_PER_PAGE);
+  const filteredRows = pagination ? pagos : localRows;
+  const totalItems = pagination?.totalItems ?? localRows.length;
+  const totalPages = pagination?.totalPages ?? Math.max(1, Math.ceil(totalItems / pageSize));
+  const rows = pagination ? pagos : paginateRows(localRows, currentPage, pageSize);
+  const params = useMemo(
+    () =>
+      withPaginationParams({
+        page: currentPage,
+        pageSize,
+        sortBy: filters.agruparCliente ? 'cliente' : sort.field,
+        sortOrder: filters.agruparCliente ? 'asc' : sort.direction,
+        filters: buildPagosFilters(filters),
+      }),
+    [currentPage, filters, pageSize, sort]
+  );
 
   useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
+    setCurrentPage((page) => Math.min(page, Math.max(1, totalPages)));
   }, [totalPages]);
 
   const handleSort = (field) => {
-    setSort((prev) => {
-      if (prev.field === field) {
-        return { field, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
-      }
-      return { field, direction: field === 'fecha' ? 'desc' : 'asc' };
-    });
+    const nextSort =
+      sort.field === field
+        ? { field, direction: sort.direction === 'asc' ? 'desc' : 'asc' }
+        : { field, direction: field === 'fecha' ? 'desc' : 'asc' };
+    setSort(nextSort);
+    setCurrentPage(1);
+    return nextSort;
   };
 
   const handleFilterChange = (event) => {
@@ -43,6 +70,7 @@ const usePagosTableState = (pagos) => {
   const applyFilters = () => {
     setFilters(filtersDraft);
     setCurrentPage(1);
+    return filtersDraft;
   };
 
   const clearFilters = () => {
@@ -50,6 +78,7 @@ const usePagosTableState = (pagos) => {
     setFiltersDraft(cleared);
     setFilters(cleared);
     setCurrentPage(1);
+    return cleared;
   };
 
   return {
@@ -57,10 +86,14 @@ const usePagosTableState = (pagos) => {
     filtersDraft,
     sort,
     currentPage,
+    pageSize,
     filteredRows,
     rows,
     totalPages,
+    totalItems,
+    params,
     setCurrentPage,
+    setPageSize,
     handleSort,
     handleFilterChange,
     toggleFilter,
