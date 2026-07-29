@@ -168,10 +168,7 @@ const Cuentas = () => {
               onEdit={facturaEditing.open}
               onCancel={administrativeActions.openCancelFacturaModal}
               onPageChange={facturasTable.setCurrentPage}
-              onPageSizeChange={(pageSize) => {
-                facturasTable.setPageSize(pageSize);
-                facturasTable.setCurrentPage(1);
-              }}
+              onPageSizeChange={facturasTable.setPageSize}
             />
           )}
 
@@ -193,10 +190,7 @@ const Cuentas = () => {
               onSort={pagosTable.handleSort}
               onOpenDetail={administrativeActions.openPagoDetailModal}
               onPageChange={pagosTable.setCurrentPage}
-              onPageSizeChange={(pageSize) => {
-                pagosTable.setPageSize(pageSize);
-                pagosTable.setCurrentPage(1);
-              }}
+              onPageSizeChange={pagosTable.setPageSize}
             />
           )}
 
