@@ -15,7 +15,7 @@ WESApp es una plataforma integral de gestión diseñada específicamente para WE
 ## 🛠 Stack Tecnológico
 
 ### Backend
-- **Runtime:** Node.js ≥ 18.0.0
+- **Runtime:** Node.js ≥ 20.0.0
 - **Framework:** Express 4.18
 - **Database:** PostgreSQL 12+
 - **Authentication:** JWT + Bcrypt
@@ -36,7 +36,7 @@ WESApp es una plataforma integral de gestión diseñada específicamente para WE
 ## 🚀 Inicio Rápido
 
 ### Requisitos
-- Node.js ≥ 18.0.0
+- Node.js ≥ 20.0.0
 - npm ≥ 9.0.0
 - PostgreSQL 12+ (local o remoto)
 

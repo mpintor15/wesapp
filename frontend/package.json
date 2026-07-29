@@ -27,7 +27,7 @@
     "axios": "^1.18.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.30.4"
+    "react-router-dom": "7.18.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -38,6 +38,11 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.8.4",
     "react-scripts": "5.0.1"
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^react-router/dom$": "<rootDir>/node_modules/react-router/dist/development/dom-export.js"
+    }
   },
   "browserslist": {
     "production": [

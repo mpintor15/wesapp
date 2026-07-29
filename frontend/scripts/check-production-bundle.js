@@ -20,6 +20,10 @@ const allowedLocalhostContexts = [
     description: 'React Router source map URL constructor base without port or path',
     pattern: /new URL\(createHref\(to\), \\"http:\/\/localhost\\"\)/,
   },
+  {
+    description: 'React Router browserless URL constructor base without port or path',
+    pattern: /"http:\/\/localhost".{0,260}No window\.location\.\(origin\|href\) available to create URL/,
+  },
 ];
 
 const walk = (dir) => {

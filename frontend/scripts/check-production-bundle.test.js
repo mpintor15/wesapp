@@ -54,10 +54,13 @@ test('permite únicamente constantes internas conocidas sin puerto ni ruta', () 
   const axiosSourceMap =
     "const origin = (hasBrowserEnv && window.location.href) || 'http://localhost';";
   const routerSourceMap = 'return new URL(createHref(to), \\"http://localhost\\");';
+  const routerBundle =
+    'function M(e,t){let a="http://localhost";e&&(a="null"!==e.location.origin?e.location.origin:e.location.href),T(a,"No window.location.(origin|href) available to create URL");return new URL(t,a)}';
 
   assert.deepEqual(findLocalEndpoints(axiosBundle), []);
   assert.deepEqual(findLocalEndpoints(axiosSourceMap), []);
   assert.deepEqual(findLocalEndpoints(routerSourceMap), []);
+  assert.deepEqual(findLocalEndpoints(routerBundle), []);
 });
 
 test('rechaza localhost genérico fuera de los contextos documentados', () => {
