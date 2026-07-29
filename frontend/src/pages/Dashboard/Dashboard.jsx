@@ -12,7 +12,9 @@ import iconUsuarios from '../../assets/icons/user.png';
 
 const MODULE_META = {
   cuentas: { description: 'Control de facturas, pagos y clientes' },
-  configuracion: { description: 'Catálogos operativos y parámetros del sistema' },
+  configuracion: {
+    description: 'Clientes, ubicaciones y organización del inventario',
+  },
   inventario: { description: 'Artículos, equipos y movimientos de bodega' },
   personal: { description: 'Colaboradores, cargos y nómina' },
   usuarios: { description: 'Cuentas de acceso y permisos del sistema' },
@@ -22,8 +24,8 @@ const DASHBOARD_MODULES = [
   { key: 'cuentas', label: 'Cuentas', icon: iconCuentas, path: '/cuentas' },
   {
     key: 'configuracion',
-    permission: 'inventario',
-    label: 'Configuración',
+    permission: 'configuracion',
+    label: 'Clientes',
     icon: iconInventario,
     path: '/configuracion',
   },

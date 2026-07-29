@@ -29,7 +29,22 @@
 
 /* ── Header ─────────────────────────────── */
 .dashboard-header {
-  background: var(--brand-header-bg);
+  background:
+    linear-gradient(
+      90deg,
+      rgba(232, 32, 26, 0.18) 0%,
+      rgba(232, 32, 26, 0.07) 18%,
+      rgba(232, 32, 26, 0) 42%
+    ),
+    linear-gradient(
+      90deg,
+      #060606 0%,
+      #111214 28%,
+      #18191c 44%,
+      #211f20 58%,
+      #2b2424 72%,
+      #101010 100%
+    );
   color: white;
   padding: 0 40px 0 52px;
   display: flex;

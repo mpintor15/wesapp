@@ -19,6 +19,7 @@ const ROLE_PERMISSIONS = {
     'inventario',
     'personal',
     'usuarios',
+    'configuracion',
     'crear_articulo',
     'eliminar_articulo',
     'dar_baja_articulo',
@@ -29,6 +30,7 @@ const ROLE_PERMISSIONS = {
     'cuentas',
     'inventario',
     'personal',
+    'configuracion',
     'crear_articulo',
     'dar_baja_articulo',
     'crear_movimiento',
@@ -37,12 +39,25 @@ const ROLE_PERMISSIONS = {
   supervisor: [
     'inventario',
     'personal',
+    'configuracion',
     'crear_articulo',
     'dar_baja_articulo',
     'crear_movimiento',
     'exportar',
   ],
-  contador: ['cuentas', 'exportar'],
+  contador: ['cuentas', 'personal', 'configuracion', 'exportar'],
+};
+
+const hasConfiguracionActionPermission = (user) => {
+  const permissions = user?.permisos || user?.permissions;
+  return (
+    Array.isArray(permissions) &&
+    permissions.some(
+      (permission) =>
+        typeof permission === 'string' &&
+        (permission.startsWith('clientes.') || permission.startsWith('inventario.ubicaciones.'))
+    )
+  );
 };
 
 const parseStoredUser = () => {
@@ -174,6 +189,7 @@ export const AuthProvider = ({ children }) => {
   const hasPermission = useCallback(
     (modulo) => {
       if (!user) return false;
+      if (modulo === 'configuracion' && hasConfiguracionActionPermission(user)) return true;
       return ROLE_PERMISSIONS[user.tipo_usuario]?.includes(modulo) || false;
     },
     [user]

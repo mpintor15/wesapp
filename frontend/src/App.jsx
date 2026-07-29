@@ -58,7 +58,7 @@ function App() {
             <Route
               path="/configuracion"
               element={
-                <ProtectedRoute requiredPermission="inventario">
+                <ProtectedRoute requiredPermission="configuracion">
                   <Configuracion />
                 </ProtectedRoute>
               }
