@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 /**
  * Custom hook para prevenir doble-submit de formularios
@@ -15,26 +15,26 @@ import { useState, useCallback } from 'react';
  */
 export const useSubmitState = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
 
-  const withSubmit = useCallback(
-    (asyncFn) => {
-      return async (...args) => {
-        // Prevenir doble-submit
-        if (isSubmitting) {
-          return;
-        }
+  const withSubmit = useCallback((asyncFn) => {
+    return async (...args) => {
+      // Prevenir doble-submit
+      if (isSubmittingRef.current) {
+        return;
+      }
 
-        setIsSubmitting(true);
-        try {
-          const result = await asyncFn(...args);
-          return result;
-        } finally {
-          setIsSubmitting(false);
-        }
-      };
-    },
-    [isSubmitting]
-  );
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
+      try {
+        const result = await asyncFn(...args);
+        return result;
+      } finally {
+        isSubmittingRef.current = false;
+        setIsSubmitting(false);
+      }
+    };
+  }, []);
 
   return { isSubmitting, withSubmit };
 };

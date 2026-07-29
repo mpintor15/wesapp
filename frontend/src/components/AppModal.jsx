@@ -26,6 +26,7 @@ const AppModal = ({
   className,
   bodyClassName,
   ariaDescribedby,
+  closeButtonDisabled = false,
 }) => {
   const modalRef = useRef(null);
   const previouslyFocusedRef = useRef(null);
@@ -37,7 +38,7 @@ const AppModal = ({
     previouslyFocusedRef.current = document.activeElement;
     const modal = modalRef.current;
     const preferredTarget = initialFocusRef?.current;
-    const focusTarget = preferredTarget || modal;
+    const focusTarget = preferredTarget?.disabled ? modal : preferredTarget || modal;
 
     focusTarget?.focus({ preventScroll: true });
 
@@ -103,7 +104,9 @@ const AppModal = ({
         tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
-        <AppModalContext.Provider value={{ bodyClassName, onClose, title, titleId }}>
+        <AppModalContext.Provider
+          value={{ bodyClassName, closeButtonDisabled, onClose, title, titleId }}
+        >
           {children}
         </AppModalContext.Provider>
       </div>
@@ -125,6 +128,7 @@ const AppModalHeader = ({ children, className }) => {
         className="app-modal__close"
         onClick={context.onClose}
         aria-label="Cerrar"
+        disabled={context.closeButtonDisabled}
       >
         ×
       </button>
@@ -132,7 +136,7 @@ const AppModalHeader = ({ children, className }) => {
   );
 };
 
-const AppModalBody = ({ children, className, id }) => {
+const AppModalBody = ({ children, className, id, ...props }) => {
   const context = useContext(AppModalContext);
   if (!context) throw new Error('AppModal.Body debe usarse dentro de AppModal');
 
@@ -141,6 +145,7 @@ const AppModalBody = ({ children, className, id }) => {
       id={id}
       className={joinClassNames('app-modal__body', context.bodyClassName, className)}
       data-app-modal-body
+      {...props}
     >
       {children}
     </div>

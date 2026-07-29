@@ -6,14 +6,68 @@
  * Extrae el mensaje de error más útil desde un error de Axios.
  */
 export const extractError = (error, fallback) => {
-  const bodyMessage = error?.response?.data?.message;
-  if (bodyMessage) return bodyMessage;
+  return normalizeServiceError(error, fallback).message;
+};
 
-  if (typeof error?.response?.data === 'string' && error.response.data.trim()) {
-    return error.response.data.trim();
+const getResponseBody = (error) => error?.response?.data;
+
+export const normalizeServiceError = (error, fallback = 'Ocurrió un error') => {
+  const status = error?.response?.status;
+  const body = getResponseBody(error);
+  const isNetworkError =
+    Boolean(error?.request && !error?.response) || error?.code === 'ECONNABORTED';
+  const bodyMessage = body?.message;
+  const textBody = typeof body === 'string' && body.trim() ? body.trim() : '';
+
+  return {
+    message:
+      bodyMessage ||
+      textBody ||
+      (isNetworkError
+        ? 'No se pudo conectar con el servidor. Verifica tu conexión e inténtalo nuevamente.'
+        : fallback),
+    status,
+    code: body?.code,
+    details: body?.details,
+    isNetworkError,
+    originalError: error,
+  };
+};
+
+export const buildServiceFailure = (error, fallback) => ({
+  success: false,
+  ...normalizeServiceError(error, fallback),
+});
+
+export const getVisibleErrorMessage = (result, fallback = 'Ocurrió un error') => {
+  if (!result) return fallback;
+
+  if (result.isNetworkError) {
+    return 'No se pudo conectar con el servidor. Verifica tu conexión e inténtalo nuevamente.';
   }
 
-  return fallback;
+  if (result.status === 401) return 'Tu sesión expiró. Vuelve a iniciar sesión.';
+  if (result.status === 403) return 'No tienes permisos para realizar esta acción.';
+  if (result.status === 404) return 'El registro ya no existe o fue eliminado.';
+
+  if (result.status === 409) {
+    if (result.code === 'CLIENT_HAS_RELATIONS') {
+      return (
+        result.message || 'El cliente tiene historial. Desactívalo para conservar sus registros.'
+      );
+    }
+    if (result.code === 'USER_HAS_ACTIVITY') {
+      return (
+        result.message || 'El usuario tiene actividad. Desactívalo para conservar el historial.'
+      );
+    }
+    return result.message || fallback;
+  }
+
+  if (result.status === 400 || result.status === 422) return result.message || fallback;
+  if (result.status >= 500) return 'Ocurrió un error interno. Inténtalo nuevamente.';
+
+  return result.message || fallback;
 };
 
 /**

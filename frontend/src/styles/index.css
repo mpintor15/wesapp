@@ -498,6 +498,12 @@ code {
   background: var(--color-neutral-200);
 }
 
+.app-modal__close:disabled {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .app-modal__close:focus-visible {
   outline: 3px solid var(--color-primary-light);
   outline-offset: 2px;
