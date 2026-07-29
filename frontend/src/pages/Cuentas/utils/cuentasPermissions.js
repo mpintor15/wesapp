@@ -6,7 +6,6 @@ export const getCuentasPermissions = (user) => {
     canEditFactura: hasAdministrativeRole,
     canCancelFactura: hasAdministrativeRole,
     canDeleteFactura: hasAdministrativeRole,
-    canDeletePago: hasAdministrativeRole,
     canExportReportes: true,
     canCreatePago: true,
     canManageClientes: true,

@@ -1,7 +1,6 @@
 const CuentasPageHeader = ({
   activeTab,
   canCreateFactura,
-  showClienteForm,
   onBack,
   onCreateFactura,
   onShowFacturasReport,
@@ -9,9 +8,6 @@ const CuentasPageHeader = ({
   onOpenBatchPayment,
   onShowPagosReport,
   onRefreshPagos,
-  onToggleClienteForm,
-  onShowClientesReport,
-  onRefreshClientes,
 }) => (
   <header className="page-header">
     <div className="page-header-left">
@@ -65,25 +61,6 @@ const CuentasPageHeader = ({
         <button
           className="btn btn-ghost btn-sm btn-icon-only"
           onClick={onRefreshPagos}
-          title="Actualizar datos"
-          type="button"
-        >
-          ↻
-        </button>
-      </div>
-    ) : null}
-
-    {activeTab === 'clientes' ? (
-      <div className="page-header-actions">
-        <button className="btn btn-ghost btn-sm" onClick={onToggleClienteForm} type="button">
-          {showClienteForm ? 'Cancelar' : 'Crear cliente'}
-        </button>
-        <button className="btn btn-ghost btn-sm" onClick={onShowClientesReport} type="button">
-          Generar reporte de Clientes
-        </button>
-        <button
-          className="btn btn-ghost btn-sm btn-icon-only"
-          onClick={onRefreshClientes}
           title="Actualizar datos"
           type="button"
         >

@@ -7,7 +7,6 @@ describe('cuentasPermissions', () => {
       canEditFactura: true,
       canCancelFactura: true,
       canDeleteFactura: true,
-      canDeletePago: true,
       canExportReportes: true,
       canCreatePago: true,
       canManageClientes: true,
@@ -23,7 +22,6 @@ describe('cuentasPermissions', () => {
         canEditFactura: false,
         canCancelFactura: false,
         canDeleteFactura: false,
-        canDeletePago: false,
         canExportReportes: true,
         canCreatePago: true,
         canManageClientes: true,
@@ -38,6 +36,5 @@ describe('cuentasPermissions', () => {
     expect(permissions.canEditFactura).toBe(false);
     expect(permissions.canCancelFactura).toBe(false);
     expect(permissions.canDeleteFactura).toBe(false);
-    expect(permissions.canDeletePago).toBe(false);
   });
 });

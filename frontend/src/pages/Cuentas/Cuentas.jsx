@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import { useToast } from '../../context/ToastContext';
-import ClientesTab from './components/ClientesTab';
 import CuentasModals from './components/CuentasModals';
 import CuentasPageHeader from './components/CuentasPageHeader';
 import { CuentasErrorBanner, CuentasLoading } from './components/CuentasStatus';
@@ -30,14 +29,12 @@ const Cuentas = () => {
   const permissions = useCuentasPermissions();
   const { isSubmitting: isCreatingFactura, withSubmit: withFacturaSubmit } = useSubmitState();
   const [activeTab, setActiveTab] = useState('facturas');
-  const [showClienteForm, setShowClienteForm] = useState(false);
 
   const {
     clientes,
     reporte,
     pagos,
     loading,
-    clientesLoading,
     clientesLoaded,
     pagosLoading,
     pagosLoaded,
@@ -50,26 +47,14 @@ const Cuentas = () => {
 
   const refreshActiveTab = useCallback(() => {
     if (activeTab === 'pagos') return loadPagos();
-    if (activeTab === 'clientes') return loadClientes();
     return loadReporte();
-  }, [activeTab, loadClientes, loadPagos, loadReporte]);
+  }, [activeTab, loadPagos, loadReporte]);
 
   useEffect(() => {
     if (activeTab === 'pagos' && !pagosLoaded && !pagosLoading) {
       loadPagos();
     }
-    if (activeTab === 'clientes' && !clientesLoaded && !clientesLoading) {
-      loadClientes();
-    }
-  }, [
-    activeTab,
-    clientesLoaded,
-    clientesLoading,
-    loadClientes,
-    loadPagos,
-    pagosLoaded,
-    pagosLoading,
-  ]);
+  }, [activeTab, loadPagos, pagosLoaded, pagosLoading]);
 
   const facturaForm = useFacturaForm({
     clientes,
@@ -122,7 +107,6 @@ const Cuentas = () => {
       <CuentasPageHeader
         activeTab={activeTab}
         canCreateFactura={permissions.canCreateFactura}
-        showClienteForm={showClienteForm}
         onBack={() => navigate('/')}
         onCreateFactura={openCreateFacturaModal}
         onShowFacturasReport={reports.facturas.open}
@@ -130,9 +114,6 @@ const Cuentas = () => {
         onOpenBatchPayment={openBatchPaymentModal}
         onShowPagosReport={reports.pagos.open}
         onRefreshPagos={loadPagos}
-        onToggleClienteForm={() => setShowClienteForm(!showClienteForm)}
-        onShowClientesReport={reports.clientes.open}
-        onRefreshClientes={loadClientes}
       />
 
       {loading ? (
@@ -142,7 +123,7 @@ const Cuentas = () => {
           <CuentasErrorBanner message={loadError} onRetry={refreshActiveTab} />
           <CuentasTabs
             activeTab={activeTab}
-            counts={{ facturas: reporte.length, pagos: pagos.length, clientes: clientes.length }}
+            counts={{ facturas: reporte.length, pagos: pagos.length }}
             onChange={setActiveTab}
           />
 
@@ -165,7 +146,6 @@ const Cuentas = () => {
               onShowAnulacion={administrativeActions.setAnulacionModal}
               onEdit={facturaEditing.open}
               onCancel={administrativeActions.openCancelFacturaModal}
-              onDelete={administrativeActions.requestDeleteFactura}
               onPageChange={facturasTable.setCurrentPage}
             />
           )}
@@ -180,31 +160,17 @@ const Cuentas = () => {
               sort={pagosTable.sort}
               currentPage={pagosTable.currentPage}
               totalPages={pagosTable.totalPages}
-              canDeletePago={permissions.canDeletePago}
               onFilterChange={pagosTable.handleFilterChange}
               onApplyFilters={pagosTable.applyFilters}
               onClearFilters={pagosTable.clearFilters}
               onToggleFilter={pagosTable.toggleFilter}
               onSort={pagosTable.handleSort}
               onOpenDetail={administrativeActions.openPagoDetailModal}
-              onDelete={administrativeActions.requestDeletePago}
               onPageChange={pagosTable.setCurrentPage}
             />
           )}
 
-          {activeTab === 'clientes' && (
-            <ClientesTab
-              clientes={clientes}
-              loading={clientesLoading}
-              onClienteCreated={loadClientes}
-              onClienteDeleted={loadClientes}
-              showClienteForm={showClienteForm}
-              setShowClienteForm={setShowClienteForm}
-            />
-          )}
-
           <CuentasModals
-            clientesCount={clientes.length}
             facturaForm={facturaFormModal}
             facturaEditing={facturaEditing}
             batchPayment={batchPayment}
