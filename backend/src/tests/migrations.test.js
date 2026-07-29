@@ -2,6 +2,10 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Pool } = require('pg');
 const { listMigrations } = require('../config/migrations');
+const {
+  assertSafeTestDatabase,
+  buildSafeTestResourceName,
+} = require('./helpers/testDatabaseSafety');
 
 const projectRoot = path.resolve(__dirname, '../../..');
 const migrationsDir = path.resolve(projectRoot, 'database/migrations');
@@ -22,7 +26,8 @@ const createAdminPool = () => new Pool(adminConfig());
 const createDbPool = (database) => new Pool({ ...adminConfig(), database });
 
 const withTempDatabase = async (prefix, callback) => {
-  const database = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+  assertSafeTestDatabase(process.env.DB_NAME);
+  const database = buildSafeTestResourceName(prefix);
   const admin = createAdminPool();
   await admin.query(`CREATE DATABASE ${quoteIdent(database)}`);
   await admin.end();

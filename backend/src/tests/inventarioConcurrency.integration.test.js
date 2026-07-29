@@ -1,4 +1,8 @@
 const db = require('../config/database');
+const {
+  assertSafeTestDatabase,
+  buildSafeTestResourceName,
+} = require('./helpers/testDatabaseSafety');
 
 const quoteIdent = (value) => `"${String(value).replaceAll('"', '""')}"`;
 
@@ -7,7 +11,8 @@ describe('inventario PostgreSQL concurrency', () => {
   let schemaIdent;
 
   beforeAll(async () => {
-    schemaName = `inventory_concurrency_${Date.now()}`;
+    assertSafeTestDatabase(process.env.DB_NAME);
+    schemaName = buildSafeTestResourceName('inventory_concurrency_schema');
     schemaIdent = quoteIdent(schemaName);
 
     await db.query(`CREATE SCHEMA ${schemaIdent}`);
