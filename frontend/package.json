@@ -14,6 +14,7 @@
     "test:unit": "react-scripts test --watchAll=false",
     "test:e2e": "playwright test",
     "test:e2e:auth": "playwright test e2e/auth.setup.js --project=setup",
+    "test:e2e:critical": "playwright test e2e/critical-*.spec.js --project=critical-chromium",
     "test:e2e:smoke": "playwright test e2e/smoke.spec.js --project=chromium",
     "test:responsive": "npm run test:responsive:chromium && npm run test:responsive:webkit",
     "test:responsive:chromium": "playwright test e2e/responsive-chromium.spec.js --project=chromium",
