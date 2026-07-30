@@ -2,6 +2,9 @@ name: Generate Linux Visual Baselines
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - test/visual-responsive-baseline
 
 jobs:
   generate-linux-visual-baselines:
