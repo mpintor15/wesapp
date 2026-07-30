@@ -371,7 +371,13 @@
 
 .inventory-card-action {
   width: 100%;
+  min-width: 0;
   min-height: 38px;
+  white-space: normal;
+}
+
+.inventory-card-action:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .inventario-container .app-table {

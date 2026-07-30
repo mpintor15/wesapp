@@ -237,3 +237,108 @@ jobs:
             frontend/test-results
             backend-e2e.log
             frontend-e2e.log
+
+  visual-responsive:
+    name: Visual Responsive
+    runs-on: ubuntu-latest
+    needs: [backend-quality, frontend-quality]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wesapp_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: wesapp_e2e
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      E2E_DB_NAME: wesapp_e2e
+      E2E_PASSWORD: E2E_Local_Password_123!
+      E2E_MODE: true
+      JWT_SECRET: ci_e2e_secret
+      REACT_APP_API_URL: http://localhost:3201/api
+      E2E_BASE_URL: http://localhost:3200
+      E2E_API_URL: http://localhost:3201/api
+      E2E_BACKEND_HEALTH_URL: http://localhost:3201/health
+      E2E_WORKERS: 1
+      BROWSER: none
+      CI: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare E2E database
+        working-directory: backend
+        run: npm run e2e:prepare-db
+
+      - name: Start backend
+        working-directory: backend
+        env:
+          PORT: 3201
+        run: npm start > ../backend-visual.log 2>&1 &
+
+      - name: Wait for backend
+        run: |
+          for attempt in {1..30}; do
+            curl -fsS http://localhost:3201/health && exit 0
+            sleep 1
+          done
+          cat backend-visual.log
+          exit 1
+
+      - name: Start frontend
+        working-directory: frontend
+        env:
+          PORT: 3200
+        run: npm start > ../frontend-visual.log 2>&1 &
+
+      - name: Wait for frontend
+        run: |
+          for attempt in {1..60}; do
+            curl -fsS http://localhost:3200 && exit 0
+            sleep 1
+          done
+          cat frontend-visual.log
+          exit 1
+
+      - name: Run visual responsive baseline
+        working-directory: frontend
+        run: npm run test:e2e:visual
+
+      - name: Upload visual artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-responsive-artifacts
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            backend-visual.log
+            frontend-visual.log
