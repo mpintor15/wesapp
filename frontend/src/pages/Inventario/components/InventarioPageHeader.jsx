@@ -12,7 +12,7 @@ const InventarioPageHeader = ({
   onExportMovimientos,
   onRefresh,
 }) => (
-  <header className="page-header">
+  <header className="brand-header page-header">
     <div className="page-header-left">
       <button className="btn-back" onClick={onBack} type="button">
         <svg

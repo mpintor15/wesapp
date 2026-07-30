@@ -30,6 +30,8 @@ const renderDashboard = async () => {
 
   return {
     container,
+    header: () => container.querySelector('.dashboard-header'),
+    logo: () => container.querySelector('.header-logo img'),
     button: (text) =>
       Array.from(container.querySelectorAll('button')).find((button) =>
         button.textContent.includes(text)
@@ -55,6 +57,13 @@ describe('Dashboard', () => {
   test('muestra acceso a Clientes sin cambiar la ruta ni componente visual', async () => {
     const page = await renderDashboard();
 
+    expect(page.header().className).toContain('brand-header');
+    expect(page.logo()).toEqual(
+      expect.objectContaining({
+        alt: 'WES Security Cía. Ltda.',
+      })
+    );
+
     const card = page.button('Clientes');
     expect(card).not.toBeNull();
     expect(card.className).toContain('module-card');
@@ -66,6 +75,35 @@ describe('Dashboard', () => {
     });
 
     expect(mockNavigate).toHaveBeenCalledWith('/configuracion');
+
+    page.unmount();
+  });
+
+  test('mantiene la confirmación antes de cerrar sesión', async () => {
+    const logout = jest.fn();
+    useAuth.mockReturnValue({
+      user: { usuario: 'gerente', tipo_usuario: 'gerente' },
+      logout,
+      hasPermission: jest.fn(() => true),
+    });
+    const page = await renderDashboard();
+
+    await act(async () => {
+      page.button('Cerrar sesión').click();
+      await flushPromises();
+    });
+
+    const confirmButton = page.container.querySelector('.confirm-dialog .btn-danger');
+    expect(confirmButton).not.toBeNull();
+    expect(logout).not.toHaveBeenCalled();
+
+    await act(async () => {
+      confirmButton.click();
+      await flushPromises();
+    });
+
+    expect(logout).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith('/login');
 
     page.unmount();
   });
