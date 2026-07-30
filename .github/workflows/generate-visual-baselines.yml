@@ -98,7 +98,7 @@ jobs:
 
       - name: Generate Linux visual baseline candidates
         working-directory: frontend
-        run: npm run test:e2e:visual:update
+        run: npx playwright test --config=playwright.visual.config.js --update-snapshots=all
 
       - name: Verify Linux visual baseline candidates
         run: |
