@@ -38,6 +38,8 @@ export E2E_WORKERS=1
 ```sh
 npm --prefix ../backend run e2e:prepare-db
 npm run test:e2e:critical
+npm run test:e2e:visual
+npm run test:e2e:visual:update
 npm run test:e2e:auth
 npm run test:e2e:smoke
 npm run test:responsive
@@ -53,6 +55,23 @@ npm run test:visual:update
 navegación principal por permisos, lectura básica de Inventario y lectura básica
 de Cuentas. No reutiliza `e2e/.auth/user.json`: cada test crea su sesión con las
 fixtures locales `e2e_gerente` o `e2e_contador`.
+
+`test:e2e:visual` es una línea base separada y pequeña en Chromium. Cubre Login,
+Dashboard de gerente, Inventario de gerente y Cuentas de contador en los viewports
+390x844, 768x1024 y 1440x900. Además de nueve snapshots, verifica overflow global,
+contención horizontal de cabeceras y controles, y scroll interno de tablas cuando
+el contenido excede su contenedor.
+
+Los baselines viven en
+`e2e/visual-responsive-baseline.spec.js-snapshots`. Los reportes, traces, videos,
+screenshots de fallo y diffs quedan en `playwright-report` o `test-results` y no se
+versionan.
+
+`test:e2e:visual:update` solo debe ejecutarse después de confirmar que el cambio
+visual es intencional. Antes de aceptar snapshots nuevos, revisar cada imagen,
+sus dimensiones, datos fixture, loaders y overlays. Ante una diferencia, revisar
+primero el artefacto `actual`/`diff`, corregir la regresión o justificar el cambio,
+y ejecutar nuevamente el comando normal sin actualizar snapshots.
 
 La base crítica debe ser local, aislada y reseteable:
 
