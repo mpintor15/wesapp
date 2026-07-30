@@ -161,7 +161,6 @@ jobs:
       E2E_PASSWORD: E2E_Local_Password_123!
       E2E_MODE: true
       JWT_SECRET: ci_e2e_secret
-      PORT: 3201
       REACT_APP_API_URL: http://localhost:3201/api
       E2E_BASE_URL: http://localhost:3200
       E2E_API_URL: http://localhost:3201/api
@@ -196,6 +195,8 @@ jobs:
 
       - name: Start backend
         working-directory: backend
+        env:
+          PORT: 3201
         run: npm start > ../backend-e2e.log 2>&1 &
 
       - name: Wait for backend
@@ -209,6 +210,8 @@ jobs:
 
       - name: Start frontend
         working-directory: frontend
+        env:
+          PORT: 3200
         run: npm start > ../frontend-e2e.log 2>&1 &
 
       - name: Wait for frontend
