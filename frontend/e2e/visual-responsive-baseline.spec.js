@@ -29,9 +29,6 @@ for (const testCase of loginCases) {
     await page.goto('/login');
     await expect(page.getByRole('button', { name: 'Ingresar' })).toBeVisible();
     await assertResponsiveStructure(page, page.locator('.login-card'));
-    if (testCase.name === 'login-mobile') {
-      await page.addStyleTag({ content: '.login-card { transform: translateX(6px) !important; }' });
-    }
     await expectBaselineScreenshot(page, testCase.name);
   });
 }
