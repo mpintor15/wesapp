@@ -6,6 +6,8 @@ La rama de integración contiene la migración a React Router 7, la alineación 
 
 El flujo de integración fue estabilizado para que CI también valide `feat/gestion-ubicaciones` y para que los tests backend de GitHub Actions usen una base local `wesapp_test` con PostgreSQL de servicio.
 
+El estado funcional de integración está verde: backend, frontend, build, `Critical E2E`, `Visual Responsive` y CI pasan, y el árbol de trabajo está limpio.
+
 ## Arquitectura actual resumida
 
 | Capa | Directorios principales | Responsabilidad | Riesgo observado |
@@ -16,7 +18,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | Base de datos | `database/schema.sql`, `database/migrations` | Esquema local, migraciones, índices y restricciones | Buenas guardas en migraciones recientes; rollback operativo no está estandarizado por cambio. |
 | Frontend app | `frontend/src/App.jsx`, `frontend/src/context`, `frontend/src/auth` | Rutas, sesión, permisos y estado global | Autorización centralizada; tokens persisten en `localStorage`. |
 | Frontend módulos | `frontend/src/pages`, `frontend/src/components`, `frontend/src/hooks` | Pantallas, formularios, tablas, modales y servicios HTTP | Algunas páginas y CSS son grandes; hay duplicación visual en tablas/filtros/modales. |
-| Pruebas | `backend/src/tests`, `frontend/src/**/*.test.*`, `frontend/e2e` | Unitarias, integración backend, E2E crítico y visual/responsive | PR #30 automatizó 9 flujos críticos en Chromium; visual/responsive sigue fuera de CI. |
+| Pruebas | `backend/src/tests`, `frontend/src/**/*.test.*`, `frontend/e2e` | Unitarias, integración backend, E2E crítico y visual/responsive | PR #30 automatizó 9 flujos críticos y PR #32 agregó 9 snapshots oficiales Ubuntu + Chromium con comparación estricta en CI. |
 | Despliegue | `railway.json`, `.github/workflows` | Runtime, checks y release | Pipeline mínimo presente; observabilidad/rollback aún dependen de práctica manual. |
 
 ## Riesgos principales
@@ -33,10 +35,10 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | FE-002 | UX | P2 | Tablas/filtros dependían mayormente de estado cliente y scroll horizontal. | PR #18 movió búsqueda, filtros, ordenamiento y paginación visible de Inventario/Cuentas al backend. PR #28 redujo duplicación de filtros, sort y paginación en hooks de Cuentas sin rediseño visual. | Menor carga cliente en módulos operativos; siguen pendientes mejoras visuales/responsive. | M | Medio | Paginación backend | parcialmente corregido |
 | SEC-001 | Seguridad | P2 | JWT en `localStorage` expone sesión ante XSS. | `frontend/src/services/authService.js` guarda `token` en `localStorage`. | Riesgo plausible si una vulnerabilidad XSS aparece. | M | Medio | Decisión de arquitectura de sesión | investigar |
 | SEC-002 | Seguridad | P2 | No se observaron headers CSP específicos. | Express usa Helmet por defecto. | Hardening incompleto frente a inyección de scripts. | S | Bajo | Inventario de assets externos | implementar |
-| TEST-001 | Pruebas | P2 | Faltaba cobertura E2E crítica automatizada en CI. | PR #30 incorporó Playwright 1.61.1, fixtures deterministas en `wesapp_e2e`, 5 specs y 9 pruebas en Chromium para autenticación, rutas, permisos y lectura de Inventario/Cuentas. | Los flujos funcionales críticos quedan cubiertos; visual/responsive, accesibilidad, Personal y comandos complejos siguen pendientes. | M | Medio | Datos E2E estables | corregido |
+| TEST-001 | Pruebas | P2 | Faltaba cobertura E2E crítica automatizada en CI. | PR #30 incorporó Playwright 1.61.1, fixtures deterministas en `wesapp_e2e`, 5 specs y 9 pruebas en Chromium para autenticación, rutas, permisos y lectura de Inventario/Cuentas. PR #32 añadió una suite visual independiente sin alterar la suite crítica. | Los flujos funcionales críticos y el baseline visual quedan cubiertos; accesibilidad, Personal y comandos complejos siguen pendientes. | M | Medio | Datos E2E estables | corregido |
 | TEST-002 | Pruebas | P3 | Algunos tests generan mucho ruido de logs esperado. | Salida backend muestra logs de errores de casos negativos. | Menor legibilidad al depurar fallos reales. | S | Bajo | Logger de test | implementar |
 | UX-001 | Accesibilidad | P2 | Hay labels sin `htmlFor` en modales complejos. | Modales de Cuentas usan varios `<label>` sin asociación explícita. | Lectores de pantalla pueden perder contexto de campos. | M | Bajo | Componentes de formularios | implementar |
-| UX-002 | Responsive | P2 | Tablas densas tienen scroll/overrides extensos. | CSS de Cuentas e Inventario contiene muchos ajustes de overflow. | Riesgo de fricción en móviles operativos. | M | Medio | Auditoría visual Playwright | diseñar |
+| UX-002 | Responsive | P2 | Tablas densas tienen scroll/overrides extensos. | PR #32 estableció 9 snapshots responsive oficiales en Ubuntu + Chromium para login, Dashboard, Inventario y Cuentas. | El baseline detecta regresiones; las mejoras de UX móvil siguen pendientes. | M | Medio | Baseline visual Playwright | parcialmente corregido |
 | DOC-001 | Documentación | P3 | README describe roles por módulos y no el catálogo granular actual. | Tabla de roles mantiene resumen antiguo. | Onboarding puede inducir permisos incorrectos. | XS | Bajo | Modelo de permisos actual | documentar |
 | DOC-002 | Documentación | P3 | Estrategia de ramas y DoR/DoD no estaban consolidadas. | Documentación dispersa. | Menor consistencia entre PRs. | XS | Bajo | Este roadmap | corregido |
 | OBS-001 | Observabilidad | P2 | No hay monitoreo/alertas documentados para health, errores o DB pool. | Health endpoints existen; no se observa pipeline de alertas. | Incidentes dependen de revisión manual. | M | Medio | Proveedor de despliegue | diseñar |
@@ -68,8 +70,8 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | 8 | Frontend Inventario shell | `refactor/frontend-inventory-shell` | Reducir orquestación de página | `Inventario.jsx`, hooks y tabs | PR 5 | Hooks por flujo y componentes contenedores | Frontend unit + visual smoke | Medio | L | Página más pequeña y comportamiento igual |
 | 9 | Frontend Configuración shell | `refactor/frontend-configuracion-shell` | Separar directorio y ubicaciones | `Configuracion.jsx`, `ClientesCatalog` | PR 5 | Hooks y componentes por catálogo | Frontend unit + responsive smoke | Medio | L | Menor acoplamiento entre clientes/ubicaciones |
 | 10 | E2E CI smoke | `test/e2e-critical-flows` | Automatizar flujos mínimos | Login válido/inválido, protección de rutas, permisos gerente/contador y lectura de Inventario/Cuentas | Datos E2E estables | Base aislada `wesapp_e2e`, 5 specs, 9 pruebas Chromium y job `Critical E2E` | Tres ejecuciones locales consecutivas verdes antes del merge, CI verde y post-merge 9/9 en 6.9 s | Medio | M | Completado en PR #30, merge `d91b6d2` |
-| 11 | Visual responsive baseline | `test/visual-responsive-baseline` | Medir UI antes de rediseñar | Playwright visual/responsive | PR 10 | Matriz de pantallas y snapshots saneados | Visual tests documentados | Medio | M | Baseline estable y revisable |
-| 12 | Accesibilidad formularios | `fix/a11y-form-labels-modals` | Asociar labels y errores | Modales de Cuentas/Inventario/Configuración | PR 11 | `htmlFor`, `aria-describedby`, roles | Frontend unit + axe/manual checklist | Bajo | M | Campos críticos tienen labels reales |
+| 11 | Visual responsive baseline | `test/visual-responsive-baseline` | Medir UI antes de rediseñar | Playwright visual/responsive | PR 10 | 9 snapshots oficiales Ubuntu + Chromium, comparación estricta, job `Visual Responsive` y actualización bloqueada fuera de Linux | `Critical E2E` intacto, CI verde y prueba negativa sensible a un desplazamiento de 6 px | Medio | M | Completado en PR #32, merge `08cc4f9` |
+| 12 | Accesibilidad formularios | `fix/a11y-form-labels-modals` | Asociar labels y errores | Modales de Cuentas/Inventario/Configuración | PR 11 | `htmlFor`, `aria-describedby`, roles | Frontend unit + axe/manual checklist | Bajo | M | Campos críticos tienen labels reales; mejora no bloqueante para nuevas funcionalidades |
 | 13 | Hardening CSP | `fix/security-csp-headers` | Añadir política CSP compatible | Helmet config, build assets | Inventario de assets | CSP inicial en producción | Backend tests, bundle build | Medio | S | App carga con CSP sin errores |
 | 14 | Observabilidad mínima | `feat/observability-health-logging` | Documentar y exponer señales operativas | Health, logs, pool, errores | Proveedor elegido | Métricas/guía de alertas | Health tests/manual deploy check | Medio | M | Runbook de incidentes mínimo |
 | 15 | Migraciones rollback | `docs/db-migration-runbook` | Estandarizar despliegue/rollback DB | Docs de migraciones | Política release | Runbook y checklist | Revisión documental | Bajo | S | Cada migración nueva exige plan rollback |
@@ -111,17 +113,17 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 | Bundle productivo | Sin endpoints locales funcionales ni sourcemaps públicos. |
 | CI | Checks en PR hacia `feat/gestion-ubicaciones` y `main`. |
 | Tamaño de módulos | Reducir controladores/páginas más grandes por PRs funcionalmente neutros. |
-| E2E | 9 flujos críticos verdes en Chromium y CI; baseline visual/responsive todavía pendiente. |
+| E2E | 9 flujos críticos y 9 snapshots visuales/responsive verdes en Ubuntu + Chromium y CI. |
 
 ## Siguiente rama recomendada
 
-La siguiente rama pendiente recomendada es `test/visual-responsive-baseline`.
+La siguiente rama técnica pendiente recomendada es `fix/a11y-form-labels-modals`, sin bloquear el inicio de nuevas funcionalidades.
 
-Objetivo: establecer un baseline visual y responsive revisable sobre los flujos críticos ya estabilizados, antes de modificar shells grandes o formularios.
+Objetivo: asociar labels, errores y ayudas de los formularios críticos sin rediseñar los módulos.
 
-Archivos probables iniciales: configuración Playwright existente, specs visual/responsive, matriz de viewports y snapshots saneados.
+Archivos probables iniciales: modales de Cuentas, Inventario y Configuración, junto con sus pruebas frontend.
 
-El alcance E2E pendiente incluye escritura y destrucción controlada, transacciones complejas, Personal, accesibilidad, regresión visual y cobertura responsive adicional. PR #30 no modificó código productivo, dependencias ni lockfiles.
+El alcance E2E pendiente incluye escritura y destrucción controlada, transacciones complejas, Personal, accesibilidad y cobertura responsive adicional. Los snapshots oficiales se generan únicamente en Linux; macOS permite ejecución diagnóstica, pero no actualiza silenciosamente el baseline.
 
 ## Decisiones de negocio pendientes
 
