@@ -62,12 +62,19 @@ Dashboard de gerente, Inventario de gerente y Cuentas de contador en los viewpor
 contención horizontal de cabeceras y controles, y scroll interno de tablas cuando
 el contenido excede su contenedor.
 
-Los baselines viven en
-`e2e/visual-responsive-baseline.spec.js-snapshots`. Los reportes, traces, videos,
-screenshots de fallo y diffs quedan en `playwright-report` o `test-results` y no se
-versionan.
+Los baselines oficiales viven en
+`e2e/visual-responsive-baseline.spec.js-snapshots` y se generan únicamente en
+Ubuntu con Chromium. CI es la validación visual canónica. Los reportes, traces,
+videos, screenshots de fallo y diffs quedan en `playwright-report` o
+`test-results` y no se versionan.
 
-`test:e2e:visual:update` solo debe ejecutarse después de confirmar que el cambio
+`test:e2e:visual` puede ejecutarse en macOS para validar las assertions responsive
+y generar artefactos de diagnóstico; las diferencias de rasterización de las
+fuentes del sistema frente a Ubuntu son esperables. `test:e2e:visual:update`
+rechaza actualizaciones fuera de Linux para impedir que baselines macOS reemplacen
+silenciosamente los oficiales.
+
+La actualización en Linux solo debe ejecutarse después de confirmar que el cambio
 visual es intencional. Antes de aceptar snapshots nuevos, revisar cada imagen,
 sus dimensiones, datos fixture, loaders y overlays. Ante una diferencia, revisar
 primero el artefacto `actual`/`diff`, corregir la regresión o justificar el cambio,
