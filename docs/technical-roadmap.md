@@ -16,7 +16,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | Base de datos | `database/schema.sql`, `database/migrations` | Esquema local, migraciones, índices y restricciones | Buenas guardas en migraciones recientes; rollback operativo no está estandarizado por cambio. |
 | Frontend app | `frontend/src/App.jsx`, `frontend/src/context`, `frontend/src/auth` | Rutas, sesión, permisos y estado global | Autorización centralizada; tokens persisten en `localStorage`. |
 | Frontend módulos | `frontend/src/pages`, `frontend/src/components`, `frontend/src/hooks` | Pantallas, formularios, tablas, modales y servicios HTTP | Algunas páginas y CSS son grandes; hay duplicación visual en tablas/filtros/modales. |
-| Pruebas | `backend/src/tests`, `frontend/src/**/*.test.*`, `frontend/e2e` | Unitarias, integración backend, visual/responsive E2E | E2E visual/responsive existe pero no está automatizado en CI. |
+| Pruebas | `backend/src/tests`, `frontend/src/**/*.test.*`, `frontend/e2e` | Unitarias, integración backend, E2E crítico y visual/responsive | PR #30 automatizó 9 flujos críticos en Chromium; visual/responsive sigue fuera de CI. |
 | Despliegue | `railway.json`, `.github/workflows` | Runtime, checks y release | Pipeline mínimo presente; observabilidad/rollback aún dependen de práctica manual. |
 
 ## Riesgos principales
@@ -33,7 +33,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | FE-002 | UX | P2 | Tablas/filtros dependían mayormente de estado cliente y scroll horizontal. | PR #18 movió búsqueda, filtros, ordenamiento y paginación visible de Inventario/Cuentas al backend. PR #28 redujo duplicación de filtros, sort y paginación en hooks de Cuentas sin rediseño visual. | Menor carga cliente en módulos operativos; siguen pendientes mejoras visuales/responsive. | M | Medio | Paginación backend | parcialmente corregido |
 | SEC-001 | Seguridad | P2 | JWT en `localStorage` expone sesión ante XSS. | `frontend/src/services/authService.js` guarda `token` en `localStorage`. | Riesgo plausible si una vulnerabilidad XSS aparece. | M | Medio | Decisión de arquitectura de sesión | investigar |
 | SEC-002 | Seguridad | P2 | No se observaron headers CSP específicos. | Express usa Helmet por defecto. | Hardening incompleto frente a inyección de scripts. | S | Bajo | Inventario de assets externos | implementar |
-| TEST-001 | Pruebas | P2 | E2E visual/responsive existe pero no corre en CI. | Scripts Playwright en frontend; workflow CI no los ejecuta. | Regresiones visuales pueden entrar por PR. | M | Medio | Datos E2E estables | implementar |
+| TEST-001 | Pruebas | P2 | Faltaba cobertura E2E crítica automatizada en CI. | PR #30 incorporó Playwright 1.61.1, fixtures deterministas en `wesapp_e2e`, 5 specs y 9 pruebas en Chromium para autenticación, rutas, permisos y lectura de Inventario/Cuentas. | Los flujos funcionales críticos quedan cubiertos; visual/responsive, accesibilidad, Personal y comandos complejos siguen pendientes. | M | Medio | Datos E2E estables | corregido |
 | TEST-002 | Pruebas | P3 | Algunos tests generan mucho ruido de logs esperado. | Salida backend muestra logs de errores de casos negativos. | Menor legibilidad al depurar fallos reales. | S | Bajo | Logger de test | implementar |
 | UX-001 | Accesibilidad | P2 | Hay labels sin `htmlFor` en modales complejos. | Modales de Cuentas usan varios `<label>` sin asociación explícita. | Lectores de pantalla pueden perder contexto de campos. | M | Bajo | Componentes de formularios | implementar |
 | UX-002 | Responsive | P2 | Tablas densas tienen scroll/overrides extensos. | CSS de Cuentas e Inventario contiene muchos ajustes de overflow. | Riesgo de fricción en móviles operativos. | M | Medio | Auditoría visual Playwright | diseñar |
@@ -67,7 +67,7 @@ El flujo de integración fue estabilizado para que CI también valide `feat/gest
 | 7.2 | Hooks frontend de listados | `refactor/frontend-list-hooks` | Reducir duplicación real en estado paginado frontend | Hook compartido para Facturas/Pagos en Cuentas; Inventario queda fuera por mayor acoplamiento de carga y catálogos | PRs #18 y #26 | `usePaginatedTableState`, migración conservadora de Cuentas y cobertura unitaria | Backend/frontend lint, backend tests, frontend unit, bundle validator, build, format check | Bajo | S | Completado en PR #28 |
 | 8 | Frontend Inventario shell | `refactor/frontend-inventory-shell` | Reducir orquestación de página | `Inventario.jsx`, hooks y tabs | PR 5 | Hooks por flujo y componentes contenedores | Frontend unit + visual smoke | Medio | L | Página más pequeña y comportamiento igual |
 | 9 | Frontend Configuración shell | `refactor/frontend-configuracion-shell` | Separar directorio y ubicaciones | `Configuracion.jsx`, `ClientesCatalog` | PR 5 | Hooks y componentes por catálogo | Frontend unit + responsive smoke | Medio | L | Menor acoplamiento entre clientes/ubicaciones |
-| 10 | E2E CI smoke | `test/e2e-ci-smoke` | Automatizar flujos mínimos | Playwright smoke/auth | Datos E2E estables | Job CI opcional o required según duración | CI smoke verde | Medio | M | Smoke corre en PR sin flakes |
+| 10 | E2E CI smoke | `test/e2e-critical-flows` | Automatizar flujos mínimos | Login válido/inválido, protección de rutas, permisos gerente/contador y lectura de Inventario/Cuentas | Datos E2E estables | Base aislada `wesapp_e2e`, 5 specs, 9 pruebas Chromium y job `Critical E2E` | Tres ejecuciones locales consecutivas verdes antes del merge, CI verde y post-merge 9/9 en 6.9 s | Medio | M | Completado en PR #30, merge `d91b6d2` |
 | 11 | Visual responsive baseline | `test/visual-responsive-baseline` | Medir UI antes de rediseñar | Playwright visual/responsive | PR 10 | Matriz de pantallas y snapshots saneados | Visual tests documentados | Medio | M | Baseline estable y revisable |
 | 12 | Accesibilidad formularios | `fix/a11y-form-labels-modals` | Asociar labels y errores | Modales de Cuentas/Inventario/Configuración | PR 11 | `htmlFor`, `aria-describedby`, roles | Frontend unit + axe/manual checklist | Bajo | M | Campos críticos tienen labels reales |
 | 13 | Hardening CSP | `fix/security-csp-headers` | Añadir política CSP compatible | Helmet config, build assets | Inventario de assets | CSP inicial en producción | Backend tests, bundle build | Medio | S | App carga con CSP sin errores |
@@ -111,15 +111,17 @@ Crear una rama por alcance revisable. Evitar ramas genéricas o de más de una s
 | Bundle productivo | Sin endpoints locales funcionales ni sourcemaps públicos. |
 | CI | Checks en PR hacia `feat/gestion-ubicaciones` y `main`. |
 | Tamaño de módulos | Reducir controladores/páginas más grandes por PRs funcionalmente neutros. |
-| E2E | Smoke estable antes de exigir visual completo en CI. |
+| E2E | 9 flujos críticos verdes en Chromium y CI; baseline visual/responsive todavía pendiente. |
 
 ## Siguiente rama recomendada
 
-La siguiente rama pendiente recomendada es `test/e2e-critical-flows`.
+La siguiente rama pendiente recomendada es `test/visual-responsive-baseline`.
 
-Objetivo: cubrir flujos críticos E2E antes de continuar con refactors visuales o de shells grandes.
+Objetivo: establecer un baseline visual y responsive revisable sobre los flujos críticos ya estabilizados, antes de modificar shells grandes o formularios.
 
-Archivos probables iniciales: configuración Playwright existente, flujos de autenticación, navegación principal y acciones críticas de Inventario/Cuentas con datos locales controlados.
+Archivos probables iniciales: configuración Playwright existente, specs visual/responsive, matriz de viewports y snapshots saneados.
+
+El alcance E2E pendiente incluye escritura y destrucción controlada, transacciones complejas, Personal, accesibilidad, regresión visual y cobertura responsive adicional. PR #30 no modificó código productivo, dependencias ni lockfiles.
 
 ## Decisiones de negocio pendientes
 
