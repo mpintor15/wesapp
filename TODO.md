@@ -119,7 +119,8 @@ Alcance inicial:
 - [V] Estado centrado validado manualmente.
 - [V] Acciones en una sola fila validadas manualmente.
 - [x] Ancho minimo razonable de columna de acciones implementado.
-- [ ] Validacion final del ancho minimo razonable de columna de acciones.
+- [V] Columna de acciones compacta validada manualmente.
+- [V] Encabezado vacio de columna de acciones validado manualmente.
 
 ### Cuentas / Pagos
 
