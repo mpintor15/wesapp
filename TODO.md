@@ -3,10 +3,10 @@
 ## Estado actual
 
 - Rama de integracion: `feat/gestion-ubicaciones`.
-- PR visual actual: PR #34 - UI Shell y Dashboard.
-- Ultimo commit del PR visual: `12e1f6552cbd39eb01b3a591cd62ad6ec8d8b437`.
+- PR visual actual: PR #34 - UI Shell y Dashboard, fusionado hacia `feat/gestion-ubicaciones`.
+- Ultimo commit del PR visual: merge commit `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`.
 - Fecha de actualizacion: 2026-08-04.
-- Estado general del proyecto: UI Shell y Dashboard implementados, validados por CI visual estricto y aprobados manualmente. Siguiente foco: QA visual automatizado en `test/automated-visual-qa`.
+- Estado general del proyecto: UI Shell y Dashboard implementados, fusionados, validados por CI post-merge y aprobados manualmente. Siguiente foco: QA visual automatizado en `test/automated-visual-qa`.
 
 ## Leyenda de estados
 
@@ -48,14 +48,19 @@
 - [x] CI visual estricto.
 - [V] CI visual estricto validado manualmente.
 - [V] PR #34 - UI Shell y Dashboard.
+- [V] PR #34 fusionado hacia `feat/gestion-ubicaciones` el 2026-08-04.
+- [V] Merge commit: `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`.
 - [V] Commits verificados: `562614e986a68b9aa3b3ec5b960ecfb36aadb2b1` y `12e1f6552cbd39eb01b3a591cd62ad6ec8d8b437`.
 - [V] Validacion visual manual aprobada.
-- [V] Seis checks verdes: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive.
+- [V] Validacion post-merge aprobada por CI canonico en Ubuntu/Chromium.
+- [V] Seis checks verdes post-merge: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive.
+- [V] UI Shell validado.
 
 ### QA visual automatizado
 
 - [~] Estado: en progreso.
 - [~] Siguiente rama: `test/automated-visual-qa`.
+- [~] Siguiente trabajo: QA visual automatizado.
 
 Alcance inicial:
 
@@ -200,6 +205,7 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 ### Estado actual
 
 - [V] PR #34 - UI Shell y Dashboard.
+- [V] PR #34 fusionado y validado por CI post-merge.
 
 ### Pendiente futuro
 
@@ -226,5 +232,21 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [x] PR #28 hooks paginados - MERGED el 2026-07-29 hacia `feat/gestion-ubicaciones`; merge commit `995103a28534ab9cb1a7b1df2d912ab4ffae8b0f`.
 - [x] PR #30 Critical E2E - MERGED el 2026-07-30 hacia `feat/gestion-ubicaciones`; merge commit `d91b6d2b0717fcb7e7a5298853a4a4924562aa30`.
 - [x] PR #32 Visual Responsive - MERGED el 2026-07-30 hacia `feat/gestion-ubicaciones`; merge commit `08cc4f9adaccae9cbe8a76d61202e80c85510347`.
-- [V] PR #34 UI Shell y Dashboard - OPEN Draft, base `feat/gestion-ubicaciones`, head `feat/next-functional-change`; commits `562614e986a68b9aa3b3ec5b960ecfb36aadb2b1` y `12e1f6552cbd39eb01b3a591cd62ad6ec8d8b437`; revision visual manual aprobada.
+- [V] PR #34 UI Shell y Dashboard - MERGED el 2026-08-04 hacia `feat/gestion-ubicaciones`; head `feat/next-functional-change`; commits `562614e986a68b9aa3b3ec5b960ecfb36aadb2b1`, `12e1f6552cbd39eb01b3a591cd62ad6ec8d8b437` y `250eb001f51ab1b6ceacaaee49ab58c02c23a0e4`; merge commit `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`; revision visual manual aprobada; CI post-merge verde.
 
+## Validacion post-merge
+
+- [V] Node real: `v20.20.2`.
+- [V] `npm --prefix backend run lint`.
+- [V] `NODE_ENV=test DB_NAME=wesapp_test npm --prefix backend test -- --runInBand`.
+- [V] `npm --prefix frontend run lint`.
+- [V] `npm --prefix frontend run test:unit -- --runInBand`.
+- [V] `node --test frontend/scripts/check-production-bundle.test.js`.
+- [V] `npm --prefix frontend run build`.
+- [V] `npm run lint`.
+- [V] `npm run format:check`.
+- [V] `git diff --check`.
+- [V] `npm --prefix frontend run test:e2e:critical` contra `wesapp_e2e`, backend `3201` y frontend `3200`.
+- [V] CI post-merge `30928386914` en `feat/gestion-ubicaciones`: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive en verde.
+- [V] `npm --prefix frontend run test:e2e:visual` validado por CI canonico Ubuntu/Chromium.
+- [ ] Diagnostico local macOS: `npm --prefix frontend run test:e2e:visual` ejecuto contra `wesapp_e2e`, backend `3201` y frontend `3200`, pero fallo 9/9 por diferencias de rasterizacion contra baselines Linux. El README de E2E documenta que CI es la validacion visual canonica y que las diferencias de fuentes macOS son esperables.
