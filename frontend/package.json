@@ -17,6 +17,8 @@
     "test:e2e:critical": "playwright test e2e/critical-*.spec.js --project=critical-chromium",
     "test:e2e:visual": "playwright test --config=playwright.visual.config.js",
     "test:e2e:visual:update": "node scripts/update-visual-baselines.js",
+    "test:qa:visual": "node scripts/run-qa-visual.js",
+    "test:qa:visual:report": "node scripts/run-qa-visual.js --open-report",
     "test:e2e:smoke": "playwright test e2e/smoke.spec.js --project=chromium",
     "test:responsive": "npm run test:responsive:chromium && npm run test:responsive:webkit",
     "test:responsive:chromium": "playwright test e2e/responsive-chromium.spec.js --project=chromium",
