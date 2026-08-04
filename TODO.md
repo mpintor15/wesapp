@@ -3,12 +3,12 @@
 ## Estado actual
 
 - Rama de integracion: `feat/gestion-ubicaciones`.
-- PR visual actual: PR #34 - UI Shell y Dashboard, fusionado hacia `feat/gestion-ubicaciones`.
-- Ultimo commit del PR visual: merge commit `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`.
+- PR visual actual: PR #37 - Dashboard y Cuentas/Facturas, fusionado hacia `feat/gestion-ubicaciones`.
+- Ultimo commit del PR visual: merge commit `e65c6438cb14f697cc98a8c03a88195481c3c363`.
 - Fecha de actualizacion: 2026-08-04.
-- Estado general del proyecto: UI Shell y Dashboard implementados, fusionados, validados por CI post-merge y aprobados manualmente. PR #37 en curso para cerrar la ronda visual Gerente de Dashboard y Cuentas/Facturas.
-- Rama actual: `fix/ui-gerente-qa-round-1`.
-- Siguiente trabajo: actualizar snapshots Ubuntu afectados, fusionar PR #37 y comenzar bloque Clientes desde `ui/clientes-directorio-phase-1`.
+- Estado general del proyecto: ronda visual Gerente 1 fusionada. Dashboard validado, Facturas visual validado, filtros predeterminados corregidos y validados, CI Visual Responsive Ubuntu aprobado y snapshots oficiales actualizados.
+- Rama actual: `docs/update-master-plan-gerente-round-1`.
+- Siguiente trabajo: comenzar Clientes / Directorio fase 1 desde `ui/clientes-directorio-phase-1`.
 
 ## Leyenda de estados
 
@@ -131,7 +131,14 @@ Alcance inicial:
 - [V] Limpiar filtros restaura ambos defaults validado manualmente.
 - [V] Refrescar mantiene los valores predeterminados aprobados.
 - [x] Reportes de Facturas respetan los filtros activos.
-- [~] PR #37: implementacion terminada, filtros corregidos, snapshots Ubuntu pendientes y merge pendiente.
+- [V] PR #37 fusionado hacia `feat/gestion-ubicaciones` el 2026-08-04.
+- [V] Merge commit: `e65c6438cb14f697cc98a8c03a88195481c3c363`.
+- [V] Dashboard validado manualmente.
+- [V] Facturas visual validado manualmente.
+- [V] Filtros por defecto de Facturas validados manualmente.
+- [V] CI Visual Responsive Ubuntu aprobado.
+- [V] Snapshots oficiales Ubuntu actualizados para Dashboard y Cuentas/Facturas.
+- [V] Seis checks verdes: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive.
 
 ### Cuentas / Pagos
 
@@ -169,6 +176,8 @@ Alcance inicial:
 - [ ] Validar RUC de 13 digitos.
 - [ ] Solo numeros.
 - [ ] Eliminar scroll horizontal de la tabla de Directorio.
+- [~] Siguiente bloque: Clientes / Directorio fase 1.
+- [~] Rama siguiente: `ui/clientes-directorio-phase-1`.
 
 ### Clientes / Ubicaciones
 
@@ -245,6 +254,7 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 
 - [V] PR #34 - UI Shell y Dashboard.
 - [V] PR #34 fusionado y validado por CI post-merge.
+- [V] PR #37 - Dashboard y Cuentas/Facturas fusionado, validado por CI y aprobado manualmente.
 
 ### Pendiente futuro
 
@@ -272,6 +282,7 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [x] PR #30 Critical E2E - MERGED el 2026-07-30 hacia `feat/gestion-ubicaciones`; merge commit `d91b6d2b0717fcb7e7a5298853a4a4924562aa30`.
 - [x] PR #32 Visual Responsive - MERGED el 2026-07-30 hacia `feat/gestion-ubicaciones`; merge commit `08cc4f9adaccae9cbe8a76d61202e80c85510347`.
 - [V] PR #34 UI Shell y Dashboard - MERGED el 2026-08-04 hacia `feat/gestion-ubicaciones`; head `feat/next-functional-change`; commits `562614e986a68b9aa3b3ec5b960ecfb36aadb2b1`, `12e1f6552cbd39eb01b3a591cd62ad6ec8d8b437` y `250eb001f51ab1b6ceacaaee49ab58c02c23a0e4`; merge commit `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`; revision visual manual aprobada; CI post-merge verde.
+- [V] PR #37 Dashboard y Cuentas/Facturas - MERGED el 2026-08-04 hacia `feat/gestion-ubicaciones`; head `fix/ui-gerente-qa-round-1`; commits `5c761db`, `afa5928`, `fb3b061`, `64517fc`, `0e26c55` y `23145af`; merge commit `e65c6438cb14f697cc98a8c03a88195481c3c363`; Dashboard, Facturas y filtros predeterminados aprobados manualmente por Martin; CI Visual Responsive Ubuntu aprobado con snapshots oficiales actualizados.
 
 ## Validacion post-merge
 
@@ -289,3 +300,5 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [V] CI post-merge `30928386914` en `feat/gestion-ubicaciones`: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive en verde.
 - [V] `npm --prefix frontend run test:e2e:visual` validado por CI canonico Ubuntu/Chromium.
 - [ ] Diagnostico local macOS: `npm --prefix frontend run test:e2e:visual` ejecuto contra `wesapp_e2e`, backend `3201` y frontend `3200`, pero fallo 9/9 por diferencias de rasterizacion contra baselines Linux. El README de E2E documenta que CI es la validacion visual canonica y que las diferencias de fuentes macOS son esperables.
+- [V] PR #37 post-merge: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive en verde antes del merge.
+- [V] PR #37 post-merge local: backend lint, backend Jest `wesapp_test`, frontend lint, frontend unit, production bundle check, frontend build, format check, `git diff --check` y Critical E2E contra `wesapp_e2e` aprobados.
