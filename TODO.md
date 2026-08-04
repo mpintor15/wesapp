@@ -6,7 +6,9 @@
 - PR visual actual: PR #34 - UI Shell y Dashboard, fusionado hacia `feat/gestion-ubicaciones`.
 - Ultimo commit del PR visual: merge commit `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`.
 - Fecha de actualizacion: 2026-08-04.
-- Estado general del proyecto: UI Shell y Dashboard implementados, fusionados, validados por CI post-merge y aprobados manualmente. Siguiente foco: QA visual automatizado en `test/automated-visual-qa`.
+- Estado general del proyecto: UI Shell y Dashboard implementados, fusionados, validados por CI post-merge y aprobados manualmente. PR #37 en curso para cerrar la ronda visual Gerente de Dashboard y Cuentas/Facturas.
+- Rama actual: `fix/ui-gerente-qa-round-1`.
+- Siguiente trabajo: actualizar snapshots Ubuntu afectados, fusionar PR #37 y comenzar bloque Clientes desde `ui/clientes-directorio-phase-1`.
 
 ## Leyenda de estados
 
@@ -16,6 +18,14 @@
 - [V] Validado manualmente
 - [B] Bloqueado
 - [A] Requiere autorizacion
+
+## Reglas globales aprobadas
+
+- [x] Columnas de acciones: aplica a todos los modulos actuales y nuevos. No deben mostrar un titulo textual visible como "Acciones", "Opciones" ni equivalente; si la tabla requiere encabezado, debe ser vacio o solo accesible para lectores de pantalla.
+- [x] Columnas de acciones: deben conservar accesibilidad mediante `aria-label`, `title` o tooltip; ocupar el menor ancho razonable; ajustarse al contenido; mantener los botones en una sola fila; mostrar unicamente acciones disponibles; no duplicar acciones que ya existen en otra columna.
+- [A] Cambiar la convencion global de columnas exclusivas de acciones requiere autorizacion.
+- [x] Headers de modulos: todos deben utilizar los mismos tokens de paleta, degradado, contraste, borde, sombra y acento del Dashboard. El contenido y las acciones pueden variar; la identidad visual no.
+- [x] Cuentas / Facturas: los filtros "Con deuda" y "Agrupar por cliente" deben iniciar activos, no pueden cambiar de valor predeterminado sin autorizacion, los reportes deben respetar sus valores activos y limpiar filtros restaura los defaults aprobados.
 
 ## Roadmap principal
 
@@ -37,6 +47,16 @@
 
 - [x] Degradado compartido.
 - [V] Degradado compartido validado manualmente.
+- [x] Paleta del degradado del Dashboard implementada para aumentar contraste del logo.
+- [x] Contraste del nombre del usuario mejorado.
+- [x] Contraste del rol mejorado.
+- [x] Contraste del boton "Cerrar sesion" mejorado.
+- [x] Iconografia del Dashboard sustituida.
+- [x] Un icono unico por modulo en Dashboard.
+- [x] Clientes e Inventario no comparten icono.
+- [V] Revision manual detecto jerarquia visual general aceptable.
+- [V] Contraste del nombre de usuario, rol y boton "Cerrar sesion" validado manualmente.
+- [V] Iconografia, balance visual, jerarquia y consistencia WES validados manualmente.
 - [x] Cabeceras unificadas.
 - [V] Cabeceras unificadas validadas manualmente.
 - [x] Dashboard mas compacto.
@@ -81,19 +101,37 @@ Alcance inicial:
 - [ ] Mi cuenta.
 - [ ] Cambiar contrasena.
 - [ ] Cerrar sesion dentro del menu.
-- [ ] Propuesta e integracion de iconos.
-- [A] Incorporacion de una sola libreria de iconos.
+- [x] Propuesta e integracion de iconos.
+- [x] Incorporacion de una sola libreria de iconos: `lucide-react`.
 - [ ] Mejora visual conservadora, sin rediseno completo.
 
 ### Cuentas / Facturas
 
-- [ ] Evitar scroll horizontal.
+- [x] Evitar scroll horizontal.
 - [ ] Mejorar selector de filas.
-- [ ] Centrar badge de estado.
+- [x] Centrar badge de estado horizontal y verticalmente.
+- [x] Reducir el ancho de la columna Estado.
 - [ ] Mejorar modal de reporte.
 - [ ] Alinear filtros.
 - [ ] Permitir fecha al crear.
 - [ ] Bloquear edicion posterior.
+- [x] Reorganizar columna de acciones sin botones montados.
+- [x] Reacomodar la columna Acciones para que ambos botones queden en una sola fila.
+- [V] Ausencia de scroll horizontal validada manualmente.
+- [V] Estado centrado validado manualmente.
+- [V] Acciones en una sola fila validadas manualmente.
+- [x] Ancho minimo razonable de columna de acciones implementado.
+- [V] Columna de acciones compacta validada manualmente.
+- [V] Encabezado vacio de columna de acciones validado manualmente.
+- [x] Con deuda activo por defecto.
+- [V] Con deuda activo por defecto validado manualmente.
+- [x] Agrupar por cliente activo por defecto.
+- [V] Agrupar por cliente activo por defecto validado manualmente.
+- [x] Limpiar filtros restaura Con deuda y Agrupar por cliente activos.
+- [V] Limpiar filtros restaura ambos defaults validado manualmente.
+- [V] Refrescar mantiene los valores predeterminados aprobados.
+- [x] Reportes de Facturas respetan los filtros activos.
+- [~] PR #37: implementacion terminada, filtros corregidos, snapshots Ubuntu pendientes y merge pendiente.
 
 ### Cuentas / Pagos
 
@@ -130,6 +168,7 @@ Alcance inicial:
 - [ ] Validar cedula de 10 digitos.
 - [ ] Validar RUC de 13 digitos.
 - [ ] Solo numeros.
+- [ ] Eliminar scroll horizontal de la tabla de Directorio.
 
 ### Clientes / Ubicaciones
 

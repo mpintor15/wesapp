@@ -38,9 +38,16 @@ describe('cuentasReportParams', () => {
     const pagos = getInitialPagosReportFilters();
 
     facturas.fechaInicio = '2026-01-01';
+    facturas.soloDeudores = false;
+    facturas.agruparCliente = false;
     pagos.metodoPago = 'efectivo';
 
-    expect(getInitialFacturasReportFilters().fechaInicio).toBe('');
+    expect(getInitialFacturasReportFilters()).toEqual({
+      fechaInicio: '',
+      fechaFin: '',
+      soloDeudores: true,
+      agruparCliente: true,
+    });
     expect(getInitialPagosReportFilters().metodoPago).toBe('');
   });
 });

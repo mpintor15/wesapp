@@ -29,6 +29,26 @@
 
 /* ── Header ─────────────────────────────── */
 .dashboard-header {
+  --brand-header-background:
+    linear-gradient(
+      90deg,
+      rgba(232, 32, 26, 0.24) 0%,
+      rgba(185, 28, 28, 0.13) 24%,
+      rgba(185, 28, 28, 0) 48%
+    ),
+    linear-gradient(105deg, #f7f9fc 0%, #eef2f7 34%, #dfe6ee 68%, #f8fafc 100%);
+  --brand-header-accent: linear-gradient(
+    90deg,
+    rgba(232, 32, 26, 0.92) 0%,
+    rgba(185, 28, 28, 0.62) 38%,
+    rgba(15, 23, 42, 0.2) 68%,
+    rgba(232, 32, 26, 0.72) 100%
+  );
+  --brand-header-text: var(--color-neutral-900);
+  --brand-header-text-muted: rgba(15, 23, 42, 0.74);
+  --brand-header-control-border: rgba(15, 23, 42, 0.28);
+  --brand-header-focus: var(--color-neutral-900);
+  --brand-header-shadow: 0 4px 16px rgba(15, 23, 42, 0.16);
   min-height: 88px;
   padding: 6px 40px 6px 44px;
   display: flex;
@@ -83,14 +103,26 @@
 .header-username {
   font-size: 0.9rem;
   font-weight: 700;
-  color: var(--color-surface);
+  color: var(--color-neutral-950);
 }
 
 .header-role {
   font-size: 0.72rem;
-  color: var(--brand-header-text-muted);
+  color: var(--color-neutral-700);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+.dashboard-header .btn-ghost {
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(15, 23, 42, 0.34);
+  color: var(--color-neutral-950);
+}
+
+.dashboard-header .btn-ghost:hover {
+  background: var(--color-surface);
+  border-color: rgba(15, 23, 42, 0.48);
+  color: var(--color-neutral-950);
 }
 
 /* ── Main content ───────────────────────── */
@@ -211,7 +243,9 @@
 .module-icon {
   width: 26px;
   height: 26px;
-  object-fit: contain;
+  color: var(--color-primary);
+  flex: 0 0 26px;
+  stroke-width: 2;
 }
 
 /* Text */
