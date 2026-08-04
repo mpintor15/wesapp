@@ -6,9 +6,9 @@
 - PR visual actual: PR #34 - UI Shell y Dashboard, fusionado hacia `feat/gestion-ubicaciones`.
 - Ultimo commit del PR visual: merge commit `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`.
 - Fecha de actualizacion: 2026-08-04.
-- Estado general del proyecto: UI Shell y Dashboard implementados, fusionados, validados por CI post-merge y aprobados manualmente. Bloque visual Gerente ronda 1 en separacion productiva para Dashboard y Cuentas/Facturas.
+- Estado general del proyecto: UI Shell y Dashboard implementados, fusionados, validados por CI post-merge y aprobados manualmente. PR #37 en curso para cerrar la ronda visual Gerente de Dashboard y Cuentas/Facturas.
 - Rama actual: `fix/ui-gerente-qa-round-1`.
-- Siguiente trabajo: comenzar bloque Clientes desde `ui/clientes-directorio-phase-1`.
+- Siguiente trabajo: actualizar snapshots Ubuntu afectados, fusionar PR #37 y comenzar bloque Clientes desde `ui/clientes-directorio-phase-1`.
 
 ## Leyenda de estados
 
@@ -25,6 +25,8 @@
 - [x] Columnas de acciones: deben conservar accesibilidad mediante `aria-label`, `title` o tooltip; ocupar el menor ancho razonable; ajustarse al contenido; mantener los botones en una sola fila; mostrar unicamente acciones disponibles; no duplicar acciones que ya existen en otra columna.
 - [A] Cambiar la convencion global de columnas exclusivas de acciones requiere autorizacion.
 - [x] Headers de modulos: todos deben utilizar los mismos tokens de paleta, degradado, contraste, borde, sombra y acento del Dashboard. El contenido y las acciones pueden variar; la identidad visual no.
+- [x] Cuentas / Facturas: los filtros "Con deuda" y "Agrupar por cliente" deben iniciar activos, no pueden cambiar de valor predeterminado sin autorizacion, los reportes deben respetar sus valores activos y limpiar filtros restaura los defaults aprobados.
+
 ## Roadmap principal
 
 ### Base tecnica completada
@@ -121,6 +123,15 @@ Alcance inicial:
 - [x] Ancho minimo razonable de columna de acciones implementado.
 - [V] Columna de acciones compacta validada manualmente.
 - [V] Encabezado vacio de columna de acciones validado manualmente.
+- [x] Con deuda activo por defecto.
+- [V] Con deuda activo por defecto validado manualmente.
+- [x] Agrupar por cliente activo por defecto.
+- [V] Agrupar por cliente activo por defecto validado manualmente.
+- [x] Limpiar filtros restaura Con deuda y Agrupar por cliente activos.
+- [V] Limpiar filtros restaura ambos defaults validado manualmente.
+- [V] Refrescar mantiene los valores predeterminados aprobados.
+- [x] Reportes de Facturas respetan los filtros activos.
+- [~] PR #37: implementacion terminada, filtros corregidos, snapshots Ubuntu pendientes y merge pendiente.
 
 ### Cuentas / Pagos
 

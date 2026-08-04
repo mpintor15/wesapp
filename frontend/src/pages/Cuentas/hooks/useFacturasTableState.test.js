@@ -15,6 +15,26 @@ const makeFacturas = (count) =>
   }));
 
 describe('useFacturasTableState', () => {
+  test('inicializa filtros obligatorios activos y construye consulta inicial', () => {
+    const hook = renderHook(() => useFacturasTableState(makeFacturas(3)));
+
+    expect(hook.result.filters).toEqual(
+      expect.objectContaining({ conSaldo: true, ordenAlfabetico: true })
+    );
+    expect(hook.result.filtersDraft).toEqual(
+      expect.objectContaining({ conSaldo: true, ordenAlfabetico: true })
+    );
+    expect(hook.result.params).toEqual(
+      expect.objectContaining({
+        page: 1,
+        solo_deudores: 'true',
+        agrupar_cliente: 'true',
+      })
+    );
+
+    hook.unmount();
+  });
+
   test('mantiene filtros borrador separados de filtros aplicados', () => {
     const hook = renderHook(() => useFacturasTableState(makeFacturas(3)));
 
@@ -72,6 +92,12 @@ describe('useFacturasTableState', () => {
     expect(hook.result.filters).toEqual(
       expect.objectContaining({ search: '', conSaldo: true, ordenAlfabetico: true })
     );
+    expect(hook.result.filtersDraft).toEqual(
+      expect.objectContaining({ search: '', conSaldo: true, ordenAlfabetico: true })
+    );
+    expect(hook.result.params).toEqual(
+      expect.objectContaining({ solo_deudores: 'true', agrupar_cliente: 'true' })
+    );
     expect(hook.result.currentPage).toBe(1);
 
     hook.unmount();
@@ -115,6 +141,18 @@ describe('useFacturasTableState', () => {
       estado: 'anulada',
       search: 'Acme',
     });
+
+    act(() => {
+      hook.result.clearFilters();
+    });
+
+    expect(hook.result.params).toEqual(
+      expect.objectContaining({
+        page: 1,
+        solo_deudores: 'true',
+        agrupar_cliente: 'true',
+      })
+    );
 
     hook.unmount();
   });
