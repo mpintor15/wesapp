@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Boxes, Building2, Receipt, ShieldCheck, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import './Dashboard.css';
 import logo from '../../assets/branding/logo_horizontal_header.png';
-import iconCuentas from '../../assets/icons/invoice.png';
-import iconInventario from '../../assets/icons/inventory.png';
-import iconPersonal from '../../assets/icons/audience.png';
-import iconUsuarios from '../../assets/icons/user.png';
 import { MODULE_ACCESS_PERMISSIONS } from '../../auth/modulePermissions';
 
 const MODULE_META = {
@@ -26,35 +23,35 @@ const DASHBOARD_MODULES = [
     key: 'cuentas',
     permission: MODULE_ACCESS_PERMISSIONS.cuentas,
     label: 'Cuentas',
-    icon: iconCuentas,
+    Icon: Receipt,
     path: '/cuentas',
   },
   {
     key: 'configuracion',
     permission: MODULE_ACCESS_PERMISSIONS.configuracion,
     label: 'Clientes',
-    icon: iconInventario,
+    Icon: Building2,
     path: '/configuracion',
   },
   {
     key: 'inventario',
     permission: MODULE_ACCESS_PERMISSIONS.inventario,
     label: 'Inventario',
-    icon: iconInventario,
+    Icon: Boxes,
     path: '/inventario',
   },
   {
     key: 'personal',
     permission: MODULE_ACCESS_PERMISSIONS.personal,
     label: 'Personal',
-    icon: iconPersonal,
+    Icon: UserRound,
     path: '/personal',
   },
   {
     key: 'usuarios',
     permission: MODULE_ACCESS_PERMISSIONS.usuarios,
     label: 'Usuarios',
-    icon: iconUsuarios,
+    Icon: ShieldCheck,
     path: '/usuarios',
   },
 ];
@@ -138,6 +135,7 @@ const Dashboard = () => {
         <div className="modules-grid">
           {modules.map((module) => {
             const meta = MODULE_META[module.key] ?? {};
+            const ModuleIcon = module.Icon;
             return (
               <button
                 key={module.key}
@@ -150,7 +148,7 @@ const Dashboard = () => {
                   {loadingModule === module.key ? (
                     <span className="spinner" />
                   ) : (
-                    <img src={module.icon} alt="" className="module-icon" />
+                    <ModuleIcon className="module-icon" aria-hidden="true" strokeWidth={2} />
                   )}
                 </div>
                 <div className="module-card-body">
