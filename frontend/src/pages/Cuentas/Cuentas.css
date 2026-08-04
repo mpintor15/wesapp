@@ -539,6 +539,86 @@
   background: var(--color-info-text);
 }
 
+.facturas-table-shell {
+  overflow-x: hidden !important;
+}
+
+.facturas-table {
+  min-width: 0 !important;
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.facturas-table th,
+.facturas-table td {
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+}
+
+.facturas-table th:nth-child(1),
+.facturas-table td:nth-child(1) {
+  width: 5.5% !important;
+}
+
+.facturas-table th:nth-child(2),
+.facturas-table td:nth-child(2) {
+  width: 7.2% !important;
+}
+
+.facturas-table th:nth-child(3),
+.facturas-table td:nth-child(3) {
+  width: 19.3% !important;
+}
+
+.facturas-table th:nth-child(n + 4):nth-child(-n + 11),
+.facturas-table td:nth-child(n + 4):nth-child(-n + 11) {
+  width: 6.75% !important;
+}
+
+.facturas-table th:nth-child(12),
+.facturas-table td:nth-child(12) {
+  width: 4.8% !important;
+  min-width: 0 !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  text-align: center !important;
+}
+
+.facturas-table th:nth-child(13),
+.facturas-table td:nth-child(13) {
+  width: 5.4% !important;
+}
+
+.facturas-table td.col-money {
+  font-size: 0.88em !important;
+  letter-spacing: 0;
+}
+
+.facturas-table .cell-cliente {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: normal !important;
+  word-break: normal;
+}
+
+.facturas-table .app-table-actions {
+  align-items: center !important;
+  flex-direction: row !important;
+  gap: 4px !important;
+  white-space: nowrap;
+}
+
+.facturas-table .action-btn {
+  width: 22px;
+  height: 22px;
+  flex-basis: 22px;
+}
+
+.facturas-table .badge {
+  justify-content: center;
+  max-width: 100%;
+}
+
 .pagos-table .app-col-actions {
   width: 96px;
   overflow: visible;
@@ -1587,6 +1667,30 @@
   .cuentas-table td {
     padding: 8px 10px;
   }
+
+  .facturas-table th,
+  .facturas-table td {
+    padding: 6px 3px !important;
+  }
+
+  .facturas-table {
+    font-size: 0.66em !important;
+  }
+
+  .facturas-table td.col-money {
+    font-size: 0.82em !important;
+  }
+
+  .facturas-table .action-btn {
+    width: 22px;
+    height: 22px;
+    flex-basis: 22px;
+  }
+
+  .facturas-table th:nth-child(13),
+  .facturas-table td:nth-child(13) {
+    width: 7.4% !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -1623,6 +1727,57 @@
     padding: 10px;
   }
 
+  .facturas-table {
+    font-size: 0.58em !important;
+  }
+
+  .facturas-table th,
+  .facturas-table td {
+    padding: 5px 2px !important;
+  }
+
+  .facturas-table td.col-money {
+    font-size: 0.76em !important;
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+  }
+
+  .facturas-table .cell-factura,
+  .facturas-table .app-cell-date {
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+  }
+
+  .facturas-table .action-btn {
+    width: 13px;
+    height: 18px;
+    flex-basis: 13px;
+  }
+
+  .facturas-table .action-btn svg {
+    height: 10px;
+    width: 10px;
+  }
+
+  .facturas-table td.app-col-actions {
+    overflow: hidden !important;
+    padding-left: 1px !important;
+    padding-right: 1px !important;
+  }
+
+  .facturas-table th:nth-child(13),
+  .facturas-table td:nth-child(13) {
+    width: 8.2% !important;
+  }
+
+  .facturas-table .badge {
+    max-width: 100%;
+    padding: 2px 1px;
+    font-size: 0.52rem;
+    line-height: 1.1;
+    white-space: normal;
+  }
+
   .report-body {
     scroll-padding-bottom: 20px;
   }
@@ -1634,6 +1789,11 @@
   .cuentas-container .action-buttons {
     flex-direction: column;
     gap: 4px;
+  }
+
+  .cuentas-container .facturas-table .app-table-actions {
+    flex-direction: row !important;
+    gap: 2px !important;
   }
 
   .modal-context {

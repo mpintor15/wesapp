@@ -15,8 +15,8 @@ const FacturasTable = ({
   onEdit,
   onCancel,
 }) => (
-  <div className="table-responsive app-table-shell">
-    <table className="app-table cuentas-table">
+  <div className="table-responsive app-table-shell facturas-table-shell">
+    <table className="app-table cuentas-table facturas-table">
       <thead>
         <tr>
           <SortHeader field="num_factura" label="N° Fact" sort={sort} onSort={onSort} />
