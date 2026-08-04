@@ -17,6 +17,10 @@
 - [B] Bloqueado
 - [A] Requiere autorizacion
 
+## Reglas globales aprobadas
+
+- [x] Columnas de acciones: aplica a todos los modulos. No deben mostrar un titulo textual visible como "Acciones"; si la tabla requiere encabezado, debe ser vacio o solo accesible para lectores de pantalla. La columna debe mantener alineacion consistente, no duplicar acciones y no mostrar botones no disponibles cuando la regla del flujo indique ocultarlos.
+
 ## Roadmap principal
 
 ### Base tecnica completada
@@ -84,7 +88,7 @@ Commits locales de la fase:
 - `985f703` - `test(e2e): add automated visual QA runner`.
 - `694e5b4` - `test(e2e): add objective visual diagnostics`.
 - `c05e3d8` - `test(e2e): add visual QA reports`.
-- Pendiente - `ci(e2e): add manual visual QA workflow`.
+- `3b860f8` - `ci(e2e): add manual visual QA workflow`.
 
 Alcance inicial:
 
