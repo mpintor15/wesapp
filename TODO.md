@@ -17,6 +17,10 @@
 - [B] Bloqueado
 - [A] Requiere autorizacion
 
+## Reglas globales aprobadas
+
+- [x] Columnas de acciones: aplica a todos los modulos. No deben mostrar un titulo textual visible como "Acciones"; si la tabla requiere encabezado, debe ser vacio o solo accesible para lectores de pantalla. La columna debe mantener alineacion consistente, no duplicar acciones y no mostrar botones no disponibles cuando la regla del flujo indique ocultarlos.
+
 ## Roadmap principal
 
 ### Base tecnica completada
@@ -58,22 +62,107 @@
 
 ### QA visual automatizado
 
-- [~] Estado: en progreso.
+- [~] Estado: primera fase implementada localmente; pendiente revision y QA manual.
 - [~] Siguiente rama: `test/automated-visual-qa`.
 - [~] Siguiente trabajo: QA visual automatizado.
+- [~] Rama actual: `test/automated-visual-qa`.
+- [x] Configuracion Playwright QA independiente en Chromium.
+- [x] Runner local sin inicio ni cierre de procesos ajenos.
+- [x] Matriz inicial de 11 escenarios.
+- [x] Captura de errores JavaScript.
+- [x] Captura de `console.error`.
+- [x] Registro informativo de `console.warn`.
+- [x] Captura de fallos de red.
+- [x] Deteccion de imagenes visibles rotas.
+- [x] Screenshots temporales por escenario.
+- [x] Reporte JSON en `frontend/qa-results/report.json`.
+- [x] Resumen Markdown en `frontend/qa-results/summary.md`.
+- [x] Seccion obligatoria "Que debes revisar tu manualmente".
+- [x] Workflow manual `workflow_dispatch` preparado, no automatico.
+- [ ] No validado manualmente.
+- [ ] No publicado.
+- [ ] Sin PR abierto.
+
+Commits locales de la fase:
+
+- `985f703` - `test(e2e): add automated visual QA runner`.
+- `694e5b4` - `test(e2e): add objective visual diagnostics`.
+- `c05e3d8` - `test(e2e): add visual QA reports`.
+- `3b860f8` - `ci(e2e): add manual visual QA workflow`.
 
 Alcance inicial:
 
-- [ ] Errores JavaScript.
-- [ ] Consola.
-- [ ] Red.
-- [ ] Overflow.
-- [ ] Elementos criticos.
-- [ ] Imagenes rotas.
-- [ ] Permisos visibles.
-- [ ] Screenshots temporales.
-- [ ] JSON y Markdown.
-- [ ] Seccion obligatoria: "Que debes revisar tu manualmente".
+- [x] Errores JavaScript.
+- [x] Consola.
+- [x] Red.
+- [ ] Overflow general.
+- [x] Elementos criticos.
+- [x] Imagenes rotas.
+- [x] Permisos visibles minimos.
+- [x] Screenshots temporales.
+- [x] JSON y Markdown.
+- [x] Seccion obligatoria: "Que debes revisar tu manualmente".
+
+Escenarios iniciales:
+
+- [x] Dashboard `/` gerente 1440x900.
+- [x] Dashboard `/` gerente 390x844.
+- [x] Dashboard `/` contador 1440x900.
+- [x] Cuentas `/cuentas` contador 1440x900.
+- [x] Cuentas `/cuentas` contador 390x844.
+- [x] Clientes `/configuracion` gerente 1440x900.
+- [x] Clientes `/configuracion` gerente 390x844.
+- [x] Inventario `/inventario` gerente 1440x900.
+- [x] Inventario `/inventario` gerente 390x844.
+- [x] Personal `/personal` gerente 1440x900.
+- [x] Usuarios `/usuarios` gerente 1440x900.
+
+Validaciones de la fase:
+
+- [x] `npm --prefix frontend run lint`.
+- [x] `npm --prefix frontend run test:unit -- --runInBand --testPathPattern=qaVisualReport.test.js`.
+- [x] `npm --prefix frontend run test:qa:visual` dos veces consecutivas contra `wesapp_e2e`, backend `3201` y frontend `3200`.
+- [x] Resultado estable de la suite QA visual: 11 escenarios, 11 pasados, 0 bloqueantes, 0 altos, 0 medios, 0 bajos.
+- [ ] Validaciones generales finales pendientes tras el cuarto commit.
+
+Verificado automaticamente por QA visual:
+
+- [x] Rutas cargadas.
+- [x] Login por rol con fixtures `e2e_gerente` y `e2e_contador`.
+- [x] Ruta final esperada.
+- [x] Root esperado visible.
+- [x] Heading principal visible.
+- [x] Ausencia de Error Boundary.
+- [x] Errores JavaScript.
+- [x] `console.error`.
+- [x] Requests fallidas.
+- [x] Respuestas locales `>=500`.
+- [x] `401/403` inesperados.
+- [x] Imagenes visibles rotas.
+- [x] Permisos visibles minimos en Dashboard.
+- [x] Screenshots temporales.
+
+Debe revisar Martin manualmente:
+
+- [ ] Dashboard - calidad estetica del degradado.
+- [ ] Dashboard - tamano percibido del logo.
+- [ ] Dashboard - densidad de tarjetas.
+- [ ] Cabeceras - consistencia visual entre modulos.
+- [ ] Cuentas - claridad de acciones.
+- [ ] Clientes - ritmo visual y legibilidad.
+- [ ] Inventario - densidad de controles.
+- [ ] Personal - jerarquia de acciones.
+- [ ] Usuarios - claridad de acciones sensibles.
+
+Bloqueos:
+
+- [ ] Ningun bloqueo activo.
+
+Siguiente accion:
+
+- [ ] Ejecutar validaciones generales completas.
+- [ ] Revisar diff final.
+- [ ] No hacer push ni abrir PR hasta autorizacion.
 
 ### Dashboard pendiente
 

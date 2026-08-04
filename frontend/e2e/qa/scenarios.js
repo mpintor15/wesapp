@@ -1,0 +1,112 @@
+const SCENARIOS = [
+  {
+    name: 'Dashboard',
+    slug: 'dashboard',
+    route: '/',
+    role: 'gerente',
+    viewport: { width: 1440, height: 900 },
+    rootSelector: '.dashboard-container',
+    heading: /bienvenido/i,
+  },
+  {
+    name: 'Dashboard',
+    slug: 'dashboard',
+    route: '/',
+    role: 'gerente',
+    viewport: { width: 390, height: 844 },
+    rootSelector: '.dashboard-container',
+    heading: /bienvenido/i,
+  },
+  {
+    name: 'Dashboard',
+    slug: 'dashboard',
+    route: '/',
+    role: 'contador',
+    viewport: { width: 1440, height: 900 },
+    rootSelector: '.dashboard-container',
+    heading: /bienvenido/i,
+  },
+  {
+    name: 'Cuentas',
+    slug: 'cuentas',
+    route: '/cuentas',
+    role: 'contador',
+    viewport: { width: 1440, height: 900 },
+    rootSelector: '.cuentas-container',
+    heading: /^Cuentas$/i,
+  },
+  {
+    name: 'Cuentas',
+    slug: 'cuentas',
+    route: '/cuentas',
+    role: 'contador',
+    viewport: { width: 390, height: 844 },
+    rootSelector: '.cuentas-container',
+    heading: /^Cuentas$/i,
+  },
+  {
+    name: 'Clientes',
+    slug: 'clientes',
+    route: '/configuracion',
+    role: 'gerente',
+    viewport: { width: 1440, height: 900 },
+    rootSelector: '.configuracion-container',
+    heading: /^Clientes$/i,
+  },
+  {
+    name: 'Clientes',
+    slug: 'clientes',
+    route: '/configuracion',
+    role: 'gerente',
+    viewport: { width: 390, height: 844 },
+    rootSelector: '.configuracion-container',
+    heading: /^Clientes$/i,
+  },
+  {
+    name: 'Inventario',
+    slug: 'inventario',
+    route: '/inventario',
+    role: 'gerente',
+    viewport: { width: 1440, height: 900 },
+    rootSelector: '.inventario-container',
+    heading: /^Inventario$/i,
+  },
+  {
+    name: 'Inventario',
+    slug: 'inventario',
+    route: '/inventario',
+    role: 'gerente',
+    viewport: { width: 390, height: 844 },
+    rootSelector: '.inventario-container',
+    heading: /^Inventario$/i,
+  },
+  {
+    name: 'Personal',
+    slug: 'personal',
+    route: '/personal',
+    role: 'gerente',
+    viewport: { width: 1440, height: 900 },
+    rootSelector: '.page-container',
+    heading: /^Personal$/i,
+  },
+  {
+    name: 'Usuarios',
+    slug: 'usuarios',
+    route: '/usuarios',
+    role: 'gerente',
+    viewport: { width: 1440, height: 900 },
+    rootSelector: '.page-container',
+    heading: /^Usuarios$/i,
+  },
+];
+
+const getViewportName = (viewport) => `${viewport.width}x${viewport.height}`;
+
+const getScenarioId = (scenario) =>
+  `${scenario.slug}-${scenario.role}-${getViewportName(scenario.viewport)}`;
+
+module.exports = {
+  SCENARIOS,
+  getScenarioId,
+  getViewportName,
+};
