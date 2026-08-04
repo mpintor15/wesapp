@@ -676,7 +676,7 @@ const Configuracion = () => {
 
   return (
     <div className="configuracion-container">
-      <header className="page-header">
+      <header className="brand-header page-header">
         <div className="page-header-left">
           <button className="btn-back" onClick={() => navigate('/')} type="button">
             <svg

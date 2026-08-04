@@ -30,6 +30,7 @@ const renderHeader = (props = {}) => {
   });
 
   return {
+    header: () => container.querySelector('header'),
     text: () => container.textContent,
     unmount: () => {
       act(() => root.unmount());
@@ -46,6 +47,7 @@ describe('CuentasPageHeader', () => {
   test('oculta reporte de facturas sin permiso de exportar reportes', () => {
     const view = renderHeader({ canExportReportes: false });
 
+    expect(view.header().className).toContain('brand-header');
     expect(view.text()).not.toContain('Generar reporte de Facturas');
     expect(view.text()).toContain('Crear nueva factura');
 

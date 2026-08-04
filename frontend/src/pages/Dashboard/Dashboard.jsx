@@ -97,7 +97,7 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header">
+      <header className="brand-header dashboard-header">
         <div className="header-logo">
           <img src={logo} alt="WES Security Cía. Ltda." width="1725" height="1000" />
         </div>
