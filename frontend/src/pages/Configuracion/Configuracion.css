@@ -202,14 +202,14 @@
 }
 
 .configuracion-ubicaciones-filter-card .ff-controls {
-  align-items: flex-start;
-  flex-wrap: wrap;
+  align-items: flex-end;
+  flex-wrap: nowrap;
   width: 100%;
 }
 
 .configuracion-ubicaciones-search-field {
   display: flex;
-  flex: 2 1 420px;
+  flex: 1 1 420px;
   flex-direction: column;
   gap: 5px;
   max-width: none;
@@ -285,64 +285,84 @@
   color: #475569;
 }
 
+.configuracion-ubicaciones-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.configuracion-ubicaciones-table th {
+  text-align: center !important;
+}
+
+.configuracion-ubicaciones-table th,
+.configuracion-ubicaciones-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal !important;
+}
+
 .configuracion-ubicaciones-table th:first-child,
 .configuracion-ubicaciones-table td:first-child {
-  min-width: 210px;
-  max-width: 340px;
+  width: 36%;
 }
 
 .configuracion-ubicaciones-table th:nth-child(2),
 .configuracion-ubicaciones-table td:nth-child(2) {
-  min-width: 190px;
-  max-width: 300px;
+  width: 36%;
 }
 
 .configuracion-ubicaciones-table th:nth-child(3),
-.configuracion-ubicaciones-table th:nth-child(4),
-.configuracion-ubicaciones-table td:nth-child(3),
-.configuracion-ubicaciones-table td:nth-child(4) {
-  width: 132px;
-  min-width: 132px;
+.configuracion-ubicaciones-table td:nth-child(3) {
+  width: 20%;
+  text-align: center !important;
 }
 
-.configuracion-ubicaciones-table td {
-  white-space: normal !important;
+.configuracion-ubicaciones-table th.app-col-actions,
+.configuracion-ubicaciones-table td.app-col-actions {
+  width: 58px;
+  min-width: 58px;
+  max-width: 58px;
+  text-align: center !important;
 }
 
+.configuracion-client-name,
 .configuracion-location-name {
   color: var(--color-text);
-  font-weight: 820;
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.configuracion-delete-blocked {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  padding: 5px 9px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  background: var(--color-surface-subtle);
-  font-size: 0.72rem;
-  font-weight: 800;
-  line-height: 1.2;
-  white-space: nowrap;
+.configuracion-operational-cell {
+  color: var(--color-text-secondary) !important;
+  font-size: 0.86rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: center !important;
 }
 
-.configuracion-delete-blocked-reason {
+.configuracion-operational-cell span,
+.configuracion-operational-cell small {
   display: block;
-  max-width: 150px;
+}
+
+.configuracion-operational-cell small {
   color: var(--color-text-muted);
-  font-size: 0.68rem;
-  font-weight: 650;
-  line-height: 1.25;
-  white-space: normal;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.configuracion-status-text {
+  color: var(--color-text-secondary);
+  font-weight: 700;
+}
+
+.configuracion-status-text--busy {
+  color: var(--color-primary-dark);
 }
 
 .configuracion-ubicaciones-mobile-list {
   list-style: none;
+  display: none;
   margin-top: 10px;
   padding: 0;
 }
@@ -385,8 +405,7 @@
   flex-wrap: wrap;
 }
 
-.configuracion-ubicacion-card-actions .action-btn,
-.configuracion-ubicacion-card-actions .configuracion-delete-blocked {
+.configuracion-ubicacion-card-actions .action-btn {
   width: auto;
   min-width: 96px;
   min-height: 38px;
@@ -642,14 +661,6 @@
     width: min(96vw, 1280px);
   }
 
-  .configuracion-ubicaciones-table th:nth-child(3),
-  .configuracion-ubicaciones-table th:nth-child(4),
-  .configuracion-ubicaciones-table td:nth-child(3),
-  .configuracion-ubicaciones-table td:nth-child(4) {
-    min-width: 118px;
-    width: 118px;
-  }
-
   .configuracion-clientes-table th:nth-child(4),
   .configuracion-clientes-table td:nth-child(4) {
     width: 14%;
@@ -675,9 +686,21 @@
     display: none;
   }
 
-  .configuracion-ubicaciones-table th:nth-child(4),
-  .configuracion-ubicaciones-table td:nth-child(4) {
-    display: none;
+  .configuracion-ubicaciones-table th.app-col-actions,
+  .configuracion-ubicaciones-table td.app-col-actions {
+    width: 54px;
+    min-width: 54px;
+    max-width: 54px;
+  }
+}
+
+@media (max-width: 900px) {
+  .configuracion-ubicaciones-table-shell {
+    display: none !important;
+  }
+
+  .configuracion-ubicaciones-mobile-list {
+    display: block;
   }
 }
 
@@ -796,8 +819,7 @@
     justify-content: stretch;
   }
 
-  .configuracion-ubicacion-card-actions .action-btn,
-  .configuracion-ubicacion-card-actions .configuracion-delete-blocked {
+  .configuracion-ubicacion-card-actions .action-btn {
     flex: 1 1 0;
   }
 }
