@@ -3,12 +3,12 @@
 ## Estado actual
 
 - Rama de integracion: `feat/gestion-ubicaciones`.
-- PR visual actual: Clientes / Ubicaciones fase 1 implementado localmente y aprobado manualmente por Martin.
-- Ultimo commit de base: merge commit `bcfdc042b9190a3353782ee9fc9b98062bcca5cc`.
+- PR visual actual: PR #41 - Clientes / Ubicaciones fase 1, fusionado hacia `feat/gestion-ubicaciones`.
+- Ultimo commit del PR visual: merge commit `aa91f8549e129a001be2396d51252bd3c8607881`.
 - Fecha de actualizacion: 2026-08-05.
-- Estado general del proyecto: Clientes / Ubicaciones fase 1 implementada localmente, validada automaticamente y aprobada manualmente por Martin; pendiente de commit, PR y merge.
-- Rama actual: `ui/clientes-ubicaciones-phase-1`.
-- Siguiente trabajo: publicar PR de Clientes / Ubicaciones fase 1 hacia `feat/gestion-ubicaciones`.
+- Estado general del proyecto: Clientes / Ubicaciones fase 1 completada, validada automaticamente, aprobada manualmente por Martin y fusionada. Integracion local actualizada y validacion post-merge aprobada.
+- Rama actual: `docs/update-master-plan-clientes-ubicaciones-phase-1`.
+- Siguiente trabajo: preparar Clientes / Ubicaciones fase 2 desde `feat/clientes-ubicaciones-grouped`.
 
 ## Leyenda de estados
 
@@ -349,6 +349,7 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [V] PR #34 fusionado y validado por CI post-merge.
 - [V] PR #37 - Dashboard y Cuentas/Facturas fusionado, validado por CI y aprobado manualmente.
 - [V] PR #39 - Clientes / Directorio fase 1 fusionado, validado por CI y aprobado manualmente por Martin.
+- [V] PR #41 - Clientes / Ubicaciones fase 1 fusionado, validado por CI y aprobado manualmente por Martin.
 
 ### Pendiente futuro
 
@@ -378,6 +379,7 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [V] PR #34 UI Shell y Dashboard - MERGED el 2026-08-04 hacia `feat/gestion-ubicaciones`; head `feat/next-functional-change`; commits `562614e986a68b9aa3b3ec5b960ecfb36aadb2b1`, `12e1f6552cbd39eb01b3a591cd62ad6ec8d8b437` y `250eb001f51ab1b6ceacaaee49ab58c02c23a0e4`; merge commit `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`; revision visual manual aprobada; CI post-merge verde.
 - [V] PR #37 Dashboard y Cuentas/Facturas - MERGED el 2026-08-04 hacia `feat/gestion-ubicaciones`; head `fix/ui-gerente-qa-round-1`; commits `5c761db`, `afa5928`, `fb3b061`, `64517fc`, `0e26c55` y `23145af`; merge commit `e65c6438cb14f697cc98a8c03a88195481c3c363`; Dashboard, Facturas y filtros predeterminados aprobados manualmente por Martin; CI Visual Responsive Ubuntu aprobado con snapshots oficiales actualizados.
 - [V] PR #39 Clientes / Directorio fase 1 - MERGED el 2026-08-05 hacia `feat/gestion-ubicaciones`; head `ui/clientes-directorio-phase-1`; commits `bbae92a8ab62b69e1e24059db62fbd2e1fd9a0d8` y `93c86e83ba258896cd27b20eaf132069c145e7be`; merge commit `e35728ccb826e6d9272fea33651b49c6cd766460`; Directorio aprobado manualmente por Martin; seis checks verdes.
+- [V] PR #41 Clientes / Ubicaciones fase 1 - MERGED el 2026-08-05 hacia `feat/gestion-ubicaciones`; head `ui/clientes-ubicaciones-phase-1`; commits `1311189cea852e92877f32fa0db86b319dddadb0` y `3d74fd440c2ff38afb634368525552e2b7fef32a`; merge commit `aa91f8549e129a001be2396d51252bd3c8607881`; Ubicaciones fase 1 aprobada manualmente por Martin; seis checks verdes.
 
 ## Validacion post-merge
 
@@ -399,3 +401,5 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [V] PR #37 post-merge local: backend lint, backend Jest `wesapp_test`, frontend lint, frontend unit, production bundle check, frontend build, format check, `git diff --check` y Critical E2E contra `wesapp_e2e` aprobados.
 - [V] PR #39 pre-merge: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive Ubuntu en verde.
 - [V] PR #39 post-merge local: backend lint, backend Jest `wesapp_test`, frontend lint, frontend unit, production bundle check, frontend build, format check, `git diff --check` y Critical E2E contra `wesapp_e2e` aprobados.
+- [V] PR #41 pre-merge: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive Ubuntu en verde.
+- [V] PR #41 post-merge local: backend lint, backend Jest `wesapp_test`, frontend lint, frontend unit, production bundle check, frontend build, format check, `git diff --check` y Critical E2E contra `wesapp_e2e` aprobados.
