@@ -3,12 +3,12 @@
 ## Estado actual
 
 - Rama de integracion: `feat/gestion-ubicaciones`.
-- PR visual actual: PR #39 - Clientes / Directorio fase 1, fusionado hacia `feat/gestion-ubicaciones`.
-- Ultimo commit del PR visual: merge commit `e35728ccb826e6d9272fea33651b49c6cd766460`.
+- PR visual actual: Clientes / Ubicaciones fase 1 implementado localmente y aprobado manualmente por Martin.
+- Ultimo commit de base: merge commit `bcfdc042b9190a3353782ee9fc9b98062bcca5cc`.
 - Fecha de actualizacion: 2026-08-05.
-- Estado general del proyecto: Clientes / Directorio fase 1 completado, validado automaticamente, aprobado manualmente por Martin y fusionado. Integracion local actualizada y validacion post-merge aprobada.
-- Rama actual: `docs/update-master-plan-clientes-directorio-phase-1`.
-- Siguiente trabajo: comenzar Clientes / Ubicaciones fase 1 desde `ui/clientes-ubicaciones-phase-1`.
+- Estado general del proyecto: Clientes / Ubicaciones fase 1 implementada localmente, validada automaticamente y aprobada manualmente por Martin; pendiente de commit, PR y merge.
+- Rama actual: `ui/clientes-ubicaciones-phase-1`.
+- Siguiente trabajo: publicar PR de Clientes / Ubicaciones fase 1 hacia `feat/gestion-ubicaciones`.
 
 ## Leyenda de estados
 
@@ -154,7 +154,7 @@ Alcance inicial:
 
 ### Clientes general
 
-- [ ] Quitar descripcion del header.
+- [x] Quitar descripcion del header.
 - [ ] Contador en todas las tabs.
 - [ ] Reportes de Directorio.
 - [A] Reportes de Directorio y Ubicaciones.
@@ -211,33 +211,82 @@ Alcance inicial:
 
 ### Clientes / Ubicaciones
 
-- [ ] Fase 1: contador correcto en la tab Ubicaciones.
-- [ ] Fase 1: eliminar filtro por Cliente.
-- [ ] Fase 1: conservar unicamente busqueda.
-- [ ] Fase 1: eliminar indicadores Ubicaciones, Asignadas y Sin Cliente.
-- [ ] Fase 1: eliminar warning de ubicaciones sin cliente.
-- [ ] Fase 1: colocar Cliente primero.
-- [ ] Fase 1: mostrar ubicaciones despues.
-- [ ] Fase 1: simplificar informacion del Cliente.
-- [ ] Fase 1: mejorar presentacion de "En uso".
-- [ ] Fase 1: eliminar textos innecesarios en acciones.
-- [ ] Fase 1: columna de acciones sin titulo.
-- [ ] Fase 1: acciones con ancho minimo.
-- [ ] Fase 1: quitar negritas innecesarias.
-- [ ] Fase 1: selector de cliente buscable al crear.
-- [ ] Dejar solo busqueda.
-- [ ] Quitar filtro por cliente.
-- [ ] Quitar indicadores.
-- [ ] Quitar warning.
-- [ ] Cliente primero.
+- [x] Fase 1: Header Clientes sin descripcion.
+- [x] Fase 1: contador correcto en la tab Ubicaciones.
+- [x] Fase 1: eliminar filtro por Cliente.
+- [x] Fase 1: conservar unicamente busqueda.
+- [x] Fase 1: eliminar indicadores Ubicaciones, Asignadas y Sin Cliente.
+- [x] Fase 1: eliminar warning de ubicaciones sin cliente.
+- [x] Fase 1: colocar Cliente primero.
+- [x] Fase 1: mostrar ubicaciones despues.
+- [x] Fase 1: simplificar informacion del Cliente.
+- [x] Fase 1: Cliente sin container decorativo.
+- [x] Fase 1: quitar negritas innecesarias.
+- [x] Fase 1: columna de acciones sin titulo.
+- [x] Fase 1: acciones con ancho minimo.
+- [x] Fase 1: presentacion basica compactada.
+- [x] Fase 1: breakpoint tablet corregido.
+- [x] Fase 1: overflow horizontal interno corregido.
+- [x] Fase 1: tabla y tarjetas mutuamente excluyentes en tablet y movil.
+- [x] Fase 1: acciones compactadas y limitadas a acciones disponibles.
+- [x] Fase 1: estado "En uso" separado de acciones.
+- [x] Fase 1: eliminacion de textos de bloqueo "No se puede eliminar...".
+- [x] Dejar solo busqueda.
+- [x] Quitar filtro por cliente.
+- [x] Quitar indicadores.
+- [x] Quitar warning.
+- [x] Cliente primero.
 - [ ] Ubicaciones expandibles por cliente.
 - [A] Agrupacion expandible de ubicaciones.
 - [ ] Estado "En uso" mediante badge y tooltip.
 - [ ] Quitar textos innecesarios.
-- [ ] Quitar titulo de Acciones.
+- [x] Quitar titulo de Acciones.
 - [ ] Quitar containers y negritas.
 - [ ] Selector buscable.
 - [ ] Agrupar nuevas ubicaciones en el cliente existente.
+
+#### Clientes / Ubicaciones decisiones aprobadas
+
+- [x] La solucion final sera una fila por cliente con multiples ubicaciones agrupadas.
+- [x] La agrupacion por cliente pertenece a Fase 2.
+- [x] "En uso" es un estado y no debe parecer un boton.
+- [x] Si una accion no esta disponible, no se muestra.
+- [x] La tabla no tiene exceso de informacion.
+- [x] El orden Cliente -> Ubicacion -> Estado es correcto.
+- [x] Tablet puede utilizar tarjetas si mejora la UX.
+- [x] La columna de acciones debe quedar compacta y contener unicamente acciones disponibles.
+
+#### Clientes / Ubicaciones fase 1 validada manualmente por Martin
+
+- [V] Desktop: la tabla se siente limpia.
+- [V] Desktop: las columnas tienen proporciones correctas.
+- [V] Desktop: las acciones no ocupan demasiado espacio.
+- [V] Desktop: Cliente mantiene suficiente protagonismo.
+- [V] Desktop: Estado se entiende inmediatamente.
+- [V] Tablet: solo aparecen tarjetas.
+- [V] Tablet: no aparece tabla y tarjetas simultaneamente.
+- [V] Movil: las tarjetas se leen comodamente.
+- [V] Movil: los botones no estan demasiado juntos.
+- [V] "En uso" aprobado como estado visual.
+- [V] Acciones comprensibles.
+- [V] Ausencia del texto "No se puede eliminar..." aprobada.
+- [V] Solo se muestran acciones disponibles.
+- [V] Columna de acciones compacta.
+- [V] Ausencia de textos recortados.
+- [V] Densidad visual mejorada.
+
+#### Clientes / Ubicaciones fase 2 pendiente
+
+- [ ] Agrupacion de multiples ubicaciones por cliente.
+- [ ] Multiples ubicaciones por fila.
+- [ ] Acciones por cliente o ubicacion.
+- [ ] Mejor presentacion de "En uso".
+- [ ] Eliminacion de mensajes innecesarios de acciones.
+- [ ] Selector de cliente buscable al crear ubicacion.
+- [ ] Reportes de Ubicaciones.
+- [ ] Auditoria de contratos y consumidores.
+- [ ] Ajustes derivados de la agrupacion.
+- [ ] Posibles cambios backend autorizados.
 
 ### Inventario / Movimientos
 
