@@ -343,19 +343,6 @@ const Configuracion = () => {
   );
   const hasUbicacionFilters = Boolean(ubicacionFilters.search.trim() || ubicacionFilters.cliente);
 
-  const clienteFilterOptions = useMemo(() => {
-    const options = [...clientes];
-    if (
-      contextualClienteFilter &&
-      contextualClienteFilter.estado === 'inactivo' &&
-      String(contextualClienteFilter.id) === String(ubicacionFiltersDraft.cliente) &&
-      !options.some((cliente) => String(cliente.id) === String(contextualClienteFilter.id))
-    ) {
-      options.push(contextualClienteFilter);
-    }
-    return options;
-  }, [clientes, contextualClienteFilter, ubicacionFiltersDraft.cliente]);
-
   const activeClienteFilter = useMemo(() => {
     const activeOption = clientes.find(
       (cliente) => String(cliente.id) === String(ubicacionFilters.cliente)
@@ -370,15 +357,7 @@ const Configuracion = () => {
     return null;
   }, [clientes, contextualClienteFilter, ubicacionFilters.cliente]);
 
-  const ubicacionesSummary = useMemo(() => {
-    const total = allUbicaciones.length;
-    const sinCliente = allUbicaciones.filter((ubicacion) => !ubicacion.cliente_id).length;
-    return {
-      total,
-      sinCliente,
-      asignadas: Math.max(total - sinCliente, 0),
-    };
-  }, [allUbicaciones]);
+  const ubicacionesTotal = allUbicaciones.length;
 
   const loadUbicaciones = useCallback(async () => {
     if (!permissions.canViewUbicaciones) return false;
@@ -578,15 +557,6 @@ const Configuracion = () => {
     }
   };
 
-  const applySinClienteFilter = () => {
-    setActiveCatalog('ubicaciones');
-    const nextFilters = { search: '', cliente: 'sin_cliente' };
-    setContextualClienteFilter(null);
-    setUbicacionFiltersDraft(nextFilters);
-    setUbicacionFilters(nextFilters);
-    setHasLoadedUbicaciones(false);
-  };
-
   const handleManageClienteUbicaciones = (cliente) => {
     if (!permissions.canViewUbicaciones) return;
     setActiveCatalog('ubicaciones');
@@ -622,9 +592,6 @@ const Configuracion = () => {
   }, []);
 
   const applyUbicacionesFilters = () => {
-    if (String(ubicacionFiltersDraft.cliente) !== String(contextualClienteFilter?.id || '')) {
-      setContextualClienteFilter(null);
-    }
     setUbicacionFilters({ ...ubicacionFiltersDraft });
     setHasLoadedUbicaciones(false);
   };
@@ -695,9 +662,6 @@ const Configuracion = () => {
           </button>
           <div>
             <h1>Clientes</h1>
-            <p className="configuracion-breadcrumb">
-              Directorio, ubicaciones y relaciones operativas
-            </p>
           </div>
         </div>
         <div className="page-header-actions">
@@ -764,7 +728,7 @@ const Configuracion = () => {
             >
               {visibleTabs.map((tab) => {
                 const selected = activeCatalog === tab.id;
-                const count = tab.id === 'clientes' ? directorioTotal : ubicacionesSummary.total;
+                const count = tab.id === 'clientes' ? directorioTotal : ubicacionesTotal;
                 return (
                   <button
                     key={tab.id}
@@ -837,36 +801,6 @@ const Configuracion = () => {
                               />
                             </div>
                           </div>
-                          <div className="ff-state configuracion-ubicaciones-state">
-                            <label className="ff-state-label" htmlFor="ubicaciones-cliente">
-                              Cliente
-                            </label>
-                            <select
-                              id="ubicaciones-cliente"
-                              value={ubicacionFiltersDraft.cliente}
-                              onChange={(event) => {
-                                if (
-                                  String(event.target.value) !==
-                                  String(contextualClienteFilter?.id || '')
-                                ) {
-                                  setContextualClienteFilter(null);
-                                }
-                                setUbicacionFiltersDraft((prev) => ({
-                                  ...prev,
-                                  cliente: event.target.value,
-                                }));
-                              }}
-                            >
-                              <option value="">Todos</option>
-                              <option value="sin_cliente">Sin cliente</option>
-                              {clienteFilterOptions.map((cliente) => (
-                                <option key={cliente.id} value={cliente.id}>
-                                  {cliente.nombre}
-                                  {cliente.estado === 'inactivo' ? ' (inactivo)' : ''}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
                         </div>
                       </div>
                       <div className="ff-filter-actions-card configuracion-filter-actions-card">
@@ -888,51 +822,6 @@ const Configuracion = () => {
                         </div>
                       </div>
                     </div>
-
-                    <div className="configuracion-summary" aria-label="Resumen de ubicaciones">
-                      <div>
-                        <span>Ubicaciones</span>
-                        <strong>{ubicacionesSummary.total}</strong>
-                      </div>
-                      <div>
-                        <span>Asignadas</span>
-                        <strong>{ubicacionesSummary.asignadas}</strong>
-                      </div>
-                      <div>
-                        <span>Sin cliente</span>
-                        <strong>{ubicacionesSummary.sinCliente}</strong>
-                      </div>
-                    </div>
-
-                    {ubicacionesSummary.sinCliente > 0 && (
-                      <div className="configuracion-migration-notice" role="status">
-                        <span>
-                          Hay {ubicacionesSummary.sinCliente}{' '}
-                          {ubicacionesSummary.sinCliente === 1 ? 'ubicación' : 'ubicaciones'} sin
-                          cliente asignado. Asígnalas para completar la organización del inventario.
-                        </span>
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          type="button"
-                          onClick={applySinClienteFilter}
-                        >
-                          Ver sin cliente
-                        </button>
-                      </div>
-                    )}
-
-                    {activeClienteFilter && (
-                      <div className="configuracion-filter-context">
-                        <span>Ubicaciones de {activeClienteFilter.nombre}</span>
-                        <button
-                          className="btn btn-modal-clear btn-sm"
-                          type="button"
-                          onClick={clearUbicacionesFilter}
-                        >
-                          Limpiar filtro
-                        </button>
-                      </div>
-                    )}
 
                     {ubicacionesLoadError && (
                       <div className="error-message configuracion-load-error" role="alert">
@@ -982,26 +871,27 @@ const Configuracion = () => {
                         <div className="table-responsive app-table-shell configuracion-ubicaciones-table-shell">
                           <table className="app-table configuracion-ubicaciones-table">
                             <caption className="sr-only">
-                              Listado de ubicaciones con cliente, artículos activos, artículos
-                              totales y acciones disponibles
+                              Listado de ubicaciones con cliente, información operativa y acciones
+                              disponibles
                             </caption>
                             <thead>
                               <tr>
-                                <th scope="col">Ubicación</th>
                                 <th scope="col">Cliente</th>
-                                <th scope="col">Artículos activos</th>
-                                <th scope="col">Artículos totales</th>
+                                <th scope="col">Ubicación</th>
+                                <th scope="col">Estado</th>
                                 {(canEdit || canDelete) && (
-                                  <th scope="col" className="app-col-actions">
-                                    Acciones
-                                  </th>
+                                  <th
+                                    scope="col"
+                                    className="app-col-actions"
+                                    aria-label="Acciones disponibles"
+                                  />
                                 )}
                               </tr>
                             </thead>
                             <tbody>
                               {ubicaciones.length === 0 ? (
                                 <tr className="empty-row">
-                                  <td colSpan={canEdit || canDelete ? 5 : 4}>
+                                  <td colSpan={canEdit || canDelete ? 4 : 3}>
                                     <div className="configuracion-empty-state" role="status">
                                       <span>
                                         {getUbicacionEmptyMessage({
@@ -1030,12 +920,16 @@ const Configuracion = () => {
                                     ubicacion,
                                     contextualClienteFilter
                                   );
-                                  const blockedReasonId = `ubicacion-delete-blocked-${ubicacion.id}`;
                                   return (
                                     <tr
                                       key={ubicacion.id}
                                       className={index % 2 === 0 ? 'row-even' : 'row-odd'}
                                     >
+                                      <td title={clienteMeta.label}>
+                                        <span className="configuracion-client-name">
+                                          {clienteMeta.label}
+                                        </span>
+                                      </td>
                                       <td
                                         title={ubicacion.nombre}
                                         className="configuracion-location-cell"
@@ -1044,22 +938,19 @@ const Configuracion = () => {
                                           {ubicacion.nombre}
                                         </span>
                                       </td>
-                                      <td title={clienteMeta.label}>
+                                      <td className="configuracion-operational-cell">
                                         <span
-                                          className={`configuracion-client-badge ${clienteMeta.badgeClass}`}
+                                          className={
+                                            deleteBlocked
+                                              ? 'configuracion-status-text configuracion-status-text--busy'
+                                              : 'configuracion-status-text'
+                                          }
                                         >
-                                          {clienteMeta.label}
+                                          {deleteBlocked ? 'En uso' : 'Sin artículos'}
                                         </span>
-                                      </td>
-                                      <td className="app-cell-qty">
-                                        <span aria-label={`${activos} artículos activos`}>
-                                          {activos} activos
-                                        </span>
-                                      </td>
-                                      <td className="app-cell-qty">
-                                        <span aria-label={`${total} artículos totales`}>
-                                          {total} totales
-                                        </span>
+                                        <small>
+                                          {activos} activos / {total} totales
+                                        </small>
                                       </td>
                                       {(canEdit || canDelete) && (
                                         <td className="app-col-actions app-col-actions--double">
@@ -1113,25 +1004,6 @@ const Configuracion = () => {
                                                 </svg>
                                               </button>
                                             )}
-                                            {canDelete && deleteBlocked && (
-                                              <button
-                                                type="button"
-                                                className="configuracion-delete-blocked"
-                                                disabled
-                                                aria-label={`No se puede eliminar ubicación ${ubicacion.nombre}`}
-                                                aria-describedby={blockedReasonId}
-                                              >
-                                                En uso
-                                              </button>
-                                            )}
-                                            {canDelete && deleteBlocked && (
-                                              <span
-                                                id={blockedReasonId}
-                                                className="configuracion-delete-blocked-reason"
-                                              >
-                                                No se puede eliminar: contiene artículos.
-                                              </span>
-                                            )}
                                           </div>
                                         </td>
                                       )}
@@ -1153,7 +1025,6 @@ const Configuracion = () => {
                                 contextualClienteFilter
                               );
                               const cardTitleId = `ubicacion-card-title-${ubicacion.id}`;
-                              const blockedReasonId = `ubicacion-card-delete-blocked-${ubicacion.id}`;
                               return (
                                 <li key={ubicacion.id}>
                                   <article
@@ -1165,11 +1036,6 @@ const Configuracion = () => {
                                         <h3 id={cardTitleId}>{ubicacion.nombre}</h3>
                                         <span>{clienteMeta.label}</span>
                                       </div>
-                                      <span
-                                        className={`configuracion-client-badge ${clienteMeta.badgeClass}`}
-                                      >
-                                        {clienteMeta.status}
-                                      </span>
                                     </div>
                                     <dl className="record-card-details configuracion-ubicacion-card-details">
                                       <div>
@@ -1187,7 +1053,15 @@ const Configuracion = () => {
                                       <div>
                                         <dt>Estado</dt>
                                         <dd>
-                                          {deleteBlocked ? 'En uso' : 'Sin artículos asociados'}
+                                          <span
+                                            className={
+                                              deleteBlocked
+                                                ? 'configuracion-status-text configuracion-status-text--busy'
+                                                : 'configuracion-status-text'
+                                            }
+                                          >
+                                            {deleteBlocked ? 'En uso' : 'Sin artículos'}
+                                          </span>
                                         </dd>
                                       </div>
                                     </dl>
@@ -1217,25 +1091,6 @@ const Configuracion = () => {
                                           >
                                             Eliminar
                                           </button>
-                                        )}
-                                        {canDelete && deleteBlocked && (
-                                          <button
-                                            type="button"
-                                            className="configuracion-delete-blocked"
-                                            disabled
-                                            aria-label={`No se puede eliminar ubicación ${ubicacion.nombre}`}
-                                            aria-describedby={blockedReasonId}
-                                          >
-                                            En uso
-                                          </button>
-                                        )}
-                                        {canDelete && deleteBlocked && (
-                                          <span
-                                            id={blockedReasonId}
-                                            className="configuracion-delete-blocked-reason"
-                                          >
-                                            No se puede eliminar: contiene artículos.
-                                          </span>
                                         )}
                                       </div>
                                     )}

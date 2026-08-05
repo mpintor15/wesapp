@@ -397,7 +397,8 @@ describe('Configuracion ubicaciones', () => {
     ).toBeNull();
     expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(1);
     expect(clientesService.listClientes).not.toHaveBeenCalledWith({});
-    expect(page.field('#ubicaciones-cliente')).not.toBeNull();
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
+    expect(page.field('#ubicaciones-search')).not.toBeNull();
 
     page.unmount();
   });
@@ -629,19 +630,27 @@ describe('Configuracion ubicaciones', () => {
     page.unmount();
   });
 
-  test('renderiza ubicaciones con tarjetas, badges y bloque de ubicaciones sin cliente', async () => {
+  test('renderiza Ubicaciones con buscador único, sin resúmenes ni warning', async () => {
     const page = await renderPage();
 
     await page.click(page.button('Ubicaciones'));
 
+    const tabs = Array.from(page.container.querySelectorAll('[role="tab"]'));
+    const ubicacionesTab = tabs.find((tab) => tab.textContent.includes('Ubicaciones'));
+    const filterRow = page.container.querySelector('.configuracion-ubicaciones-filter-row');
+    const tableShell = page.container.querySelector('.configuracion-ubicaciones-table-shell');
+
     expect(page.text()).not.toContain('Catálogos / Ubicaciones');
+    expect(page.text()).not.toContain('Directorio, ubicaciones y relaciones operativas');
     expect(page.button('Crear ubicación')).toBeTruthy();
-    expect(page.text()).toContain('Asignadas');
-    expect(page.text()).toContain('Sin cliente');
-    expect(page.text()).toContain('Hay 1 ubicación sin cliente asignado');
-    expect(page.container.querySelector('.configuracion-client-badge--unassigned')).not.toBeNull();
-    expect(page.container.querySelector('.configuracion-client-badge--assigned')).not.toBeNull();
-    expect(page.container.querySelector('.configuracion-ubicaciones-filter-row')).not.toBeNull();
+    expect(ubicacionesTab.textContent).toContain('3');
+    expect(page.text()).not.toContain('Asignadas');
+    expect(page.text()).not.toContain('Hay 1 ubicación sin cliente asignado');
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
+    expect(page.field('#ubicaciones-search')).not.toBeNull();
+    expect(page.field('#ubicaciones-search').placeholder).toBe('Cliente o ubicación');
+    expect(page.container.querySelector('.configuracion-summary')).toBeNull();
+    expect(page.container.querySelector('.configuracion-migration-notice')).toBeNull();
     expect(page.container.querySelector('.configuracion-ubicaciones-filter-card')).not.toBeNull();
     expect(
       page.container.querySelector('.configuracion-ubicaciones-filter-card .ff-controls')
@@ -651,13 +660,10 @@ describe('Configuracion ubicaciones', () => {
     ).not.toBeNull();
     expect(
       page.container.querySelector('.configuracion-ubicaciones-filter-card .ff-state')
-    ).not.toBeNull();
+    ).toBeNull();
     expect(
       Boolean(
-        page.container
-          .querySelector('.configuracion-ubicaciones-filter-row')
-          .compareDocumentPosition(page.container.querySelector('.configuracion-summary')) &
-        window.Node.DOCUMENT_POSITION_FOLLOWING
+        filterRow.compareDocumentPosition(tableShell) & window.Node.DOCUMENT_POSITION_FOLLOWING
       )
     ).toBe(true);
 
@@ -707,9 +713,9 @@ describe('Configuracion ubicaciones', () => {
     expect(page.text()).toContain('ACME Seguridad');
     expect(page.text()).toContain('Cliente Inactivo (inactivo)');
     expect(page.text()).toContain('Sin cliente — dato histórico');
-    expect(page.container.querySelector('.configuracion-client-badge--assigned')).not.toBeNull();
-    expect(page.container.querySelector('.configuracion-client-badge--inactive')).not.toBeNull();
-    expect(page.container.querySelector('.configuracion-client-badge--unassigned')).not.toBeNull();
+    expect(page.container.querySelector('.configuracion-client-badge--assigned')).toBeNull();
+    expect(page.container.querySelector('.configuracion-client-badge--inactive')).toBeNull();
+    expect(page.container.querySelector('.configuracion-client-badge--unassigned')).toBeNull();
 
     page.unmount();
   });
@@ -722,6 +728,7 @@ describe('Configuracion ubicaciones', () => {
     const table = page.container.querySelector('.configuracion-ubicaciones-table');
     const caption = table.querySelector('caption');
     const headers = Array.from(table.querySelectorAll('thead th'));
+    const firstRowCells = Array.from(table.querySelectorAll('tbody tr:first-child td'));
     const mobileCards = Array.from(
       page.container.querySelectorAll('.configuracion-ubicaciones-mobile-list .record-card')
     );
@@ -732,15 +739,20 @@ describe('Configuracion ubicaciones', () => {
       'col',
       'col',
       'col',
-      'col',
     ]);
     expect(headers.map((header) => header.textContent.trim())).toEqual([
-      'Ubicación',
       'Cliente',
-      'Artículos activos',
-      'Artículos totales',
-      'Acciones',
+      'Ubicación',
+      'Estado',
+      '',
     ]);
+    expect(headers[3].getAttribute('aria-label')).toBe('Acciones disponibles');
+    expect(firstRowCells[0].textContent).toContain('Sin cliente — dato histórico');
+    expect(firstRowCells[1].textContent).toContain('Histórica');
+    expect(firstRowCells[0].querySelector('.configuracion-client-badge')).toBeNull();
+    expect(firstRowCells[0].querySelector('.configuracion-client-name')).not.toBeNull();
+    expect(table.querySelector('.sticky')).toBeNull();
+    expect(table.querySelector('.frozen')).toBeNull();
     expect(mobileCards).toHaveLength(ubicaciones.length);
     const bodegaCard = mobileCards.find((card) => card.textContent.includes('Bodega Central'));
     const historicaCard = mobileCards.find((card) => card.textContent.includes('Histórica'));
@@ -880,9 +892,7 @@ describe('Configuracion ubicaciones', () => {
     });
     const page = await renderPage();
 
-    await page.click(page.button('Ubicaciones'));
-    page.changeField('#ubicaciones-cliente', '1');
-    await page.click(page.button('Aplicar'));
+    await page.click(page.button('2 ubicaciones'));
     await page.click(page.button('Crear ubicación'));
     page.changeField('#ubicacion-cliente', '3');
     page.changeInput('Patio Beta');
@@ -997,9 +1007,7 @@ describe('Configuracion ubicaciones', () => {
     });
     const page = await renderPage();
 
-    await page.click(page.button('Ubicaciones'));
-    page.changeField('#ubicaciones-cliente', '1');
-    await page.click(page.button('Aplicar'));
+    await page.click(page.button('2 ubicaciones'));
     await page.click(page.container.querySelector('button[aria-label="Editar ubicación Archivo"]'));
     page.changeField('#ubicacion-cliente', '3');
     await page.submitForm();
@@ -1068,7 +1076,7 @@ describe('Configuracion ubicaciones', () => {
     page.unmount();
   });
 
-  test('bloquea visualmente eliminación con artículos asociados', async () => {
+  test('muestra En uso como estado y oculta eliminación no disponible', async () => {
     const page = await renderPage();
 
     await page.click(page.button('Ubicaciones'));
@@ -1081,14 +1089,9 @@ describe('Configuracion ubicaciones', () => {
       )
     );
 
-    expect(blockedActions).toHaveLength(2);
-    blockedActions.forEach((button) => {
-      expect(button.textContent).toBe('En uso');
-      expect(button.disabled).toBe(true);
-      expect(button.getAttribute('aria-label')).toContain('No se puede eliminar ubicación');
-      expect(button.getAttribute('aria-describedby')).toBeTruthy();
-    });
-    expect(page.text()).toContain('No se puede eliminar: contiene artículos.');
+    expect(blockedActions).toHaveLength(0);
+    expect(page.text()).toContain('En uso');
+    expect(page.text()).not.toContain('No se puede eliminar: contiene artículos.');
     expect(page.buttons().some((button) => button.textContent.trim() === '!')).toBe(false);
     expect(tableDeleteButtons).toHaveLength(2);
 
@@ -1118,37 +1121,19 @@ describe('Configuracion ubicaciones', () => {
     page.unmount();
   });
 
-  test('filtra ubicaciones por cliente y sin cliente', async () => {
+  test('Ubicaciones elimina el filtro visible de cliente y conserva buscador general', async () => {
     const page = await renderPage();
 
     await page.click(page.button('Ubicaciones'));
-    page.changeField('#ubicaciones-cliente', '1');
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
+    expect(page.field('#ubicaciones-search')).not.toBeNull();
+    page.changeField('#ubicaciones-search', 'Bodega');
     await page.click(page.button('Aplicar'));
     await act(async () => {
       await flushPromises();
     });
 
-    expect(inventarioService.getUbicaciones).toHaveBeenLastCalledWith({ cliente_id: '1' });
-
-    page.changeField('#ubicaciones-cliente', 'sin_cliente');
-    await page.click(page.button('Aplicar'));
-    await act(async () => {
-      await flushPromises();
-    });
-
-    expect(inventarioService.getUbicaciones).toHaveBeenLastCalledWith({ sin_cliente: 'true' });
-
-    page.unmount();
-  });
-
-  test('Ver sin cliente aplica el filtro de ubicaciones sin asignar', async () => {
-    const page = await renderPage();
-
-    await page.click(page.button('Ubicaciones'));
-    await page.click(page.button('Ver sin cliente'));
-
-    expect(page.field('#ubicaciones-cliente').value).toBe('sin_cliente');
-    expect(inventarioService.getUbicaciones).toHaveBeenLastCalledWith({ sin_cliente: 'true' });
+    expect(inventarioService.getUbicaciones).toHaveBeenLastCalledWith({ search: 'Bodega' });
 
     page.unmount();
   });
@@ -1160,15 +1145,14 @@ describe('Configuracion ubicaciones', () => {
     expect(action.className).toContain('configuracion-link-button');
     await page.click(action);
 
-    expect(page.text()).toContain('Ubicaciones de ACME Seguridad');
+    expect(page.text()).not.toContain('Ubicaciones de ACME Seguridad');
     expect(
       page.container.querySelector('.configuracion-ubicaciones-filter-card .ff-controls')
     ).not.toBeNull();
-    expect(page.field('#ubicaciones-cliente').value).toBe('1');
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
     expect(inventarioService.getUbicaciones).toHaveBeenLastCalledWith({ cliente_id: '1' });
 
-    await page.click(page.button('Limpiar filtro'));
-    expect(page.field('#ubicaciones-cliente').value).toBe('');
+    await page.click(page.button('Limpiar'));
     expect(page.field('#ubicaciones-search').value).toBe('');
     expect(page.text()).not.toContain('Ubicaciones de ACME Seguridad');
 
@@ -1188,31 +1172,16 @@ describe('Configuracion ubicaciones', () => {
 
     await page.click(inactiveClientLocationButton());
 
-    expect(page.field('#ubicaciones-cliente').value).toBe('2');
-    expect(
-      Array.from(page.field('#ubicaciones-cliente').querySelectorAll('option')).map(
-        (option) => option.textContent
-      )
-    ).toContain('Cliente Inactivo (inactivo)');
-    expect(page.text()).toContain('Ubicaciones de Cliente Inactivo');
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
+    expect(page.text()).not.toContain('Ubicaciones de Cliente Inactivo');
     expect(page.text()).toContain('Este cliente no tiene ubicaciones registradas.');
     expect(page.text()).not.toContain('No existen ubicaciones registradas.');
 
-    await page.click(page.button('Limpiar filtro'));
-    expect(page.field('#ubicaciones-cliente').value).toBe('');
-    expect(
-      Array.from(page.field('#ubicaciones-cliente').querySelectorAll('option')).map(
-        (option) => option.textContent
-      )
-    ).not.toContain('Cliente Inactivo (inactivo)');
+    await page.click(page.button('Limpiar'));
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
 
     await page.click(inactiveClientLocationButton());
-    expect(page.field('#ubicaciones-cliente').value).toBe('2');
-    expect(
-      Array.from(page.field('#ubicaciones-cliente').querySelectorAll('option')).map(
-        (option) => option.textContent
-      )
-    ).toContain('Cliente Inactivo (inactivo)');
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
 
     page.unmount();
   });
@@ -1223,18 +1192,17 @@ describe('Configuracion ubicaciones', () => {
 
     await page.click(page.button('Ubicaciones'));
 
-    expect(page.field('#ubicaciones-cliente').value).toBe('');
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
     expect(page.text()).toContain('No existen ubicaciones registradas.');
     expect(page.text()).not.toContain('Este cliente no tiene ubicaciones registradas.');
 
     page.unmount();
   });
 
-  test('combina búsqueda de ubicaciones con filtro de cliente', async () => {
+  test('combina búsqueda de ubicaciones con filtro interno de cliente', async () => {
     const page = await renderPage();
 
-    await page.click(page.container.querySelectorAll('.configuracion-tabs button')[1]);
-    page.changeField('#ubicaciones-cliente', '1');
+    await page.click(page.button('2 ubicaciones'));
     page.changeField('#ubicaciones-search', 'bodega');
     await page.click(page.button('Aplicar'));
     await act(async () => {
@@ -1601,7 +1569,7 @@ describe('Configuracion ubicaciones', () => {
 
     await page.click(page.button('2 ubicaciones'));
 
-    expect(page.field('#ubicaciones-cliente').value).toBe('1');
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
     expect(inventarioService.getUbicaciones).toHaveBeenLastCalledWith({ cliente_id: '1' });
 
     page.unmount();
@@ -1614,7 +1582,7 @@ describe('Configuracion ubicaciones', () => {
     await page.click(page.button('Crear ubicación'));
 
     expect(page.field('#ubicacion-cliente').value).toBe('');
-    expect(page.field('#ubicaciones-cliente').value).toBe('');
+    expect(page.field('#ubicaciones-cliente')).toBeNull();
 
     page.unmount();
   });
