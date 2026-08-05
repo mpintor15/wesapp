@@ -26,6 +26,7 @@
 - [A] Cambiar la convencion global de columnas exclusivas de acciones requiere autorizacion.
 - [x] Headers de modulos: todos deben utilizar los mismos tokens de paleta, degradado, contraste, borde, sombra y acento del Dashboard. El contenido y las acciones pueden variar; la identidad visual no.
 - [x] Cuentas / Facturas: los filtros "Con deuda" y "Agrupar por cliente" deben iniciar activos, no pueden cambiar de valor predeterminado sin autorizacion, los reportes deben respetar sus valores activos y limpiar filtros restaura los defaults aprobados.
+- [x] Clientes / Directorio: el acceso a ubicaciones de un cliente debe realizarse desde la celda de Ubicaciones; no debe duplicarse como boton dentro de la columna exclusiva de acciones.
 
 ## Roadmap principal
 
@@ -159,25 +160,39 @@ Alcance inicial:
 
 ### Clientes / Directorio
 
-- [ ] Eliminar titulo repetido.
-- [ ] Placeholder correcto.
-- [ ] Alinear filtros.
-- [ ] Separar telefono y correo.
-- [ ] Simplificar identificacion.
-- [ ] Centrar encabezados.
-- [ ] Eliminar accion redundante de ubicaciones.
-- [ ] Eliminar columnas congeladas.
+- [x] Fase 1: eliminar completamente el scroll horizontal del Directorio.
+- [x] Fase 1: eliminar columna congelada de Cliente.
+- [x] Fase 1: eliminar titulo repetido "Directorio" debajo de tabs.
+- [x] Fase 1: mover texto de ayuda de busqueda al placeholder.
+- [x] Placeholder correcto.
+- [x] Alinear filtros.
+- [x] Separar telefono y correo en columnas independientes.
+- [x] Simplificar identificacion: mostrar solo numero.
+- [x] Centrar encabezados.
+- [x] Eliminar accion redundante de ubicaciones.
+- [x] Eliminar columnas congeladas.
 - [ ] Bloquear nombre, razon social, tipo e identificacion en edicion.
 - [ ] Retirar eliminacion de clientes.
 - [A] Retiro funcional de eliminacion de clientes.
-- [ ] Quitar titulo de Acciones.
+- [x] Quitar titulo de Acciones.
 - [ ] Quitar negritas.
 - [ ] Validar cedula de 10 digitos.
 - [ ] Validar RUC de 13 digitos.
 - [ ] Solo numeros.
-- [ ] Eliminar scroll horizontal de la tabla de Directorio.
-- [~] Siguiente bloque: Clientes / Directorio fase 1.
+- [x] Eliminar scroll horizontal de la tabla de Directorio.
+- [~] Siguiente bloque: Clientes / Directorio fase 2.
 - [~] Rama siguiente: `ui/clientes-directorio-phase-1`.
+
+#### Clientes / Directorio fase 2 pendiente
+
+- [ ] Bloquear nombre, razon social, tipo e identificacion en edicion.
+- [ ] Retirar eliminacion de clientes.
+- [ ] Quitar negritas.
+- [ ] Validar cedula de 10 digitos.
+- [ ] Validar RUC de 13 digitos.
+- [ ] Solo numeros.
+- [ ] Reportes de Directorio.
+- [ ] Agrupaciones o cambios estructurales solo con autorizacion.
 
 ### Clientes / Ubicaciones
 
