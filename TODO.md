@@ -3,12 +3,12 @@
 ## Estado actual
 
 - Rama de integracion: `feat/gestion-ubicaciones`.
-- PR visual actual: PR #37 - Dashboard y Cuentas/Facturas, fusionado hacia `feat/gestion-ubicaciones`.
-- Ultimo commit del PR visual: merge commit `e65c6438cb14f697cc98a8c03a88195481c3c363`.
-- Fecha de actualizacion: 2026-08-04.
-- Estado general del proyecto: ronda visual Gerente 1 fusionada. Dashboard validado, Facturas visual validado, filtros predeterminados corregidos y validados, CI Visual Responsive Ubuntu aprobado y snapshots oficiales actualizados.
-- Rama actual: `docs/update-master-plan-gerente-round-1`.
-- Siguiente trabajo: comenzar Clientes / Directorio fase 1 desde `ui/clientes-directorio-phase-1`.
+- PR visual actual: PR #39 - Clientes / Directorio fase 1, fusionado hacia `feat/gestion-ubicaciones`.
+- Ultimo commit del PR visual: merge commit `e35728ccb826e6d9272fea33651b49c6cd766460`.
+- Fecha de actualizacion: 2026-08-05.
+- Estado general del proyecto: Clientes / Directorio fase 1 completado, validado automaticamente, aprobado manualmente por Martin y fusionado. Integracion local actualizada y validacion post-merge aprobada.
+- Rama actual: `docs/update-master-plan-clientes-directorio-phase-1`.
+- Siguiente trabajo: comenzar Clientes / Ubicaciones fase 1 desde `ui/clientes-ubicaciones-phase-1`.
 
 ## Leyenda de estados
 
@@ -27,6 +27,8 @@
 - [x] Headers de modulos: todos deben utilizar los mismos tokens de paleta, degradado, contraste, borde, sombra y acento del Dashboard. El contenido y las acciones pueden variar; la identidad visual no.
 - [x] Cuentas / Facturas: los filtros "Con deuda" y "Agrupar por cliente" deben iniciar activos, no pueden cambiar de valor predeterminado sin autorizacion, los reportes deben respetar sus valores activos y limpiar filtros restaura los defaults aprobados.
 - [x] Clientes / Directorio: el acceso a ubicaciones de un cliente debe realizarse desde la celda de Ubicaciones; no debe duplicarse como boton dentro de la columna exclusiva de acciones.
+- [x] Tabs de modulos: despues de las tabs deben aparecer directamente los filtros cuando no exista contenido funcional intermedio necesario.
+- [x] Textos de ayuda: deben integrarse preferentemente en el placeholder o etiqueta del control, evitando bloques redundantes.
 
 ## Roadmap principal
 
@@ -180,8 +182,21 @@ Alcance inicial:
 - [ ] Validar RUC de 13 digitos.
 - [ ] Solo numeros.
 - [x] Eliminar scroll horizontal de la tabla de Directorio.
-- [~] Siguiente bloque: Clientes / Directorio fase 2.
-- [~] Rama siguiente: `ui/clientes-directorio-phase-1`.
+- [V] No existe scroll horizontal validado manualmente por Martin.
+- [V] La tabla aprovecha todo el ancho disponible validado manualmente por Martin.
+- [V] Los filtros estan alineados validados manualmente por Martin.
+- [V] El placeholder mantiene la linea grafica validado manualmente por Martin.
+- [V] Telefono y Correo separados mejoran la lectura validado manualmente por Martin.
+- [V] No se extrana el boton redundante de Ubicaciones validado manualmente por Martin.
+- [V] La tabla mantiene buena densidad visual validada manualmente por Martin.
+- [V] No existen espacios muertos validado manualmente por Martin.
+- [V] No hay columnas excesivamente anchas validado manualmente por Martin.
+- [V] PR #39 fusionado hacia `feat/gestion-ubicaciones` el 2026-08-05.
+- [V] Merge commit: `e35728ccb826e6d9272fea33651b49c6cd766460`.
+- [V] Validacion post-merge aprobada.
+- [V] Directorio fase 1 completado.
+- [~] Siguiente bloque: Clientes / Ubicaciones fase 1.
+- [~] Rama siguiente: `ui/clientes-ubicaciones-phase-1`.
 
 #### Clientes / Directorio fase 2 pendiente
 
@@ -196,6 +211,20 @@ Alcance inicial:
 
 ### Clientes / Ubicaciones
 
+- [ ] Fase 1: contador correcto en la tab Ubicaciones.
+- [ ] Fase 1: eliminar filtro por Cliente.
+- [ ] Fase 1: conservar unicamente busqueda.
+- [ ] Fase 1: eliminar indicadores Ubicaciones, Asignadas y Sin Cliente.
+- [ ] Fase 1: eliminar warning de ubicaciones sin cliente.
+- [ ] Fase 1: colocar Cliente primero.
+- [ ] Fase 1: mostrar ubicaciones despues.
+- [ ] Fase 1: simplificar informacion del Cliente.
+- [ ] Fase 1: mejorar presentacion de "En uso".
+- [ ] Fase 1: eliminar textos innecesarios en acciones.
+- [ ] Fase 1: columna de acciones sin titulo.
+- [ ] Fase 1: acciones con ancho minimo.
+- [ ] Fase 1: quitar negritas innecesarias.
+- [ ] Fase 1: selector de cliente buscable al crear.
 - [ ] Dejar solo busqueda.
 - [ ] Quitar filtro por cliente.
 - [ ] Quitar indicadores.
@@ -270,6 +299,7 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [V] PR #34 - UI Shell y Dashboard.
 - [V] PR #34 fusionado y validado por CI post-merge.
 - [V] PR #37 - Dashboard y Cuentas/Facturas fusionado, validado por CI y aprobado manualmente.
+- [V] PR #39 - Clientes / Directorio fase 1 fusionado, validado por CI y aprobado manualmente por Martin.
 
 ### Pendiente futuro
 
@@ -298,6 +328,7 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [x] PR #32 Visual Responsive - MERGED el 2026-07-30 hacia `feat/gestion-ubicaciones`; merge commit `08cc4f9adaccae9cbe8a76d61202e80c85510347`.
 - [V] PR #34 UI Shell y Dashboard - MERGED el 2026-08-04 hacia `feat/gestion-ubicaciones`; head `feat/next-functional-change`; commits `562614e986a68b9aa3b3ec5b960ecfb36aadb2b1`, `12e1f6552cbd39eb01b3a591cd62ad6ec8d8b437` y `250eb001f51ab1b6ceacaaee49ab58c02c23a0e4`; merge commit `a6c75f3bcac6f9d3443a80ee885857b061d2dcb3`; revision visual manual aprobada; CI post-merge verde.
 - [V] PR #37 Dashboard y Cuentas/Facturas - MERGED el 2026-08-04 hacia `feat/gestion-ubicaciones`; head `fix/ui-gerente-qa-round-1`; commits `5c761db`, `afa5928`, `fb3b061`, `64517fc`, `0e26c55` y `23145af`; merge commit `e65c6438cb14f697cc98a8c03a88195481c3c363`; Dashboard, Facturas y filtros predeterminados aprobados manualmente por Martin; CI Visual Responsive Ubuntu aprobado con snapshots oficiales actualizados.
+- [V] PR #39 Clientes / Directorio fase 1 - MERGED el 2026-08-05 hacia `feat/gestion-ubicaciones`; head `ui/clientes-directorio-phase-1`; commits `bbae92a8ab62b69e1e24059db62fbd2e1fd9a0d8` y `93c86e83ba258896cd27b20eaf132069c145e7be`; merge commit `e35728ccb826e6d9272fea33651b49c6cd766460`; Directorio aprobado manualmente por Martin; seis checks verdes.
 
 ## Validacion post-merge
 
@@ -317,3 +348,5 @@ Seccion viva para validaciones manuales requeridas o aprobadas.
 - [ ] Diagnostico local macOS: `npm --prefix frontend run test:e2e:visual` ejecuto contra `wesapp_e2e`, backend `3201` y frontend `3200`, pero fallo 9/9 por diferencias de rasterizacion contra baselines Linux. El README de E2E documenta que CI es la validacion visual canonica y que las diferencias de fuentes macOS son esperables.
 - [V] PR #37 post-merge: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive en verde antes del merge.
 - [V] PR #37 post-merge local: backend lint, backend Jest `wesapp_test`, frontend lint, frontend unit, production bundle check, frontend build, format check, `git diff --check` y Critical E2E contra `wesapp_e2e` aprobados.
+- [V] PR #39 pre-merge: Backend Quality, Backend Tests, Critical E2E, Frontend Build, Frontend Quality y Visual Responsive Ubuntu en verde.
+- [V] PR #39 post-merge local: backend lint, backend Jest `wesapp_test`, frontend lint, frontend unit, production bundle check, frontend build, format check, `git diff --check` y Critical E2E contra `wesapp_e2e` aprobados.
