@@ -393,8 +393,8 @@ const ClientesCatalog = ({
       ),
     [filters]
   );
-  const hasActionsColumn = canViewUbicaciones || canEditCliente || canDeleteCliente;
-  const tableColSpan = 6 + (canViewUbicaciones ? 1 : 0) + (hasActionsColumn ? 1 : 0);
+  const hasActionsColumn = canEditCliente || canDeleteCliente;
+  const tableColSpan = 7 + (canViewUbicaciones ? 1 : 0) + (hasActionsColumn ? 1 : 0);
   const isGlobalEmpty = allClientes.length === 0 && !hasAppliedFilters;
   const emptyMessage = useMemo(() => {
     if (isGlobalEmpty) return 'No hay clientes registrados.';
@@ -590,10 +590,6 @@ const ClientesCatalog = ({
   return (
     <>
       <section className="tab-content configuracion-content" aria-busy={loading}>
-        <div className="configuracion-section-heading">
-          <h2>Directorio</h2>
-        </div>
-
         <div className="ff-filter-row configuracion-clientes-filter-row">
           <div className="ff-filter-card configuracion-clientes-filter-card">
             <div className="ff-controls">
@@ -620,13 +616,9 @@ const ClientesCatalog = ({
                     value={filtersDraft.search}
                     onChange={handleSearchChange}
                     onKeyDown={(event) => event.key === 'Enter' && applyFilters()}
-                    placeholder="Buscar cliente..."
-                    aria-describedby="clientes-search-help"
+                    placeholder="Buscar por nombre, identificación, correo o teléfono."
                   />
                 </div>
-                <small id="clientes-search-help" className="configuracion-filter-help">
-                  Buscar por nombre, identificación, correo o teléfono.
-                </small>
               </div>
               <div className="ff-state configuracion-clientes-state">
                 <label className="ff-state-label" htmlFor="clientes-ubicaciones">
@@ -709,14 +701,21 @@ const ClientesCatalog = ({
               <table className="app-table configuracion-clientes-table">
                 <thead>
                   <tr>
-                    <th>Cliente</th>
-                    <th>Identificación</th>
-                    <th>Contacto</th>
-                    <th>Dirección</th>
-                    <th>Ciudad</th>
-                    <th>Estado</th>
-                    {canViewUbicaciones && <th>Ubicaciones</th>}
-                    {hasActionsColumn && <th className="app-col-actions">Acciones</th>}
+                    <th scope="col">Cliente</th>
+                    <th scope="col">Identificación</th>
+                    <th scope="col">Teléfono</th>
+                    <th scope="col">Correo electrónico</th>
+                    <th scope="col">Dirección</th>
+                    <th scope="col">Ciudad</th>
+                    <th scope="col">Estado</th>
+                    {canViewUbicaciones && <th scope="col">Ubicaciones</th>}
+                    {hasActionsColumn && (
+                      <th
+                        scope="col"
+                        className="app-col-actions"
+                        aria-label="Acciones disponibles"
+                      />
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -751,28 +750,16 @@ const ClientesCatalog = ({
                           {getDisplayValue(cliente.nombre)}
                         </td>
                         <td
-                          title={`${getDisplayValue(cliente.tipo_identificacion)} ${getDisplayValue(
-                            cliente.identificacion
-                          )}`.trim()}
+                          className="configuracion-cell-identificacion"
+                          title={getDisplayValue(cliente.identificacion)}
                         >
-                          <div className="configuracion-contacto">
-                            <span>{getDisplayValue(cliente.identificacion)}</span>
-                            <span className="configuracion-muted-value">
-                              {getDisplayValue(cliente.tipo_identificacion)}
-                            </span>
-                          </div>
+                          {getDisplayValue(cliente.identificacion)}
                         </td>
-                        <td
-                          title={`${getDisplayValue(cliente.telefono)} ${getDisplayValue(
-                            cliente.correo
-                          )}`.trim()}
-                        >
-                          <div className="configuracion-contacto">
-                            <span>{getDisplayValue(cliente.telefono)}</span>
-                            <span className="configuracion-muted-value">
-                              {getDisplayValue(cliente.correo)}
-                            </span>
-                          </div>
+                        <td title={getDisplayValue(cliente.telefono)}>
+                          {getDisplayValue(cliente.telefono)}
+                        </td>
+                        <td title={getDisplayValue(cliente.correo)}>
+                          {getDisplayValue(cliente.correo)}
                         </td>
                         <td title={getDisplayValue(cliente.direccion)}>
                           {getDisplayValue(cliente.direccion)}
@@ -801,32 +788,8 @@ const ClientesCatalog = ({
                           </td>
                         )}
                         {hasActionsColumn && (
-                          <td className="app-col-actions app-col-actions--triple">
+                          <td className="app-col-actions app-col-actions--double">
                             <div className="action-buttons app-table-actions">
-                              {canViewUbicaciones && (
-                                <button
-                                  className="action-btn action-btn-neutral"
-                                  type="button"
-                                  onClick={() => onManageUbicaciones?.(cliente)}
-                                  title="Ver ubicaciones"
-                                  aria-label={`Ver ubicaciones de ${cliente.nombre}`}
-                                >
-                                  <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    width="14"
-                                    height="14"
-                                    aria-hidden="true"
-                                  >
-                                    <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z" />
-                                    <circle cx="12" cy="10" r="2.5" />
-                                  </svg>
-                                </button>
-                              )}
                               {canEditCliente && (
                                 <button
                                   className="action-btn action-btn-edit"
@@ -924,30 +887,6 @@ const ClientesCatalog = ({
                     </dl>
                     {hasActionsColumn && (
                       <div className="record-card-actions configuracion-cliente-card-actions">
-                        {canViewUbicaciones && (
-                          <button
-                            className="action-btn action-btn-neutral"
-                            type="button"
-                            onClick={() => onManageUbicaciones?.(cliente)}
-                            title="Ver ubicaciones"
-                            aria-label={`Ver ubicaciones de ${cliente.nombre}`}
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              width="14"
-                              height="14"
-                              aria-hidden="true"
-                            >
-                              <path d="M12 21s7-5.1 7-11a7 7 0 1 0-14 0c0 5.9 7 11 7 11Z" />
-                              <circle cx="12" cy="10" r="2.5" />
-                            </svg>
-                          </button>
-                        )}
                         {canEditCliente && (
                           <button
                             className="action-btn action-btn-edit"

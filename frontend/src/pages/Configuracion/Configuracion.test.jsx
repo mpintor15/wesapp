@@ -1155,11 +1155,9 @@ describe('Configuracion ubicaciones', () => {
 
   test('Ver ubicaciones desde cliente cambia de pestaña y filtra por cliente', async () => {
     const page = await renderPage();
-    const action = page.container.querySelector(
-      'button[aria-label="Ver ubicaciones de ACME Seguridad"]'
-    );
+    const action = page.button('2 ubicaciones');
 
-    expect(action.title).toBe('Ver ubicaciones');
+    expect(action.className).toContain('configuracion-link-button');
     await page.click(action);
 
     expect(page.text()).toContain('Ubicaciones de ACME Seguridad');
@@ -1183,10 +1181,12 @@ describe('Configuracion ubicaciones', () => {
       return Promise.resolve(success(ubicaciones));
     });
     const page = await renderPage();
+    const inactiveClientLocationButton = () =>
+      Array.from(page.container.querySelectorAll('.configuracion-clientes-table tbody tr'))
+        .find((row) => row.textContent.includes('Cliente Inactivo'))
+        ?.querySelector('button');
 
-    await page.click(
-      page.container.querySelector('button[aria-label="Ver ubicaciones de Cliente Inactivo"]')
-    );
+    await page.click(inactiveClientLocationButton());
 
     expect(page.field('#ubicaciones-cliente').value).toBe('2');
     expect(
@@ -1206,9 +1206,7 @@ describe('Configuracion ubicaciones', () => {
       )
     ).not.toContain('Cliente Inactivo (inactivo)');
 
-    await page.click(
-      page.container.querySelector('button[aria-label="Ver ubicaciones de Cliente Inactivo"]')
-    );
+    await page.click(inactiveClientLocationButton());
     expect(page.field('#ubicaciones-cliente').value).toBe('2');
     expect(
       Array.from(page.field('#ubicaciones-cliente').querySelectorAll('option')).map(
@@ -1463,7 +1461,11 @@ describe('Configuracion ubicaciones', () => {
     expect(page.text()).toContain('2 ubicaciones');
     expect(page.text()).toContain('1 ubicación');
     expect(page.text()).toContain('Sin ubicaciones');
-    expect(page.text()).toContain('Buscar por nombre, identificación, correo o teléfono.');
+    expect(page.text()).not.toContain('Directorio\nBuscar');
+    expect(page.text()).not.toContain('Buscar por nombre, identificación, correo o teléfono.');
+    expect(page.field('#clientes-search').placeholder).toBe(
+      'Buscar por nombre, identificación, correo o teléfono.'
+    );
     page.changeField('#clientes-search', 'acme');
     await page.click(page.button('Aplicar'));
     await act(async () => {
@@ -1626,14 +1628,15 @@ describe('Configuracion ubicaciones', () => {
     expect(headers).toEqual([
       'Cliente',
       'Identificación',
-      'Contacto',
+      'Teléfono',
+      'Correo electrónico',
       'Dirección',
       'Ciudad',
       'Estado',
       'Ubicaciones',
-      'Acciones',
+      '',
     ]);
-    expect(page.text()).toContain('RUC');
+    expect(page.text()).not.toContain('RUC');
     expect(page.text()).toContain('0999999999');
     expect(page.text()).toContain('ops@acme.com');
     expect(page.text()).toContain('Av. Principal');
@@ -1643,6 +1646,12 @@ describe('Configuracion ubicaciones', () => {
     expect(
       page.container.querySelector('.configuracion-clientes-table td[title="Av. Principal"]')
     ).not.toBeNull();
+    expect(
+      page.container.querySelector('button[aria-label="Ver ubicaciones de ACME Seguridad"]')
+    ).toBeNull();
+    expect(
+      page.container.querySelector('.configuracion-clientes-table thead th:last-child').textContent
+    ).toBe('');
 
     page.unmount();
   });

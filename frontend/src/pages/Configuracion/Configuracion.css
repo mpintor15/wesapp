@@ -175,9 +175,9 @@
 
 .configuracion-clientes-search-field {
   display: flex;
-  flex: 1.4 1 320px;
+  flex: 1.5 1 360px;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   max-width: none;
   min-width: 260px;
 }
@@ -188,13 +188,13 @@
 }
 
 .configuracion-clientes-state {
-  flex: 0 1 210px;
-  min-width: 176px;
+  flex: 0 1 220px;
+  min-width: 190px;
 }
 
 .configuracion-clientes-relation {
-  flex: 0 1 210px;
-  min-width: 176px;
+  flex: 0 1 220px;
+  min-width: 190px;
 }
 
 .configuracion-ubicaciones-filter-row {
@@ -233,14 +233,6 @@
   min-height: 36px;
   font-size: 0.84em;
   padding: 8px 10px;
-}
-
-.configuracion-filter-help {
-  display: block;
-  margin-top: 5px;
-  color: var(--color-text-muted);
-  font-size: 0.76rem;
-  font-weight: 600;
 }
 
 .configuracion-link-button {
@@ -464,59 +456,12 @@
   flex: 0 0 auto;
 }
 
-.configuracion-clientes-table th:first-child,
-.configuracion-clientes-table td:first-child {
-  left: 0;
-  min-width: 250px;
-  max-width: 340px;
-  position: sticky;
-  z-index: 1;
+.configuracion-clientes-table {
+  table-layout: fixed;
+  width: 100%;
 }
 
-.configuracion-clientes-table td:first-child {
-  background: inherit;
-}
-
-.configuracion-clientes-table th:first-child {
-  z-index: 2;
-}
-
-.configuracion-clientes-table th:nth-child(2),
-.configuracion-clientes-table td:nth-child(2) {
-  min-width: 160px;
-  max-width: 200px;
-}
-
-.configuracion-clientes-table th:nth-child(3),
-.configuracion-clientes-table td:nth-child(3),
-.configuracion-clientes-table th:nth-child(4),
-.configuracion-clientes-table td:nth-child(4),
-.configuracion-clientes-table th:nth-child(5),
-.configuracion-clientes-table td:nth-child(5),
-.configuracion-clientes-table th:nth-child(6),
-.configuracion-clientes-table td:nth-child(6),
-.configuracion-clientes-table th:nth-child(7),
-.configuracion-clientes-table td:nth-child(7) {
-  min-width: 140px;
-}
-
-.configuracion-clientes-table th:nth-child(3),
-.configuracion-clientes-table td:nth-child(3) {
-  min-width: 210px;
-  max-width: 250px;
-}
-
-.configuracion-clientes-table th:nth-child(4),
-.configuracion-clientes-table td:nth-child(4) {
-  min-width: 220px;
-  max-width: 300px;
-}
-
-.configuracion-clientes-table th:nth-child(8),
-.configuracion-clientes-table td:nth-child(8) {
-  min-width: 118px;
-}
-
+.configuracion-clientes-table th,
 .configuracion-clientes-table td {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -524,11 +469,56 @@
 }
 
 .configuracion-clientes-table th {
-  text-align: left !important;
+  text-align: center !important;
+}
+
+.configuracion-clientes-table th:first-child,
+.configuracion-clientes-table td:first-child {
+  width: 19%;
+}
+
+.configuracion-clientes-table th:nth-child(2),
+.configuracion-clientes-table td:nth-child(2) {
+  width: 11%;
+}
+
+.configuracion-clientes-table th:nth-child(3),
+.configuracion-clientes-table td:nth-child(3) {
+  width: 10%;
+}
+
+.configuracion-clientes-table th:nth-child(4),
+.configuracion-clientes-table td:nth-child(4) {
+  width: 16%;
+}
+
+.configuracion-clientes-table th:nth-child(5),
+.configuracion-clientes-table td:nth-child(5) {
+  width: 17%;
 }
 
 .configuracion-clientes-table th:nth-child(6),
 .configuracion-clientes-table td:nth-child(6) {
+  width: 9%;
+}
+
+.configuracion-clientes-table th:nth-child(7),
+.configuracion-clientes-table td:nth-child(7) {
+  width: 8%;
+  text-align: center !important;
+}
+
+.configuracion-clientes-table th:nth-child(8),
+.configuracion-clientes-table td:nth-child(8) {
+  width: 10%;
+  text-align: center !important;
+}
+
+.configuracion-clientes-table th.app-col-actions,
+.configuracion-clientes-table td.app-col-actions {
+  width: 76px;
+  min-width: 76px;
+  max-width: 76px;
   text-align: center !important;
 }
 
@@ -588,7 +578,8 @@
 
 .configuracion-clientes-table td:nth-child(3),
 .configuracion-clientes-table td:nth-child(4),
-.configuracion-clientes-table td:nth-child(5) {
+.configuracion-clientes-table td:nth-child(5),
+.configuracion-clientes-table td:nth-child(6) {
   color: var(--color-text-secondary) !important;
 }
 
@@ -661,7 +652,7 @@
 
   .configuracion-clientes-table th:nth-child(4),
   .configuracion-clientes-table td:nth-child(4) {
-    max-width: 220px;
+    width: 14%;
   }
 }
 
@@ -679,8 +670,8 @@
     flex-basis: 100%;
   }
 
-  .configuracion-clientes-table th:nth-child(4),
-  .configuracion-clientes-table td:nth-child(4) {
+  .configuracion-clientes-table th:nth-child(5),
+  .configuracion-clientes-table td:nth-child(5) {
     display: none;
   }
 
