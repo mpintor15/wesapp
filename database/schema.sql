@@ -135,6 +135,22 @@ CREATE UNIQUE INDEX idx_villas_manzana_identificador_normalizado_unique
     ON villas (manzana_id, LOWER(REGEXP_REPLACE(TRIM(identificador), '\s+', ' ', 'g')));
 CREATE INDEX idx_villas_manzana ON villas (manzana_id);
 
+CREATE TABLE residentes (
+    id SERIAL PRIMARY KEY,
+    villa_id INTEGER NOT NULL REFERENCES villas(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    nombre VARCHAR(150) NOT NULL,
+    contacto VARCHAR(150) NOT NULL,
+    es_principal BOOLEAN NOT NULL DEFAULT TRUE,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_residentes_villa_principal_activo_unique
+    ON residentes (villa_id) WHERE es_principal = TRUE AND activo = TRUE;
+CREATE INDEX idx_residentes_villa ON residentes (villa_id);
+
 CREATE INDEX idx_ubicaciones_cliente_id ON ubicaciones(cliente_id);
 CREATE UNIQUE INDEX idx_ubicaciones_cliente_nombre_lower_unique
     ON ubicaciones(cliente_id, LOWER(TRIM(nombre)))
@@ -534,6 +550,35 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+CREATE OR REPLACE FUNCTION enforce_residente_active_chain()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.activo = TRUE AND NOT EXISTS (
+        SELECT 1 FROM villas v
+        JOIN manzanas m ON m.id = v.manzana_id
+        JOIN ubicaciones u ON u.id = m.ubicacion_id
+        WHERE v.id = NEW.villa_id AND v.estado = 'activo'
+          AND m.estado = 'activo' AND u.tipo_punto = 'URBANIZACION'
+    ) THEN
+        RAISE EXCEPTION 'El Residente activo requiere Villa, Manzana y Urbanización activas'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE OR REPLACE FUNCTION prevent_villa_deactivation_with_resident()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.estado = 'activo' AND NEW.estado = 'inactivo'
+       AND EXISTS (SELECT 1 FROM residentes WHERE villa_id = OLD.id AND es_principal = TRUE AND activo = TRUE) THEN
+        RAISE EXCEPTION 'No se puede desactivar una Villa con Residente principal activo'
+            USING ERRCODE = '23503';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
 CREATE TRIGGER enforce_manzana_urbanizacion_trigger
     BEFORE INSERT OR UPDATE OF ubicacion_id ON manzanas
     FOR EACH ROW EXECUTE FUNCTION enforce_manzana_urbanizacion();
@@ -541,6 +586,14 @@ CREATE TRIGGER enforce_manzana_urbanizacion_trigger
 CREATE TRIGGER prevent_urbanizacion_downgrade_trigger
     BEFORE UPDATE OF tipo_punto ON ubicaciones
     FOR EACH ROW EXECUTE FUNCTION prevent_urbanizacion_downgrade_with_manzanas();
+
+CREATE TRIGGER enforce_residente_active_chain_trigger
+    BEFORE INSERT OR UPDATE OF villa_id, activo ON residentes
+    FOR EACH ROW EXECUTE FUNCTION enforce_residente_active_chain();
+
+CREATE TRIGGER prevent_villa_deactivation_with_resident_trigger
+    BEFORE UPDATE OF estado ON villas
+    FOR EACH ROW EXECUTE FUNCTION prevent_villa_deactivation_with_resident();
 
 CREATE TRIGGER update_usuarios_updated_at BEFORE UPDATE ON usuarios
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -561,6 +614,9 @@ CREATE TRIGGER update_manzanas_updated_at BEFORE UPDATE ON manzanas
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_villas_updated_at BEFORE UPDATE ON villas
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_residentes_updated_at BEFORE UPDATE ON residentes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 INSERT INTO schema_version (version, description) VALUES

@@ -1009,4 +1009,55 @@ describe('database migrations', () => {
       ).rejects.toMatchObject({ code: '23503' });
     });
   });
+
+  test('migration 025 enforces one active principal, active chain and historical RESTRICT', async () => {
+    await withTempDatabase('wesapp_migration_residentes_025', async (pool) => {
+      await pool.query(`
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY, tipo_punto VARCHAR(20) NOT NULL);
+        CREATE TABLE manzanas (
+          id SERIAL PRIMARY KEY,
+          ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+          estado VARCHAR(10) NOT NULL
+        );
+        CREATE TABLE villas (
+          id SERIAL PRIMARY KEY,
+          manzana_id INTEGER NOT NULL REFERENCES manzanas(id) ON DELETE RESTRICT,
+          estado VARCHAR(10) NOT NULL
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones (tipo_punto) VALUES ('URBANIZACION');
+        INSERT INTO manzanas (ubicacion_id, estado) VALUES (1, 'activo');
+        INSERT INTO villas (manzana_id, estado) VALUES (1, 'activo'), (1, 'inactivo');
+      `);
+      await applyMigrationInTransaction(pool, 25);
+      await pool.query(
+        `INSERT INTO residentes (villa_id, nombre, contacto, created_by)
+         VALUES (1, 'Ana', '099', 1)`
+      );
+      await expect(
+        pool.query(
+          `INSERT INTO residentes (villa_id, nombre, contacto)
+           VALUES (1, 'Luis', '098')`
+        )
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(
+        pool.query(
+          `INSERT INTO residentes (villa_id, nombre, contacto)
+           VALUES (2, 'Luis', '098')`
+        )
+      ).rejects.toMatchObject({ code: '23514' });
+      await expect(
+        pool.query('UPDATE villas SET estado = $1 WHERE id = 1', ['inactivo'])
+      ).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM villas WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await pool.query('UPDATE residentes SET activo = FALSE WHERE villa_id = 1');
+      await pool.query('UPDATE villas SET estado = $1 WHERE id = 1', ['inactivo']);
+    });
+  });
 });

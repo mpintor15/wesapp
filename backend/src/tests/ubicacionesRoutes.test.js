@@ -73,6 +73,16 @@ describe('ubicaciones routes', () => {
     expect(res.status).toBe(403);
   });
 
+  test('protege Residentes principales con el permiso dedicado', async () => {
+    currentUser.tipo_usuario = 'secretario';
+    const res = await requestWithAuth(
+      'post',
+      '/api/inventario/ubicaciones/villas/1/residente-principal'
+    ).send({ nombre: 'Ana', contacto: '099' });
+    currentUser.tipo_usuario = 'gerente';
+    expect(res.status).toBe(403);
+  });
+
   test('lista ubicaciones', async () => {
     db.query.mockImplementation(async (sql) => {
       const query = String(sql);

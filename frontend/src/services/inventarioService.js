@@ -223,6 +223,38 @@ const inventarioService = {
     }
   },
 
+  getResidentePrincipal: async (villaId) => {
+    try {
+      const response = await api.get(
+        `/inventario/ubicaciones/villas/${villaId}/residente-principal`
+      );
+      return { success: response.data.success, data: response.data.data || null };
+    } catch (error) {
+      return failure(error, 'Error al obtener Residente principal');
+    }
+  },
+
+  createResidentePrincipal: async (villaId, data) => {
+    try {
+      const response = await api.post(
+        `/inventario/ubicaciones/villas/${villaId}/residente-principal`,
+        data
+      );
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al crear Residente principal');
+    }
+  },
+
+  updateResidentePrincipal: async (residenteId, data) => {
+    try {
+      const response = await api.put(`/inventario/ubicaciones/residentes/${residenteId}`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al actualizar Residente principal');
+    }
+  },
+
   getArticulos: async (params = {}) => {
     try {
       const response = await api.get('/inventario/articulos', { params });

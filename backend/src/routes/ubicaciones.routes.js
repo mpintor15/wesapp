@@ -45,6 +45,24 @@ router.put(
 );
 
 router.get(
+  '/villas/:villaId/residente-principal',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.getResidentePrincipal
+);
+
+router.post(
+  '/villas/:villaId/residente-principal',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.createResidentePrincipal
+);
+
+router.put(
+  '/residentes/:residenteId',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.updateResidentePrincipal
+);
+
+router.get(
   '/agrupadas',
   requireAnyPermission(
     PERMISSIONS.INVENTARIO_UBICACIONES_VER,

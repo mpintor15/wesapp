@@ -122,6 +122,23 @@ describe('inventarioService', () => {
     });
   });
 
+  test('gestiona Residente principal con rutas de Villa', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: null } });
+    api.post.mockResolvedValue({ data: { success: true, data: { id: 8 } } });
+    api.put.mockResolvedValue({ data: { success: true, data: { id: 8 } } });
+    await inventarioService.getResidentePrincipal(3);
+    await inventarioService.createResidentePrincipal(3, { nombre: 'Ana', contacto: '099' });
+    await inventarioService.updateResidentePrincipal(8, { activo: false });
+    expect(api.get).toHaveBeenCalledWith('/inventario/ubicaciones/villas/3/residente-principal');
+    expect(api.post).toHaveBeenCalledWith('/inventario/ubicaciones/villas/3/residente-principal', {
+      nombre: 'Ana',
+      contacto: '099',
+    });
+    expect(api.put).toHaveBeenCalledWith('/inventario/ubicaciones/residentes/8', {
+      activo: false,
+    });
+  });
+
   test('getUbicacionesAgrupadas conserva parámetros y metadata agrupada', async () => {
     api.get.mockResolvedValueOnce({
       data: {

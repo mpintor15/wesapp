@@ -14,6 +14,9 @@ jest.mock('../../../services/inventarioService', () => ({
     getVillas: jest.fn(),
     createVilla: jest.fn(),
     updateVilla: jest.fn(),
+    getResidentePrincipal: jest.fn(),
+    createResidentePrincipal: jest.fn(),
+    updateResidentePrincipal: jest.fn(),
   },
 }));
 
@@ -53,6 +56,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   inventarioService.getManzanas.mockResolvedValue(success([]));
   inventarioService.getVillas.mockResolvedValue(success([]));
+  inventarioService.getResidentePrincipal.mockResolvedValue(success(null));
 });
 
 test('muestra estado vacío y crea una Manzana', async () => {
@@ -164,4 +168,115 @@ test('presenta error de carga con reintento accesible', async () => {
   expect(page.field('[role="alert"]').textContent).toContain('Sin conexión');
   expect(page.button('Reintentar')).not.toBeUndefined();
   page.unmount();
+});
+
+test('muestra Villa sin Residente y crea el principal', async () => {
+  inventarioService.getManzanas.mockResolvedValue(
+    success([{ id: 2, nombre: 'Etapa A', estado: 'activo' }])
+  );
+  inventarioService.getVillas.mockResolvedValue(
+    success([{ id: 3, identificador: 'Villa 1', estado: 'activo' }])
+  );
+  inventarioService.createResidentePrincipal.mockResolvedValue(success({ id: 8 }));
+  const page = await renderModal();
+  expect(page.text()).toContain('Sin Residente principal');
+  await act(async () => page.button('Crear Residente').click());
+  act(() => {
+    Simulate.change(page.field('#residente-nombre'), { target: { value: 'Ana Pérez' } });
+    Simulate.change(page.field('#residente-contacto'), { target: { value: '099123' } });
+  });
+  await act(async () => Simulate.submit(page.field('#residente-nombre').closest('form')));
+  await flushPromises();
+  expect(inventarioService.createResidentePrincipal).toHaveBeenCalledWith(3, {
+    nombre: 'Ana Pérez',
+    contacto: '099123',
+  });
+  page.unmount();
+});
+
+test('edita y reemplaza Residente principal con confirmación', async () => {
+  const resident = { id: 8, nombre: 'Ana', contacto: '099', activo: true };
+  inventarioService.getManzanas.mockResolvedValue(
+    success([{ id: 2, nombre: 'Etapa A', estado: 'activo' }])
+  );
+  inventarioService.getVillas.mockResolvedValue(
+    success([{ id: 3, identificador: 'Villa 1', estado: 'activo' }])
+  );
+  inventarioService.getResidentePrincipal.mockResolvedValue(success(resident));
+  inventarioService.updateResidentePrincipal.mockResolvedValue(success(resident));
+  inventarioService.createResidentePrincipal.mockResolvedValue(success({ id: 9 }));
+  const page = await renderModal();
+
+  await act(async () => page.button('Editar Residente').click());
+  act(() => {
+    Simulate.change(page.field('#residente-contacto'), { target: { value: '098' } });
+  });
+  await act(async () => Simulate.submit(page.field('#residente-nombre').closest('form')));
+  await flushPromises();
+  expect(inventarioService.updateResidentePrincipal).toHaveBeenCalledWith(8, {
+    nombre: 'Ana',
+    contacto: '098',
+  });
+
+  await act(async () => page.button('Reemplazar Residente').click());
+  const continueButton = Array.from(document.body.querySelectorAll('button')).find(
+    (button) => button.textContent.trim() === 'Continuar'
+  );
+  await act(async () => continueButton.click());
+  act(() => {
+    Simulate.change(page.field('#residente-nombre'), { target: { value: 'Luis' } });
+    Simulate.change(page.field('#residente-contacto'), { target: { value: '097' } });
+  });
+  await act(async () => Simulate.submit(page.field('#residente-nombre').closest('form')));
+  await flushPromises();
+  expect(inventarioService.createResidentePrincipal).toHaveBeenCalledWith(3, {
+    nombre: 'Luis',
+    contacto: '097',
+    reemplazar: true,
+  });
+  page.unmount();
+});
+
+test('desactiva y reactiva Residente principal mostrando estado', async () => {
+  inventarioService.getManzanas.mockResolvedValue(
+    success([{ id: 2, nombre: 'Etapa A', estado: 'activo' }])
+  );
+  inventarioService.getVillas.mockResolvedValue(
+    success([{ id: 3, identificador: 'Villa 1', estado: 'activo' }])
+  );
+  inventarioService.getResidentePrincipal.mockResolvedValue(
+    success({ id: 8, nombre: 'Ana', contacto: '099', activo: true })
+  );
+  inventarioService.updateResidentePrincipal.mockResolvedValue(success({ id: 8, activo: false }));
+  const activePage = await renderModal();
+  await act(async () => activePage.button('Desactivar Residente').click());
+  let confirm = Array.from(document.body.querySelectorAll('button'))
+    .filter((button) => button.textContent.trim() === 'Desactivar')
+    .at(-1);
+  await act(async () => confirm.click());
+  await flushPromises();
+  expect(inventarioService.updateResidentePrincipal).toHaveBeenCalledWith(8, { activo: false });
+  activePage.unmount();
+
+  jest.clearAllMocks();
+  inventarioService.getManzanas.mockResolvedValue(
+    success([{ id: 2, nombre: 'Etapa A', estado: 'activo' }])
+  );
+  inventarioService.getVillas.mockResolvedValue(
+    success([{ id: 3, identificador: 'Villa 1', estado: 'activo' }])
+  );
+  inventarioService.getResidentePrincipal.mockResolvedValue(
+    success({ id: 8, nombre: 'Ana', contacto: '099', activo: false })
+  );
+  inventarioService.updateResidentePrincipal.mockResolvedValue(success({ id: 8, activo: true }));
+  const inactivePage = await renderModal();
+  expect(inactivePage.text()).toContain('inactivo');
+  await act(async () => inactivePage.button('Reactivar Residente').click());
+  confirm = Array.from(document.body.querySelectorAll('button'))
+    .filter((button) => button.textContent.trim() === 'Reactivar')
+    .at(-1);
+  await act(async () => confirm.click());
+  await flushPromises();
+  expect(inventarioService.updateResidentePrincipal).toHaveBeenCalledWith(8, { activo: true });
+  inactivePage.unmount();
 });

@@ -31,6 +31,17 @@ const validateText = (value, label) => {
   return normalized;
 };
 
+const validateResidentText = (value, label) => {
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    throw appError(400, 'INVALID_RESIDENT', `${label} es obligatorio`);
+  }
+  if (normalized.length > 150) {
+    throw appError(400, 'INVALID_RESIDENT', `${label} no puede exceder 150 caracteres`);
+  }
+  return normalized;
+};
+
 const validateEstado = (value, fallback = 'activo') => {
   const estado = value === undefined ? fallback : normalizeText(value).toLowerCase();
   if (!['activo', 'inactivo'].includes(estado)) {
@@ -55,6 +66,13 @@ const sendError = (res, error, fallback) => {
       success: false,
       code: 'DUPLICATE_MASTER',
       message: 'Ya existe un registro equivalente dentro del mismo padre.',
+    });
+  }
+  if (error.code === '23514' || error.code === '23503') {
+    return res.status(409).json({
+      success: false,
+      code: 'INVALID_MASTER_CHAIN',
+      message: 'La operación no respeta la cadena activa de Urbanización.',
     });
   }
   return res.status(error.status || 500).json({
@@ -94,6 +112,36 @@ const getManzana = async (executor, manzanaId, lock = '') => {
     throw appError(404, 'BLOCK_NOT_FOUND', 'Manzana no encontrada');
   }
   return result.rows[0];
+};
+
+const getVilla = async (executor, villaId, lock = '') => {
+  const result = await executor.query(
+    `SELECT v.id, v.manzana_id, v.identificador, v.estado,
+            m.estado AS manzana_estado, m.ubicacion_id, u.tipo_punto
+     FROM villas v
+     JOIN manzanas m ON m.id = v.manzana_id
+     JOIN ubicaciones u ON u.id = m.ubicacion_id
+     WHERE v.id = $1 ${lock}`,
+    [villaId]
+  );
+  if (result.rowCount === 0) {
+    throw appError(404, 'VILLA_NOT_FOUND', 'Villa no encontrada');
+  }
+  return result.rows[0];
+};
+
+const ensureActiveVillaChain = (villa) => {
+  if (
+    villa.estado !== 'activo' ||
+    villa.manzana_estado !== 'activo' ||
+    villa.tipo_punto !== 'URBANIZACION'
+  ) {
+    throw appError(
+      409,
+      'VILLA_CHAIN_INACTIVE',
+      'La Villa, su Manzana y su Urbanización deben estar activas.'
+    );
+  }
 };
 
 const listManzanas = async (req, res) => {
@@ -234,6 +282,20 @@ const updateVilla = async (req, res) => {
         ? validateText(req.body.identificador, 'El identificador de la Villa')
         : current.identificador;
       const estado = validateEstado(req.body?.estado, current.estado);
+      if (current.estado === 'activo' && estado === 'inactivo') {
+        const activeResident = await client.query(
+          `SELECT 1 FROM residentes
+           WHERE villa_id = $1 AND es_principal = TRUE AND activo = TRUE LIMIT 1`,
+          [villaId]
+        );
+        if (activeResident.rowCount > 0) {
+          throw appError(
+            409,
+            'VILLA_HAS_ACTIVE_RESIDENT',
+            'No se puede desactivar la Villa mientras tenga Residente principal activo.'
+          );
+        }
+      }
       if (estado === 'activo') {
         if (current.manzana_estado !== 'activo') {
           throw appError(
@@ -257,6 +319,101 @@ const updateVilla = async (req, res) => {
   }
 };
 
+const getResidentePrincipal = async (req, res) => {
+  try {
+    const villaId = parseId(req.params.villaId, 'La Villa es inválida');
+    await getVilla(db, villaId);
+    const result = await db.query(
+      `SELECT id, villa_id, nombre, contacto, es_principal, activo, created_at, updated_at
+       FROM residentes WHERE villa_id = $1 AND es_principal = TRUE
+       ORDER BY activo DESC, created_at DESC, id DESC LIMIT 1`,
+      [villaId]
+    );
+    return res.json({ success: true, data: result.rows[0] || null });
+  } catch (error) {
+    return sendError(res, error, 'Error al consultar Residente principal');
+  }
+};
+
+const createResidentePrincipal = async (req, res) => {
+  try {
+    const villaId = parseId(req.params.villaId, 'La Villa es inválida');
+    const nombre = validateResidentText(req.body?.nombre, 'El nombre');
+    const contacto = validateResidentText(req.body?.contacto, 'El contacto');
+    const reemplazar = req.body?.reemplazar === true;
+    const created = await db.transaction(async (client) => {
+      const villa = await getVilla(client, villaId, 'FOR UPDATE OF v, m');
+      ensureActiveVillaChain(villa);
+      const current = await client.query(
+        `SELECT id FROM residentes
+         WHERE villa_id = $1 AND es_principal = TRUE AND activo = TRUE FOR UPDATE`,
+        [villaId]
+      );
+      if (current.rowCount > 0 && !reemplazar) {
+        throw appError(409, 'ACTIVE_RESIDENT_EXISTS', 'La Villa ya tiene Residente principal.');
+      }
+      if (current.rowCount > 0) {
+        await client.query('UPDATE residentes SET activo = FALSE WHERE id = $1', [
+          current.rows[0].id,
+        ]);
+      }
+      const result = await client.query(
+        `INSERT INTO residentes (villa_id, nombre, contacto, es_principal, activo, created_by)
+         VALUES ($1, $2, $3, TRUE, TRUE, $4)
+         RETURNING id, villa_id, nombre, contacto, es_principal, activo, created_at, updated_at`,
+        [villaId, nombre, contacto, req.user.id]
+      );
+      return result.rows[0];
+    });
+    return res.status(201).json({ success: true, data: created });
+  } catch (error) {
+    return sendError(res, error, 'Error al crear Residente principal');
+  }
+};
+
+const updateResidentePrincipal = async (req, res) => {
+  try {
+    const residenteId = parseId(req.params.residenteId, 'El Residente es inválido');
+    const updated = await db.transaction(async (client) => {
+      const currentResult = await client.query(
+        `SELECT id, villa_id, nombre, contacto, activo FROM residentes
+         WHERE id = $1 AND es_principal = TRUE FOR UPDATE`,
+        [residenteId]
+      );
+      if (currentResult.rowCount === 0) {
+        throw appError(404, 'RESIDENT_NOT_FOUND', 'Residente principal no encontrado');
+      }
+      const current = currentResult.rows[0];
+      const nombre = Object.prototype.hasOwnProperty.call(req.body || {}, 'nombre')
+        ? validateResidentText(req.body.nombre, 'El nombre')
+        : current.nombre;
+      const contacto = Object.prototype.hasOwnProperty.call(req.body || {}, 'contacto')
+        ? validateResidentText(req.body.contacto, 'El contacto')
+        : current.contacto;
+      let activo = current.activo;
+      if (req.body?.activo !== undefined) {
+        if (typeof req.body.activo !== 'boolean') {
+          throw appError(400, 'INVALID_RESIDENT', 'El estado activo es inválido');
+        }
+        activo = req.body.activo;
+      }
+      if (activo) {
+        const villa = await getVilla(client, current.villa_id, 'FOR UPDATE OF v, m');
+        ensureActiveVillaChain(villa);
+      }
+      const result = await client.query(
+        `UPDATE residentes SET nombre = $1, contacto = $2, activo = $3 WHERE id = $4
+         RETURNING id, villa_id, nombre, contacto, es_principal, activo, created_at, updated_at`,
+        [nombre, contacto, activo, residenteId]
+      );
+      return result.rows[0];
+    });
+    return res.json({ success: true, data: updated });
+  } catch (error) {
+    return sendError(res, error, 'Error al actualizar Residente principal');
+  }
+};
+
 module.exports = {
   listManzanas,
   createManzana,
@@ -264,4 +421,7 @@ module.exports = {
   listVillas,
   createVilla,
   updateVilla,
+  getResidentePrincipal,
+  createResidentePrincipal,
+  updateResidentePrincipal,
 };

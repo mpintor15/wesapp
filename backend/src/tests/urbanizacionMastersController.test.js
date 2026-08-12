@@ -170,6 +170,7 @@ describe('urbanizacion masters controller', () => {
         ],
         rowCount: 1,
       })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
       .mockResolvedValueOnce({ rows: [{ id: 5, estado: 'inactivo' }], rowCount: 1 });
     db.transaction.mockImplementationOnce((callback) => callback(inactiveClient));
     const deactivated = response();
@@ -197,5 +198,148 @@ describe('urbanizacion masters controller', () => {
     const reactivated = response();
     await controller.updateVilla(request({ villaId: '5' }, { estado: 'activo' }), reactivated);
     expect(reactivated.body.data.estado).toBe('activo');
+  });
+
+  test('consulta Villa sin Residente principal', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = response();
+    await controller.getResidentePrincipal(request({ villaId: '5' }), res);
+    expect(res.body).toEqual({ success: true, data: null });
+  });
+
+  test('crea Residente principal bloqueando la Villa para evitar concurrencia', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 8, villa_id: 5, nombre: 'Ana', contacto: '099', activo: true }],
+        rowCount: 1,
+      });
+    db.transaction.mockImplementation((callback) => callback(client));
+    const res = response();
+    await controller.createResidentePrincipal(
+      request({ villaId: '5' }, { nombre: ' Ana ', contacto: ' 099 ' }),
+      res
+    );
+    expect(res.statusCode).toBe(201);
+    expect(client.query.mock.calls[0][0]).toContain('FOR UPDATE OF v, m');
+  });
+
+  test('reemplaza Residente principal transaccionalmente', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 7 }], rowCount: 1 })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 9, nombre: 'Luis', activo: true }], rowCount: 1 });
+    db.transaction.mockImplementation((callback) => callback(client));
+    const res = response();
+    await controller.createResidentePrincipal(
+      request({ villaId: '5' }, { nombre: 'Luis', contacto: '098', reemplazar: true }),
+      res
+    );
+    expect(res.statusCode).toBe(201);
+    expect(client.query.mock.calls[2][0]).toContain('UPDATE residentes SET activo = FALSE');
+    expect(client.query.mock.calls[3][0]).toContain('INSERT INTO residentes');
+  });
+
+  test('Villa inactiva rechaza crear y reactivar Residente', async () => {
+    const createClient = {
+      query: jest.fn().mockResolvedValueOnce({
+        rows: [{ id: 5, estado: 'inactivo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rowCount: 1,
+      }),
+    };
+    db.transaction.mockImplementationOnce((callback) => callback(createClient));
+    const created = response();
+    await controller.createResidentePrincipal(
+      request({ villaId: '5' }, { nombre: 'Ana', contacto: '099' }),
+      created
+    );
+    expect(created.statusCode).toBe(409);
+
+    const updateClient = { query: jest.fn() };
+    updateClient.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 8, villa_id: 5, nombre: 'Ana', contacto: '099', activo: false }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 5, estado: 'inactivo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rowCount: 1,
+      });
+    db.transaction.mockImplementationOnce((callback) => callback(updateClient));
+    const updated = response();
+    await controller.updateResidentePrincipal(
+      request({ residenteId: '8' }, { activo: true }),
+      updated
+    );
+    expect(updated.statusCode).toBe(409);
+  });
+
+  test('edita, desactiva y reactiva Residente principal', async () => {
+    const editClient = { query: jest.fn() };
+    editClient.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 8, villa_id: 5, nombre: 'Ana', contacto: '099', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 8, nombre: 'Ana P.', contacto: '098', activo: false }],
+        rowCount: 1,
+      });
+    db.transaction.mockImplementationOnce((callback) => callback(editClient));
+    const edited = response();
+    await controller.updateResidentePrincipal(
+      request({ residenteId: '8' }, { nombre: 'Ana P.', contacto: '098', activo: false }),
+      edited
+    );
+    expect(edited.statusCode).toBe(200);
+
+    const reactivateClient = { query: jest.fn() };
+    reactivateClient.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 8, villa_id: 5, nombre: 'Ana P.', contacto: '098', activo: false }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 8, activo: true }], rowCount: 1 });
+    db.transaction.mockImplementationOnce((callback) => callback(reactivateClient));
+    const reactivated = response();
+    await controller.updateResidentePrincipal(
+      request({ residenteId: '8' }, { activo: true }),
+      reactivated
+    );
+    expect(reactivated.body.data.activo).toBe(true);
+  });
+
+  test('desactivar Villa con Residente principal activo devuelve conflicto', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', ubicacion_id: 1 }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }], rowCount: 1 });
+    db.transaction.mockImplementation((callback) => callback(client));
+    const res = response();
+    await controller.updateVilla(request({ villaId: '5' }, { estado: 'inactivo' }), res);
+    expect(res.statusCode).toBe(409);
+    expect(res.body.code).toBe('VILLA_HAS_ACTIVE_RESIDENT');
   });
 });

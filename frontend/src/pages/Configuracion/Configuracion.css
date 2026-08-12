@@ -476,6 +476,37 @@
   gap: 0.75rem;
 }
 
+.urbanizacion-villa-card {
+  display: grid !important;
+  gap: 0.75rem;
+}
+
+.urbanizacion-villa-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.urbanizacion-resident-card,
+.urbanizacion-resident-form {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-left: 3px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.urbanizacion-resident-card h4,
+.urbanizacion-resident-card p,
+.urbanizacion-resident-form h3 {
+  margin: 0;
+}
+
+.urbanizacion-resident-form input {
+  min-width: 0;
+}
+
 .urbanizacion-card-actions {
   display: flex;
   gap: 0.5rem;
@@ -501,6 +532,11 @@
   .urbanizacion-manzana-card > header,
   .urbanizacion-villas-list > li,
   .urbanizacion-card-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .urbanizacion-villa-heading {
     align-items: stretch;
     flex-direction: column;
   }
