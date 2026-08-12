@@ -65,6 +65,14 @@ beforeEach(() => {
 });
 
 describe('ubicaciones routes', () => {
+  test('protege maestros de Urbanización con el permiso dedicado', async () => {
+    currentUser.tipo_usuario = 'secretario';
+    const res = await requestWithAuth('get', '/api/inventario/ubicaciones/1/manzanas');
+    currentUser.tipo_usuario = 'gerente';
+
+    expect(res.status).toBe(403);
+  });
+
   test('lista ubicaciones', async () => {
     db.query.mockImplementation(async (sql) => {
       const query = String(sql);
@@ -973,25 +981,31 @@ describe('ubicaciones routes', () => {
     ['URBANIZACION', 'GENERAL'],
   ])('cambia tipo de punto de %s a %s', async (currentType, nextType) => {
     const client = { query: jest.fn() };
-    client.query
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: 3,
-            nombre: 'Punto',
-            tipo_punto: currentType,
-            cliente_id: 10,
-            cliente_nombre: 'ACME',
-            cliente_estado: 'activo',
-          },
-        ],
-        rowCount: 1,
-      })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
-      .mockResolvedValueOnce({
-        rows: [{ id: 3, nombre: 'Punto', cliente_id: 10, tipo_punto: nextType }],
-        rowCount: 1,
-      });
+    client.query.mockImplementation(async (sql) => {
+      const query = String(sql);
+      if (query.includes('FROM ubicaciones u')) {
+        return {
+          rows: [
+            {
+              id: 3,
+              nombre: 'Punto',
+              tipo_punto: currentType,
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (query.includes('UPDATE ubicaciones')) {
+        return {
+          rows: [{ id: 3, nombre: 'Punto', cliente_id: 10, tipo_punto: nextType }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
     db.transaction.mockImplementation(async (callback) => callback(client));
 
     const res = await requestWithAuth('put', '/api/inventario/ubicaciones/3').send({
@@ -1001,6 +1015,34 @@ describe('ubicaciones routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.tipo_punto).toBe(nextType);
+  });
+
+  test('impide cambiar a GENERAL una Urbanización con Manzanas', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 3,
+            nombre: 'Conjunto',
+            tipo_punto: 'URBANIZACION',
+            cliente_id: 10,
+            cliente_nombre: 'ACME',
+            cliente_estado: 'activo',
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }], rowCount: 1 });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('put', '/api/inventario/ubicaciones/3').send({
+      nombre: 'Conjunto',
+      tipo_punto: 'GENERAL',
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('LOCATION_HAS_BLOCKS');
   });
 
   test('edita ubicación histórica sin cliente conservando cliente_id null', async () => {

@@ -32,6 +32,12 @@ jest.mock('../../services/inventarioService', () => ({
     createUbicacion: jest.fn(),
     updateUbicacion: jest.fn(),
     deleteUbicacion: jest.fn(),
+    getManzanas: jest.fn(),
+    createManzana: jest.fn(),
+    updateManzana: jest.fn(),
+    getVillas: jest.fn(),
+    createVilla: jest.fn(),
+    updateVilla: jest.fn(),
   },
 }));
 
@@ -295,6 +301,8 @@ describe('Configuracion ubicaciones', () => {
     inventarioService.getUbicacionesAgrupadas.mockResolvedValue(
       groupedSuccess(buildGroupedUbicaciones())
     );
+    inventarioService.getManzanas.mockResolvedValue(success([]));
+    inventarioService.getVillas.mockResolvedValue(success([]));
     clientesService.listClientes.mockResolvedValue(clientesSuccess());
     clientesService.listOpcionesUbicaciones.mockResolvedValue(
       success(clientes.filter((cliente) => cliente.estado === 'activo'))
@@ -1025,6 +1033,47 @@ describe('Configuracion ubicaciones', () => {
       2,
       expect.objectContaining({ tipo_punto: 'GENERAL' })
     );
+    page.unmount();
+  });
+
+  test('solo URBANIZACION con permiso muestra administración de Manzanas y Villas', async () => {
+    const typed = ubicaciones.map((ubicacion) =>
+      ubicacion.id === 2 ? { ...ubicacion, tipo_punto: 'URBANIZACION' } : ubicacion
+    );
+    inventarioService.getUbicaciones.mockResolvedValue(success(typed));
+    inventarioService.getUbicacionesAgrupadas.mockResolvedValue(
+      groupedSuccess(buildGroupedUbicaciones(typed, clientes))
+    );
+    const page = await renderPage();
+    await page.click(page.button('Ubicaciones'));
+
+    expect(page.button('Administrar Manzanas y Villas de Archivo')).not.toBeNull();
+    expect(page.button('Administrar Manzanas y Villas de Bodega Central')).toBeUndefined();
+
+    page.unmount();
+  });
+
+  test('URBANIZACION sin permiso no muestra administración de maestros', async () => {
+    useAuth.mockReturnValue({
+      user: {
+        id: 8,
+        usuario: 'ubicaciones-view',
+        tipo_usuario: 'custom',
+        permisos: ['inventario.ubicaciones.ver'],
+      },
+    });
+    const typed = ubicaciones.map((ubicacion) => ({
+      ...ubicacion,
+      tipo_punto: ubicacion.id === 2 ? 'URBANIZACION' : 'GENERAL',
+    }));
+    inventarioService.getUbicaciones.mockResolvedValue(success(typed));
+    inventarioService.getUbicacionesAgrupadas.mockResolvedValue(
+      groupedSuccess(buildGroupedUbicaciones(typed, clientes))
+    );
+    const page = await renderPage();
+    await page.click(page.button('Ubicaciones'));
+
+    expect(page.button('Administrar Manzanas y Villas de Archivo')).toBeUndefined();
     page.unmount();
   });
 

@@ -1,11 +1,48 @@
 const express = require('express');
 const router = express.Router();
 const ubicacionesController = require('../controllers/ubicacionesController');
+const urbanizacionMastersController = require('../controllers/urbanizacionMastersController');
 const { verifyToken } = require('../middleware/auth');
 const { requireAnyPermission, requirePermission } = require('../middleware/permissions');
 const { PERMISSIONS } = require('../config/permissions');
 
 router.use(verifyToken);
+
+router.get(
+  '/:ubicacionId/manzanas',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.listManzanas
+);
+
+router.post(
+  '/:ubicacionId/manzanas',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.createManzana
+);
+
+router.put(
+  '/manzanas/:manzanaId',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.updateManzana
+);
+
+router.get(
+  '/manzanas/:manzanaId/villas',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.listVillas
+);
+
+router.post(
+  '/manzanas/:manzanaId/villas',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.createVilla
+);
+
+router.put(
+  '/villas/:villaId',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.updateVilla
+);
 
 router.get(
   '/agrupadas',

@@ -169,6 +169,60 @@ const inventarioService = {
     }
   },
 
+  getManzanas: async (ubicacionId) => {
+    try {
+      const response = await api.get(`/inventario/ubicaciones/${ubicacionId}/manzanas`);
+      return { success: response.data.success, data: response.data.data || [] };
+    } catch (error) {
+      return failure(error, 'Error al obtener Manzanas');
+    }
+  },
+
+  createManzana: async (ubicacionId, data) => {
+    try {
+      const response = await api.post(`/inventario/ubicaciones/${ubicacionId}/manzanas`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al crear Manzana');
+    }
+  },
+
+  updateManzana: async (manzanaId, data) => {
+    try {
+      const response = await api.put(`/inventario/ubicaciones/manzanas/${manzanaId}`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al actualizar Manzana');
+    }
+  },
+
+  getVillas: async (manzanaId) => {
+    try {
+      const response = await api.get(`/inventario/ubicaciones/manzanas/${manzanaId}/villas`);
+      return { success: response.data.success, data: response.data.data || [] };
+    } catch (error) {
+      return failure(error, 'Error al obtener Villas');
+    }
+  },
+
+  createVilla: async (manzanaId, data) => {
+    try {
+      const response = await api.post(`/inventario/ubicaciones/manzanas/${manzanaId}/villas`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al crear Villa');
+    }
+  },
+
+  updateVilla: async (villaId, data) => {
+    try {
+      const response = await api.put(`/inventario/ubicaciones/villas/${villaId}`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al actualizar Villa');
+    }
+  },
+
   getArticulos: async (params = {}) => {
     try {
       const response = await api.get('/inventario/articulos', { params });

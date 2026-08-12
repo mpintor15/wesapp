@@ -10,6 +10,7 @@ import clientesService from '../../services/clientesService';
 import inventarioService from '../../services/inventarioService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import ClientesCatalog from './ClientesCatalog';
+import UrbanizacionMastersModal from './components/UrbanizacionMastersModal';
 import { getConfiguracionPermissions } from './utils/configuracionPermissions';
 import './Configuracion.css';
 
@@ -393,6 +394,7 @@ const Configuracion = () => {
   const [formFieldErrors, setFormFieldErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [urbanizacionTarget, setUrbanizacionTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [clientes, setClientes] = useState([]);
   const [contextualClienteFilter, setContextualClienteFilter] = useState(null);
@@ -451,7 +453,8 @@ const Configuracion = () => {
   }, [clientes, contextualClienteFilter, ubicacionFilters.cliente]);
 
   const ubicacionesTotal = ubicacionesMeta.totalLocations || allUbicaciones.length;
-  const canManageAnyUbicacion = canCreate || canEdit || canDelete;
+  const canManageAnyUbicacion =
+    canCreate || canEdit || canDelete || permissions.canManageUrbanizacion;
 
   const loadUbicacionesCatalogo = useCallback(async () => {
     if (!permissions.canViewUbicaciones) return false;
@@ -1199,6 +1202,21 @@ const Configuracion = () => {
                                                     </button>
                                                   )}
                                                   {ubicacion &&
+                                                    ubicacion.tipo_punto === 'URBANIZACION' &&
+                                                    permissions.canManageUrbanizacion && (
+                                                      <button
+                                                        className="action-btn action-btn-view"
+                                                        type="button"
+                                                        onClick={() =>
+                                                          setUrbanizacionTarget(ubicacion)
+                                                        }
+                                                        title="Administrar Manzanas y Villas"
+                                                        aria-label={`Administrar Manzanas y Villas de ${ubicacion.nombre}`}
+                                                      >
+                                                        Maestros
+                                                      </button>
+                                                    )}
+                                                  {ubicacion &&
                                                     canDelete &&
                                                     ubicacion.puede_eliminar && (
                                                       <button
@@ -1359,7 +1377,10 @@ const Configuracion = () => {
                                                   <small>{status.detail}</small>
                                                 </div>
                                               </div>
-                                              {(canEdit || canDelete) && (
+                                              {(canEdit ||
+                                                canDelete ||
+                                                (permissions.canManageUrbanizacion &&
+                                                  ubicacion.tipo_punto === 'URBANIZACION')) && (
                                                 <div
                                                   className="record-card-actions configuracion-ubicacion-card-actions"
                                                   aria-label={`Acciones de ubicación ${ubicacion.nombre}`}
@@ -1382,6 +1403,19 @@ const Configuracion = () => {
                                                       Editar
                                                     </button>
                                                   )}
+                                                  {permissions.canManageUrbanizacion &&
+                                                    ubicacion.tipo_punto === 'URBANIZACION' && (
+                                                      <button
+                                                        className="action-btn action-btn-view"
+                                                        type="button"
+                                                        onClick={() =>
+                                                          setUrbanizacionTarget(ubicacion)
+                                                        }
+                                                        aria-label={`Administrar Manzanas y Villas de ${ubicacion.nombre}`}
+                                                      >
+                                                        Maestros
+                                                      </button>
+                                                    )}
                                                   {canDelete && ubicacion.puede_eliminar && (
                                                     <button
                                                       className="action-btn action-btn-del"
@@ -1515,6 +1549,12 @@ const Configuracion = () => {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+      {urbanizacionTarget && (
+        <UrbanizacionMastersModal
+          ubicacion={urbanizacionTarget}
+          onClose={() => setUrbanizacionTarget(null)}
+        />
+      )}
     </div>
   );
 };

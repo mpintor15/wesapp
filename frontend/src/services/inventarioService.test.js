@@ -94,6 +94,34 @@ describe('inventarioService', () => {
     });
   });
 
+  test('gestiona Manzanas y Villas con rutas jerárquicas', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: [] } });
+    api.post.mockResolvedValue({ data: { success: true, data: { id: 2 } } });
+    api.put.mockResolvedValue({ data: { success: true, data: { id: 2 } } });
+
+    await inventarioService.getManzanas(4);
+    await inventarioService.createManzana(4, { nombre: 'A' });
+    await inventarioService.updateManzana(2, { estado: 'inactivo' });
+    await inventarioService.getVillas(2);
+    await inventarioService.createVilla(2, { identificador: '1' });
+    await inventarioService.updateVilla(7, { estado: 'activo' });
+
+    expect(api.get).toHaveBeenNthCalledWith(1, '/inventario/ubicaciones/4/manzanas');
+    expect(api.post).toHaveBeenNthCalledWith(1, '/inventario/ubicaciones/4/manzanas', {
+      nombre: 'A',
+    });
+    expect(api.put).toHaveBeenNthCalledWith(1, '/inventario/ubicaciones/manzanas/2', {
+      estado: 'inactivo',
+    });
+    expect(api.get).toHaveBeenNthCalledWith(2, '/inventario/ubicaciones/manzanas/2/villas');
+    expect(api.post).toHaveBeenNthCalledWith(2, '/inventario/ubicaciones/manzanas/2/villas', {
+      identificador: '1',
+    });
+    expect(api.put).toHaveBeenNthCalledWith(2, '/inventario/ubicaciones/villas/7', {
+      estado: 'activo',
+    });
+  });
+
   test('getUbicacionesAgrupadas conserva parámetros y metadata agrupada', async () => {
     api.get.mockResolvedValueOnce({
       data: {

@@ -954,4 +954,59 @@ describe('database migrations', () => {
       ).rejects.toMatchObject({ code: '23514' });
     });
   });
+
+  test('migration 024 enforces normalized uniqueness and historical RESTRICT relationships', async () => {
+    await withTempDatabase('wesapp_migration_manzanas_villas_024', async (pool) => {
+      await pool.query(`
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (
+          id SERIAL PRIMARY KEY,
+          nombre VARCHAR(100) NOT NULL,
+          tipo_punto VARCHAR(20) NOT NULL DEFAULT 'GENERAL'
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        CREATE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$
+        BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
+        $$ LANGUAGE plpgsql;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones (nombre, tipo_punto)
+        VALUES ('Urb', 'URBANIZACION'), ('General', 'GENERAL');
+      `);
+      await applyMigrationInTransaction(pool, 24);
+      await expect(
+        pool.query('INSERT INTO manzanas (ubicacion_id, nombre) VALUES ($1, $2)', [2, 'A'])
+      ).rejects.toMatchObject({ code: '23514' });
+      const manzana = await pool.query(
+        `INSERT INTO manzanas (ubicacion_id, nombre, created_by)
+         VALUES (1, 'Etapa A', 1) RETURNING id`
+      );
+      await expect(
+        pool.query('INSERT INTO manzanas (ubicacion_id, nombre) VALUES ($1, $2)', [
+          1,
+          '  etapa   a ',
+        ])
+      ).rejects.toMatchObject({ code: '23505' });
+      await pool.query('INSERT INTO villas (manzana_id, identificador) VALUES ($1, $2)', [
+        manzana.rows[0].id,
+        'Villa 1',
+      ]);
+      await expect(
+        pool.query('INSERT INTO villas (manzana_id, identificador) VALUES ($1, $2)', [
+          manzana.rows[0].id,
+          ' villa   1 ',
+        ])
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(
+        pool.query('DELETE FROM manzanas WHERE id = $1', [manzana.rows[0].id])
+      ).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM ubicaciones WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(
+        pool.query('UPDATE ubicaciones SET tipo_punto = $1 WHERE id = $2', ['GENERAL', 1])
+      ).rejects.toMatchObject({ code: '23503' });
+    });
+  });
 });

@@ -337,6 +337,19 @@ const updateUbicacion = async (req, res) => {
       const tipoPunto = Object.prototype.hasOwnProperty.call(req.body || {}, 'tipo_punto')
         ? validatePointType(req.body.tipo_punto)
         : currentUbicacion.tipo_punto || 'GENERAL';
+      if (currentUbicacion.tipo_punto === 'URBANIZACION' && tipoPunto === 'GENERAL') {
+        const manzanas = await client.query(
+          'SELECT 1 FROM manzanas WHERE ubicacion_id = $1 LIMIT 1',
+          [id]
+        );
+        if (manzanas.rowCount > 0) {
+          throw createAppError(
+            409,
+            'LOCATION_HAS_BLOCKS',
+            'No se puede cambiar a General una Urbanización que tiene Manzanas.'
+          );
+        }
+      }
       const currentClienteId =
         currentUbicacion.cliente_id === null ? null : Number(currentUbicacion.cliente_id);
       const requestedClienteId = requestedCliente.provided

@@ -107,6 +107,34 @@ CREATE TABLE ubicaciones (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE manzanas (
+    id SERIAL PRIMARY KEY,
+    ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    nombre VARCHAR(100) NOT NULL,
+    estado VARCHAR(10) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
+    created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_manzanas_ubicacion_nombre_normalizado_unique
+    ON manzanas (ubicacion_id, LOWER(REGEXP_REPLACE(TRIM(nombre), '\s+', ' ', 'g')));
+CREATE INDEX idx_manzanas_ubicacion ON manzanas (ubicacion_id);
+
+CREATE TABLE villas (
+    id SERIAL PRIMARY KEY,
+    manzana_id INTEGER NOT NULL REFERENCES manzanas(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    identificador VARCHAR(100) NOT NULL,
+    estado VARCHAR(10) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
+    created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_villas_manzana_identificador_normalizado_unique
+    ON villas (manzana_id, LOWER(REGEXP_REPLACE(TRIM(identificador), '\s+', ' ', 'g')));
+CREATE INDEX idx_villas_manzana ON villas (manzana_id);
+
 CREATE INDEX idx_ubicaciones_cliente_id ON ubicaciones(cliente_id);
 CREATE UNIQUE INDEX idx_ubicaciones_cliente_nombre_lower_unique
     ON ubicaciones(cliente_id, LOWER(TRIM(nombre)))
@@ -479,6 +507,41 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+CREATE OR REPLACE FUNCTION enforce_manzana_urbanizacion()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM ubicaciones
+        WHERE id = NEW.ubicacion_id AND tipo_punto = 'URBANIZACION'
+    ) THEN
+        RAISE EXCEPTION 'Las Manzanas solo pertenecen a ubicaciones URBANIZACION'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE OR REPLACE FUNCTION prevent_urbanizacion_downgrade_with_manzanas()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.tipo_punto = 'URBANIZACION'
+       AND NEW.tipo_punto <> 'URBANIZACION'
+       AND EXISTS (SELECT 1 FROM manzanas WHERE ubicacion_id = OLD.id) THEN
+        RAISE EXCEPTION 'No se puede cambiar a GENERAL una Urbanización con Manzanas'
+            USING ERRCODE = '23503';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER enforce_manzana_urbanizacion_trigger
+    BEFORE INSERT OR UPDATE OF ubicacion_id ON manzanas
+    FOR EACH ROW EXECUTE FUNCTION enforce_manzana_urbanizacion();
+
+CREATE TRIGGER prevent_urbanizacion_downgrade_trigger
+    BEFORE UPDATE OF tipo_punto ON ubicaciones
+    FOR EACH ROW EXECUTE FUNCTION prevent_urbanizacion_downgrade_with_manzanas();
+
 CREATE TRIGGER update_usuarios_updated_at BEFORE UPDATE ON usuarios
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -492,6 +555,12 @@ CREATE TRIGGER update_articulos_updated_at BEFORE UPDATE ON articulos
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_colaboradores_updated_at BEFORE UPDATE ON colaboradores
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_manzanas_updated_at BEFORE UPDATE ON manzanas
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_villas_updated_at BEFORE UPDATE ON villas
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 INSERT INTO schema_version (version, description) VALUES
