@@ -123,6 +123,7 @@ const usuarioCreateSchema = z.object({
     errorMap: () => ({ message: `Tipo debe ser uno de: ${ALLOWED_ROLES.join(', ')}` }),
   }),
   colaborador_id: optionalNullablePositiveInt('Colaborador ID'),
+  ubicacion_ids: z.array(positiveInt('Ubicación ID')).optional(),
 });
 
 const usuarioUpdateSchema = z.object({
@@ -143,6 +144,7 @@ const usuarioUpdateSchema = z.object({
     .optional(),
   activo: z.boolean().optional(),
   colaborador_id: optionalNullablePositiveInt('Colaborador ID'),
+  ubicacion_ids: z.array(positiveInt('Ubicación ID')).optional(),
 });
 
 // ============================================

@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const db = require('../config/database');
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { clearActiveCache } = require('../middleware/permissions');
+const { hasPermission, PERMISSIONS } = require('../config/permissions');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { assertUsuarioWithoutActivity } = require('../services/usuariosDeletionService');
 
@@ -16,6 +17,38 @@ const ALLOWED_TYPES = new Set([
 ]);
 const ROLE_GERENTE = 'gerente';
 const COLABORADOR_CONFLICT_MESSAGE = 'El colaborador ya está vinculado a otro usuario';
+const ROLE_GUARDIA = 'guardia';
+
+const normalizeUbicacionIds = (value) => [...new Set((value || []).map(Number))];
+
+const assertCanManageAssignments = (req) => {
+  if (!hasPermission(req.user?.tipo_usuario, PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)) {
+    throw createHttpError(403, 'No tienes permiso para administrar asignaciones');
+  }
+};
+
+const replaceAssignments = async (client, usuarioId, tipoUsuario, ubicacionIds, createdBy) => {
+  const ids = normalizeUbicacionIds(ubicacionIds);
+  if (tipoUsuario !== ROLE_GUARDIA && ids.length > 0) {
+    throw createHttpError(400, 'Solo los usuarios Guardia pueden tener puntos asignados');
+  }
+  if (ids.length > 0) {
+    const locations = await client.query('SELECT id FROM ubicaciones WHERE id = ANY($1::int[])', [
+      ids,
+    ]);
+    if (locations.rowCount !== ids.length) {
+      throw createHttpError(400, 'Una o más ubicaciones no existen');
+    }
+  }
+  await client.query('DELETE FROM usuario_ubicaciones WHERE usuario_id = $1', [usuarioId]);
+  for (const ubicacionId of ids) {
+    await client.query(
+      'INSERT INTO usuario_ubicaciones (usuario_id, ubicacion_id, created_by) VALUES ($1, $2, $3)',
+      [usuarioId, ubicacionId, createdBy || null]
+    );
+  }
+  return ids;
+};
 
 const generateTempPassword = () => {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -66,9 +99,11 @@ const getUsuarios = async (req, res) => {
     let query = `
       SELECT u.id, u.usuario, u.nombre, u.apellido, u.tipo_usuario, u.primer_login, u.activo,
              u.created_at, u.colaborador_id, c.nombres_completos AS colaborador_nombre,
-             c.estado AS colaborador_estado
+             c.estado AS colaborador_estado,
+             COALESCE(ARRAY_AGG(uu.ubicacion_id) FILTER (WHERE uu.ubicacion_id IS NOT NULL), '{}') AS ubicacion_ids
       FROM usuarios u
       LEFT JOIN colaboradores c ON c.id = u.colaborador_id
+      LEFT JOIN usuario_ubicaciones uu ON uu.usuario_id = u.id
     `;
     const params = [];
     const conditions = [];
@@ -104,12 +139,26 @@ const getUsuarios = async (req, res) => {
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
-    query += ' ORDER BY u.apellido ASC, u.nombre ASC, u.usuario ASC';
+    query +=
+      ' GROUP BY u.id, c.nombres_completos, c.estado ORDER BY u.apellido ASC, u.nombre ASC, u.usuario ASC';
 
     const result = await db.query(query, params);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener usuarios:');
+  }
+};
+
+const getUbicacionesAsignables = async (_req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT u.id, u.nombre, u.cliente_id, c.nombre AS cliente_nombre
+       FROM ubicaciones u LEFT JOIN clientes c ON c.id = u.cliente_id
+       ORDER BY COALESCE(c.nombre, ''), u.nombre`
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al obtener ubicaciones asignables:');
   }
 };
 
@@ -169,6 +218,8 @@ const createUsuario = async (req, res) => {
     const tipoUsuario =
       typeof req.body?.tipo_usuario === 'string' ? req.body.tipo_usuario.trim().toLowerCase() : '';
     const colaboradorId = req.body?.colaborador_id ?? null;
+    const hasAssignments = Object.prototype.hasOwnProperty.call(req.body || {}, 'ubicacion_ids');
+    const ubicacionIds = req.body?.ubicacion_ids || [];
 
     if (!usuario || !tipoUsuario || !nombre || !apellido) {
       return res.status(400).json({
@@ -179,6 +230,9 @@ const createUsuario = async (req, res) => {
 
     if (!ALLOWED_TYPES.has(tipoUsuario)) {
       return res.status(400).json({ success: false, message: 'Tipo de usuario inválido' });
+    }
+    if (hasAssignments) {
+      assertCanManageAssignments(req);
     }
 
     const tempPassword = generateTempPassword();
@@ -195,6 +249,15 @@ const createUsuario = async (req, res) => {
         [usuario, password_hash, nombre, apellido, tipoUsuario, colaboradorId]
       );
       createdUsuario = result.rows[0];
+      if (hasAssignments) {
+        createdUsuario.ubicacion_ids = await replaceAssignments(
+          client,
+          createdUsuario.id,
+          tipoUsuario,
+          ubicacionIds,
+          req.user?.id
+        );
+      }
       await logAudit(client, {
         tabla: 'usuarios',
         operacion: 'INSERT',
@@ -287,13 +350,21 @@ const updateUsuario = async (req, res) => {
 
     const { updates, values, tipoUsuario, activo, colaboradorId, hasColaboradorId } =
       buildUpdateFields(req.body, req.user?.id, id);
+    const hasAssignments = Object.prototype.hasOwnProperty.call(req.body || {}, 'ubicacion_ids');
+    const ubicacionIds = req.body?.ubicacion_ids || [];
+    if (hasAssignments) {
+      assertCanManageAssignments(req);
+    }
 
-    if (updates.length === 0) {
+    if (updates.length === 0 && !hasAssignments) {
       return res.status(400).json({ success: false, message: 'No hay campos para actualizar' });
     }
 
     const nextTipo = tipoUsuario || currentUser.tipo_usuario;
     const nextActivo = typeof activo === 'boolean' ? activo : currentUser.activo;
+    if (currentUser.tipo_usuario === ROLE_GUARDIA && nextTipo !== ROLE_GUARDIA) {
+      assertCanManageAssignments(req);
+    }
     await assertGerenteNotLastActive(currentUser, nextTipo, nextActivo);
 
     let updatedUsuario;
@@ -301,14 +372,32 @@ const updateUsuario = async (req, res) => {
       if (hasColaboradorId && colaboradorId !== currentUser.colaborador_id) {
         await assertEligibleColaborador(client, colaboradorId, id);
       }
-      values.push(id);
-      const result = await client.query(
-        `UPDATE usuarios SET ${updates.join(', ')}
-         WHERE id = $${values.length}
-         RETURNING id, usuario, nombre, apellido, tipo_usuario, colaborador_id, primer_login, activo`,
-        values
-      );
+      let result;
+      if (updates.length > 0) {
+        values.push(id);
+        result = await client.query(
+          `UPDATE usuarios SET ${updates.join(', ')}
+           WHERE id = $${values.length}
+           RETURNING id, usuario, nombre, apellido, tipo_usuario, colaborador_id, primer_login, activo`,
+          values
+        );
+      } else {
+        result = await client.query(
+          `SELECT id, usuario, nombre, apellido, tipo_usuario, colaborador_id, primer_login, activo
+           FROM usuarios WHERE id = $1`,
+          [id]
+        );
+      }
       updatedUsuario = result.rows[0];
+      if (hasAssignments || nextTipo !== ROLE_GUARDIA) {
+        updatedUsuario.ubicacion_ids = await replaceAssignments(
+          client,
+          id,
+          nextTipo,
+          hasAssignments ? ubicacionIds : [],
+          req.user?.id
+        );
+      }
       await logAudit(client, {
         tabla: 'usuarios',
         operacion: 'UPDATE',
@@ -446,6 +535,7 @@ const deleteUsuario = async (req, res) => {
 module.exports = {
   getUsuarios,
   getColaboradoresElegibles,
+  getUbicacionesAsignables,
   createUsuario,
   updateUsuario,
   reenviarInvitacion,

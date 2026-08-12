@@ -3,7 +3,11 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import UsuarioCreateModal from './UsuarioCreateModal';
 import UsuarioEditModal from './UsuarioEditModal';
-import { EMPTY_CREATE_USER_FORM, EMPTY_EDIT_USER_FORM } from '../utils/usuariosHelpers';
+import {
+  buildUsuarioPayload,
+  EMPTY_CREATE_USER_FORM,
+  EMPTY_EDIT_USER_FORM,
+} from '../utils/usuariosHelpers';
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -38,13 +42,14 @@ const renderModal = (element) => {
   };
 };
 
-const CreateHarness = ({ onSubmit }) => {
-  const [formData, setFormData] = useState(EMPTY_CREATE_USER_FORM);
+const CreateHarness = ({ canManageAssignments = false, initialData = {}, onSubmit }) => {
+  const [formData, setFormData] = useState({ ...EMPTY_CREATE_USER_FORM, ...initialData });
   return (
     <UsuarioCreateModal
       colaboradores={[colaboradores[0]]}
       colaboradoresError=""
       colaboradoresLoading={false}
+      canManageAssignments={canManageAssignments}
       createErrors={{}}
       formData={formData}
       isCreating={false}
@@ -52,34 +57,58 @@ const CreateHarness = ({ onSubmit }) => {
       onChange={(field, value) => setFormData((current) => ({ ...current, [field]: value }))}
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(formData);
+        onSubmit(buildUsuarioPayload(formData, canManageAssignments));
       }}
+      ubicaciones={[
+        { id: 4, nombre: 'Norte' },
+        { id: 5, nombre: 'Sur' },
+      ]}
+      ubicacionesError=""
+      ubicacionesLoading={false}
     />
   );
 };
 
-const EditHarness = ({ initialColaboradorId = '7', onSubmit }) => {
+const EditHarness = ({
+  canManageAssignments = false,
+  initialData = {},
+  initialColaboradorId = '7',
+  onSubmit,
+}) => {
   const [editData, setEditData] = useState({
     ...EMPTY_EDIT_USER_FORM,
     colaborador_id: initialColaboradorId,
+    ...initialData,
   });
   return (
     <UsuarioEditModal
       colaboradores={colaboradores}
       colaboradoresError=""
       colaboradoresLoading={false}
+      canManageAssignments={canManageAssignments}
       editData={editData}
       isSaving={false}
       onCancel={jest.fn()}
       onChange={(field, value) => setEditData((current) => ({ ...current, [field]: value }))}
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit({
-          ...editData,
-          colaborador_id: editData.colaborador_id === '' ? null : editData.colaborador_id,
-        });
+        onSubmit(
+          buildUsuarioPayload(
+            {
+              ...editData,
+              colaborador_id: editData.colaborador_id === '' ? null : editData.colaborador_id,
+            },
+            canManageAssignments
+          )
+        );
       }}
       selectedUsuario={{ id: 2, nombre: 'Luis', apellido: 'Paz' }}
+      ubicaciones={[
+        { id: 4, nombre: 'Norte' },
+        { id: 5, nombre: 'Sur' },
+      ]}
+      ubicacionesError=""
+      ubicacionesLoading={false}
     />
   );
 };
@@ -205,4 +234,135 @@ describe('selector Usuario-Colaborador', () => {
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ colaborador_id: null }));
     view.unmount();
   });
+
+  test.each([[[]], [['4']], [['4', '5']]])('Guardia permite seleccionar %s puntos', (selected) => {
+    const onChange = jest.fn();
+    const view = renderModal(
+      <UsuarioCreateModal
+        canManageAssignments
+        colaboradores={[]}
+        colaboradoresError=""
+        colaboradoresLoading={false}
+        createErrors={{}}
+        formData={{ ...EMPTY_CREATE_USER_FORM, tipo_usuario: 'guardia', ubicacion_ids: selected }}
+        isCreating={false}
+        onCancel={jest.fn()}
+        onChange={onChange}
+        onSubmit={jest.fn()}
+        ubicaciones={[
+          { id: 4, nombre: 'Norte' },
+          { id: 5, nombre: 'Sur' },
+        ]}
+        ubicacionesError=""
+        ubicacionesLoading={false}
+      />
+    );
+    expect(view.container.querySelectorAll('.usuarios-puntos input:checked')).toHaveLength(
+      selected.length
+    );
+    view.unmount();
+  });
+
+  test('otros roles no muestran selector de puntos', () => {
+    const view = renderModal(
+      <UsuarioEditModal
+        canManageAssignments
+        colaboradores={[]}
+        colaboradoresError=""
+        colaboradoresLoading={false}
+        editData={{ ...EMPTY_EDIT_USER_FORM, tipo_usuario: 'supervisor' }}
+        isSaving={false}
+        onCancel={jest.fn()}
+        onChange={jest.fn()}
+        onSubmit={jest.fn()}
+        selectedUsuario={{ id: 2, nombre: 'Ana', apellido: 'Vera' }}
+        ubicaciones={[{ id: 4, nombre: 'Norte' }]}
+        ubicacionesError=""
+        ubicacionesLoading={false}
+      />
+    );
+    expect(view.container.querySelector('.usuarios-puntos')).toBeNull();
+    view.unmount();
+  });
+
+  test('edición preserva varios puntos y permite retirar uno', () => {
+    const onChange = jest.fn();
+    const view = renderModal(
+      <UsuarioEditModal
+        canManageAssignments
+        colaboradores={[]}
+        colaboradoresError=""
+        colaboradoresLoading={false}
+        editData={{ ...EMPTY_EDIT_USER_FORM, tipo_usuario: 'guardia', ubicacion_ids: ['4', '5'] }}
+        isSaving={false}
+        onCancel={jest.fn()}
+        onChange={onChange}
+        onSubmit={jest.fn()}
+        selectedUsuario={{ id: 2, nombre: 'Ana', apellido: 'Vera' }}
+        ubicaciones={[
+          { id: 4, nombre: 'Norte' },
+          { id: 5, nombre: 'Sur' },
+        ]}
+        ubicacionesError=""
+        ubicacionesLoading={false}
+      />
+    );
+    const selected = view.container.querySelectorAll('.usuarios-puntos input:checked');
+    expect(selected).toHaveLength(2);
+    act(() => selected[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+    expect(onChange).toHaveBeenCalledWith('ubicacion_ids', ['5']);
+    view.unmount();
+  });
+
+  test('submit de creación sin permiso omite ubicacion_ids', () => {
+    const onSubmit = jest.fn();
+    const view = renderModal(<CreateHarness onSubmit={onSubmit} />);
+    submitForm(view.container);
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('ubicacion_ids');
+    view.unmount();
+  });
+
+  test('submit de edición sin administrar asignaciones omite ubicacion_ids', () => {
+    const onSubmit = jest.fn();
+    const view = renderModal(
+      <EditHarness
+        initialData={{ tipo_usuario: 'guardia', ubicacion_ids: ['4'] }}
+        onSubmit={onSubmit}
+      />
+    );
+    submitForm(view.container);
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('ubicacion_ids');
+    view.unmount();
+  });
+
+  test('Guardia que cambia de rol no envía IDs heredados', () => {
+    const onSubmit = jest.fn();
+    const view = renderModal(
+      <EditHarness
+        canManageAssignments
+        initialData={{ tipo_usuario: 'supervisor', ubicacion_ids: ['4', '5'] }}
+        onSubmit={onSubmit}
+      />
+    );
+    submitForm(view.container);
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('ubicacion_ids');
+    view.unmount();
+  });
+
+  test.each([[[]], [['4']], [['4', '5']]])(
+    'submit de Guardia con permiso envía %s puntos',
+    (ubicacionIds) => {
+      const onSubmit = jest.fn();
+      const view = renderModal(
+        <CreateHarness
+          canManageAssignments
+          initialData={{ tipo_usuario: 'guardia', ubicacion_ids: ubicacionIds }}
+          onSubmit={onSubmit}
+        />
+      );
+      submitForm(view.container);
+      expect(onSubmit.mock.calls[0][0].ubicacion_ids).toEqual(ubicacionIds);
+      view.unmount();
+    }
+  );
 });

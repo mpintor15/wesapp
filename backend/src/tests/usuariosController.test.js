@@ -76,6 +76,75 @@ describe('usuarios validation schemas', () => {
 });
 
 describe('usuariosController.createUsuario', () => {
+  test.each([
+    ['cero', []],
+    ['uno', [4]],
+    ['varios', [4, 5]],
+  ])('crea Guardia con %s puntos', async (_label, ubicacionIds) => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 2,
+            usuario: 'guardia',
+            nombre: 'Guardia',
+            apellido: 'Prueba',
+            tipo_usuario: 'guardia',
+            colaborador_id: null,
+            primer_login: true,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4 }, { id: 5 }].slice(0, ubicacionIds.length),
+        rowCount: ubicacionIds.length,
+      })
+      .mockResolvedValue({ rows: [], rowCount: 1 });
+    const res = mockRes();
+
+    await createUsuario(
+      mockReq({
+        body: {
+          usuario: 'guardia',
+          nombre: 'Guardia',
+          apellido: 'Prueba',
+          tipo_usuario: 'guardia',
+          ubicacion_ids: ubicacionIds,
+        },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(res.json.mock.calls[0][0].data.ubicacion_ids).toEqual(ubicacionIds);
+  });
+
+  test('crear usuario sin tocar asignaciones no exige permiso de asignaciones', async () => {
+    db.query.mockResolvedValue({
+      rows: [{ id: 2, usuario: 'nuevo', tipo_usuario: 'secretario' }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await createUsuario(
+      mockReq({
+        body: {
+          usuario: 'nuevo',
+          nombre: 'Nuevo',
+          apellido: 'Usuario',
+          tipo_usuario: 'secretario',
+        },
+        user: { id: 9, tipo_usuario: 'supervisor' },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+  });
+
   test('crea usuario con colaborador activo elegible', async () => {
     db.query
       .mockResolvedValueOnce({
@@ -290,6 +359,180 @@ describe('usuariosController.createUsuario', () => {
 });
 
 describe('usuariosController.updateUsuario', () => {
+  test('editar sin tocar asignaciones no exige permiso de asignaciones', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, nombre: 'Actualizado', tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      });
+    const res = mockRes();
+
+    await updateUsuario(
+      mockReq({
+        params: { id: '2' },
+        body: { nombre: 'Actualizado' },
+        user: { id: 9, tipo_usuario: 'supervisor' },
+      }),
+      res
+    );
+
+    expect(res.status).not.toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalled();
+  });
+
+  test.each([
+    ['cero', []],
+    ['uno', [4]],
+    ['varios normalizando duplicados', [4, 5, 4]],
+  ])('reemplaza asignaciones de Guardia con %s puntos', async (_label, ubicacionIds) => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4 }, { id: 5 }].slice(0, new Set(ubicacionIds).size),
+        rowCount: new Set(ubicacionIds).size,
+      })
+      .mockResolvedValue({ rows: [], rowCount: 1 });
+    const res = mockRes();
+
+    await updateUsuario(
+      mockReq({
+        params: { id: '2' },
+        body: { ubicacion_ids: ubicacionIds },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
+      res
+    );
+
+    expect(res.json.mock.calls[0][0].data.ubicacion_ids).toEqual([...new Set(ubicacionIds)]);
+  });
+
+  test('rechaza ubicación inexistente y usuario no Guardia', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const missingRes = mockRes();
+    await updateUsuario(
+      mockReq({
+        params: { id: '2' },
+        body: { ubicacion_ids: [99] },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
+      missingRes
+    );
+    expectStatus(missingRes, 400);
+
+    jest.clearAllMocks();
+    db.transaction.mockImplementation(async (callback) => callback({ query: db.query }));
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 3, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 3, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      });
+    const roleRes = mockRes();
+    await updateUsuario(
+      mockReq({
+        params: { id: '3' },
+        body: { ubicacion_ids: [4] },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
+      roleRes
+    );
+    expectStatus(roleRes, 400);
+  });
+
+  test('rechaza modificar asignaciones sin permiso', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 2, tipo_usuario: 'guardia', activo: true }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+    await updateUsuario(
+      mockReq({
+        params: { id: '2' },
+        body: { ubicacion_ids: [4] },
+        user: { id: 9, tipo_usuario: 'supervisor' },
+      }),
+      res
+    );
+    expectStatus(res, 403);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('cambiar Guardia a otro rol retira todas las asignaciones', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValue({ rows: [], rowCount: 1 });
+    const res = mockRes();
+    await updateUsuario(
+      mockReq({
+        params: { id: '2' },
+        body: { tipo_usuario: 'secretario' },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
+      res
+    );
+    expect(
+      db.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM usuario_ubicaciones'))
+    ).toBe(true);
+  });
+
+  test('rollback de limpieza impide completar parcialmente el cambio de rol', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 2, tipo_usuario: 'guardia', activo: true }],
+      rowCount: 1,
+    });
+    const transactionClient = { query: jest.fn() };
+    transactionClient.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockRejectedValueOnce(new Error('falló limpieza'));
+    db.transaction.mockImplementation(async (callback) => callback(transactionClient));
+    const res = mockRes();
+
+    await updateUsuario(
+      mockReq({
+        params: { id: '2' },
+        body: { tipo_usuario: 'secretario' },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
+      res
+    );
+
+    expect(transactionClient.query.mock.calls[0][0]).toContain('UPDATE usuarios');
+    expect(transactionClient.query.mock.calls[1][0]).toContain('DELETE FROM usuario_ubicaciones');
+    expectStatus(res, 500);
+  });
   test('cambia el vínculo a otro colaborador activo elegible', async () => {
     db.query
       .mockResolvedValueOnce({

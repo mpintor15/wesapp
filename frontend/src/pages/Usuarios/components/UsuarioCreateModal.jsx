@@ -2,12 +2,16 @@ import AppModal from '../../../components/AppModal';
 import { TIPOS_USUARIO } from '../utils/usuariosHelpers';
 
 const UsuarioCreateModal = ({
+  canManageAssignments,
   colaboradores,
   colaboradoresError,
   colaboradoresLoading,
   createErrors,
   formData,
   isCreating,
+  ubicaciones,
+  ubicacionesError,
+  ubicacionesLoading,
   onCancel,
   onChange,
   onSubmit,
@@ -35,6 +39,38 @@ const UsuarioCreateModal = ({
           />
           {createErrors.nombre ? <span className="field-error">{createErrors.nombre}</span> : null}
         </div>
+        {formData.tipo_usuario === 'guardia' && canManageAssignments ? (
+          <fieldset className="form-group usuarios-form-grid__full usuarios-puntos">
+            <legend>Puntos asignados</legend>
+            {ubicacionesLoading ? <span>Cargando ubicaciones…</span> : null}
+            {ubicacionesError ? (
+              <span className="field-error" role="alert">
+                {ubicacionesError}
+              </span>
+            ) : null}
+            {!ubicacionesLoading && !ubicacionesError && ubicaciones.length === 0 ? (
+              <span>No hay ubicaciones disponibles.</span>
+            ) : null}
+            {ubicaciones.map((ubicacion) => (
+              <label key={ubicacion.id}>
+                <input
+                  type="checkbox"
+                  checked={formData.ubicacion_ids.includes(String(ubicacion.id))}
+                  onChange={(event) =>
+                    onChange(
+                      'ubicacion_ids',
+                      event.target.checked
+                        ? [...formData.ubicacion_ids, String(ubicacion.id)]
+                        : formData.ubicacion_ids.filter((id) => id !== String(ubicacion.id))
+                    )
+                  }
+                />
+                {ubicacion.nombre}
+                {ubicacion.cliente_nombre ? ` — ${ubicacion.cliente_nombre}` : ''}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
         <div className="form-group usuarios-form-grid__full">
           <label htmlFor="u-colaborador">Colaborador</label>
           <select

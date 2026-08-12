@@ -11,6 +11,7 @@
 -- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 -- Limpiar tablas existentes (SOLO PARA DESARROLLO LOCAL)
+DROP TABLE IF EXISTS usuario_ubicaciones CASCADE;
 DROP TABLE IF EXISTS detalle_movimientos CASCADE;
 DROP TABLE IF EXISTS movimientos CASCADE;
 DROP TABLE IF EXISTS articulos CASCADE;
@@ -230,6 +231,15 @@ ALTER TABLE usuarios
     ADD CONSTRAINT usuarios_colaborador_id_fkey
         FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id) ON DELETE RESTRICT,
     ADD CONSTRAINT usuarios_colaborador_id_key UNIQUE (colaborador_id);
+
+CREATE TABLE usuario_ubicaciones (
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER NULL REFERENCES usuarios(id) ON DELETE SET NULL,
+    PRIMARY KEY (usuario_id, ubicacion_id)
+);
+CREATE INDEX idx_usuario_ubicaciones_ubicacion_id ON usuario_ubicaciones(ubicacion_id);
 
 CREATE TABLE audit_log (
     id SERIAL PRIMARY KEY,

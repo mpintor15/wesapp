@@ -908,4 +908,27 @@ describe('database migrations', () => {
       expect(version.rowCount).toBe(1);
     });
   });
+
+  test('migration 022 creates unique assignments with cascade and restrict behavior', async () => {
+    await withTempDatabase('wesapp_migration_usuario_ubicaciones_022', async (pool) => {
+      await pool.query(`
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones DEFAULT VALUES;
+      `);
+      await applyMigrationInTransaction(pool, 22);
+      await pool.query('INSERT INTO usuario_ubicaciones (usuario_id, ubicacion_id) VALUES (1, 1)');
+      await expect(
+        pool.query('INSERT INTO usuario_ubicaciones (usuario_id, ubicacion_id) VALUES (1, 1)')
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(pool.query('DELETE FROM ubicaciones WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await pool.query('DELETE FROM usuarios WHERE id = 1');
+      const assignments = await pool.query('SELECT * FROM usuario_ubicaciones');
+      expect(assignments.rowCount).toBe(0);
+    });
+  });
 });

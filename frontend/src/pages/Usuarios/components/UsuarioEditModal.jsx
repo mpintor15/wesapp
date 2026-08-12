@@ -2,11 +2,15 @@ import AppModal from '../../../components/AppModal';
 import { fullName, TIPOS_USUARIO } from '../utils/usuariosHelpers';
 
 const UsuarioEditModal = ({
+  canManageAssignments,
   colaboradores,
   colaboradoresError,
   colaboradoresLoading,
   editData,
   isSaving,
+  ubicaciones,
+  ubicacionesError,
+  ubicacionesLoading,
   onCancel,
   onChange,
   onSubmit,
@@ -35,6 +39,38 @@ const UsuarioEditModal = ({
             autoComplete="off"
           />
         </div>
+        {editData.tipo_usuario === 'guardia' && canManageAssignments ? (
+          <fieldset className="form-group usuarios-form-grid__full usuarios-puntos">
+            <legend>Puntos asignados</legend>
+            {ubicacionesLoading ? <span>Cargando ubicaciones…</span> : null}
+            {ubicacionesError ? (
+              <span className="field-error" role="alert">
+                {ubicacionesError}
+              </span>
+            ) : null}
+            {!ubicacionesLoading && !ubicacionesError && ubicaciones.length === 0 ? (
+              <span>No hay ubicaciones disponibles.</span>
+            ) : null}
+            {ubicaciones.map((ubicacion) => (
+              <label key={ubicacion.id}>
+                <input
+                  type="checkbox"
+                  checked={editData.ubicacion_ids.includes(String(ubicacion.id))}
+                  onChange={(event) =>
+                    onChange(
+                      'ubicacion_ids',
+                      event.target.checked
+                        ? [...editData.ubicacion_ids, String(ubicacion.id)]
+                        : editData.ubicacion_ids.filter((id) => id !== String(ubicacion.id))
+                    )
+                  }
+                />
+                {ubicacion.nombre}
+                {ubicacion.cliente_nombre ? ` — ${ubicacion.cliente_nombre}` : ''}
+              </label>
+            ))}
+          </fieldset>
+        ) : null}
         <div className="form-group usuarios-form-grid__full">
           <label htmlFor="e-colaborador">Colaborador</label>
           <select

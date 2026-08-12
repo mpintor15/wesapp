@@ -18,6 +18,7 @@ import UsuariosPageHeader from './components/UsuariosPageHeader';
 import UsuariosTable from './components/UsuariosTable';
 import {
   buildFilterParams,
+  buildUsuarioPayload,
   buildInvitationMessage,
   EMPTY_CREATE_USER_FORM,
   EMPTY_EDIT_USER_FORM,
@@ -41,6 +42,9 @@ const Usuarios = () => {
   const [colaboradores, setColaboradores] = useState([]);
   const [colaboradoresLoading, setColaboradoresLoading] = useState(false);
   const [colaboradoresError, setColaboradoresError] = useState('');
+  const [ubicaciones, setUbicaciones] = useState([]);
+  const [ubicacionesLoading, setUbicacionesLoading] = useState(false);
+  const [ubicacionesError, setUbicacionesError] = useState('');
   const [filters, setFilters] = useState(EMPTY_USUARIOS_FILTERS);
   const [filtersDraft, setFiltersDraft] = useState(EMPTY_USUARIOS_FILTERS);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -92,6 +96,18 @@ const Usuarios = () => {
     setColaboradoresLoading(false);
   }, []);
 
+  const loadUbicaciones = useCallback(async () => {
+    setUbicacionesLoading(true);
+    setUbicacionesError('');
+    const result = await usuariosService.getUbicacionesAsignables();
+    if (result.success) setUbicaciones(result.data);
+    else {
+      setUbicaciones([]);
+      setUbicacionesError(result.message || 'No se pudieron cargar las ubicaciones');
+    }
+    setUbicacionesLoading(false);
+  }, []);
+
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
     setFiltersDraft((prev) => ({ ...prev, [name]: value }));
@@ -118,6 +134,7 @@ const Usuarios = () => {
       canEdit: can(user, PERMISSIONS.USUARIOS_EDITAR),
       canInvite: can(user, PERMISSIONS.USUARIOS_EDITAR),
       canDelete: can(user, PERMISSIONS.USUARIOS_ELIMINAR),
+      canManageAssignments: can(user, PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR),
     }),
     [user]
   );
@@ -131,6 +148,7 @@ const Usuarios = () => {
     setCreateErrors({});
     setShowCreateModal(true);
     void loadColaboradores();
+    if (permissions.canManageAssignments) void loadUbicaciones();
   };
 
   const openEdit = (usuario) => {
@@ -142,6 +160,7 @@ const Usuarios = () => {
     setEditData(getEditUserFormData(usuario));
     setShowEditModal(true);
     void loadColaboradores(usuario.id);
+    if (permissions.canManageAssignments) void loadUbicaciones();
   };
 
   const handleCreateFormChange = (field, value) => {
@@ -162,7 +181,9 @@ const Usuarios = () => {
       return;
     }
 
-    const result = await usuariosService.createUsuario(formData);
+    const result = await usuariosService.createUsuario(
+      buildUsuarioPayload(formData, permissions.canManageAssignments)
+    );
     if (result.success) {
       setShowCreateModal(false);
       setInvitationData({
@@ -179,7 +200,10 @@ const Usuarios = () => {
   const handleEdit = withSaveSubmit(async (e) => {
     e.preventDefault();
     if (!selectedUsuario) return;
-    const result = await usuariosService.updateUsuario(selectedUsuario.id, editData);
+    const result = await usuariosService.updateUsuario(
+      selectedUsuario.id,
+      buildUsuarioPayload(editData, permissions.canManageAssignments)
+    );
     if (result.success) {
       showToast('Usuario actualizado', 'success');
       setShowEditModal(false);
@@ -316,6 +340,10 @@ const Usuarios = () => {
           colaboradoresLoading={colaboradoresLoading}
           formData={formData}
           isCreating={isCreating}
+          canManageAssignments={permissions.canManageAssignments}
+          ubicaciones={ubicaciones}
+          ubicacionesError={ubicacionesError}
+          ubicacionesLoading={ubicacionesLoading}
           onCancel={() => setShowCreateModal(false)}
           onChange={handleCreateFormChange}
           onSubmit={handleCreate}
@@ -340,6 +368,10 @@ const Usuarios = () => {
           colaboradoresError={colaboradoresError}
           colaboradoresLoading={colaboradoresLoading}
           isSaving={isSaving}
+          canManageAssignments={permissions.canManageAssignments}
+          ubicaciones={ubicaciones}
+          ubicacionesError={ubicacionesError}
+          ubicacionesLoading={ubicacionesLoading}
           onCancel={() => setShowEditModal(false)}
           onChange={handleEditFormChange}
           onSubmit={handleEdit}

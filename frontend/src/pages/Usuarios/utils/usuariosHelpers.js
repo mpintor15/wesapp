@@ -15,6 +15,7 @@ export const EMPTY_CREATE_USER_FORM = {
   usuario: '',
   tipo_usuario: 'secretario',
   colaborador_id: '',
+  ubicacion_ids: [],
 };
 
 export const EMPTY_EDIT_USER_FORM = {
@@ -23,6 +24,7 @@ export const EMPTY_EDIT_USER_FORM = {
   tipo_usuario: 'secretario',
   activo: true,
   colaborador_id: '',
+  ubicacion_ids: [],
 };
 
 export const getStatusLabel = (usuario) => {
@@ -78,7 +80,16 @@ export const getEditUserFormData = (usuario) => ({
   tipo_usuario: usuario.tipo_usuario,
   activo: usuario.activo,
   colaborador_id: usuario.colaborador_id ? String(usuario.colaborador_id) : '',
+  ubicacion_ids: (usuario.ubicacion_ids || []).map(String),
 });
+
+export const buildUsuarioPayload = (data, canManageAssignments) => {
+  const { ubicacion_ids: ubicacionIds, ...payload } = data;
+  if (canManageAssignments && data.tipo_usuario === 'guardia') {
+    payload.ubicacion_ids = ubicacionIds;
+  }
+  return payload;
+};
 
 export const getTipoUsuarioLabel = (tipoUsuario) =>
   TIPOS_USUARIO.find((tipo) => tipo.value === tipoUsuario)?.label ?? tipoUsuario;
