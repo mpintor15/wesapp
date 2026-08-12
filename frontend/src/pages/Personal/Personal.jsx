@@ -6,6 +6,8 @@ import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import PaginationControls from '../../components/PaginationControls';
+import TabularWorkspace from '../../components/TabularWorkspace';
 import { can } from '../../auth/authorization';
 import { PERMISSIONS } from '../../auth/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -228,7 +230,7 @@ const Personal = () => {
   });
 
   return (
-    <div className="page-container">
+    <div className="page-container tabular-page">
       <PersonalPageHeader
         canCreate={permissions.canCreate}
         canExport={permissions.canExport}
@@ -238,53 +240,63 @@ const Personal = () => {
         onRefresh={refreshColaboradores}
       />
 
-      <PersonalFilters
-        cargos={cargos}
-        filtersDraft={filtersDraft}
-        onApply={applyFilters}
-        onChange={handleFilterChange}
-        onClear={handleClearFilters}
-      />
-
-      {/* Table */}
-      {loading ? (
-        <div className="loading-spinner-wrap">
-          <span className="spinner" />
-          <span>Cargando colaboradores…</span>
-        </div>
-      ) : (
-        <>
-          <div className="table-result-count">
-            Mostrando {paginatedColaboradores.length} de {sortedColaboradores.length}{' '}
-            colaborador(es)
-          </div>
-
-          <PersonalTable
-            canDelete={permissions.canDelete}
-            canEdit={permissions.canEdit}
-            colaboradores={sortedColaboradores}
-            currentPage={currentPage}
-            onDelete={setConfirmTarget}
-            onEdit={openEdit}
-            onPageChange={setCurrentPage}
-            onSort={handleTableSort}
-            paginatedColaboradores={paginatedColaboradores}
-            tableSort={tableSort}
-            totalPages={totalPages}
+      <TabularWorkspace
+        controls={
+          <PersonalFilters
+            cargos={cargos}
+            filtersDraft={filtersDraft}
+            onApply={applyFilters}
+            onChange={handleFilterChange}
+            onClear={handleClearFilters}
           />
-        </>
-      )}
-
-      {/* Mobile cards */}
-      {!loading && sortedColaboradores.length > 0 && (
-        <PersonalMobileCards
-          canDelete={permissions.canDelete}
-          canEdit={permissions.canEdit}
-          colaboradores={paginatedColaboradores}
-          onDelete={setConfirmTarget}
-          onEdit={openEdit}
-        />
-      )}
+        }
+        summary={
+          !loading ? (
+            <div className="table-result-count">
+              Mostrando {paginatedColaboradores.length} de {sortedColaboradores.length}{' '}
+              colaborador(es)
+            </div>
+          ) : null
+        }
+        pagination={
+          !loading && totalPages > 1 ? (
+            <PaginationControls
+              page={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
+          ) : null
+        }
+      >
+        {loading ? (
+          <div className="loading-spinner-wrap">
+            <span className="spinner" />
+            <span>Cargando colaboradores…</span>
+          </div>
+        ) : (
+          <>
+            <PersonalTable
+              canDelete={permissions.canDelete}
+              canEdit={permissions.canEdit}
+              colaboradores={sortedColaboradores}
+              onDelete={setConfirmTarget}
+              onEdit={openEdit}
+              onSort={handleTableSort}
+              paginatedColaboradores={paginatedColaboradores}
+              tableSort={tableSort}
+            />
+            {sortedColaboradores.length > 0 && (
+              <PersonalMobileCards
+                canDelete={permissions.canDelete}
+                canEdit={permissions.canEdit}
+                colaboradores={paginatedColaboradores}
+                onDelete={setConfirmTarget}
+                onEdit={openEdit}
+              />
+            )}
+          </>
+        )}
+      </TabularWorkspace>
 
       {/* Create / Edit modal */}
       {showModal && (

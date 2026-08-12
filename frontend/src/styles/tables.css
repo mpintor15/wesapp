@@ -13,6 +13,93 @@
   isolation: isolate;
 }
 
+.tabular-workspace {
+  min-width: 0;
+}
+
+.tabular-workspace[hidden],
+[role='tabpanel'][hidden] {
+  display: none !important;
+}
+
+.tabular-workspace__controls,
+.tabular-workspace__summary,
+.tabular-workspace__pagination {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.tabular-workspace__data {
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .tabular-page {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .tabular-page > .page-header,
+  .tabular-page > .tabular-workspace,
+  .tabular-page > main {
+    min-width: 0;
+  }
+
+  .tabular-page > .page-header {
+    flex: 0 0 auto;
+  }
+
+  .tabular-workspace {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .tabular-workspace__data {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .tabular-workspace__data > .app-table-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .tabular-workspace > .app-table-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+
+  .tabular-page > main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .tabular-page > main > .configuracion-tabs {
+    flex: 0 0 auto;
+  }
+
+  .tabular-page > main > [role='tabpanel']:not([hidden]),
+  .tabular-page > main > .tabular-workspace:not([hidden]) {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+}
+
 .app-table-shell::-webkit-scrollbar {
   height: 10px;
 }

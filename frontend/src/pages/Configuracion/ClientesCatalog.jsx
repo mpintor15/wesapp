@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppModal from '../../components/AppModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import PaginationControls from '../../components/PaginationControls';
 import { useToast } from '../../context/ToastContext';
 import clientesService from '../../services/clientesService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
-import PaginationControls from '../Cuentas/components/PaginationControls';
 
 const EMPTY_CLIENTE_FORM = {
   nombre: '',
@@ -589,7 +589,7 @@ const ClientesCatalog = ({
 
   return (
     <>
-      <section className="tab-content configuracion-content" aria-busy={loading}>
+      <section className="tab-content configuracion-content tabular-workspace" aria-busy={loading}>
         <div className="ff-filter-row configuracion-clientes-filter-row">
           <div className="ff-filter-card configuracion-clientes-filter-card">
             <div className="ff-controls">

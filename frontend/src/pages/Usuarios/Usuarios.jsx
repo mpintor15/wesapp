@@ -6,6 +6,7 @@ import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import TabularWorkspace from '../../components/TabularWorkspace';
 import { can } from '../../auth/authorization';
 import { PERMISSIONS } from '../../auth/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -283,7 +284,7 @@ const Usuarios = () => {
   };
 
   return (
-    <div className="page-container">
+    <div className="page-container tabular-page">
       <UsuariosPageHeader
         canCreate={permissions.canCreate}
         onBack={() => navigate('/')}
@@ -291,49 +292,53 @@ const Usuarios = () => {
         onRefresh={refreshUsuarios}
       />
 
-      <UsuariosFilters
-        filtersDraft={filtersDraft}
-        onApply={applyFilters}
-        onChange={handleFilterChange}
-        onClear={clearFilters}
-      />
-
-      {/* Table */}
-      {loading ? (
-        <div className="loading-spinner-wrap">
-          <span className="spinner" />
-          <span>Cargando usuarios…</span>
-        </div>
-      ) : (
-        <>
-          <div className="table-result-count">Mostrando {sortedUsuarios.length} usuario(s)</div>
-
-          <UsuariosTable
-            canDelete={permissions.canDelete}
-            canEdit={permissions.canEdit}
-            canInvite={permissions.canInvite}
-            onDelete={setConfirmTarget}
-            onEdit={openEdit}
-            onInvite={handleReenviarInvitacion}
-            onSort={handleTableSort}
-            tableSort={tableSort}
-            usuarios={sortedUsuarios}
+      <TabularWorkspace
+        controls={
+          <UsuariosFilters
+            filtersDraft={filtersDraft}
+            onApply={applyFilters}
+            onChange={handleFilterChange}
+            onClear={clearFilters}
           />
-        </>
-      )}
-
-      {/* Mobile cards */}
-      {!loading && sortedUsuarios.length > 0 && (
-        <UsuariosMobileCards
-          canDelete={permissions.canDelete}
-          canEdit={permissions.canEdit}
-          canInvite={permissions.canInvite}
-          onDelete={setConfirmTarget}
-          onEdit={openEdit}
-          onInvite={handleReenviarInvitacion}
-          usuarios={sortedUsuarios}
-        />
-      )}
+        }
+        summary={
+          !loading ? (
+            <div className="table-result-count">Mostrando {sortedUsuarios.length} usuario(s)</div>
+          ) : null
+        }
+      >
+        {loading ? (
+          <div className="loading-spinner-wrap">
+            <span className="spinner" />
+            <span>Cargando usuarios…</span>
+          </div>
+        ) : (
+          <>
+            <UsuariosTable
+              canDelete={permissions.canDelete}
+              canEdit={permissions.canEdit}
+              canInvite={permissions.canInvite}
+              onDelete={setConfirmTarget}
+              onEdit={openEdit}
+              onInvite={handleReenviarInvitacion}
+              onSort={handleTableSort}
+              tableSort={tableSort}
+              usuarios={sortedUsuarios}
+            />
+            {sortedUsuarios.length > 0 && (
+              <UsuariosMobileCards
+                canDelete={permissions.canDelete}
+                canEdit={permissions.canEdit}
+                canInvite={permissions.canInvite}
+                onDelete={setConfirmTarget}
+                onEdit={openEdit}
+                onInvite={handleReenviarInvitacion}
+                usuarios={sortedUsuarios}
+              />
+            )}
+          </>
+        )}
+      </TabularWorkspace>
 
       {/* Create modal */}
       {showCreateModal && (

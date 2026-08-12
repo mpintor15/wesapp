@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import AppModal from '../../components/AppModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PageHeader from '../../components/PageHeader';
+import PaginationControls from '../../components/PaginationControls';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
-import PaginationControls from '../Cuentas/components/PaginationControls';
 import clientesService from '../../services/clientesService';
 import inventarioService from '../../services/inventarioService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
@@ -814,7 +814,7 @@ const Configuracion = () => {
   }, [isUbicacionesActive, loadClientesActivos, permissions.canViewUbicaciones]);
 
   return (
-    <div className="configuracion-container">
+    <div className="configuracion-container tabular-page">
       <PageHeader
         title="Clientes"
         onBack={() => navigate('/')}
@@ -894,7 +894,7 @@ const Configuracion = () => {
             {permissions.canViewUbicaciones && (
               <section
                 id="configuracion-panel-ubicaciones"
-                className="tab-content configuracion-content"
+                className="tab-content configuracion-content tabular-workspace"
                 role="tabpanel"
                 aria-labelledby="configuracion-tab-ubicaciones"
                 aria-busy={ubicacionesLoading}
@@ -1261,13 +1261,11 @@ const Configuracion = () => {
                           </table>
                         </div>
                         {ubicacionesMeta.totalPages > 1 && (
-                          <div className="configuracion-ubicaciones-pagination">
-                            <PaginationControls
-                              page={ubicacionesPage}
-                              totalPages={ubicacionesMeta.totalPages}
-                              onPageChange={handleUbicacionesPageChange}
-                            />
-                          </div>
+                          <PaginationControls
+                            page={ubicacionesPage}
+                            totalPages={ubicacionesMeta.totalPages}
+                            onPageChange={handleUbicacionesPageChange}
+                          />
                         )}
                         {ubicacionGroups.length > 0 && (
                           <ul className="records-mobile configuracion-ubicaciones-mobile-list">

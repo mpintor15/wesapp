@@ -11,14 +11,11 @@ const PersonalTable = ({
   canDelete,
   canEdit,
   colaboradores,
-  currentPage,
   onDelete,
   onEdit,
-  onPageChange,
   onSort,
   paginatedColaboradores,
   tableSort,
-  totalPages,
 }) => (
   <div className="table-responsive app-table-shell personal-table-shell">
     <table className="app-table personal-table">
@@ -112,29 +109,6 @@ const PersonalTable = ({
         )}
       </tbody>
     </table>
-    {totalPages > 1 && (
-      <div className="pagination personal-pagination">
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => onPageChange((page) => Math.max(1, page - 1))}
-          disabled={currentPage === 1}
-          type="button"
-        >
-          ‹ Anterior
-        </button>
-        <span className="pagination-info">
-          Página <span className="pagination-count">{currentPage}</span> de {totalPages}
-        </span>
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => onPageChange((page) => Math.min(totalPages, page + 1))}
-          disabled={currentPage === totalPages}
-          type="button"
-        >
-          Siguiente ›
-        </button>
-      </div>
-    )}
   </div>
 );
 

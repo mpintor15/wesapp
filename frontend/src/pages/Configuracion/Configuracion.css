@@ -657,14 +657,6 @@
   font-weight: 600;
 }
 
-.configuracion-ubicaciones-pagination {
-  margin-top: 12px;
-}
-
-.configuracion-ubicaciones-pagination .pagination {
-  padding-top: 2px;
-}
-
 td.configuracion-operational-cell {
   color: var(--color-text-secondary) !important;
   font-size: 0.86rem;
