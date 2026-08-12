@@ -35,7 +35,7 @@ CREATE TABLE usuarios (
     password_hash VARCHAR(255) NOT NULL,
     nombre VARCHAR(100),
     apellido VARCHAR(100),
-    tipo_usuario VARCHAR(20) NOT NULL CHECK (tipo_usuario IN ('gerente', 'secretario', 'supervisor', 'contador')),
+    tipo_usuario VARCHAR(20) NOT NULL CHECK (tipo_usuario IN ('gerente', 'secretario', 'supervisor', 'contador', 'guardia', 'monitorista')),
     primer_login BOOLEAN DEFAULT TRUE,
     activo BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

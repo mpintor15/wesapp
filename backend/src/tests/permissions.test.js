@@ -70,6 +70,33 @@ describe('permission matrix', () => {
     );
   });
 
+  test('presets de Bitácoras respetan las capacidades aprobadas', () => {
+    expect(hasPermission('guardia', PERMISSIONS.BITACORAS_REGISTRO_CREAR)).toBe(true);
+    expect(hasPermission('guardia', PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(true);
+    expect(hasPermission('guardia', PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS)).toBe(false);
+    expect(hasPermission('guardia', PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR)).toBe(false);
+    expect(hasPermission('guardia', PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR)).toBe(false);
+    expect(hasPermission('guardia', PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(false);
+
+    expect(hasPermission('monitorista', PERMISSIONS.BITACORAS_REGISTRO_CREAR)).toBe(false);
+    expect(hasPermission('monitorista', PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(true);
+    expect(hasPermission('monitorista', PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS)).toBe(true);
+    expect(hasPermission('monitorista', PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR)).toBe(true);
+    expect(hasPermission('monitorista', PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR)).toBe(
+      false
+    );
+
+    expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_REGISTRO_CREAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(false);
+
+    expect(hasPermission('secretario', PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
+    expect(hasPermission('contador', PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
+    expect(hasPermission('gerente', PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(true);
+  });
+
   test('solo gerente puede eliminar administrativamente inventario', () => {
     expect(hasPermission('gerente', PERMISSIONS.INVENTARIO_MOVIMIENTOS_ELIMINAR)).toBe(true);
     expect(hasPermission('gerente', PERMISSIONS.INVENTARIO_BAJAS_ELIMINAR)).toBe(true);

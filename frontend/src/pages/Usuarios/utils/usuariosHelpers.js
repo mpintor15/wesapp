@@ -3,6 +3,8 @@ export const TIPOS_USUARIO = [
   { value: 'secretario', label: 'Secretario' },
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'contador', label: 'Contador' },
+  { value: 'guardia', label: 'Guardia' },
+  { value: 'monitorista', label: 'Monitorista' },
 ];
 
 export const EMPTY_USUARIOS_FILTERS = { search: '', tipo_usuario: '', activo: '' };

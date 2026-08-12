@@ -820,4 +820,49 @@ describe('database migrations', () => {
       expect(columns.rowCount).toBe(0);
     });
   });
+
+  test('migration 020 preserves users and accepts all existing and new roles', async () => {
+    await withTempDatabase('wesapp_migration_roles_020', async (pool) => {
+      await pool.query(`
+        CREATE TABLE usuarios (
+          id SERIAL PRIMARY KEY,
+          usuario TEXT NOT NULL,
+          tipo_usuario VARCHAR(20) NOT NULL
+            CONSTRAINT usuarios_tipo_usuario_check
+            CHECK (tipo_usuario IN ('gerente', 'secretario', 'supervisor', 'contador'))
+        );
+        CREATE TABLE schema_version (
+          version INTEGER PRIMARY KEY,
+          description TEXT NOT NULL,
+          applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO usuarios (usuario, tipo_usuario) VALUES
+          ('g', 'gerente'),
+          ('s', 'secretario'),
+          ('v', 'supervisor'),
+          ('c', 'contador');
+      `);
+
+      await applyMigrationInTransaction(pool, 20);
+
+      const existing = await pool.query(
+        'SELECT usuario, tipo_usuario FROM usuarios ORDER BY usuario'
+      );
+      expect(existing.rows).toHaveLength(4);
+      await expect(
+        pool.query(
+          `INSERT INTO usuarios (usuario, tipo_usuario)
+           VALUES ('guardia', 'guardia'), ('monitorista', 'monitorista')`
+        )
+      ).resolves.toBeDefined();
+      await expect(
+        pool.query(`
+          INSERT INTO usuarios (usuario, tipo_usuario)
+          VALUES ('otro', 'otro')
+        `)
+      ).rejects.toMatchObject({ code: '23514' });
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 20');
+      expect(version.rowCount).toBe(1);
+    });
+  });
 });

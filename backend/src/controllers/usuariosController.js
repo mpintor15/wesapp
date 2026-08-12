@@ -6,7 +6,14 @@ const { clearActiveCache } = require('../middleware/permissions');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { assertUsuarioWithoutActivity } = require('../services/usuariosDeletionService');
 
-const ALLOWED_TYPES = new Set(['gerente', 'secretario', 'supervisor', 'contador']);
+const ALLOWED_TYPES = new Set([
+  'gerente',
+  'secretario',
+  'supervisor',
+  'contador',
+  'guardia',
+  'monitorista',
+]);
 const ROLE_GERENTE = 'gerente';
 
 const generateTempPassword = () => {

@@ -85,6 +85,8 @@ const Dashboard = () => {
       secretario: 'Secretario',
       supervisor: 'Supervisor',
       contador: 'Contador',
+      guardia: 'Guardia',
+      monitorista: 'Monitorista',
     }[user?.tipo_usuario] ??
     user?.tipo_usuario ??
     '';

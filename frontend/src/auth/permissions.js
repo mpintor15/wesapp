@@ -55,6 +55,13 @@ export const PERMISSIONS = {
   USUARIOS_CREAR: 'usuarios.crear',
   USUARIOS_EDITAR: 'usuarios.editar',
   USUARIOS_ELIMINAR: 'usuarios.eliminar',
+
+  BITACORAS_REGISTRO_CREAR: 'bitacoras.registro.crear',
+  BITACORAS_HISTORIAL_VER: 'bitacoras.historial.ver',
+  BITACORAS_PUNTOS_VER_TODOS: 'bitacoras.puntos.ver_todos',
+  BITACORAS_FORMULARIOS_ADMINISTRAR: 'bitacoras.formularios.administrar',
+  BITACORAS_ASIGNACIONES_ADMINISTRAR: 'bitacoras.asignaciones.administrar',
+  BITACORAS_URBANIZACION_ADMINISTRAR: 'bitacoras.urbanizacion.administrar',
 };
 
 export const KNOWN_PERMISSIONS = new Set(Object.values(PERMISSIONS));

@@ -59,6 +59,21 @@ describe('authorization', () => {
     expect(can(user('supervisor'), PERMISSIONS.INVENTARIO_MOVIMIENTOS_ELIMINAR)).toBe(false);
   });
 
+  test('presets frontend de Bitácoras coinciden con las capacidades aprobadas', () => {
+    expect(can(user('guardia'), PERMISSIONS.BITACORAS_REGISTRO_CREAR)).toBe(true);
+    expect(can(user('guardia'), PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(true);
+    expect(can(user('guardia'), PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR)).toBe(false);
+    expect(can(user('monitorista'), PERMISSIONS.BITACORAS_REGISTRO_CREAR)).toBe(false);
+    expect(can(user('monitorista'), PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS)).toBe(true);
+    expect(can(user('monitorista'), PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR)).toBe(true);
+    expect(can(user('supervisor'), PERMISSIONS.BITACORAS_REGISTRO_CREAR)).toBe(true);
+    expect(can(user('supervisor'), PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR)).toBe(true);
+    expect(can(user('supervisor'), PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(false);
+    expect(can(user('secretario'), PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
+    expect(can(user('contador'), PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
+    expect(can(user('gerente'), PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(true);
+  });
+
   test('canAny exige al menos un permiso concedido', () => {
     expect(canAny(user('secretario'), [])).toBe(false);
     expect(

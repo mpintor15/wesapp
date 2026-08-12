@@ -92,7 +92,7 @@ const changePasswordSchema = z
 // USUARIOS SCHEMAS
 // ============================================
 
-const ALLOWED_ROLES = ['gerente', 'secretario', 'supervisor', 'contador'];
+const ALLOWED_ROLES = ['gerente', 'secretario', 'supervisor', 'contador', 'guardia', 'monitorista'];
 
 const usuarioCreateSchema = z.object({
   usuario: z

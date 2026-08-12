@@ -46,6 +46,39 @@ beforeEach(() => {
 });
 
 describe('usuariosController.createUsuario', () => {
+  test.each(['guardia', 'monitorista'])('acepta el nuevo rol %s', async (tipoUsuario) => {
+    db.query.mockResolvedValue({
+      rows: [
+        {
+          id: 2,
+          usuario: `nuevo_${tipoUsuario}`,
+          nombre: 'Nuevo',
+          apellido: 'Usuario',
+          tipo_usuario: tipoUsuario,
+          primer_login: true,
+          activo: true,
+        },
+      ],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await createUsuario(
+      mockReq({
+        body: {
+          usuario: `nuevo_${tipoUsuario}`,
+          nombre: 'Nuevo',
+          apellido: 'Usuario',
+          tipo_usuario: tipoUsuario,
+        },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(res.json.mock.calls[0][0].data.tipo_usuario).toBe(tipoUsuario);
+  });
+
   test('crea usuario válido con contraseña temporal', async () => {
     db.query.mockResolvedValue({
       rows: [
