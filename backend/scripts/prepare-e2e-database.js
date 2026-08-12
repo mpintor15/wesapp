@@ -118,6 +118,40 @@ const seedE2eFixtures = async (pool) => {
     ['Bodega E2E Norte', cliente.rows[0].id]
   );
 
+  await pool.query(
+    `
+      INSERT INTO clientes (nombre, identificacion, tipo_identificacion, telefono, correo, direccion, ciudad, estado)
+      VALUES ($1, $2, 'ruc', '0988888888', 'sin-ubicaciones@example.local', 'Dirección E2E', 'Quito', 'activo')
+      RETURNING id
+    `,
+    ['Cliente E2E Sin Ubicaciones', 'E2E-CLIENTE-002']
+  );
+
+  const clienteMultiple = await pool.query(
+    `
+      INSERT INTO clientes (nombre, identificacion, tipo_identificacion, telefono, correo, direccion, ciudad, estado)
+      VALUES ($1, $2, 'ruc', '0977777777', 'multiple@example.local', 'Dirección E2E', 'Quito', 'activo')
+      RETURNING id
+    `,
+    ['Cliente E2E Multiple', 'E2E-CLIENTE-003']
+  );
+
+  await pool.query(
+    `
+      INSERT INTO ubicaciones (nombre, cliente_id)
+      VALUES ($1, $2), ($3, $2)
+    `,
+    ['Bodega E2E Sur', clienteMultiple.rows[0].id, 'Archivo E2E Libre']
+  );
+
+  await pool.query(
+    `
+      INSERT INTO ubicaciones (nombre, cliente_id)
+      VALUES ($1, NULL)
+    `,
+    ['Histórica E2E Sin Cliente']
+  );
+
   const articulo = await pool.query(
     `
       INSERT INTO articulos (

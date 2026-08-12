@@ -6,6 +6,7 @@
  *
  *  UBICACIONES
  *  - getUbicaciones()                   : GET /inventario/ubicaciones
+ *  - getUbicacionesAgrupadas()          : GET /inventario/ubicaciones/agrupadas
  *  - createUbicacion(data)              : POST /inventario/ubicaciones
  *  - updateUbicacion(id, data)          : PUT  /inventario/ubicaciones/:id
  *  - deleteUbicacion(id)                : DEL  /inventario/ubicaciones/:id
@@ -105,6 +106,27 @@ const inventarioService = {
       };
     } catch (error) {
       return failure(error, 'Error al obtener ubicaciones');
+    }
+  },
+
+  getUbicacionesAgrupadas: async (params = {}) => {
+    try {
+      const response = await api.get('/inventario/ubicaciones/agrupadas', { params });
+      return {
+        success: response.data.success,
+        data: response.data.data || [],
+        meta: response.data.meta || {
+          page: 1,
+          pageSize: 25,
+          totalGroups: 0,
+          filteredGroups: 0,
+          totalLocations: 0,
+          filteredLocations: 0,
+          totalPages: 0,
+        },
+      };
+    } catch (error) {
+      return failure(error, 'Error al obtener ubicaciones agrupadas');
     }
   },
 

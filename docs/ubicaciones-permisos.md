@@ -11,6 +11,28 @@ Configuracion > Ubicaciones usa exclusivamente permisos especificos:
 
 Los permisos de Articulos o Movimientos no conceden administracion de Ubicaciones.
 
+## Consulta agrupada
+
+`GET /api/inventario/ubicaciones/agrupadas` devuelve grupos paginados de clientes y ubicaciones para
+presentaciones administrativas. No reemplaza a `GET /api/inventario/ubicaciones`, que permanece como
+catalogo plano compartido para selectores, filtros y operaciones de Inventario.
+
+La consulta agrupada usa la misma politica de lectura que el catalogo plano. Requiere autenticacion y
+al menos uno de estos permisos:
+
+- `inventario.ubicaciones.ver`
+- `inventario.articulos.ver`
+- `inventario.articulos.crear`
+- `inventario.movimientos.ver`
+- `inventario.movimientos.crear`
+
+Estos permisos permiten consultar el endpoint, pero no conceden por si solos capacidad para crear,
+editar o eliminar ubicaciones. Las operaciones de escritura mantienen sus permisos especificos:
+
+- `inventario.ubicaciones.crear`
+- `inventario.ubicaciones.editar`
+- `inventario.ubicaciones.eliminar`
+
 ## Catalogo operativo
 
 `GET /api/inventario/ubicaciones` se mantiene como catalogo compartido para selectores y filtros

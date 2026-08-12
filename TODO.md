@@ -3,12 +3,12 @@
 ## Estado actual
 
 - Rama de integracion: `feat/gestion-ubicaciones`.
-- PR visual actual: PR #41 - Clientes / Ubicaciones fase 1, fusionado hacia `feat/gestion-ubicaciones`.
-- Ultimo commit del PR visual: merge commit `aa91f8549e129a001be2396d51252bd3c8607881`.
-- Fecha de actualizacion: 2026-08-05.
-- Estado general del proyecto: Clientes / Ubicaciones fase 1 completada, validada automaticamente, aprobada manualmente por Martin y fusionada. Integracion local actualizada y validacion post-merge aprobada.
-- Rama actual: `docs/update-master-plan-clientes-ubicaciones-phase-1`.
-- Siguiente trabajo: preparar Clientes / Ubicaciones fase 2 desde `feat/clientes-ubicaciones-grouped`.
+- PR visual actual: sin PR abierto; Clientes / Ubicaciones fase 2 aprobado localmente.
+- Ultimo commit de base: `786cb7f9bf876ce911b36859bddab9d2a97e60a2`.
+- Fecha de actualizacion: 2026-08-11.
+- Estado general del proyecto: Clientes / Ubicaciones fase 2 `APPROVED`; implementacion, validacion tecnica y QA de aceptacion completados. Pendiente revision final del diff antes de `READY_FOR_COMMIT`.
+- Rama actual: `feat/clientes-ubicaciones-grouped`.
+- Siguiente trabajo: revision final del diff completo antes de evaluar la transicion a `READY_FOR_COMMIT`.
 
 ## Leyenda de estados
 
@@ -29,6 +29,8 @@
 - [x] Clientes / Directorio: el acceso a ubicaciones de un cliente debe realizarse desde la celda de Ubicaciones; no debe duplicarse como boton dentro de la columna exclusiva de acciones.
 - [x] Tabs de modulos: despues de las tabs deben aparecer directamente los filtros cuando no exista contenido funcional intermedio necesario.
 - [x] Textos de ayuda: deben integrarse preferentemente en el placeholder o etiqueta del control, evitando bloques redundantes.
+- [x] Filtros con unica busqueda textual: no muestran botones Aplicar ni Limpiar; la busqueda se aplica directamente; vaciar el campo restaura automaticamente el listado; cambiar el texto reinicia la pagina a 1.
+- [A] Cambiar la regla de busqueda textual directa requiere autorizacion.
 
 ## Roadmap principal
 
@@ -236,14 +238,14 @@ Alcance inicial:
 - [x] Quitar indicadores.
 - [x] Quitar warning.
 - [x] Cliente primero.
-- [ ] Ubicaciones expandibles por cliente.
-- [A] Agrupacion expandible de ubicaciones.
-- [ ] Estado "En uso" mediante badge y tooltip.
+- [x] Ubicaciones expandibles por cliente.
+- [x] Agrupacion de ubicaciones por cliente mediante endpoint nuevo.
+- [x] Estado agregado por cliente y estado individual por ubicacion.
 - [ ] Quitar textos innecesarios.
 - [x] Quitar titulo de Acciones.
 - [ ] Quitar containers y negritas.
 - [ ] Selector buscable.
-- [ ] Agrupar nuevas ubicaciones en el cliente existente.
+- [x] Agrupar nuevas ubicaciones en el cliente existente.
 
 #### Clientes / Ubicaciones decisiones aprobadas
 
@@ -275,18 +277,81 @@ Alcance inicial:
 - [V] Ausencia de textos recortados.
 - [V] Densidad visual mejorada.
 
-#### Clientes / Ubicaciones fase 2 pendiente
+#### Clientes / Ubicaciones fase 2 - arquitectura aprobada
 
-- [ ] Agrupacion de multiples ubicaciones por cliente.
-- [ ] Multiples ubicaciones por fila.
-- [ ] Acciones por cliente o ubicacion.
-- [ ] Mejor presentacion de "En uso".
-- [ ] Eliminacion de mensajes innecesarios de acciones.
+- [x] Endpoint agrupado nuevo: `GET /api/inventario/ubicaciones/agrupadas`.
+- [x] Endpoint plano `GET /api/inventario/ubicaciones` permanece intacto.
+- [x] Permiso basado en lectura de ubicaciones, sin exigir obligatoriamente `clientes.ver`.
+- [x] Paginacion por cliente/grupo.
+- [x] Contador de tab basado en total de ubicaciones.
+- [x] Busqueda con coincidencias parciales por cliente o ubicacion.
+- [x] Clientes sin ubicacion incluidos.
+- [x] Grupo historico `Sin cliente - dato historico` incluido.
+- [x] Estado agregado por cliente y estado individual por ubicacion.
+- [x] `puede_eliminar` calculado en backend con dependencias reales.
+- [x] Conteos de articulos corregidos con `COUNT(DISTINCT a.id)` para evitar duplicados por relaciones uno-a-muchos.
+
+#### Clientes / Ubicaciones fase 2 implementado localmente
+
+- [x] Una fila por cliente en desktop.
+- [x] Multiples ubicaciones agrupadas dentro de la fila del cliente.
+- [x] Cliente sin ubicaciones visible con accion Crear ubicacion cuando aplica.
+- [x] Grupo historico sin cliente visible.
+- [x] Crear ubicacion como accion del cliente.
+- [x] Editar y eliminar como acciones de cada ubicacion.
+- [x] Eliminar oculto cuando `puede_eliminar=false`.
+- [x] Tabla desktop agrupada.
+- [x] Tarjetas tablet y movil agrupadas.
+- [x] Semilla E2E deterministica para cero, una, multiples e historica.
+- [x] Presentacion ordenada para clientes con multiples ubicaciones.
+- [x] Contador visual de la tab Ubicaciones mejorado sin cambiar su semantica.
+- [x] Busqueda textual directa en Ubicaciones.
+- [x] Botones Aplicar y Limpiar eliminados cuando el unico filtro es busqueda textual.
+- [x] Cambio de busqueda reinicia la pagina a 1.
+- [x] Vaciar la busqueda restaura automaticamente el listado.
+- [x] Crear ubicacion desde un cliente preselecciona y bloquea el cliente.
+- [x] Limite inicial de cinco ubicaciones por grupo.
+- [x] Expansion y contraccion con "Ver N ubicaciones mas" y "Ver menos ubicaciones".
+- [x] Crear ubicacion como accion unica, accesible y ubicada en la columna de acciones.
+- [x] Reticula real compartida por Ubicaciones, Estado y Acciones en desktop.
+- [x] Estados centrados horizontalmente y alineados verticalmente de forma uniforme.
+- [x] Contador de Ubicaciones disponible desde el ingreso mediante la consulta agrupada paginada.
+- [x] Header de Clientes alineado con el patron visual existente del Dashboard, sin abstraccion global nueva.
+- [x] Paginador de Ubicaciones reemplazado por `PaginationControls`, con `pageSize=25` y sin selector visible.
+
+#### Clientes / Ubicaciones fase 2 validado automaticamente
+
+- [x] Backend lint.
+- [x] Backend tests focalizados: 116/116 en `ubicacionesRoutes` y `routeProtection`.
+- [x] Regresion de conteo: un articulo con multiples relaciones dependientes se contabiliza una sola vez.
+- [x] Frontend lint.
+- [x] Frontend tests focalizados finales: 83/83 en `Configuracion`.
+- [x] Build de produccion y verificacion del bundle.
+- [x] `git diff --check` sin errores.
+- [x] E2E criticos aislados: 9/9.
+- [x] QA visual propio en desktop, tablet y movil con perfiles de solo lectura, creacion y administracion.
+- [x] Contrato agrupado verificado con parametros invalidos.
+- [x] Cobertura de busqueda por cliente, busqueda por ubicacion y busqueda sin resultados.
+- [x] Cobertura de creacion contextual con cliente bloqueado.
+
+#### Clientes / Ubicaciones fase 2 validada manualmente por Martin
+
+- [V] Revision visual y UX aprobada por Martin.
+- [V] La agrupacion se entiende rapidamente en desktop.
+- [V] Las tarjetas son legibles en tablet y movil.
+- [V] El contador basado en ubicaciones es claro.
+- [V] Las ubicaciones multiples se distinguen claramente.
+- [V] La creacion contextual es clara para el usuario.
+
+#### Clientes / Ubicaciones fase 2 pendiente posterior
+
 - [ ] Selector de cliente buscable al crear ubicacion.
 - [ ] Reportes de Ubicaciones.
-- [ ] Auditoria de contratos y consumidores.
-- [ ] Ajustes derivados de la agrupacion.
-- [ ] Posibles cambios backend autorizados.
+- [ ] Optimizaciones de rendimiento adicionales si el volumen real lo exige.
+
+#### Clientes / Ubicaciones fase 2 siguiente gate
+
+- [ ] Revision final del diff completo antes de `READY_FOR_COMMIT`.
 
 ### Inventario / Movimientos
 

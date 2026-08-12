@@ -2,11 +2,14 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const { parseStrictPositiveInteger } = require('../utils/inputValidation');
+const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const { sanitizeError } = require('../utils/logSanitizer');
 const { assertClienteActivoForOperation } = require('../services/clientesStateService');
+const { findGroupedLocations, toBoolean } = require('../repositories/ubicacionesGroupedRepository');
 
 const normalizeName = (value) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+const GROUPED_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 const parseId = (value) => {
   const result = parseStrictPositiveInteger(value, 'La ubicación es inválida');
@@ -178,6 +181,55 @@ const getUbicaciones = async (req, res) => {
     return res.json({ success: true, data: result.rows });
   } catch (error) {
     return sendError(res, error, 'Error al obtener ubicaciones');
+  }
+};
+
+const getUbicacionesAgrupadas = async (req, res) => {
+  try {
+    const normalizedSearch = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    if (normalizedSearch.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'El filtro de búsqueda no puede exceder 100 caracteres',
+      });
+    }
+
+    const pagination = normalizePaginationQuery(req.query);
+    if (!GROUPED_PAGE_SIZE_OPTIONS.includes(pagination.pageSize)) {
+      return res.status(400).json({
+        success: false,
+        message: 'pageSize debe ser uno de 10, 25, 50 o 100',
+      });
+    }
+    const includeEmpty = toBoolean(req.query.include_empty, true);
+    const includeHistorical = toBoolean(req.query.include_historical, true);
+    const { groups, totals } = await findGroupedLocations({
+      search: normalizedSearch,
+      includeEmpty,
+      includeHistorical,
+      pagination,
+    });
+    const basePagination = buildPaginationMetadata({
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalItems: totals.filteredGroups,
+    });
+
+    return res.json({
+      success: true,
+      data: groups,
+      meta: {
+        page: basePagination.page,
+        pageSize: basePagination.pageSize,
+        totalGroups: totals.totalGroups,
+        filteredGroups: totals.filteredGroups,
+        totalLocations: totals.totalLocations,
+        filteredLocations: totals.filteredLocations,
+        totalPages: basePagination.totalPages,
+      },
+    });
+  } catch (error) {
+    return sendError(res, error, 'Error al obtener ubicaciones agrupadas');
   }
 };
 
@@ -405,6 +457,7 @@ const deleteUbicacion = async (req, res) => {
 
 module.exports = {
   getUbicaciones,
+  getUbicacionesAgrupadas,
   createUbicacion,
   updateUbicacion,
   deleteUbicacion,

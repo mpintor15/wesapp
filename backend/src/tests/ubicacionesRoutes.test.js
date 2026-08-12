@@ -25,6 +25,10 @@ const db = require('../config/database');
 const app = require('../app');
 const config = require('../config/config');
 const audit = require('../utils/audit');
+const {
+  findGroupedLocations,
+  findGroupedLocationsSource,
+} = require('../repositories/ubicacionesGroupedRepository');
 
 const token = jwt.sign({ id: 50, usuario: 'gerente', tipo_usuario: 'gerente' }, config.jwt.secret, {
   expiresIn: '1h',
@@ -142,6 +146,467 @@ describe('ubicaciones routes', () => {
         },
       ],
     });
+  });
+
+  test('lista ubicaciones agrupadas sin cambiar el contrato plano', async () => {
+    db.query.mockImplementation(async (sql) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [currentUser], rowCount: 1 };
+      }
+
+      if (query.includes('SELECT COUNT(*)::int AS total FROM ubicaciones')) {
+        return { rows: [{ total: 4 }], rowCount: 1 };
+      }
+
+      if (query.includes('FROM clientes c') && !query.includes('LEFT JOIN clientes c')) {
+        expect(query).toMatch(/CASE WHEN c\.estado = 'activo' THEN 0 ELSE 1 END/);
+        expect(query).toContain('c.nombre ASC');
+        return {
+          rows: [
+            { id: 10, nombre: 'ACME', estado: 'activo', cliente_search_match: false },
+            { id: 11, nombre: 'Beta', estado: 'activo', cliente_search_match: false },
+          ],
+          rowCount: 2,
+        };
+      }
+
+      if (query.includes('FROM ubicaciones u')) {
+        expect(query).toContain('LEFT JOIN detalle_movimientos dmo');
+        expect(query).toContain('LEFT JOIN inventario_stock_efectos ise');
+        expect(query).toContain(
+          'COUNT(DISTINCT a.id) FILTER (WHERE a.activo = TRUE)::int AS articulos_activos'
+        );
+        expect(query).toContain('COUNT(DISTINCT a.id)::int AS articulos_totales');
+        expect(query).toContain('ORDER BY c.nombre ASC NULLS LAST, u.nombre ASC, u.id ASC');
+        return {
+          rows: [
+            {
+              id: 1,
+              nombre: 'Bodega',
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+              articulos_activos: 2,
+              articulos_totales: 3,
+              puede_eliminar: false,
+              ubicacion_search_match: false,
+              cliente_search_match: false,
+            },
+            {
+              id: 2,
+              nombre: 'Archivo',
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+              articulos_activos: 0,
+              articulos_totales: 0,
+              puede_eliminar: true,
+              ubicacion_search_match: false,
+              cliente_search_match: false,
+            },
+            {
+              id: 3,
+              nombre: 'Histórica',
+              cliente_id: null,
+              cliente_nombre: null,
+              cliente_estado: null,
+              articulos_activos: 0,
+              articulos_totales: 0,
+              puede_eliminar: true,
+              ubicacion_search_match: false,
+              cliente_search_match: false,
+            },
+          ],
+          rowCount: 3,
+        };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/inventario/ubicaciones/agrupadas');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      success: true,
+      data: [
+        {
+          tipo: 'cliente',
+          cliente_id: 10,
+          cliente_nombre: 'ACME',
+          ubicaciones: [
+            { id: 1, nombre: 'Bodega', estado_uso: 'en_uso', puede_eliminar: false },
+            { id: 2, nombre: 'Archivo', estado_uso: 'sin_articulos', puede_eliminar: true },
+          ],
+          resumen: { total: 2, en_uso: 1, disponibles: 1 },
+        },
+        {
+          tipo: 'cliente',
+          cliente_id: 11,
+          cliente_nombre: 'Beta',
+          ubicaciones: [],
+          resumen: { total: 0, en_uso: 0, disponibles: 0 },
+        },
+        {
+          tipo: 'sin_cliente',
+          cliente_id: null,
+          cliente_nombre: 'Sin cliente — dato histórico',
+          ubicaciones: [{ id: 3, nombre: 'Histórica', puede_eliminar: true }],
+        },
+      ],
+      meta: {
+        page: 1,
+        pageSize: 25,
+        totalGroups: 3,
+        filteredGroups: 3,
+        totalLocations: 4,
+        filteredLocations: 3,
+        totalPages: 1,
+      },
+    });
+  });
+
+  test('ubicaciones agrupadas soporta búsqueda, paginación y flags include', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [currentUser], rowCount: 1 };
+      }
+
+      if (query.includes('SELECT COUNT(*)::int AS total FROM ubicaciones')) {
+        return { rows: [{ total: 2 }], rowCount: 1 };
+      }
+
+      if (query.includes('FROM clientes c') && !query.includes('LEFT JOIN clientes c')) {
+        expect(params).toEqual(['%Bodega%']);
+        return {
+          rows: [
+            { id: 10, nombre: 'ACME', estado: 'activo', cliente_search_match: false },
+            { id: 11, nombre: 'Beta', estado: 'activo', cliente_search_match: false },
+          ],
+          rowCount: 2,
+        };
+      }
+
+      if (query.includes('FROM ubicaciones u')) {
+        expect(params).toEqual(['%Bodega%']);
+        return {
+          rows: [
+            {
+              id: 1,
+              nombre: 'Bodega',
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+              articulos_activos: 0,
+              articulos_totales: 0,
+              puede_eliminar: true,
+              ubicacion_search_match: true,
+              cliente_search_match: false,
+            },
+            {
+              id: 2,
+              nombre: 'Histórica',
+              cliente_id: null,
+              cliente_nombre: null,
+              cliente_estado: null,
+              articulos_activos: 0,
+              articulos_totales: 0,
+              puede_eliminar: true,
+              ubicacion_search_match: true,
+              cliente_search_match: false,
+            },
+          ],
+          rowCount: 2,
+        };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth(
+      'get',
+      '/api/inventario/ubicaciones/agrupadas?search=Bodega&page=1&pageSize=10&include_empty=false&include_historical=false'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0]).toMatchObject({
+      cliente_id: 10,
+      ubicaciones: [{ id: 1, nombre: 'Bodega' }],
+    });
+    expect(res.body.meta).toMatchObject({
+      page: 1,
+      pageSize: 10,
+      filteredGroups: 1,
+      filteredLocations: 1,
+      totalLocations: 2,
+      totalPages: 1,
+    });
+  });
+
+  test('ubicaciones agrupadas muestra todas las ubicaciones cuando la búsqueda coincide con el cliente', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [currentUser], rowCount: 1 };
+      }
+
+      if (query.includes('SELECT COUNT(*)::int AS total FROM ubicaciones')) {
+        return { rows: [{ total: 2 }], rowCount: 1 };
+      }
+
+      if (query.includes('FROM clientes c') && !query.includes('LEFT JOIN clientes c')) {
+        expect(params).toEqual(['%ACME%']);
+        return {
+          rows: [{ id: 10, nombre: 'ACME', estado: 'activo', cliente_search_match: true }],
+          rowCount: 1,
+        };
+      }
+
+      if (query.includes('FROM ubicaciones u')) {
+        expect(params).toEqual(['%ACME%']);
+        return {
+          rows: [
+            {
+              id: 1,
+              nombre: 'Bodega',
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+              articulos_activos: 0,
+              articulos_totales: 0,
+              puede_eliminar: true,
+              ubicacion_search_match: false,
+              cliente_search_match: true,
+            },
+            {
+              id: 2,
+              nombre: 'Archivo',
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+              articulos_activos: 0,
+              articulos_totales: 0,
+              puede_eliminar: true,
+              ubicacion_search_match: false,
+              cliente_search_match: true,
+            },
+          ],
+          rowCount: 2,
+        };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/inventario/ubicaciones/agrupadas?search=ACME');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.data[0].ubicaciones.map((ubicacion) => ubicacion.nombre)).toEqual([
+      'Bodega',
+      'Archivo',
+    ]);
+    expect(res.body.meta).toMatchObject({
+      totalGroups: 1,
+      filteredGroups: 1,
+      filteredLocations: 2,
+    });
+  });
+
+  test('ubicaciones agrupadas devuelve metadata vacía para búsqueda sin resultados', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [currentUser], rowCount: 1 };
+      }
+
+      if (query.includes('SELECT COUNT(*)::int AS total FROM ubicaciones')) {
+        return { rows: [{ total: 1 }], rowCount: 1 };
+      }
+
+      if (query.includes('FROM clientes c') && !query.includes('LEFT JOIN clientes c')) {
+        expect(params).toEqual(['%zzzz%']);
+        return {
+          rows: [{ id: 10, nombre: 'ACME', estado: 'activo', cliente_search_match: false }],
+          rowCount: 1,
+        };
+      }
+
+      if (query.includes('FROM ubicaciones u')) {
+        expect(params).toEqual(['%zzzz%']);
+        return {
+          rows: [
+            {
+              id: 1,
+              nombre: 'Bodega',
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+              articulos_activos: 0,
+              articulos_totales: 0,
+              puede_eliminar: true,
+              ubicacion_search_match: false,
+              cliente_search_match: false,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/inventario/ubicaciones/agrupadas?search=zzzz');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+    expect(res.body.meta).toMatchObject({
+      page: 1,
+      pageSize: 25,
+      totalGroups: 1,
+      filteredGroups: 0,
+      totalLocations: 1,
+      filteredLocations: 0,
+      totalPages: 0,
+    });
+  });
+
+  test.each([
+    [
+      'search demasiado largo',
+      `search=${'x'.repeat(101)}`,
+      'El filtro de búsqueda no puede exceder 100 caracteres',
+    ],
+    ['page cero', 'page=0', 'page debe ser mayor o igual a 1'],
+    ['page no entero', 'page=abc', 'page debe ser un entero'],
+    ['pageSize cero', 'pageSize=0', 'pageSize debe estar entre 10 y 100'],
+    ['pageSize sobre máximo', 'pageSize=101', 'pageSize debe estar entre 10 y 100'],
+    ['pageSize no entero', 'pageSize=abc', 'pageSize debe ser un entero'],
+    ['pageSize fuera de opciones', 'pageSize=11', 'pageSize debe ser uno de 10, 25, 50 o 100'],
+    ['include_empty inválido', 'include_empty=maybe', 'El parámetro booleano es inválido'],
+    [
+      'include_historical inválido',
+      'include_historical=maybe',
+      'El parámetro booleano es inválido',
+    ],
+  ])('rechaza parámetros inválidos de ubicaciones agrupadas: %s', async (_case, query, message) => {
+    const res = await requestWithAuth('get', `/api/inventario/ubicaciones/agrupadas?${query}`);
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      success: false,
+      message,
+    });
+  });
+
+  test('ubicaciones agrupadas usa executor inyectable y consultas parametrizadas', async () => {
+    const executor = {
+      query: jest.fn(async (sql, params = []) => {
+        const query = String(sql);
+
+        if (query.includes('SELECT COUNT(*)::int AS total FROM ubicaciones')) {
+          expect(params).toEqual([]);
+          return { rows: [{ total: 1 }], rowCount: 1 };
+        }
+
+        expect(params).toEqual(['%Bodega%']);
+        if (query.includes('FROM clientes c') && !query.includes('LEFT JOIN clientes c')) {
+          return {
+            rows: [{ id: 10, nombre: 'ACME', estado: 'activo', cliente_search_match: false }],
+            rowCount: 1,
+          };
+        }
+
+        return {
+          rows: [
+            {
+              id: 1,
+              nombre: 'Bodega',
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+              articulos_activos: 0,
+              articulos_totales: 0,
+              puede_eliminar: true,
+              ubicacion_search_match: true,
+              cliente_search_match: false,
+            },
+          ],
+          rowCount: 1,
+        };
+      }),
+    };
+
+    const result = await findGroupedLocations(
+      {
+        search: 'Bodega',
+        includeEmpty: true,
+        includeHistorical: true,
+        pagination: { page: 1, pageSize: 25, offset: 0 },
+      },
+      executor
+    );
+
+    expect(executor.query).toHaveBeenCalledTimes(3);
+    expect(result.groups[0].ubicaciones).toEqual([
+      expect.objectContaining({ nombre: 'Bodega', puede_eliminar: true }),
+    ]);
+  });
+
+  test('cuenta una sola vez cada artículo aunque existan múltiples relaciones dependientes', async () => {
+    const joinedArticleIds = [7, 7, 7, 7];
+    const executor = {
+      query: jest.fn(async (sql) => {
+        const query = String(sql);
+
+        if (query.includes('FROM clientes c') && !query.includes('LEFT JOIN clientes c')) {
+          return { rows: [], rowCount: 0 };
+        }
+
+        expect(query).toContain('LEFT JOIN detalle_movimientos dmo');
+        expect(query).toContain('LEFT JOIN detalle_movimientos dmd');
+        expect(query).toContain('LEFT JOIN articulos_bajas ab');
+        expect(query).toContain('LEFT JOIN inventario_stock_efectos ise');
+        expect(query).toContain(
+          'COUNT(DISTINCT a.id) FILTER (WHERE a.activo = TRUE)::int AS articulos_activos'
+        );
+        expect(query).toContain('COUNT(DISTINCT a.id)::int AS articulos_totales');
+        const countsDistinctArticles = query.includes('COUNT(DISTINCT a.id)');
+        const articleCount = countsDistinctArticles
+          ? new Set(joinedArticleIds).size
+          : joinedArticleIds.length;
+        return {
+          rows: [
+            {
+              id: 1,
+              nombre: 'Bodega',
+              cliente_id: 10,
+              cliente_nombre: 'ACME',
+              cliente_estado: 'activo',
+              articulos_activos: articleCount,
+              articulos_totales: articleCount,
+              puede_eliminar: false,
+              ubicacion_search_match: false,
+              cliente_search_match: false,
+            },
+          ],
+          rowCount: 1,
+        };
+      }),
+    };
+
+    const source = await findGroupedLocationsSource({ search: '' }, executor);
+
+    expect(source.locations).toEqual([
+      expect.objectContaining({ articulos_activos: 1, articulos_totales: 1 }),
+    ]);
   });
 
   test('consulta cliente_estado sin romper LEFT JOIN ni conteos', async () => {

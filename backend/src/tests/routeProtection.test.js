@@ -273,6 +273,17 @@ describe('inventario permissions', () => {
     expectAllowedPastAuthorization(res);
   });
 
+  test('GET ubicaciones agrupadas acepta permiso mínimo de ubicaciones sin clientes.ver', async () => {
+    rolePermissions.custom_ubicaciones = [PERMISSIONS.INVENTARIO_UBICACIONES_VER];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const res = await request(app)
+      .get('/api/inventario/ubicaciones/agrupadas')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expectAllowedPastAuthorization(res);
+  });
+
   test.each([
     ['POST', 'post', '/api/inventario/ubicaciones', PERMISSIONS.INVENTARIO_ARTICULOS_CREAR],
     ['PUT', 'put', '/api/inventario/ubicaciones/10', PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR],

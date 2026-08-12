@@ -8,6 +8,18 @@ const { PERMISSIONS } = require('../config/permissions');
 router.use(verifyToken);
 
 router.get(
+  '/agrupadas',
+  requireAnyPermission(
+    PERMISSIONS.INVENTARIO_UBICACIONES_VER,
+    PERMISSIONS.INVENTARIO_ARTICULOS_VER,
+    PERMISSIONS.INVENTARIO_ARTICULOS_CREAR,
+    PERMISSIONS.INVENTARIO_MOVIMIENTOS_VER,
+    PERMISSIONS.INVENTARIO_MOVIMIENTOS_CREAR
+  ),
+  ubicacionesController.getUbicacionesAgrupadas
+);
+
+router.get(
   '/',
   requireAnyPermission(
     PERMISSIONS.INVENTARIO_UBICACIONES_VER,

@@ -338,6 +338,99 @@ Descarga archivo `clientes.xlsx`
 }
 ```
 
+#### Listar Ubicaciones Agrupadas por Cliente
+**GET** `/inventario/ubicaciones/agrupadas`
+
+Devuelve grupos paginados de clientes con sus ubicaciones. Puede incluir clientes sin ubicaciones y
+un grupo histórico para ubicaciones sin cliente.
+
+**Permisos:** se requiere al menos uno de los siguientes:
+- `inventario.ubicaciones.ver`
+- `inventario.articulos.ver`
+- `inventario.articulos.crear`
+- `inventario.movimientos.ver`
+- `inventario.movimientos.crear`
+
+**Query Params:**
+- `page` - Página de grupos. Valor predeterminado: `1`.
+- `pageSize` - Grupos por página. Valor predeterminado: `25`. Valores permitidos: `10`, `25`, `50` o `100`.
+- `search` - Coincidencia parcial por nombre de cliente o ubicación. Máximo: 100 caracteres.
+- `include_empty` - Incluye clientes sin ubicaciones. Booleano; valor predeterminado: `true`.
+- `include_historical` - Incluye el grupo de ubicaciones sin cliente. Booleano; valor predeterminado: `true`.
+
+La paginación se aplica a grupos, no a ubicaciones individuales. Si la búsqueda coincide con un
+cliente, se incluyen sus ubicaciones; si coincide únicamente con ubicaciones, el grupo contiene las
+ubicaciones coincidentes.
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "tipo": "cliente",
+      "cliente_id": 12,
+      "cliente_nombre": "Cliente Ejemplo",
+      "cliente_estado": "activo",
+      "ubicaciones": [
+        {
+          "id": 7,
+          "nombre": "Matriz",
+          "articulos_activos": 3,
+          "articulos_totales": 4,
+          "estado_uso": "en_uso",
+          "puede_eliminar": false
+        }
+      ],
+      "resumen": {
+        "total": 1,
+        "en_uso": 1,
+        "disponibles": 0
+      }
+    },
+    {
+      "tipo": "sin_cliente",
+      "cliente_id": null,
+      "cliente_nombre": "Sin cliente — dato histórico",
+      "cliente_estado": null,
+      "ubicaciones": [
+        {
+          "id": 9,
+          "nombre": "Archivo histórico",
+          "articulos_activos": 0,
+          "articulos_totales": 0,
+          "estado_uso": "sin_articulos",
+          "puede_eliminar": true
+        }
+      ],
+      "resumen": {
+        "total": 1,
+        "en_uso": 0,
+        "disponibles": 1
+      }
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "pageSize": 25,
+    "totalGroups": 18,
+    "filteredGroups": 18,
+    "totalLocations": 42,
+    "filteredLocations": 42,
+    "totalPages": 1
+  }
+}
+```
+
+`estado_uso` puede ser `en_uso` o `sin_articulos`. `puede_eliminar` considera dependencias reales
+de inventario, no solo artículos asociados.
+
+**Response (400):** se devuelve cuando la búsqueda excede 100 caracteres, la paginación es inválida,
+`pageSize` no pertenece a los valores permitidos o los parámetros booleanos son inválidos.
+
+Este endpoint complementa a `GET /inventario/ubicaciones`; no reemplaza ni modifica el contrato del
+catálogo plano.
+
 ---
 
 ### Artículos (Equipment)

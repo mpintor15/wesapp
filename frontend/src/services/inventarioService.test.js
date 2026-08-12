@@ -94,6 +94,53 @@ describe('inventarioService', () => {
     });
   });
 
+  test('getUbicacionesAgrupadas conserva parámetros y metadata agrupada', async () => {
+    api.get.mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: [
+          {
+            tipo: 'cliente',
+            cliente_id: 1,
+            cliente_nombre: 'ACME',
+            cliente_estado: 'activo',
+            ubicaciones: [],
+            resumen: { total: 0, en_uso: 0, disponibles: 0 },
+          },
+        ],
+        meta: {
+          page: 2,
+          pageSize: 25,
+          totalGroups: 10,
+          filteredGroups: 10,
+          totalLocations: 14,
+          filteredLocations: 8,
+          totalPages: 1,
+        },
+      },
+    });
+
+    const result = await inventarioService.getUbicacionesAgrupadas({
+      search: 'ACME',
+      page: 2,
+      pageSize: 25,
+    });
+
+    expect(api.get).toHaveBeenCalledWith('/inventario/ubicaciones/agrupadas', {
+      params: { search: 'ACME', page: 2, pageSize: 25 },
+    });
+    expect(result.data[0].cliente_nombre).toBe('ACME');
+    expect(result.meta).toEqual({
+      page: 2,
+      pageSize: 25,
+      totalGroups: 10,
+      filteredGroups: 10,
+      totalLocations: 14,
+      filteredLocations: 8,
+      totalPages: 1,
+    });
+  });
+
   test('getArticulos conserva parámetros y metadata de paginación del backend', async () => {
     api.get.mockResolvedValueOnce({
       data: {
