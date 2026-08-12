@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import AppModal from '../../components/AppModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import PageHeader from '../../components/PageHeader';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -814,73 +815,40 @@ const Configuracion = () => {
 
   return (
     <div className="configuracion-container">
-      <header className="brand-header page-header">
-        <div className="page-header-left">
-          <button className="btn-back" onClick={() => navigate('/')} type="button">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              width="14"
-              height="14"
-            >
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-            Volver
-          </button>
-          <div>
-            <h1>Clientes</h1>
-          </div>
-        </div>
-        <div className="page-header-actions">
-          {isClientesActive && permissions.canViewClientes && (
-            <>
-              {permissions.canCreateCliente && (
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => setClienteCreateRequest((value) => value + 1)}
-                  type="button"
-                >
-                  Crear cliente
-                </button>
-              )}
+      <PageHeader
+        title="Clientes"
+        onBack={() => navigate('/')}
+        onRefresh={
+          isClientesActive && permissions.canViewClientes
+            ? refreshDirectorio
+            : isUbicacionesActive
+              ? refreshUbicaciones
+              : null
+        }
+        refreshDisabled={isUbicacionesActive && (ubicacionesLoading || clientesActivosLoading)}
+        actions={
+          <>
+            {isClientesActive && permissions.canViewClientes && permissions.canCreateCliente && (
               <button
-                className="btn btn-ghost btn-sm btn-icon-only"
-                onClick={refreshDirectorio}
-                title="Actualizar datos"
-                aria-label="Actualizar datos"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setClienteCreateRequest((value) => value + 1)}
                 type="button"
               >
-                ↻
+                Crear cliente
               </button>
-            </>
-          )}
-          {isUbicacionesActive && canCreate && (
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => openCreateModal()}
-              type="button"
-            >
-              Crear ubicación
-            </button>
-          )}
-          {isUbicacionesActive && (
-            <button
-              className="btn btn-ghost btn-sm btn-icon-only"
-              onClick={refreshUbicaciones}
-              title="Actualizar datos"
-              aria-label="Actualizar datos"
-              type="button"
-              disabled={ubicacionesLoading || clientesActivosLoading}
-            >
-              ↻
-            </button>
-          )}
-        </div>
-      </header>
+            )}
+            {isUbicacionesActive && canCreate && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => openCreateModal()}
+                type="button"
+              >
+                Crear ubicación
+              </button>
+            )}
+          </>
+        }
+      />
 
       <main>
         {authLoading ? (
