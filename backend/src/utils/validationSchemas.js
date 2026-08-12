@@ -19,6 +19,18 @@ const positiveInt = (label) =>
       message: `${label} debe ser un entero positivo`,
     })
     .transform((value) => parseStrictPositiveInteger(value, `${label} debe ser positivo`).value);
+const optionalNullablePositiveInt = (label) =>
+  z.preprocess(
+    emptyToUndefined,
+    z
+      .union([z.string(), z.number()])
+      .refine((value) => parseStrictPositiveInteger(value, `${label} debe ser positivo`).valid, {
+        message: `${label} debe ser un entero positivo`,
+      })
+      .transform((value) => parseStrictPositiveInteger(value, `${label} debe ser positivo`).value)
+      .optional()
+      .nullable()
+  );
 const positiveNumber = (label) =>
   z
     .union([z.string(), z.number()], { required_error: `${label} es requerido` })
@@ -110,6 +122,7 @@ const usuarioCreateSchema = z.object({
   tipo_usuario: z.enum(ALLOWED_ROLES, {
     errorMap: () => ({ message: `Tipo debe ser uno de: ${ALLOWED_ROLES.join(', ')}` }),
   }),
+  colaborador_id: optionalNullablePositiveInt('Colaborador ID'),
 });
 
 const usuarioUpdateSchema = z.object({
@@ -129,6 +142,7 @@ const usuarioUpdateSchema = z.object({
     })
     .optional(),
   activo: z.boolean().optional(),
+  colaborador_id: optionalNullablePositiveInt('Colaborador ID'),
 });
 
 // ============================================

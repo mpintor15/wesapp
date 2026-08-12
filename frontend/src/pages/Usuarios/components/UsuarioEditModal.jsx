@@ -2,6 +2,9 @@ import AppModal from '../../../components/AppModal';
 import { fullName, TIPOS_USUARIO } from '../utils/usuariosHelpers';
 
 const UsuarioEditModal = ({
+  colaboradores,
+  colaboradoresError,
+  colaboradoresLoading,
   editData,
   isSaving,
   onCancel,
@@ -31,6 +34,31 @@ const UsuarioEditModal = ({
             onChange={(e) => onChange('nombre', e.target.value)}
             autoComplete="off"
           />
+        </div>
+        <div className="form-group usuarios-form-grid__full">
+          <label htmlFor="e-colaborador">Colaborador</label>
+          <select
+            id="e-colaborador"
+            value={editData.colaborador_id}
+            onChange={(e) => onChange('colaborador_id', e.target.value)}
+            disabled={colaboradoresLoading}
+            aria-describedby={colaboradoresError ? 'e-colaborador-error' : undefined}
+          >
+            <option value="">
+              {colaboradoresLoading ? 'Cargando colaboradores…' : 'Sin colaborador'}
+            </option>
+            {colaboradores.map((colaborador) => (
+              <option key={colaborador.id} value={colaborador.id}>
+                {colaborador.nombres_completos} — {colaborador.cedula}
+                {colaborador.estado === 'inactivo' ? ' (Inactivo)' : ''}
+              </option>
+            ))}
+          </select>
+          {colaboradoresError ? (
+            <span id="e-colaborador-error" className="field-error" role="alert">
+              {colaboradoresError}
+            </span>
+          ) : null}
         </div>
         <div className="form-group">
           <label htmlFor="e-apellido">Apellido</label>

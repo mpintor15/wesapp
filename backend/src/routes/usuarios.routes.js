@@ -11,6 +11,11 @@ router.use(verifyToken);
 
 // Listado
 router.get('/', requirePermission(PERMISSIONS.USUARIOS_VER), usuariosController.getUsuarios);
+router.get(
+  '/colaboradores-elegibles',
+  requirePermission(PERMISSIONS.USUARIOS_VER),
+  usuariosController.getColaboradoresElegibles
+);
 
 // Crear usuario
 router.post(

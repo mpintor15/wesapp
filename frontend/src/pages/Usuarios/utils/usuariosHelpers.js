@@ -14,6 +14,7 @@ export const EMPTY_CREATE_USER_FORM = {
   apellido: '',
   usuario: '',
   tipo_usuario: 'secretario',
+  colaborador_id: '',
 };
 
 export const EMPTY_EDIT_USER_FORM = {
@@ -21,6 +22,7 @@ export const EMPTY_EDIT_USER_FORM = {
   apellido: '',
   tipo_usuario: 'secretario',
   activo: true,
+  colaborador_id: '',
 };
 
 export const getStatusLabel = (usuario) => {
@@ -75,6 +77,7 @@ export const getEditUserFormData = (usuario) => ({
   apellido: usuario.apellido || '',
   tipo_usuario: usuario.tipo_usuario,
   activo: usuario.activo,
+  colaborador_id: usuario.colaborador_id ? String(usuario.colaborador_id) : '',
 });
 
 export const getTipoUsuarioLabel = (tipoUsuario) =>

@@ -28,6 +28,16 @@ const usuariosService = {
     }
   },
 
+  getColaboradoresElegibles: async (usuarioId = null) => {
+    try {
+      const params = usuarioId ? { usuario_id: usuarioId } : {};
+      const response = await api.get('/usuarios/colaboradores-elegibles', { params });
+      return { success: response.data.success, data: response.data.data || [] };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener colaboradores elegibles');
+    }
+  },
+
   createUsuario: async (data) => {
     try {
       const response = await api.post('/usuarios', data);

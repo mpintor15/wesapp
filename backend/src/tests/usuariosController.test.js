@@ -14,16 +14,19 @@ jest.mock('../utils/audit', () => ({
 
 const db = require('../config/database');
 const { logAudit } = require('../utils/audit');
+const { usuarioCreateSchema, usuarioUpdateSchema } = require('../utils/validationSchemas');
 const {
   createUsuario,
+  getColaboradoresElegibles,
   updateUsuario,
   reenviarInvitacion,
   deleteUsuario,
 } = require('../controllers/usuariosController');
 
-const mockReq = ({ body = {}, params = {}, user = { id: 1 } } = {}) => ({
+const mockReq = ({ body = {}, params = {}, query = {}, user = { id: 1 } } = {}) => ({
   body,
   params,
+  query,
   user,
   ip: '127.0.0.1',
 });
@@ -45,7 +48,135 @@ beforeEach(() => {
   db.transaction.mockImplementation(async (callback) => callback({ query: db.query }));
 });
 
+describe('usuarios validation schemas', () => {
+  test('aceptan colaborador opcional, null y un id positivo', () => {
+    const base = {
+      usuario: 'nuevo',
+      nombre: 'Nuevo',
+      apellido: 'Usuario',
+      tipo_usuario: 'guardia',
+    };
+    expect(usuarioCreateSchema.parse(base).colaborador_id).toBeUndefined();
+    expect(usuarioCreateSchema.parse({ ...base, colaborador_id: null }).colaborador_id).toBeNull();
+    expect(usuarioCreateSchema.parse({ ...base, colaborador_id: '7' }).colaborador_id).toBe(7);
+    expect(usuarioUpdateSchema.parse({ colaborador_id: '' }).colaborador_id).toBeUndefined();
+  });
+
+  test('rechazan ids de colaborador inválidos', () => {
+    expect(() =>
+      usuarioCreateSchema.parse({
+        usuario: 'nuevo',
+        nombre: 'Nuevo',
+        apellido: 'Usuario',
+        tipo_usuario: 'guardia',
+        colaborador_id: 'abc',
+      })
+    ).toThrow();
+  });
+});
+
 describe('usuariosController.createUsuario', () => {
+  test('crea usuario con colaborador activo elegible', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 7, estado: 'activo', usuario_id: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 2,
+            usuario: 'guardia_vinculado',
+            nombre: 'Guardia',
+            apellido: 'Vinculado',
+            tipo_usuario: 'guardia',
+            colaborador_id: 7,
+            primer_login: true,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      });
+    const res = mockRes();
+
+    await createUsuario(
+      mockReq({
+        body: {
+          usuario: 'guardia_vinculado',
+          nombre: 'Guardia',
+          apellido: 'Vinculado',
+          tipo_usuario: 'guardia',
+          colaborador_id: 7,
+        },
+      }),
+      res
+    );
+
+    expectStatus(res, 201);
+    expect(res.json.mock.calls[0][0].data.colaborador_id).toBe(7);
+  });
+
+  test.each([
+    ['inexistente', { rows: [], rowCount: 0 }, 400, /no existe/i],
+    [
+      'inactivo',
+      { rows: [{ id: 7, estado: 'inactivo', usuario_id: null }], rowCount: 1 },
+      400,
+      /inactivo/i,
+    ],
+    [
+      'ya vinculado',
+      { rows: [{ id: 7, estado: 'activo', usuario_id: 9 }], rowCount: 1 },
+      409,
+      /otro usuario/i,
+    ],
+  ])('rechaza colaborador %s al crear', async (_label, collaboratorResult, status, message) => {
+    db.query.mockResolvedValueOnce(collaboratorResult);
+    const res = mockRes();
+
+    await createUsuario(
+      mockReq({
+        body: {
+          usuario: 'guardia_vinculado',
+          nombre: 'Guardia',
+          apellido: 'Vinculado',
+          tipo_usuario: 'guardia',
+          colaborador_id: 7,
+        },
+      }),
+      res
+    );
+
+    expectStatus(res, status);
+    expect(res.json.mock.calls[0][0].message).toMatch(message);
+  });
+
+  test('convierte conflicto concurrente de colaborador en respuesta 409', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 7, estado: 'activo', usuario_id: null }],
+        rowCount: 1,
+      })
+      .mockRejectedValueOnce({ code: '23505', constraint: 'usuarios_colaborador_id_key' });
+    const res = mockRes();
+
+    await createUsuario(
+      mockReq({
+        body: {
+          usuario: 'guardia_conflicto',
+          nombre: 'Guardia',
+          apellido: 'Conflicto',
+          tipo_usuario: 'guardia',
+          colaborador_id: 7,
+        },
+      }),
+      res
+    );
+
+    expectStatus(res, 409);
+    expect(res.json.mock.calls[0][0].message).toMatch(/otro usuario/i);
+  });
+
   test.each(['guardia', 'monitorista'])('acepta el nuevo rol %s', async (tipoUsuario) => {
     db.query.mockResolvedValue({
       rows: [
@@ -112,7 +243,10 @@ describe('usuariosController.createUsuario', () => {
     expect(res.json.mock.calls[0][0].data).toEqual(
       expect.objectContaining({ usuario: 'nuevo', temp_password: expect.any(String) })
     );
-    expect(logAudit).toHaveBeenCalledWith(db, expect.objectContaining({ tabla: 'usuarios' }));
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.any(Function) }),
+      expect.objectContaining({ tabla: 'usuarios' })
+    );
   });
 
   test('rechaza rol inválido', async () => {
@@ -156,6 +290,113 @@ describe('usuariosController.createUsuario', () => {
 });
 
 describe('usuariosController.updateUsuario', () => {
+  test('cambia el vínculo a otro colaborador activo elegible', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 8, estado: 'activo', usuario_id: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 8 }],
+        rowCount: 1,
+      });
+    const res = mockRes();
+
+    await updateUsuario(mockReq({ params: { id: '2' }, body: { colaborador_id: 8 } }), res);
+
+    expect(res.json.mock.calls[0][0].data.colaborador_id).toBe(8);
+    expect(db.query.mock.calls[1][0]).toContain('FOR UPDATE OF c');
+    expect(db.query.mock.calls[2][1]).toEqual([8, 2]);
+  });
+
+  test.each([
+    ['inexistente', { rows: [], rowCount: 0 }, 400, /no existe/i],
+    [
+      'inactivo',
+      { rows: [{ id: 8, estado: 'inactivo', usuario_id: null }], rowCount: 1 },
+      400,
+      /inactivo/i,
+    ],
+    [
+      'ya vinculado',
+      { rows: [{ id: 8, estado: 'activo', usuario_id: 9 }], rowCount: 1 },
+      409,
+      /otro usuario/i,
+    ],
+  ])('rechaza colaborador %s al editar', async (_label, colaboradorResult, status, message) => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce(colaboradorResult);
+    const res = mockRes();
+
+    await updateUsuario(mockReq({ params: { id: '2' }, body: { colaborador_id: 8 } }), res);
+
+    const body = expectStatus(res, status);
+    expect(body.message).toMatch(message);
+  });
+
+  test('convierte conflicto concurrente durante edición en respuesta 409', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 8, estado: 'activo', usuario_id: null }],
+        rowCount: 1,
+      })
+      .mockRejectedValueOnce({ code: '23505', constraint: 'usuarios_colaborador_id_key' });
+    const res = mockRes();
+
+    await updateUsuario(mockReq({ params: { id: '2' }, body: { colaborador_id: 8 } }), res);
+
+    const body = expectStatus(res, 409);
+    expect(body.message).toMatch(/otro usuario/i);
+  });
+
+  test('desvincula colaborador con null', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: null }],
+        rowCount: 1,
+      });
+    const res = mockRes();
+
+    await updateUsuario(mockReq({ params: { id: '2' }, body: { colaborador_id: null } }), res);
+
+    expect(res.json.mock.calls[0][0].data.colaborador_id).toBeNull();
+    expect(db.query.mock.calls[1][0]).toContain('colaborador_id = $1');
+  });
+
+  test('conserva vínculo existente aunque el colaborador esté inactivo', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
+        rowCount: 1,
+      });
+    const res = mockRes();
+
+    await updateUsuario(mockReq({ params: { id: '2' }, body: { colaborador_id: 7 } }), res);
+
+    expect(res.json.mock.calls[0][0].data.colaborador_id).toBe(7);
+    expect(db.query).toHaveBeenCalledTimes(2);
+  });
+
   test('rechaza desactivar el propio usuario', async () => {
     db.query.mockResolvedValue({
       rows: [{ id: 1, tipo_usuario: 'gerente', activo: true }],
@@ -213,7 +454,62 @@ describe('usuariosController.updateUsuario', () => {
     await updateUsuario(mockReq({ params: { id: '2' }, body: { apellido: 'Editado' } }), res);
 
     expect(res.json.mock.calls[0][0]).toEqual(expect.objectContaining({ success: true }));
-    expect(logAudit).toHaveBeenCalledWith(db, expect.objectContaining({ operacion: 'UPDATE' }));
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.any(Function) }),
+      expect.objectContaining({ operacion: 'UPDATE' })
+    );
+  });
+});
+
+describe('usuariosController.getColaboradoresElegibles', () => {
+  test('retorna contrato mínimo sin datos bancarios o salariales', async () => {
+    db.query.mockResolvedValue({
+      rows: [
+        {
+          id: 7,
+          nombres_completos: 'Ana Vera',
+          cedula: '123',
+          cargo: 'Guardia',
+          estado: 'activo',
+        },
+      ],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await getColaboradoresElegibles(mockReq({ query: {} }), res);
+
+    expect(res.json.mock.calls[0][0].data[0]).toEqual({
+      id: 7,
+      nombres_completos: 'Ana Vera',
+      cedula: '123',
+      cargo: 'Guardia',
+      estado: 'activo',
+    });
+    expect(db.query.mock.calls[0][0]).not.toMatch(/sueldo|banco|numero_cuenta/i);
+  });
+
+  test('excluye colaboradores vinculados a otros usuarios al crear', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await getColaboradoresElegibles(mockReq({ query: {} }), res);
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toMatch(/c\.estado = 'activo' AND u\.id IS NULL/);
+    expect(params).toEqual([null]);
+  });
+
+  test('incluye como excepción únicamente el colaborador del usuario editado', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await getColaboradoresElegibles(mockReq({ query: { usuario_id: '12' } }), res);
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toMatch(/u\.id = \$1/);
+    expect(sql).not.toMatch(/c\.estado = 'inactivo'/);
+    expect(params).toEqual([12]);
   });
 });
 

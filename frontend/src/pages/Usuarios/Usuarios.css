@@ -225,3 +225,6 @@
     font-size: 0.72rem;
   }
 }
+.usuarios-form-grid__full {
+  grid-column: 1 / -1;
+}

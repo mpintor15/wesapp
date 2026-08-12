@@ -2,6 +2,9 @@ import AppModal from '../../../components/AppModal';
 import { TIPOS_USUARIO } from '../utils/usuariosHelpers';
 
 const UsuarioCreateModal = ({
+  colaboradores,
+  colaboradoresError,
+  colaboradoresLoading,
   createErrors,
   formData,
   isCreating,
@@ -31,6 +34,30 @@ const UsuarioCreateModal = ({
             required
           />
           {createErrors.nombre ? <span className="field-error">{createErrors.nombre}</span> : null}
+        </div>
+        <div className="form-group usuarios-form-grid__full">
+          <label htmlFor="u-colaborador">Colaborador</label>
+          <select
+            id="u-colaborador"
+            value={formData.colaborador_id}
+            onChange={(e) => onChange('colaborador_id', e.target.value)}
+            disabled={colaboradoresLoading}
+            aria-describedby={colaboradoresError ? 'u-colaborador-error' : undefined}
+          >
+            <option value="">
+              {colaboradoresLoading ? 'Cargando colaboradores…' : 'Sin colaborador'}
+            </option>
+            {colaboradores.map((colaborador) => (
+              <option key={colaborador.id} value={colaborador.id}>
+                {colaborador.nombres_completos} — {colaborador.cedula}
+              </option>
+            ))}
+          </select>
+          {colaboradoresError ? (
+            <span id="u-colaborador-error" className="field-error" role="alert">
+              {colaboradoresError}
+            </span>
+          ) : null}
         </div>
         <div className="form-group">
           <label htmlFor="u-apellido">

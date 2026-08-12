@@ -225,6 +225,12 @@ CREATE TABLE colaboradores (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE usuarios
+    ADD COLUMN colaborador_id INTEGER NULL,
+    ADD CONSTRAINT usuarios_colaborador_id_fkey
+        FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT usuarios_colaborador_id_key UNIQUE (colaborador_id);
+
 CREATE TABLE audit_log (
     id SERIAL PRIMARY KEY,
     tabla VARCHAR(50) NOT NULL,

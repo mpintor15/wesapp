@@ -106,6 +106,9 @@ const createPre015OriginalSchema = async (pool) => {
       usuario TEXT,
       tipo_usuario TEXT
     );
+    CREATE TABLE colaboradores (
+      id SERIAL PRIMARY KEY
+    );
     CREATE TABLE ubicaciones (
       id SERIAL PRIMARY KEY,
       nombre TEXT
@@ -862,6 +865,46 @@ describe('database migrations', () => {
         `)
       ).rejects.toMatchObject({ code: '23514' });
       const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 20');
+      expect(version.rowCount).toBe(1);
+    });
+  });
+
+  test('migration 021 adds nullable unique restricted colaborador relationship', async () => {
+    await withTempDatabase('wesapp_migration_usuario_colaborador_021', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (
+          id SERIAL PRIMARY KEY,
+          nombres_completos TEXT NOT NULL,
+          estado TEXT NOT NULL
+        );
+        CREATE TABLE usuarios (
+          id SERIAL PRIMARY KEY,
+          usuario TEXT NOT NULL
+        );
+        CREATE TABLE schema_version (
+          version INTEGER PRIMARY KEY,
+          description TEXT NOT NULL,
+          applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO colaboradores (nombres_completos, estado)
+        VALUES ('Uno', 'activo'), ('Dos', 'activo');
+        INSERT INTO usuarios (usuario) VALUES ('sin-vinculo'), ('segundo');
+      `);
+
+      await applyMigrationInTransaction(pool, 21);
+
+      const preserved = await pool.query(
+        'SELECT COUNT(*)::int AS total FROM usuarios WHERE colaborador_id IS NULL'
+      );
+      expect(preserved.rows[0].total).toBe(2);
+      await pool.query('UPDATE usuarios SET colaborador_id = 1 WHERE id = 1');
+      await expect(
+        pool.query('UPDATE usuarios SET colaborador_id = 1 WHERE id = 2')
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(pool.query('DELETE FROM colaboradores WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 21');
       expect(version.rowCount).toBe(1);
     });
   });

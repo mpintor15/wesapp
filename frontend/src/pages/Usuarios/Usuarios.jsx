@@ -38,6 +38,9 @@ const Usuarios = () => {
   const { showToast } = useToast();
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [colaboradores, setColaboradores] = useState([]);
+  const [colaboradoresLoading, setColaboradoresLoading] = useState(false);
+  const [colaboradoresError, setColaboradoresError] = useState('');
   const [filters, setFilters] = useState(EMPTY_USUARIOS_FILTERS);
   const [filtersDraft, setFiltersDraft] = useState(EMPTY_USUARIOS_FILTERS);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -75,6 +78,19 @@ const Usuarios = () => {
   const refreshUsuarios = useCallback(() => {
     loadUsuarios(buildFilterParams(filters));
   }, [filters, loadUsuarios]);
+
+  const loadColaboradores = useCallback(async (usuarioId = null) => {
+    setColaboradoresLoading(true);
+    setColaboradoresError('');
+    const result = await usuariosService.getColaboradoresElegibles(usuarioId);
+    if (result.success) {
+      setColaboradores(result.data);
+    } else {
+      setColaboradores([]);
+      setColaboradoresError(result.message || 'No se pudieron cargar los colaboradores');
+    }
+    setColaboradoresLoading(false);
+  }, []);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -114,6 +130,7 @@ const Usuarios = () => {
     setFormData(EMPTY_CREATE_USER_FORM);
     setCreateErrors({});
     setShowCreateModal(true);
+    void loadColaboradores();
   };
 
   const openEdit = (usuario) => {
@@ -124,6 +141,7 @@ const Usuarios = () => {
     setSelectedUsuario(usuario);
     setEditData(getEditUserFormData(usuario));
     setShowEditModal(true);
+    void loadColaboradores(usuario.id);
   };
 
   const handleCreateFormChange = (field, value) => {
@@ -293,6 +311,9 @@ const Usuarios = () => {
       {showCreateModal && (
         <UsuarioCreateModal
           createErrors={createErrors}
+          colaboradores={colaboradores}
+          colaboradoresError={colaboradoresError}
+          colaboradoresLoading={colaboradoresLoading}
           formData={formData}
           isCreating={isCreating}
           onCancel={() => setShowCreateModal(false)}
@@ -315,6 +336,9 @@ const Usuarios = () => {
       {showEditModal && selectedUsuario && (
         <UsuarioEditModal
           editData={editData}
+          colaboradores={colaboradores}
+          colaboradoresError={colaboradoresError}
+          colaboradoresLoading={colaboradoresLoading}
           isSaving={isSaving}
           onCancel={() => setShowEditModal(false)}
           onChange={handleEditFormChange}

@@ -178,6 +178,21 @@ describe('personalController.updateColaborador', () => {
 });
 
 describe('personalController.deleteColaborador', () => {
+  test('rechaza eliminar un colaborador vinculado a un usuario', async () => {
+    db.query.mockRejectedValue({
+      code: '23503',
+      constraint: 'usuarios_colaborador_id_fkey',
+    });
+    const res = mockRes();
+
+    await deleteColaborador(mockReq({ params: { id: '7' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringMatching(/vinculado a un usuario/i) })
+    );
+  });
+
   test('retorna 404 si el colaborador no existe', async () => {
     db.query.mockResolvedValue({ rows: [], rowCount: 0 });
     const res = mockRes();
