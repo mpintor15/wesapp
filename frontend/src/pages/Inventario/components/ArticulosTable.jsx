@@ -6,8 +6,8 @@ import {
   getSerieDisplay,
   getTipoLabel,
 } from '../utils/inventarioHelpers';
+import PaginationControls from '../../../components/PaginationControls';
 import ArticulosMobileCards from './ArticulosMobileCards';
-import PaginationControls from './PaginationControls';
 import SortHeader from './SortHeader';
 
 const ArticulosTable = ({
@@ -31,7 +31,7 @@ const ArticulosTable = ({
   articuloActionsClass,
 }) => (
   <>
-    <div className="table-responsive app-table-shell">
+    <div className="table-responsive app-table-shell app-table-scroll">
       <table className="app-table articulos-table">
         <thead>
           <tr>

@@ -15,7 +15,7 @@ const FacturasTable = ({
   onEdit,
   onCancel,
 }) => (
-  <div className="table-responsive app-table-shell facturas-table-shell">
+  <div className="table-responsive app-table-shell app-table-scroll facturas-table-shell">
     <table className="app-table cuentas-table facturas-table">
       <thead>
         <tr>

@@ -1,4 +1,4 @@
-import PaginationControls from './PaginationControls';
+import PaginationControls from '../../../components/PaginationControls';
 import PagoFilters from './PagoFilters';
 import PagosTable from './PagosTable';
 

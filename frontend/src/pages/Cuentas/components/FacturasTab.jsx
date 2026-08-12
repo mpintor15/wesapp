@@ -1,6 +1,6 @@
+import PaginationControls from '../../../components/PaginationControls';
 import FacturaFilters from './FacturaFilters';
 import FacturasTable from './FacturasTable';
-import PaginationControls from './PaginationControls';
 
 const FacturasTab = ({
   filtersDraft,

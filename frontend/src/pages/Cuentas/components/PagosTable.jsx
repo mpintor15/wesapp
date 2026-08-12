@@ -2,7 +2,7 @@ import { formatDate, formatMetodoPago, formatMoney } from '../utils/cuentasForma
 import SortHeader from './SortHeader';
 
 const PagosTable = ({ rows, loading, filters, sort, onSort, onOpenDetail }) => (
-  <div className="table-responsive app-table-shell pagos-table-shell">
+  <div className="table-responsive app-table-shell app-table-scroll pagos-table-shell">
     <table className="app-table pagos-table">
       <thead>
         <tr>
