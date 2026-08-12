@@ -214,4 +214,19 @@ describe('auth routes', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.message).toMatch(/actualizada/i);
   });
+
+  test('legacy sin colaborador puede completar el cambio de contraseña de primer login', async () => {
+    const legacyUser = await userRow({ colaborador_id: null, primer_login: true });
+    mockAuthQuery({ verifyUser: legacyUser });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ nueva_password: 'new-password-1', confirmar_password: 'new-password-1' });
+
+    expect(res.status).toBe(200);
+    expect(
+      db.query.mock.calls.some(([sql]) => String(sql).includes('UPDATE usuarios SET password_hash'))
+    ).toBe(true);
+  });
 });

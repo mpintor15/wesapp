@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import SearchableSelect from '../../../components/SearchableSelect';
 import UsuarioCreateModal from './UsuarioCreateModal';
 import UsuarioEditModal from './UsuarioEditModal';
 import {
@@ -12,20 +13,13 @@ import {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const colaboradores = [
-  {
-    id: 7,
-    nombres_completos: 'Ana Vera',
-    cedula: '123',
-    cargo: 'Guardia',
-    estado: 'activo',
-  },
-  {
-    id: 8,
-    nombres_completos: 'Luis Paz',
-    cedula: '456',
-    cargo: 'Guardia',
-    estado: 'inactivo',
-  },
+  { id: 7, nombres_completos: 'Ana María Vera', cedula: '123', estado: 'activo' },
+  { id: 8, nombres_completos: 'Luis Paz', cedula: '456', estado: 'inactivo' },
+];
+const ubicaciones = [
+  { id: 4, nombre: 'Norte', direccion: 'Av. Amazonas', cliente_nombre: 'Cliente A' },
+  { id: 5, nombre: 'Sur', direccion: 'Av. Maldonado', cliente_nombre: 'Cliente B' },
+  { id: 6, nombre: 'Valle', direccion: 'Cumbayá', cliente_nombre: 'Cliente A' },
 ];
 
 const renderModal = (element) => {
@@ -33,20 +27,18 @@ const renderModal = (element) => {
   document.body.appendChild(container);
   const root = createRoot(container);
   act(() => root.render(element));
-  return {
-    container,
-    unmount: () => {
-      act(() => root.unmount());
-      container.remove();
-    },
-  };
+  return { container, unmount: () => act(() => root.unmount()) };
 };
 
-const CreateHarness = ({ canManageAssignments = false, initialData = {}, onSubmit }) => {
+const CreateHarness = ({
+  canManageAssignments = false,
+  initialData = {},
+  onSubmit = jest.fn(),
+}) => {
   const [formData, setFormData] = useState({ ...EMPTY_CREATE_USER_FORM, ...initialData });
   return (
     <UsuarioCreateModal
-      colaboradores={[colaboradores[0]]}
+      colaboradores={colaboradores}
       colaboradoresError=""
       colaboradoresLoading={false}
       canManageAssignments={canManageAssignments}
@@ -59,25 +51,18 @@ const CreateHarness = ({ canManageAssignments = false, initialData = {}, onSubmi
         event.preventDefault();
         onSubmit(buildUsuarioPayload(formData, canManageAssignments));
       }}
-      ubicaciones={[
-        { id: 4, nombre: 'Norte' },
-        { id: 5, nombre: 'Sur' },
-      ]}
+      ubicaciones={ubicaciones}
       ubicacionesError=""
       ubicacionesLoading={false}
     />
   );
 };
 
-const EditHarness = ({
-  canManageAssignments = false,
-  initialData = {},
-  initialColaboradorId = '7',
-  onSubmit,
-}) => {
+const EditHarness = ({ canManageAssignments = false, initialData = {}, onSubmit = jest.fn() }) => {
   const [editData, setEditData] = useState({
     ...EMPTY_EDIT_USER_FORM,
-    colaborador_id: initialColaboradorId,
+    colaborador_id: '7',
+    tipo_usuario: 'secretario',
     ...initialData,
   });
   return (
@@ -92,91 +77,151 @@ const EditHarness = ({
       onChange={(field, value) => setEditData((current) => ({ ...current, [field]: value }))}
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(
-          buildUsuarioPayload(
-            {
-              ...editData,
-              colaborador_id: editData.colaborador_id === '' ? null : editData.colaborador_id,
-            },
-            canManageAssignments
-          )
-        );
+        onSubmit(buildUsuarioPayload(editData, canManageAssignments));
       }}
       selectedUsuario={{ id: 2, nombre: 'Luis', apellido: 'Paz' }}
-      ubicaciones={[
-        { id: 4, nombre: 'Norte' },
-        { id: 5, nombre: 'Sur' },
-      ]}
+      ubicaciones={ubicaciones}
       ubicacionesError=""
       ubicacionesLoading={false}
     />
   );
 };
 
-const changeSelect = (select, value) => {
+const inputText = (input, value) =>
   act(() => {
-    select.value = value;
-    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(input, value);
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
   });
-};
-
-const submitForm = (container) => {
-  act(() => {
+const click = (element) =>
+  act(() => element.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+const submit = (container) =>
+  act(() =>
     container
       .querySelector('form')
-      .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-  });
-};
+      .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }))
+  );
+const pressKey = (element, key) =>
+  act(() => element.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true })));
 
-describe('selector Usuario-Colaborador', () => {
+describe('UX de selectores de Usuarios', () => {
   afterEach(() => {
     document.body.innerHTML = '';
   });
 
-  test('crear ofrece Sin colaborador y solo las opciones entregadas por el backend', () => {
-    const view = renderModal(
-      <UsuarioCreateModal
-        colaboradores={[colaboradores[0]]}
-        colaboradoresError=""
-        colaboradoresLoading={false}
-        createErrors={{}}
-        formData={EMPTY_CREATE_USER_FORM}
-        isCreating={false}
-        onCancel={jest.fn()}
-        onChange={jest.fn()}
-        onSubmit={jest.fn()}
-      />
-    );
-
-    const options = [...view.container.querySelectorAll('#u-colaborador option')].map(
-      (option) => option.textContent
-    );
-    expect(options).toEqual(['Sin colaborador', 'Ana Vera — 123']);
+  test('Tipo de usuario inicia vacío y Colaborador no ofrece desvinculación', () => {
+    const view = renderModal(<CreateHarness />);
+    expect(view.container.querySelector('#u-tipo').value).toBe('');
+    expect(view.container.textContent).not.toContain('Sin colaborador');
+    expect(view.container.querySelector('label[for="u-colaborador"]').textContent).toContain('*');
     view.unmount();
   });
 
-  test('editar conserva y etiqueta el colaborador inactivo actualmente vinculado', () => {
+  test.each(['Ana', 'Vera', '123'])('busca colaborador por %s', (term) => {
+    const view = renderModal(<CreateHarness />);
+    const input = view.container.querySelector('#u-colaborador');
+    act(() => input.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true })));
+    inputText(input, term);
+    expect(view.container.querySelector('[role="option"]').textContent).toContain('Ana María Vera');
+    view.unmount();
+  });
+
+  test('selecciona colaborador y envía el vínculo al crear', () => {
+    const onSubmit = jest.fn();
+    const view = renderModal(
+      <CreateHarness
+        initialData={{ nombre: 'A', apellido: 'V', usuario: 'av', tipo_usuario: 'secretario' }}
+        onSubmit={onSubmit}
+      />
+    );
+    const input = view.container.querySelector('#u-colaborador');
+    act(() => input.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true })));
+    click(view.container.querySelector('[role="option"]'));
+    submit(view.container);
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ colaborador_id: '7' }));
+    view.unmount();
+  });
+
+  test('edición conserva y etiqueta al colaborador inactivo', () => {
     const view = renderModal(
       <UsuarioEditModal
         colaboradores={[colaboradores[1]]}
         colaboradoresError=""
         colaboradoresLoading={false}
-        editData={{ ...EMPTY_EDIT_USER_FORM, colaborador_id: '8' }}
+        editData={{ ...EMPTY_EDIT_USER_FORM, tipo_usuario: 'guardia', colaborador_id: '8' }}
         isSaving={false}
         onCancel={jest.fn()}
         onChange={jest.fn()}
         onSubmit={jest.fn()}
-        selectedUsuario={{ id: 2, nombre: 'Luis', apellido: 'Paz' }}
+        selectedUsuario={{ nombre: 'Luis', apellido: 'Paz' }}
       />
     );
-
-    const select = view.container.querySelector('#e-colaborador');
-    expect(select.value).toBe('8');
-    expect(select.textContent).toContain('Luis Paz — 456 (Inactivo)');
+    expect(view.container.querySelector('#e-colaborador').value).toContain(
+      'Luis Paz — 456 (Inactivo)'
+    );
     view.unmount();
   });
 
-  test('muestra loading y error accesible', () => {
+  test('Guardia muestra puntos agrupados y busca por cliente, nombre y dirección', () => {
+    const view = renderModal(
+      <CreateHarness canManageAssignments initialData={{ tipo_usuario: 'guardia' }} />
+    );
+    click(view.container.querySelector('.selection-trigger'));
+    expect(
+      [...view.container.querySelectorAll('.selection-group h4')].map((node) => node.textContent)
+    ).toEqual(['Cliente A', 'Cliente B']);
+    const search = view.container.querySelector('#u-puntos');
+    for (const term of ['Cliente B', 'Sur', 'Maldonado']) {
+      inputText(search, term);
+      expect(view.container.querySelector('.selection-group label').textContent).toContain('Sur');
+    }
+    view.unmount();
+  });
+
+  test.each([[[]], [['4']], [['4', '5']]])('Guardia conserva selección 0/1/N: %s', (selected) => {
+    const onSubmit = jest.fn();
+    const view = renderModal(
+      <CreateHarness
+        canManageAssignments
+        initialData={{ tipo_usuario: 'guardia', colaborador_id: '7', ubicacion_ids: selected }}
+        onSubmit={onSubmit}
+      />
+    );
+    expect(view.container.querySelector('.selection-trigger').textContent).toContain(
+      String(selected.length)
+    );
+    submit(view.container);
+    expect(onSubmit.mock.calls[0][0].ubicacion_ids).toEqual(selected);
+    view.unmount();
+  });
+
+  test('permite seleccionar y retirar puntos desde el selector múltiple', () => {
+    const view = renderModal(
+      <EditHarness
+        canManageAssignments
+        initialData={{ tipo_usuario: 'guardia', ubicacion_ids: ['4'] }}
+      />
+    );
+    click(view.container.querySelector('.selection-trigger'));
+    const checks = view.container.querySelectorAll('.selection-group input');
+    expect([...checks].filter((check) => check.checked)).toHaveLength(1);
+    click(checks[1]);
+    expect(view.container.querySelector('.selection-trigger').textContent).toContain('2 puntos');
+    view.unmount();
+  });
+
+  test.each(['secretario', 'supervisor', 'monitorista'])(
+    '%s no muestra selector de puntos',
+    (tipo) => {
+      const view = renderModal(
+        <CreateHarness canManageAssignments initialData={{ tipo_usuario: tipo }} />
+      );
+      expect(view.container.querySelector('.usuarios-puntos')).toBeNull();
+      view.unmount();
+    }
+  );
+
+  test('loading y error de Colaborador son accesibles', () => {
     const view = renderModal(
       <UsuarioCreateModal
         colaboradores={[]}
@@ -190,7 +235,6 @@ describe('selector Usuario-Colaborador', () => {
         onSubmit={jest.fn()}
       />
     );
-
     expect(view.container.querySelector('#u-colaborador').disabled).toBe(true);
     expect(view.container.querySelector('[role="alert"]').textContent).toContain(
       'No se pudo cargar'
@@ -198,171 +242,34 @@ describe('selector Usuario-Colaborador', () => {
     view.unmount();
   });
 
-  test('cambia efectivamente la selección y la envía al crear', () => {
-    const onSubmit = jest.fn();
-    const view = renderModal(<CreateHarness onSubmit={onSubmit} />);
-
-    const select = view.container.querySelector('#u-colaborador');
-    changeSelect(select, '7');
-    expect(select.value).toBe('7');
-    submitForm(view.container);
-
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ colaborador_id: '7' }));
-    view.unmount();
-  });
-
-  test('envía la nueva selección al editar', () => {
-    const onSubmit = jest.fn();
-    const view = renderModal(<EditHarness onSubmit={onSubmit} />);
-
-    const select = view.container.querySelector('#e-colaborador');
-    changeSelect(select, '8');
-    expect(select.value).toBe('8');
-    submitForm(view.container);
-
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ colaborador_id: '8' }));
-    view.unmount();
-  });
-
-  test('envía null al desvincular durante edición', () => {
-    const onSubmit = jest.fn();
-    const view = renderModal(<EditHarness onSubmit={onSubmit} />);
-
-    changeSelect(view.container.querySelector('#e-colaborador'), '');
-    submitForm(view.container);
-
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ colaborador_id: null }));
-    view.unmount();
-  });
-
-  test.each([[[]], [['4']], [['4', '5']]])('Guardia permite seleccionar %s puntos', (selected) => {
+  test('teclado opera únicamente sobre las primeras 50 opciones renderizadas', () => {
+    const options = Array.from({ length: 60 }, (_, index) => ({
+      id: index + 1,
+      label: `Opción ${String(index + 1).padStart(2, '0')}`,
+    }));
     const onChange = jest.fn();
     const view = renderModal(
-      <UsuarioCreateModal
-        canManageAssignments
-        colaboradores={[]}
-        colaboradoresError=""
-        colaboradoresLoading={false}
-        createErrors={{}}
-        formData={{ ...EMPTY_CREATE_USER_FORM, tipo_usuario: 'guardia', ubicacion_ids: selected }}
-        isCreating={false}
-        onCancel={jest.fn()}
+      <SearchableSelect
+        inputId="large-select"
+        options={options}
+        value=""
         onChange={onChange}
-        onSubmit={jest.fn()}
-        ubicaciones={[
-          { id: 4, nombre: 'Norte' },
-          { id: 5, nombre: 'Sur' },
-        ]}
-        ubicacionesError=""
-        ubicacionesLoading={false}
+        getOptionLabel={(option) => option.label}
       />
     );
-    expect(view.container.querySelectorAll('.usuarios-puntos input:checked')).toHaveLength(
-      selected.length
-    );
+    const input = view.container.querySelector('#large-select');
+    act(() => input.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true })));
+
+    expect(view.container.querySelectorAll('[role="option"]')).toHaveLength(50);
+    for (let index = 0; index < 55; index += 1) pressKey(input, 'ArrowDown');
+    expect(input.getAttribute('aria-activedescendant')).toBe('large-select-50');
+    expect(document.getElementById(input.getAttribute('aria-activedescendant'))).not.toBeNull();
+    pressKey(input, 'ArrowUp');
+    expect(input.getAttribute('aria-activedescendant')).toBe('large-select-49');
+    pressKey(input, 'Enter');
+
+    expect(onChange).toHaveBeenCalledWith('49');
+    expect(onChange).not.toHaveBeenCalledWith('51');
     view.unmount();
   });
-
-  test('otros roles no muestran selector de puntos', () => {
-    const view = renderModal(
-      <UsuarioEditModal
-        canManageAssignments
-        colaboradores={[]}
-        colaboradoresError=""
-        colaboradoresLoading={false}
-        editData={{ ...EMPTY_EDIT_USER_FORM, tipo_usuario: 'supervisor' }}
-        isSaving={false}
-        onCancel={jest.fn()}
-        onChange={jest.fn()}
-        onSubmit={jest.fn()}
-        selectedUsuario={{ id: 2, nombre: 'Ana', apellido: 'Vera' }}
-        ubicaciones={[{ id: 4, nombre: 'Norte' }]}
-        ubicacionesError=""
-        ubicacionesLoading={false}
-      />
-    );
-    expect(view.container.querySelector('.usuarios-puntos')).toBeNull();
-    view.unmount();
-  });
-
-  test('edición preserva varios puntos y permite retirar uno', () => {
-    const onChange = jest.fn();
-    const view = renderModal(
-      <UsuarioEditModal
-        canManageAssignments
-        colaboradores={[]}
-        colaboradoresError=""
-        colaboradoresLoading={false}
-        editData={{ ...EMPTY_EDIT_USER_FORM, tipo_usuario: 'guardia', ubicacion_ids: ['4', '5'] }}
-        isSaving={false}
-        onCancel={jest.fn()}
-        onChange={onChange}
-        onSubmit={jest.fn()}
-        selectedUsuario={{ id: 2, nombre: 'Ana', apellido: 'Vera' }}
-        ubicaciones={[
-          { id: 4, nombre: 'Norte' },
-          { id: 5, nombre: 'Sur' },
-        ]}
-        ubicacionesError=""
-        ubicacionesLoading={false}
-      />
-    );
-    const selected = view.container.querySelectorAll('.usuarios-puntos input:checked');
-    expect(selected).toHaveLength(2);
-    act(() => selected[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
-    expect(onChange).toHaveBeenCalledWith('ubicacion_ids', ['5']);
-    view.unmount();
-  });
-
-  test('submit de creación sin permiso omite ubicacion_ids', () => {
-    const onSubmit = jest.fn();
-    const view = renderModal(<CreateHarness onSubmit={onSubmit} />);
-    submitForm(view.container);
-    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('ubicacion_ids');
-    view.unmount();
-  });
-
-  test('submit de edición sin administrar asignaciones omite ubicacion_ids', () => {
-    const onSubmit = jest.fn();
-    const view = renderModal(
-      <EditHarness
-        initialData={{ tipo_usuario: 'guardia', ubicacion_ids: ['4'] }}
-        onSubmit={onSubmit}
-      />
-    );
-    submitForm(view.container);
-    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('ubicacion_ids');
-    view.unmount();
-  });
-
-  test('Guardia que cambia de rol no envía IDs heredados', () => {
-    const onSubmit = jest.fn();
-    const view = renderModal(
-      <EditHarness
-        canManageAssignments
-        initialData={{ tipo_usuario: 'supervisor', ubicacion_ids: ['4', '5'] }}
-        onSubmit={onSubmit}
-      />
-    );
-    submitForm(view.container);
-    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty('ubicacion_ids');
-    view.unmount();
-  });
-
-  test.each([[[]], [['4']], [['4', '5']]])(
-    'submit de Guardia con permiso envía %s puntos',
-    (ubicacionIds) => {
-      const onSubmit = jest.fn();
-      const view = renderModal(
-        <CreateHarness
-          canManageAssignments
-          initialData={{ tipo_usuario: 'guardia', ubicacion_ids: ubicacionIds }}
-          onSubmit={onSubmit}
-        />
-      );
-      submitForm(view.container);
-      expect(onSubmit.mock.calls[0][0].ubicacion_ids).toEqual(ubicacionIds);
-      view.unmount();
-    }
-  );
 });

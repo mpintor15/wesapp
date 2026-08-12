@@ -200,6 +200,10 @@ const Usuarios = () => {
   const handleEdit = withSaveSubmit(async (e) => {
     e.preventDefault();
     if (!selectedUsuario) return;
+    if (!editData.colaborador_id) {
+      showToast('Selecciona un colaborador', 'error');
+      return;
+    }
     const result = await usuariosService.updateUsuario(
       selectedUsuario.id,
       buildUsuarioPayload(editData, permissions.canManageAssignments)

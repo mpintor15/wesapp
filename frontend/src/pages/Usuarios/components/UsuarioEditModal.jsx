@@ -1,5 +1,14 @@
 import AppModal from '../../../components/AppModal';
-import { fullName, TIPOS_USUARIO } from '../utils/usuariosHelpers';
+import GroupedMultiSelect from '../../../components/GroupedMultiSelect';
+import SearchableSelect from '../../../components/SearchableSelect';
+import {
+  fullName,
+  getColaboradorLabel,
+  getColaboradorSearchText,
+  getUbicacionLabel,
+  getUbicacionSearchText,
+  TIPOS_USUARIO,
+} from '../utils/usuariosHelpers';
 
 const UsuarioEditModal = ({
   canManageAssignments,
@@ -20,8 +29,8 @@ const UsuarioEditModal = ({
     isOpen
     onClose={onCancel}
     title={`Editar ${fullName(selectedUsuario)}`}
-    size="sm"
-    className="usuarios-modal usuarios-modal--sm"
+    size="md"
+    className="usuarios-modal"
   >
     <AppModal.Header>
       <>
@@ -37,64 +46,8 @@ const UsuarioEditModal = ({
             value={editData.nombre}
             onChange={(e) => onChange('nombre', e.target.value)}
             autoComplete="off"
+            required
           />
-        </div>
-        {editData.tipo_usuario === 'guardia' && canManageAssignments ? (
-          <fieldset className="form-group usuarios-form-grid__full usuarios-puntos">
-            <legend>Puntos asignados</legend>
-            {ubicacionesLoading ? <span>Cargando ubicaciones…</span> : null}
-            {ubicacionesError ? (
-              <span className="field-error" role="alert">
-                {ubicacionesError}
-              </span>
-            ) : null}
-            {!ubicacionesLoading && !ubicacionesError && ubicaciones.length === 0 ? (
-              <span>No hay ubicaciones disponibles.</span>
-            ) : null}
-            {ubicaciones.map((ubicacion) => (
-              <label key={ubicacion.id}>
-                <input
-                  type="checkbox"
-                  checked={editData.ubicacion_ids.includes(String(ubicacion.id))}
-                  onChange={(event) =>
-                    onChange(
-                      'ubicacion_ids',
-                      event.target.checked
-                        ? [...editData.ubicacion_ids, String(ubicacion.id)]
-                        : editData.ubicacion_ids.filter((id) => id !== String(ubicacion.id))
-                    )
-                  }
-                />
-                {ubicacion.nombre}
-                {ubicacion.cliente_nombre ? ` — ${ubicacion.cliente_nombre}` : ''}
-              </label>
-            ))}
-          </fieldset>
-        ) : null}
-        <div className="form-group usuarios-form-grid__full">
-          <label htmlFor="e-colaborador">Colaborador</label>
-          <select
-            id="e-colaborador"
-            value={editData.colaborador_id}
-            onChange={(e) => onChange('colaborador_id', e.target.value)}
-            disabled={colaboradoresLoading}
-            aria-describedby={colaboradoresError ? 'e-colaborador-error' : undefined}
-          >
-            <option value="">
-              {colaboradoresLoading ? 'Cargando colaboradores…' : 'Sin colaborador'}
-            </option>
-            {colaboradores.map((colaborador) => (
-              <option key={colaborador.id} value={colaborador.id}>
-                {colaborador.nombres_completos} — {colaborador.cedula}
-                {colaborador.estado === 'inactivo' ? ' (Inactivo)' : ''}
-              </option>
-            ))}
-          </select>
-          {colaboradoresError ? (
-            <span id="e-colaborador-error" className="field-error" role="alert">
-              {colaboradoresError}
-            </span>
-          ) : null}
         </div>
         <div className="form-group">
           <label htmlFor="e-apellido">Apellido</label>
@@ -103,7 +56,29 @@ const UsuarioEditModal = ({
             value={editData.apellido}
             onChange={(e) => onChange('apellido', e.target.value)}
             autoComplete="off"
+            required
           />
+        </div>
+        <div className="form-group usuarios-form-grid__full">
+          <label htmlFor="e-colaborador">
+            Colaborador <span className="required">*</span>
+          </label>
+          <SearchableSelect
+            inputId="e-colaborador"
+            value={editData.colaborador_id}
+            options={colaboradores}
+            onChange={(value) => onChange('colaborador_id', value)}
+            getOptionLabel={getColaboradorLabel}
+            getOptionSearchText={getColaboradorSearchText}
+            placeholder="Buscar por nombre, apellido o cédula"
+            loading={colaboradoresLoading}
+            emptyMessage="No hay colaboradores elegibles."
+          />
+          {colaboradoresError ? (
+            <span id="e-colaborador-error" className="field-error" role="alert">
+              {colaboradoresError}
+            </span>
+          ) : null}
         </div>
         <div className="form-group">
           <label htmlFor="e-tipo">Tipo de usuario</label>
@@ -111,6 +86,7 @@ const UsuarioEditModal = ({
             id="e-tipo"
             value={editData.tipo_usuario}
             onChange={(e) => onChange('tipo_usuario', e.target.value)}
+            required
           >
             {TIPOS_USUARIO.map((tipo) => (
               <option key={tipo.value} value={tipo.value}>
@@ -130,6 +106,28 @@ const UsuarioEditModal = ({
             <option value="false">Inactivo</option>
           </select>
         </div>
+        {editData.tipo_usuario === 'guardia' && canManageAssignments ? (
+          <fieldset className="form-group usuarios-form-grid__full usuarios-puntos">
+            <legend>Puntos asignados</legend>
+            {ubicacionesError ? (
+              <span className="field-error" role="alert">
+                {ubicacionesError}
+              </span>
+            ) : null}
+            <GroupedMultiSelect
+              inputId="e-puntos"
+              options={ubicaciones}
+              value={editData.ubicacion_ids}
+              onChange={(value) => onChange('ubicacion_ids', value)}
+              getGroupLabel={(ubicacion) => ubicacion.cliente_nombre || 'Sin cliente'}
+              getOptionLabel={getUbicacionLabel}
+              getOptionSearchText={getUbicacionSearchText}
+              placeholder="Buscar por cliente, punto o dirección"
+              loading={ubicacionesLoading}
+              emptyMessage="No hay ubicaciones disponibles."
+            />
+          </fieldset>
+        ) : null}
       </AppModal.Body>
       <AppModal.Footer className="usuarios-modal-actions">
         <button className="btn btn-primary" type="submit" disabled={isSaving}>

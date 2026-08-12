@@ -474,6 +474,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  min-width: 0;
+}
+
+.urbanizacion-manzana-card > header > div:first-child,
+.urbanizacion-villa-heading > strong,
+.urbanizacion-resident-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .urbanizacion-villa-card {
@@ -509,7 +517,16 @@
 
 .urbanizacion-card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.urbanizacion-card-actions .btn,
+.urbanizacion-villa-heading .btn {
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
 }
 
 .urbanizacion-manzana-card h3 {
@@ -539,6 +556,12 @@
   .urbanizacion-villa-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .urbanizacion-card-actions .btn,
+  .urbanizacion-villa-heading .btn,
+  .urbanizacion-inline-form .btn {
+    width: 100%;
   }
 }
 

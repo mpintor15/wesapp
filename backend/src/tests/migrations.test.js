@@ -1060,4 +1060,57 @@ describe('database migrations', () => {
       await pool.query('UPDATE villas SET estado = $1 WHERE id = 1', ['inactivo']);
     });
   });
+
+  test('migration 026 preserves legacy users and requires collaborator on new or updated rows', async () => {
+    await withTempDatabase('wesapp_migration_usuario_colaborador_026', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (id SERIAL PRIMARY KEY);
+        CREATE TABLE usuarios (
+          id SERIAL PRIMARY KEY,
+          usuario TEXT NOT NULL,
+          password_hash TEXT NOT NULL DEFAULT 'legacy-hash',
+          primer_login BOOLEAN NOT NULL DEFAULT TRUE,
+          colaborador_id INTEGER UNIQUE REFERENCES colaboradores(id) ON DELETE RESTRICT
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO colaboradores DEFAULT VALUES;
+        INSERT INTO usuarios (usuario, colaborador_id) VALUES ('vinculado', 1), ('legacy', NULL);
+      `);
+      await applyMigrationInTransaction(pool, 26);
+
+      const legacy = await pool.query('SELECT colaborador_id FROM usuarios WHERE usuario = $1', [
+        'legacy',
+      ]);
+      expect(legacy.rows[0].colaborador_id).toBeNull();
+      await expect(
+        pool.query('INSERT INTO usuarios (usuario, colaborador_id) VALUES ($1, NULL)', ['nuevo'])
+      ).rejects.toMatchObject({ code: '23514' });
+      await pool.query(
+        `UPDATE usuarios
+         SET password_hash = $1, primer_login = FALSE
+         WHERE usuario = $2`,
+        ['new-hash', 'legacy']
+      );
+      const legacyAfterFirstLogin = await pool.query(
+        'SELECT colaborador_id, password_hash, primer_login FROM usuarios WHERE usuario = $1',
+        ['legacy']
+      );
+      expect(legacyAfterFirstLogin.rows[0]).toEqual({
+        colaborador_id: null,
+        password_hash: 'new-hash',
+        primer_login: false,
+      });
+      await expect(
+        pool.query('UPDATE usuarios SET colaborador_id = NULL WHERE usuario = $1', ['vinculado'])
+      ).rejects.toMatchObject({ code: '23514' });
+      await pool.query('INSERT INTO colaboradores DEFAULT VALUES');
+      await pool.query('INSERT INTO usuarios (usuario, colaborador_id) VALUES ($1, 2)', ['nuevo']);
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 26');
+      expect(version.rowCount).toBe(1);
+      expect(await fs.readFile(schemaPath, 'utf8')).toMatch(
+        /ADD COLUMN colaborador_id INTEGER NOT NULL/
+      );
+    });
+  });
 });

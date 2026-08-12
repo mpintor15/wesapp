@@ -273,7 +273,7 @@ CREATE TABLE colaboradores (
 );
 
 ALTER TABLE usuarios
-    ADD COLUMN colaborador_id INTEGER NULL,
+    ADD COLUMN colaborador_id INTEGER NOT NULL,
     ADD CONSTRAINT usuarios_colaborador_id_fkey
         FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id) ON DELETE RESTRICT,
     ADD CONSTRAINT usuarios_colaborador_id_key UNIQUE (colaborador_id);
@@ -354,13 +354,24 @@ CREATE UNIQUE INDEX idx_clientes_identificacion_normalizada_unique
 -- DATOS DE PRUEBA
 -- ============================================
 
+-- Colaboradores vinculados a los Usuarios de prueba
+INSERT INTO colaboradores
+    (nombres_completos, cedula, fecha_nacimiento, cargo, estado)
+VALUES
+('Gerente Prueba', 'TEST-COL-001', '1990-01-01', 'Gerente', 'activo'),
+('Secretario Prueba', 'TEST-COL-002', '1990-01-01', 'Secretario', 'activo'),
+('Supervisor Prueba', 'TEST-COL-003', '1990-01-01', 'Supervisor', 'activo'),
+('Contador Prueba', 'TEST-COL-004', '1990-01-01', 'Contador', 'activo');
+
 -- Usuarios de prueba
 -- Password para todos: "password123"
-INSERT INTO usuarios (usuario, password_hash, tipo_usuario, primer_login, activo) VALUES
-('gerente1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'gerente', FALSE, TRUE),
-('secretario1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'secretario', FALSE, TRUE),
-('supervisor1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'supervisor', FALSE, TRUE),
-('contador1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'contador', FALSE, TRUE);
+INSERT INTO usuarios
+    (usuario, password_hash, tipo_usuario, colaborador_id, primer_login, activo)
+VALUES
+('gerente1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'gerente', 1, FALSE, TRUE),
+('secretario1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'secretario', 2, FALSE, TRUE),
+('supervisor1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'supervisor', 3, FALSE, TRUE),
+('contador1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'contador', 4, FALSE, TRUE);
 
 -- Clientes de prueba
 INSERT INTO clientes (nombre, identificacion) VALUES

@@ -152,7 +152,7 @@ const getUsuarios = async (req, res) => {
 const getUbicacionesAsignables = async (_req, res) => {
   try {
     const result = await db.query(
-      `SELECT u.id, u.nombre, u.cliente_id, c.nombre AS cliente_nombre
+      `SELECT u.id, u.nombre, c.direccion, u.cliente_id, c.nombre AS cliente_nombre
        FROM ubicaciones u LEFT JOIN clientes c ON c.id = u.cliente_id
        ORDER BY COALESCE(c.nombre, ''), u.nombre`
     );
@@ -185,7 +185,7 @@ const getColaboradoresElegibles = async (req, res) => {
 
 const assertEligibleColaborador = async (executor, colaboradorId, currentUsuarioId = null) => {
   if (colaboradorId === null || colaboradorId === undefined) {
-    return;
+    throw createHttpError(400, 'El colaborador es requerido');
   }
   const result = await executor.query(
     `SELECT c.id, c.estado, u.id AS usuario_id
@@ -217,14 +217,14 @@ const createUsuario = async (req, res) => {
     const apellido = typeof req.body?.apellido === 'string' ? req.body.apellido.trim() : '';
     const tipoUsuario =
       typeof req.body?.tipo_usuario === 'string' ? req.body.tipo_usuario.trim().toLowerCase() : '';
-    const colaboradorId = req.body?.colaborador_id ?? null;
+    const colaboradorId = req.body?.colaborador_id;
     const hasAssignments = Object.prototype.hasOwnProperty.call(req.body || {}, 'ubicacion_ids');
     const ubicacionIds = req.body?.ubicacion_ids || [];
 
-    if (!usuario || !tipoUsuario || !nombre || !apellido) {
+    if (!usuario || !tipoUsuario || !nombre || !apellido || !colaboradorId) {
       return res.status(400).json({
         success: false,
-        message: 'Usuario, nombre, apellido y tipo de usuario son requeridos',
+        message: 'Usuario, nombre, apellido, tipo de usuario y colaborador son requeridos',
       });
     }
 
@@ -319,6 +319,9 @@ const buildUpdateFields = (body, currentUserId, targetId) => {
     values.push(activo);
   }
   if (hasColaboradorId) {
+    if (colaboradorId === null || colaboradorId === undefined) {
+      throw createHttpError(400, 'El colaborador es requerido');
+    }
     updates.push(`colaborador_id = $${values.length + 1}`);
     values.push(colaboradorId);
   }
@@ -358,6 +361,10 @@ const updateUsuario = async (req, res) => {
 
     if (updates.length === 0 && !hasAssignments) {
       return res.status(400).json({ success: false, message: 'No hay campos para actualizar' });
+    }
+
+    if (currentUser.colaborador_id === null && !hasColaboradorId) {
+      throw createHttpError(400, 'El colaborador es requerido para editar este usuario');
     }
 
     const nextTipo = tipoUsuario || currentUser.tipo_usuario;

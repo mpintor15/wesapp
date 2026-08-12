@@ -18,6 +18,7 @@ const { usuarioCreateSchema, usuarioUpdateSchema } = require('../utils/validatio
 const {
   createUsuario,
   getColaboradoresElegibles,
+  getUbicacionesAsignables,
   updateUsuario,
   reenviarInvitacion,
   deleteUsuario,
@@ -45,21 +46,22 @@ const expectStatus = (res, status) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  db.query.mockReset();
   db.transaction.mockImplementation(async (callback) => callback({ query: db.query }));
 });
 
 describe('usuarios validation schemas', () => {
-  test('aceptan colaborador opcional, null y un id positivo', () => {
+  test('exige colaborador al crear y rechaza eliminarlo al editar', () => {
     const base = {
       usuario: 'nuevo',
       nombre: 'Nuevo',
       apellido: 'Usuario',
       tipo_usuario: 'guardia',
     };
-    expect(usuarioCreateSchema.parse(base).colaborador_id).toBeUndefined();
-    expect(usuarioCreateSchema.parse({ ...base, colaborador_id: null }).colaborador_id).toBeNull();
+    expect(() => usuarioCreateSchema.parse(base)).toThrow();
+    expect(() => usuarioCreateSchema.parse({ ...base, colaborador_id: null })).toThrow();
     expect(usuarioCreateSchema.parse({ ...base, colaborador_id: '7' }).colaborador_id).toBe(7);
-    expect(usuarioUpdateSchema.parse({ colaborador_id: '' }).colaborador_id).toBeUndefined();
+    expect(() => usuarioUpdateSchema.parse({ colaborador_id: null })).toThrow();
   });
 
   test('rechazan ids de colaborador inválidos', () => {
@@ -76,12 +78,33 @@ describe('usuarios validation schemas', () => {
 });
 
 describe('usuariosController.createUsuario', () => {
+  test('rechaza crear Usuario sin colaborador', async () => {
+    const res = mockRes();
+    await createUsuario(
+      mockReq({
+        body: {
+          usuario: 'sin_colaborador',
+          nombre: 'Sin',
+          apellido: 'Colaborador',
+          tipo_usuario: 'secretario',
+        },
+      }),
+      res
+    );
+    expectStatus(res, 400);
+    expect(res.json.mock.calls[0][0].message).toMatch(/colaborador/i);
+  });
+
   test.each([
     ['cero', []],
     ['uno', [4]],
     ['varios', [4, 5]],
   ])('crea Guardia con %s puntos', async (_label, ubicacionIds) => {
     db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 7, estado: 'activo', usuario_id: null }],
+        rowCount: 1,
+      })
       .mockResolvedValueOnce({
         rows: [
           {
@@ -90,7 +113,7 @@ describe('usuariosController.createUsuario', () => {
             nombre: 'Guardia',
             apellido: 'Prueba',
             tipo_usuario: 'guardia',
-            colaborador_id: null,
+            colaborador_id: 7,
             primer_login: true,
             activo: true,
           },
@@ -111,6 +134,7 @@ describe('usuariosController.createUsuario', () => {
           nombre: 'Guardia',
           apellido: 'Prueba',
           tipo_usuario: 'guardia',
+          colaborador_id: 7,
           ubicacion_ids: ubicacionIds,
         },
         user: { id: 1, tipo_usuario: 'gerente' },
@@ -123,10 +147,12 @@ describe('usuariosController.createUsuario', () => {
   });
 
   test('crear usuario sin tocar asignaciones no exige permiso de asignaciones', async () => {
-    db.query.mockResolvedValue({
-      rows: [{ id: 2, usuario: 'nuevo', tipo_usuario: 'secretario' }],
-      rowCount: 1,
-    });
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 7, estado: 'activo', usuario_id: null }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, usuario: 'nuevo', tipo_usuario: 'secretario', colaborador_id: 7 }],
+        rowCount: 1,
+      });
     const res = mockRes();
 
     await createUsuario(
@@ -136,6 +162,7 @@ describe('usuariosController.createUsuario', () => {
           nombre: 'Nuevo',
           apellido: 'Usuario',
           tipo_usuario: 'secretario',
+          colaborador_id: 7,
         },
         user: { id: 9, tipo_usuario: 'supervisor' },
       }),
@@ -247,20 +274,22 @@ describe('usuariosController.createUsuario', () => {
   });
 
   test.each(['guardia', 'monitorista'])('acepta el nuevo rol %s', async (tipoUsuario) => {
-    db.query.mockResolvedValue({
-      rows: [
-        {
-          id: 2,
-          usuario: `nuevo_${tipoUsuario}`,
-          nombre: 'Nuevo',
-          apellido: 'Usuario',
-          tipo_usuario: tipoUsuario,
-          primer_login: true,
-          activo: true,
-        },
-      ],
-      rowCount: 1,
-    });
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 7, estado: 'activo', usuario_id: null }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 2,
+            usuario: `nuevo_${tipoUsuario}`,
+            nombre: 'Nuevo',
+            apellido: 'Usuario',
+            tipo_usuario: tipoUsuario,
+            primer_login: true,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      });
     const res = mockRes();
 
     await createUsuario(
@@ -270,6 +299,7 @@ describe('usuariosController.createUsuario', () => {
           nombre: 'Nuevo',
           apellido: 'Usuario',
           tipo_usuario: tipoUsuario,
+          colaborador_id: 7,
         },
       }),
       res
@@ -280,20 +310,22 @@ describe('usuariosController.createUsuario', () => {
   });
 
   test('crea usuario válido con contraseña temporal', async () => {
-    db.query.mockResolvedValue({
-      rows: [
-        {
-          id: 2,
-          usuario: 'nuevo',
-          nombre: 'Nuevo',
-          apellido: 'Usuario',
-          tipo_usuario: 'secretario',
-          primer_login: true,
-          activo: true,
-        },
-      ],
-      rowCount: 1,
-    });
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 7, estado: 'activo', usuario_id: null }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 2,
+            usuario: 'nuevo',
+            nombre: 'Nuevo',
+            apellido: 'Usuario',
+            tipo_usuario: 'secretario',
+            primer_login: true,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
+      });
     const res = mockRes();
 
     await createUsuario(
@@ -303,6 +335,7 @@ describe('usuariosController.createUsuario', () => {
           nombre: 'Nuevo',
           apellido: 'Usuario',
           tipo_usuario: 'secretario',
+          colaborador_id: 7,
         },
       }),
       res
@@ -328,6 +361,7 @@ describe('usuariosController.createUsuario', () => {
           nombre: 'Nuevo',
           apellido: 'Usuario',
           tipo_usuario: 'admin',
+          colaborador_id: 7,
         },
       }),
       res
@@ -339,7 +373,9 @@ describe('usuariosController.createUsuario', () => {
   });
 
   test('reporta usuario duplicado', async () => {
-    db.query.mockRejectedValue({ code: '23505' });
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 7, estado: 'activo', usuario_id: null }], rowCount: 1 })
+      .mockRejectedValueOnce({ code: '23505' });
     const res = mockRes();
 
     await createUsuario(
@@ -349,6 +385,7 @@ describe('usuariosController.createUsuario', () => {
           nombre: 'Nuevo',
           apellido: 'Usuario',
           tipo_usuario: 'secretario',
+          colaborador_id: 7,
         },
       }),
       res
@@ -362,11 +399,19 @@ describe('usuariosController.updateUsuario', () => {
   test('editar sin tocar asignaciones no exige permiso de asignaciones', async () => {
     db.query
       .mockResolvedValueOnce({
-        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true, colaborador_id: 7 }],
         rowCount: 1,
       })
       .mockResolvedValueOnce({
-        rows: [{ id: 2, nombre: 'Actualizado', tipo_usuario: 'secretario', activo: true }],
+        rows: [
+          {
+            id: 2,
+            nombre: 'Actualizado',
+            tipo_usuario: 'secretario',
+            activo: true,
+            colaborador_id: 7,
+          },
+        ],
         rowCount: 1,
       });
     const res = mockRes();
@@ -381,7 +426,63 @@ describe('usuariosController.updateUsuario', () => {
     );
 
     expect(res.status).not.toHaveBeenCalledWith(403);
-    expect(res.json).toHaveBeenCalled();
+    expect(res.json.mock.calls[0][0].data.colaborador_id).toBe(7);
+  });
+
+  test.each([
+    ['nombre', { nombre: 'Actualizado' }],
+    ['rol', { tipo_usuario: 'secretario' }],
+    ['estado', { activo: false }],
+    ['asignaciones', { ubicacion_ids: [4] }],
+  ])('legacy sin colaborador rechaza editar %s sin vincularse', async (_label, body) => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: null }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await updateUsuario(
+      mockReq({ params: { id: '2' }, body, user: { id: 1, tipo_usuario: 'gerente' } }),
+      res
+    );
+
+    expectStatus(res, 400);
+    expect(res.json.mock.calls[0][0].message).toMatch(/colaborador/i);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('legacy sin colaborador edita y se vincula en la misma transacción', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true, colaborador_id: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 8, estado: 'activo', usuario_id: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 2,
+            nombre: 'Actualizado',
+            tipo_usuario: 'secretario',
+            activo: true,
+            colaborador_id: 8,
+          },
+        ],
+        rowCount: 1,
+      });
+    const res = mockRes();
+
+    await updateUsuario(
+      mockReq({ params: { id: '2' }, body: { nombre: 'Actualizado', colaborador_id: 8 } }),
+      res
+    );
+
+    expect(res.json.mock.calls[0][0].data.colaborador_id).toBe(8);
+    expect(db.query.mock.calls[1][0]).toContain('FOR UPDATE OF c');
+    expect(db.query.mock.calls[2][0]).toContain('UPDATE usuarios');
   });
 
   test.each([
@@ -391,11 +492,11 @@ describe('usuariosController.updateUsuario', () => {
   ])('reemplaza asignaciones de Guardia con %s puntos', async (_label, ubicacionIds) => {
     db.query
       .mockResolvedValueOnce({
-        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: null }],
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
         rowCount: 1,
       })
       .mockResolvedValueOnce({
-        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: null }],
+        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
         rowCount: 1,
       })
       .mockResolvedValueOnce({
@@ -604,22 +705,18 @@ describe('usuariosController.updateUsuario', () => {
     expect(body.message).toMatch(/otro usuario/i);
   });
 
-  test('desvincula colaborador con null', async () => {
-    db.query
-      .mockResolvedValueOnce({
-        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
-        rowCount: 1,
-      })
-      .mockResolvedValueOnce({
-        rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: null }],
-        rowCount: 1,
-      });
+  test('rechaza eliminar el colaborador durante edición', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 2, tipo_usuario: 'guardia', activo: true, colaborador_id: 7 }],
+      rowCount: 1,
+    });
     const res = mockRes();
 
     await updateUsuario(mockReq({ params: { id: '2' }, body: { colaborador_id: null } }), res);
 
-    expect(res.json.mock.calls[0][0].data.colaborador_id).toBeNull();
-    expect(db.query.mock.calls[1][0]).toContain('colaborador_id = $1');
+    expectStatus(res, 400);
+    expect(res.json.mock.calls[0][0].message).toMatch(/colaborador/i);
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   test('conserva vínculo existente aunque el colaborador esté inactivo', async () => {
@@ -753,6 +850,29 @@ describe('usuariosController.getColaboradoresElegibles', () => {
     expect(sql).toMatch(/u\.id = \$1/);
     expect(sql).not.toMatch(/c\.estado = 'inactivo'/);
     expect(params).toEqual([12]);
+  });
+});
+
+describe('usuariosController.getUbicacionesAsignables', () => {
+  test('expone cliente, punto y dirección sin datos adicionales', async () => {
+    db.query.mockResolvedValue({
+      rows: [
+        {
+          id: 4,
+          nombre: 'Norte',
+          direccion: 'Av. Amazonas',
+          cliente_id: 2,
+          cliente_nombre: 'Cliente A',
+        },
+      ],
+      rowCount: 1,
+    });
+    const res = mockRes();
+    await getUbicacionesAsignables(mockReq(), res);
+    expect(res.json.mock.calls[0][0].data[0]).toEqual(
+      expect.objectContaining({ direccion: 'Av. Amazonas', cliente_nombre: 'Cliente A' })
+    );
+    expect(db.query.mock.calls[0][0]).toMatch(/c\.direccion/);
   });
 });
 

@@ -13,7 +13,7 @@ export const EMPTY_CREATE_USER_FORM = {
   nombre: '',
   apellido: '',
   usuario: '',
-  tipo_usuario: 'secretario',
+  tipo_usuario: '',
   colaborador_id: '',
   ubicacion_ids: [],
 };
@@ -21,7 +21,7 @@ export const EMPTY_CREATE_USER_FORM = {
 export const EMPTY_EDIT_USER_FORM = {
   nombre: '',
   apellido: '',
-  tipo_usuario: 'secretario',
+  tipo_usuario: '',
   activo: true,
   colaborador_id: '',
   ubicacion_ids: [],
@@ -48,6 +48,7 @@ export const validateCreateForm = (data) => {
   if (!data.apellido.trim()) errors.apellido = 'Ingresa el apellido';
   if (!data.usuario.trim()) errors.usuario = 'Ingresa el usuario';
   if (!data.tipo_usuario) errors.tipo_usuario = 'Selecciona el tipo de usuario';
+  if (!data.colaborador_id) errors.colaborador_id = 'Selecciona un colaborador';
   return errors;
 };
 
@@ -90,6 +91,20 @@ export const buildUsuarioPayload = (data, canManageAssignments) => {
   }
   return payload;
 };
+
+export const getColaboradorLabel = (colaborador) =>
+  `${colaborador.nombres_completos} — ${colaborador.cedula}${
+    colaborador.estado === 'inactivo' ? ' (Inactivo)' : ''
+  }`;
+
+export const getColaboradorSearchText = (colaborador) =>
+  `${colaborador.nombres_completos} ${colaborador.cedula}`;
+
+export const getUbicacionLabel = (ubicacion) =>
+  `${ubicacion.nombre}${ubicacion.direccion ? ` · ${ubicacion.direccion}` : ''}`;
+
+export const getUbicacionSearchText = (ubicacion) =>
+  `${ubicacion.cliente_nombre || 'Sin cliente'} ${ubicacion.nombre} ${ubicacion.direccion || ''}`;
 
 export const getTipoUsuarioLabel = (tipoUsuario) =>
   TIPOS_USUARIO.find((tipo) => tipo.value === tipoUsuario)?.label ?? tipoUsuario;

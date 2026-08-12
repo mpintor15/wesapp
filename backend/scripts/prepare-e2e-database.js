@@ -83,21 +83,31 @@ const clearDevelopmentSeed = async (pool) => {
 const seedE2eFixtures = async (pool) => {
   const passwordHash = await bcrypt.hash(E2E_PASSWORD, 10);
 
+  const colaboradores = await pool.query(`
+    INSERT INTO colaboradores (nombres_completos, cedula, fecha_nacimiento, cargo, estado)
+    VALUES
+      ('Gerente E2E', 'E2E-COL-001', '1990-01-01', 'Gerente', 'activo'),
+      ('Contador E2E', 'E2E-COL-002', '1990-01-01', 'Contador', 'activo')
+    RETURNING id
+  `);
+
   const gerente = await pool.query(
     `
-      INSERT INTO usuarios (usuario, password_hash, nombre, apellido, tipo_usuario, primer_login, activo)
-      VALUES ($1, $2, 'Gerente', 'E2E', 'gerente', FALSE, TRUE)
+      INSERT INTO usuarios
+        (usuario, password_hash, nombre, apellido, tipo_usuario, colaborador_id, primer_login, activo)
+      VALUES ($1, $2, 'Gerente', 'E2E', 'gerente', $3, FALSE, TRUE)
       RETURNING id
     `,
-    ['e2e_gerente', passwordHash]
+    ['e2e_gerente', passwordHash, colaboradores.rows[0].id]
   );
 
   await pool.query(
     `
-      INSERT INTO usuarios (usuario, password_hash, nombre, apellido, tipo_usuario, primer_login, activo)
-      VALUES ($1, $2, 'Contador', 'E2E', 'contador', FALSE, TRUE)
+      INSERT INTO usuarios
+        (usuario, password_hash, nombre, apellido, tipo_usuario, colaborador_id, primer_login, activo)
+      VALUES ($1, $2, 'Contador', 'E2E', 'contador', $3, FALSE, TRUE)
     `,
-    ['e2e_contador', passwordHash]
+    ['e2e_contador', passwordHash, colaboradores.rows[1].id]
   );
 
   const cliente = await pool.query(

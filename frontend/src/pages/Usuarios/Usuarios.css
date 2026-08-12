@@ -91,6 +91,18 @@
   gap: 14px;
 }
 
+.usuarios-puntos {
+  position: relative;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.usuarios-puntos legend {
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
 /* ── Modal action buttons ─────────────────────────────────── */
 .usuarios-modal-actions .btn {
   flex: 0 0 auto;
@@ -227,8 +239,4 @@
 }
 .usuarios-form-grid__full {
   grid-column: 1 / -1;
-}
-.usuarios-puntos {
-  display: grid;
-  gap: 0.5rem;
 }
