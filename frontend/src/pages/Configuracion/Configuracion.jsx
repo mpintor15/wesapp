@@ -13,7 +13,7 @@ import ClientesCatalog from './ClientesCatalog';
 import { getConfiguracionPermissions } from './utils/configuracionPermissions';
 import './Configuracion.css';
 
-const EMPTY_FORM = { nombre: '', cliente_id: '' };
+const EMPTY_FORM = { nombre: '', cliente_id: '', tipo_punto: 'GENERAL' };
 const MAX_NOMBRE_LENGTH = 100;
 const COLLAPSED_UBICACIONES_LIMIT = 5;
 const UBICACIONES_PAGE_SIZE = 25;
@@ -128,6 +128,9 @@ const getLocationStatusMeta = (ubicacion) => {
       : 'configuracion-status-text',
   };
 };
+
+const getPointTypeLabel = (tipoPunto) =>
+  tipoPunto === 'URBANIZACION' ? 'Urbanización' : 'General';
 
 const getUbicacionFieldError = (result) => {
   if (result?.code === 'CLIENT_INACTIVE' || result?.code === 'LOCATION_CLIENT_REQUIRED') {
@@ -315,6 +318,18 @@ const UbicacionFormModal = ({
                 {fieldErrors.nombre}
               </div>
             )}
+          </div>
+          <div className="form-group">
+            <label htmlFor="ubicacion-tipo-punto">Tipo de punto</label>
+            <select
+              id="ubicacion-tipo-punto"
+              value={form.tipo_punto}
+              onChange={(event) => onChange({ tipo_punto: event.target.value })}
+              disabled={isSubmitting}
+            >
+              <option value="GENERAL">General</option>
+              <option value="URBANIZACION">Urbanización</option>
+            </select>
           </div>
         </AppModal.Body>
         <AppModal.Footer className="modal-buttons">
@@ -581,6 +596,7 @@ const Configuracion = () => {
         ubicacion.cliente_id == null
           ? HISTORICAL_UNASSIGNED_CLIENT_VALUE
           : String(ubicacion.cliente_id),
+      tipo_punto: ubicacion.tipo_punto || 'GENERAL',
     });
     setFormError('');
     setFormFieldErrors({});
@@ -628,6 +644,7 @@ const Configuracion = () => {
     const payload = {
       nombre,
       cliente_id: isPreservingHistoricalUnassigned ? null : Number(form.cliente_id),
+      tipo_punto: form.tipo_punto,
     };
     try {
       const result =
@@ -1078,12 +1095,17 @@ const Configuracion = () => {
                                             )}
                                             <td className="configuracion-location-cell">
                                               {ubicacion ? (
-                                                <span
-                                                  className="configuracion-location-name"
-                                                  title={ubicacion.nombre}
-                                                >
-                                                  {ubicacion.nombre}
-                                                </span>
+                                                <div>
+                                                  <span
+                                                    className="configuracion-location-name"
+                                                    title={ubicacion.nombre}
+                                                  >
+                                                    {ubicacion.nombre}
+                                                  </span>
+                                                  <small className="configuracion-point-type">
+                                                    {getPointTypeLabel(ubicacion.tipo_punto)}
+                                                  </small>
+                                                </div>
                                               ) : (
                                                 <span className="configuracion-muted-value">
                                                   Sin ubicaciones
@@ -1327,6 +1349,9 @@ const Configuracion = () => {
                                                 <span className="configuracion-location-name">
                                                   {ubicacion.nombre}
                                                 </span>
+                                                <small className="configuracion-point-type">
+                                                  {getPointTypeLabel(ubicacion.tipo_punto)}
+                                                </small>
                                                 <div className="configuracion-location-card-status">
                                                   <span className={status.className}>
                                                     {status.label}

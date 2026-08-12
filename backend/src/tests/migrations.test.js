@@ -931,4 +931,27 @@ describe('database migrations', () => {
       expect(assignments.rowCount).toBe(0);
     });
   });
+
+  test('migration 023 preserves locations as GENERAL and validates point types', async () => {
+    await withTempDatabase('wesapp_migration_ubicaciones_tipo_023', async (pool) => {
+      await pool.query(`
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO ubicaciones (nombre) VALUES ('Existente');
+      `);
+      await applyMigrationInTransaction(pool, 23);
+      const existing = await pool.query('SELECT tipo_punto FROM ubicaciones WHERE id = 1');
+      expect(existing.rows[0].tipo_punto).toBe('GENERAL');
+      await pool.query('INSERT INTO ubicaciones (nombre, tipo_punto) VALUES ($1, $2)', [
+        'Urb',
+        'URBANIZACION',
+      ]);
+      await expect(
+        pool.query('INSERT INTO ubicaciones (nombre, tipo_punto) VALUES ($1, $2)', [
+          'Inválida',
+          'OTRO',
+        ])
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
 });

@@ -10,6 +10,7 @@ const { findGroupedLocations, toBoolean } = require('../repositories/ubicaciones
 const normalizeName = (value) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
 const GROUPED_PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const ALLOWED_POINT_TYPES = new Set(['GENERAL', 'URBANIZACION']);
 
 const parseId = (value) => {
   const result = parseStrictPositiveInteger(value, 'La ubicación es inválida');
@@ -114,6 +115,16 @@ const validateName = (value) => {
   return nombre;
 };
 
+const validatePointType = (value = 'GENERAL') => {
+  const tipoPunto = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (!ALLOWED_POINT_TYPES.has(tipoPunto)) {
+    const error = new Error('El tipo de punto debe ser GENERAL o URBANIZACION');
+    error.status = 400;
+    throw error;
+  }
+  return tipoPunto;
+};
+
 const getUbicaciones = async (req, res) => {
   try {
     const params = [];
@@ -163,6 +174,7 @@ const getUbicaciones = async (req, res) => {
       SELECT
         u.id,
         u.nombre,
+        u.tipo_punto,
         u.cliente_id,
         c.nombre AS cliente_nombre,
         c.estado AS cliente_estado,
@@ -172,7 +184,7 @@ const getUbicaciones = async (req, res) => {
       LEFT JOIN clientes c ON c.id = u.cliente_id
       LEFT JOIN articulos a ON a.ubicacion_id = u.id
       ${where}
-      GROUP BY u.id, u.nombre, u.cliente_id, c.nombre, c.estado
+      GROUP BY u.id, u.nombre, u.tipo_punto, u.cliente_id, c.nombre, c.estado
       ORDER BY c.nombre ASC NULLS LAST, u.nombre ASC
     `,
       params
@@ -236,6 +248,7 @@ const getUbicacionesAgrupadas = async (req, res) => {
 const createUbicacion = async (req, res) => {
   try {
     const nombre = validateName(req.body?.nombre);
+    const tipoPunto = validatePointType(req.body?.tipo_punto);
     const requestedCliente = parseRequestedClienteId(req.body);
     if (!requestedCliente.valid) {
       return res.status(400).json({ success: false, message: 'El cliente es inválido' });
@@ -268,8 +281,9 @@ const createUbicacion = async (req, res) => {
       }
 
       const result = await client.query(
-        'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2) RETURNING id, nombre, cliente_id',
-        [nombre, clienteId]
+        `INSERT INTO ubicaciones (nombre, cliente_id, tipo_punto)
+         VALUES ($1, $2, $3) RETURNING id, nombre, cliente_id, tipo_punto`,
+        [nombre, clienteId, tipoPunto]
       );
       const row = { ...result.rows[0], cliente_nombre: cliente.nombre };
       await logAuditStrict(client, {
@@ -306,7 +320,7 @@ const updateUbicacion = async (req, res) => {
 
     const updated = await db.transaction(async (client) => {
       const current = await client.query(
-        `SELECT u.id, u.nombre, u.cliente_id, c.nombre AS cliente_nombre, c.estado AS cliente_estado
+        `SELECT u.id, u.nombre, u.tipo_punto, u.cliente_id, c.nombre AS cliente_nombre, c.estado AS cliente_estado
          FROM ubicaciones u
          LEFT JOIN clientes c ON c.id = u.cliente_id
          WHERE u.id = $1
@@ -320,6 +334,9 @@ const updateUbicacion = async (req, res) => {
       }
 
       const currentUbicacion = current.rows[0];
+      const tipoPunto = Object.prototype.hasOwnProperty.call(req.body || {}, 'tipo_punto')
+        ? validatePointType(req.body.tipo_punto)
+        : currentUbicacion.tipo_punto || 'GENERAL';
       const currentClienteId =
         currentUbicacion.cliente_id === null ? null : Number(currentUbicacion.cliente_id);
       const requestedClienteId = requestedCliente.provided
@@ -366,8 +383,9 @@ const updateUbicacion = async (req, res) => {
       }
 
       const result = await client.query(
-        'UPDATE ubicaciones SET nombre = $1, cliente_id = $2 WHERE id = $3 RETURNING id, nombre, cliente_id',
-        [nombre, requestedClienteId, id]
+        `UPDATE ubicaciones SET nombre = $1, cliente_id = $2, tipo_punto = $3
+         WHERE id = $4 RETURNING id, nombre, cliente_id, tipo_punto`,
+        [nombre, requestedClienteId, tipoPunto, id]
       );
       const row = {
         ...result.rows[0],

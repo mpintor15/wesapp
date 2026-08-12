@@ -101,6 +101,8 @@ CREATE TABLE abonos (
 CREATE TABLE ubicaciones (
     id SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
+    tipo_punto VARCHAR(20) NOT NULL DEFAULT 'GENERAL'
+        CHECK (tipo_punto IN ('GENERAL', 'URBANIZACION')),
     cliente_id INTEGER CONSTRAINT fk_ubicaciones_cliente REFERENCES clientes(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

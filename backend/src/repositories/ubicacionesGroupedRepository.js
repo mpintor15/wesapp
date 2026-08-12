@@ -56,6 +56,7 @@ const findGroupedLocationsSource = async ({ search }, executor = db) => {
     SELECT
       u.id,
       u.nombre,
+      u.tipo_punto,
       u.cliente_id,
       c.nombre AS cliente_nombre,
       c.estado AS cliente_estado,
@@ -78,7 +79,7 @@ const findGroupedLocationsSource = async ({ search }, executor = db) => {
     LEFT JOIN articulos_bajas ab ON ab.ubicacion_id = u.id
     LEFT JOIN inventario_stock_efectos ise
       ON ise.ubicacion_anterior_id = u.id OR ise.ubicacion_posterior_id = u.id
-    GROUP BY u.id, u.nombre, u.cliente_id, c.nombre, c.estado
+    GROUP BY u.id, u.nombre, u.tipo_punto, u.cliente_id, c.nombre, c.estado
     ORDER BY c.nombre ASC NULLS LAST, u.nombre ASC, u.id ASC
   `;
 
@@ -99,6 +100,7 @@ const normalizeLocation = (location) => {
   return {
     id: location.id,
     nombre: location.nombre,
+    tipo_punto: location.tipo_punto || 'GENERAL',
     articulos_activos: activos,
     articulos_totales: total,
     estado_uso: total > 0 ? 'en_uso' : 'sin_articulos',

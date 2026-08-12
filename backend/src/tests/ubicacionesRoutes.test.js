@@ -621,7 +621,9 @@ describe('ubicaciones routes', () => {
         expect(query).toContain('LEFT JOIN clientes c ON c.id = u.cliente_id');
         expect(query).toContain('c.estado AS cliente_estado');
         expect(query).toContain('COUNT(a.id) FILTER (WHERE a.activo = TRUE)::int');
-        expect(query).toContain('GROUP BY u.id, u.nombre, u.cliente_id, c.nombre, c.estado');
+        expect(query).toContain(
+          'GROUP BY u.id, u.nombre, u.tipo_punto, u.cliente_id, c.nombre, c.estado'
+        );
         return { rows: [], rowCount: 0 };
       }
 
@@ -749,8 +751,8 @@ describe('ubicaciones routes', () => {
 
     expect(res.status).toBe(201);
     expect(client.query).toHaveBeenCalledWith(
-      'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2) RETURNING id, nombre, cliente_id',
-      ['Bodega Norte', 10]
+      expect.stringContaining('INSERT INTO ubicaciones (nombre, cliente_id, tipo_punto)'),
+      ['Bodega Norte', 10, 'GENERAL']
     );
     expect(res.body).toMatchObject({
       success: true,
@@ -777,6 +779,34 @@ describe('ubicaciones routes', () => {
         }),
       })
     );
+  });
+
+  test('crea ubicación URBANIZACION y rechaza tipos inválidos', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({ rows: [{ id: 10, nombre: 'ACME', estado: 'activo' }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 4, nombre: 'Conjunto', cliente_id: 10, tipo_punto: 'URBANIZACION' }],
+        rowCount: 1,
+      });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const created = await requestWithAuth('post', '/api/inventario/ubicaciones').send({
+      nombre: 'Conjunto',
+      cliente_id: 10,
+      tipo_punto: 'URBANIZACION',
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.data.tipo_punto).toBe('URBANIZACION');
+
+    const invalid = await requestWithAuth('post', '/api/inventario/ubicaciones').send({
+      nombre: 'Inválida',
+      cliente_id: 10,
+      tipo_punto: 'OTRO',
+    });
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.message).toMatch(/GENERAL o URBANIZACION/);
   });
 
   test('rechaza crear ubicación sin cliente', async () => {
@@ -917,8 +947,10 @@ describe('ubicaciones routes', () => {
 
     expect(res.status).toBe(200);
     expect(client.query).toHaveBeenCalledWith(
-      'UPDATE ubicaciones SET nombre = $1, cliente_id = $2 WHERE id = $3 RETURNING id, nombre, cliente_id',
-      ['Bodega Sur', 11, 3]
+      expect.stringContaining(
+        'UPDATE ubicaciones SET nombre = $1, cliente_id = $2, tipo_punto = $3'
+      ),
+      ['Bodega Sur', 11, 'GENERAL', 3]
     );
     expect(res.body).toMatchObject({
       success: true,
@@ -934,6 +966,41 @@ describe('ubicaciones routes', () => {
         datos_nuevos: expect.objectContaining({ nombre: 'Bodega Sur', cliente_id: 11 }),
       })
     );
+  });
+
+  test.each([
+    ['GENERAL', 'URBANIZACION'],
+    ['URBANIZACION', 'GENERAL'],
+  ])('cambia tipo de punto de %s a %s', async (currentType, nextType) => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 3,
+            nombre: 'Punto',
+            tipo_punto: currentType,
+            cliente_id: 10,
+            cliente_nombre: 'ACME',
+            cliente_estado: 'activo',
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 3, nombre: 'Punto', cliente_id: 10, tipo_punto: nextType }],
+        rowCount: 1,
+      });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('put', '/api/inventario/ubicaciones/3').send({
+      nombre: 'Punto',
+      tipo_punto: nextType,
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.tipo_punto).toBe(nextType);
   });
 
   test('edita ubicación histórica sin cliente conservando cliente_id null', async () => {
@@ -965,8 +1032,10 @@ describe('ubicaciones routes', () => {
     expect(res.status).toBe(200);
     expect(client.query.mock.calls[0][0]).toContain('FOR UPDATE');
     expect(client.query).toHaveBeenCalledWith(
-      'UPDATE ubicaciones SET nombre = $1, cliente_id = $2 WHERE id = $3 RETURNING id, nombre, cliente_id',
-      ['Bodega histórica renombrada', null, 7]
+      expect.stringContaining(
+        'UPDATE ubicaciones SET nombre = $1, cliente_id = $2, tipo_punto = $3'
+      ),
+      ['Bodega histórica renombrada', null, 'GENERAL', 7]
     );
     expect(client.query.mock.calls.map((call) => call[0]).join('\n')).not.toContain(
       'FROM clientes'
@@ -1078,8 +1147,10 @@ describe('ubicaciones routes', () => {
 
     expect(res.status).toBe(200);
     expect(client.query).toHaveBeenCalledWith(
-      'UPDATE ubicaciones SET nombre = $1, cliente_id = $2 WHERE id = $3 RETURNING id, nombre, cliente_id',
-      ['Bodega asociada renombrada', 10, 3]
+      expect.stringContaining(
+        'UPDATE ubicaciones SET nombre = $1, cliente_id = $2, tipo_punto = $3'
+      ),
+      ['Bodega asociada renombrada', 10, 'GENERAL', 3]
     );
     expect(res.body).toMatchObject({
       data: {
@@ -1165,8 +1236,10 @@ describe('ubicaciones routes', () => {
 
     expect(res.status).toBe(200);
     expect(client.query).toHaveBeenCalledWith(
-      'UPDATE ubicaciones SET nombre = $1, cliente_id = $2 WHERE id = $3 RETURNING id, nombre, cliente_id',
-      ['Bodega Norte', 15, 3]
+      expect.stringContaining(
+        'UPDATE ubicaciones SET nombre = $1, cliente_id = $2, tipo_punto = $3'
+      ),
+      ['Bodega Norte', 15, 'GENERAL', 3]
     );
   });
 

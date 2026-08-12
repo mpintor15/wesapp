@@ -167,6 +167,7 @@ const buildGroupedUbicaciones = (sourceUbicaciones = ubicaciones, sourceClientes
     current.push({
       id: ubicacion.id,
       nombre: ubicacion.nombre,
+      tipo_punto: ubicacion.tipo_punto || 'GENERAL',
       articulos_activos: ubicacion.articulos_activos,
       articulos_totales: ubicacion.articulos_totales,
       estado_uso: ubicacion.articulos_totales > 0 ? 'en_uso' : 'sin_articulos',
@@ -195,6 +196,7 @@ const buildGroupedUbicaciones = (sourceUbicaciones = ubicaciones, sourceClientes
     .map((ubicacion) => ({
       id: ubicacion.id,
       nombre: ubicacion.nombre,
+      tipo_punto: ubicacion.tipo_punto || 'GENERAL',
       articulos_activos: ubicacion.articulos_activos,
       articulos_totales: ubicacion.articulos_totales,
       estado_uso: ubicacion.articulos_totales > 0 ? 'en_uso' : 'sin_articulos',
@@ -973,10 +975,56 @@ describe('Configuracion ubicaciones', () => {
     expect(inventarioService.createUbicacion).toHaveBeenCalledWith({
       nombre: 'Patio',
       cliente_id: 1,
+      tipo_punto: 'GENERAL',
     });
     expect(inventarioService.getUbicaciones).toHaveBeenLastCalledWith({});
     expect(page.text()).toContain('Patio');
 
+    page.unmount();
+  });
+
+  test('creación usa General por defecto y permite enviar Urbanización', async () => {
+    inventarioService.createUbicacion.mockResolvedValue({ success: true, data: {} });
+    const page = await renderPage();
+
+    await page.click(page.button('Ubicaciones'));
+    await page.click(page.button('Crear ubicación'));
+    expect(page.field('#ubicacion-tipo-punto').value).toBe('GENERAL');
+    page.changeField('#ubicacion-cliente', '1');
+    page.changeInput('Conjunto Norte');
+    page.changeField('#ubicacion-tipo-punto', 'URBANIZACION');
+    await page.submitForm();
+
+    expect(inventarioService.createUbicacion).toHaveBeenCalledWith({
+      nombre: 'Conjunto Norte',
+      cliente_id: 1,
+      tipo_punto: 'URBANIZACION',
+    });
+    page.unmount();
+  });
+
+  test('edición refleja, cambia y presenta el tipo actual', async () => {
+    const urbanizacion = ubicaciones.map((ubicacion) =>
+      ubicacion.id === 2 ? { ...ubicacion, tipo_punto: 'URBANIZACION' } : ubicacion
+    );
+    inventarioService.getUbicaciones.mockResolvedValue(success(urbanizacion));
+    inventarioService.getUbicacionesAgrupadas.mockResolvedValue(
+      groupedSuccess(buildGroupedUbicaciones(urbanizacion, clientes))
+    );
+    inventarioService.updateUbicacion.mockResolvedValue({ success: true, data: {} });
+    const page = await renderPage();
+
+    await page.click(page.button('Ubicaciones'));
+    expect(page.text()).toContain('Urbanización');
+    await page.click(page.container.querySelector('button[aria-label="Editar ubicación Archivo"]'));
+    expect(page.field('#ubicacion-tipo-punto').value).toBe('URBANIZACION');
+    page.changeField('#ubicacion-tipo-punto', 'GENERAL');
+    await page.submitForm();
+
+    expect(inventarioService.updateUbicacion).toHaveBeenCalledWith(
+      2,
+      expect.objectContaining({ tipo_punto: 'GENERAL' })
+    );
     page.unmount();
   });
 
@@ -1087,6 +1135,7 @@ describe('Configuracion ubicaciones', () => {
     expect(inventarioService.updateUbicacion).toHaveBeenCalledWith(2, {
       nombre: 'Archivo General',
       cliente_id: 1,
+      tipo_punto: 'GENERAL',
     });
     expect(inventarioService.getUbicaciones).toHaveBeenLastCalledWith({});
     expect(page.text()).toContain('Archivo General');
@@ -1424,6 +1473,7 @@ describe('Configuracion ubicaciones', () => {
     expect(inventarioService.updateUbicacion).toHaveBeenCalledWith(3, {
       nombre: 'Histórica editada',
       cliente_id: null,
+      tipo_punto: 'GENERAL',
     });
 
     page.unmount();
@@ -1457,6 +1507,7 @@ describe('Configuracion ubicaciones', () => {
     expect(inventarioService.updateUbicacion).toHaveBeenCalledWith(3, {
       nombre: 'Histórica',
       cliente_id: 1,
+      tipo_punto: 'GENERAL',
     });
 
     page.unmount();
@@ -1506,6 +1557,7 @@ describe('Configuracion ubicaciones', () => {
     expect(inventarioService.updateUbicacion).toHaveBeenCalledWith(8, {
       nombre: 'Bodega histórica editada',
       cliente_id: 2,
+      tipo_punto: 'GENERAL',
     });
 
     page.unmount();
@@ -1587,6 +1639,7 @@ describe('Configuracion ubicaciones', () => {
     expect(inventarioService.updateUbicacion).toHaveBeenCalledWith(8, {
       nombre: 'Bodega histórica',
       cliente_id: 1,
+      tipo_punto: 'GENERAL',
     });
 
     page.unmount();
@@ -1646,6 +1699,7 @@ describe('Configuracion ubicaciones', () => {
     expect(inventarioService.createUbicacion).toHaveBeenCalledWith({
       nombre: 'Patio nuevo',
       cliente_id: 1,
+      tipo_punto: 'GENERAL',
     });
 
     page.unmount();
