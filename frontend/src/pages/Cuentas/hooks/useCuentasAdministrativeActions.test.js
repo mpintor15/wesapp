@@ -70,7 +70,7 @@ describe('useCuentasAdministrativeActions', () => {
     hook.unmount();
   });
 
-  test('abre/cierra detalles de pago y respeta permisos de factura', async () => {
+  test('respeta permisos de factura y no expone acciones destructivas', async () => {
     const props = baseProps({
       permissions: { canCancelFactura: false },
     });
@@ -78,19 +78,12 @@ describe('useCuentasAdministrativeActions', () => {
 
     act(() => {
       hook.result.openCancelFacturaModal({ num_factura: 1 });
-      hook.result.openPagoDetailModal({ id: 3 });
     });
 
     expect(props.showToast).toHaveBeenCalledWith(
       'Solo un usuario Gerente puede anular facturas',
       'error'
     );
-    expect(hook.result.selectedPago).toEqual({ id: 3 });
-
-    act(() => {
-      hook.result.closePagoDetailModal();
-    });
-    expect(hook.result.selectedPago).toBeNull();
     expect(hook.result.requestDeletePago).toBeUndefined();
     expect(hook.result.confirmDeletePago).toBeUndefined();
     expect(hook.result.requestDeleteFactura).toBeUndefined();

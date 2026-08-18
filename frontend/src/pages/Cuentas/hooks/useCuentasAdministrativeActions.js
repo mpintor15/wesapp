@@ -7,7 +7,6 @@ const useCuentasAdministrativeActions = ({ permissions, showToast, onRefresh }) 
   const { isSubmitting: isSubmittingCancelFactura, withSubmit: withCancelFacturaSubmit } =
     useSubmitState();
   const [anulacionModal, setAnulacionModal] = useState(null);
-  const [selectedPago, setSelectedPago] = useState(null);
   const [facturaToCancel, setFacturaToCancel] = useState(null);
   const [cancelDetail, setCancelDetail] = useState('');
   const [showCancelFacturaModal, setShowCancelFacturaModal] = useState(false);
@@ -60,14 +59,11 @@ const useCuentasAdministrativeActions = ({ permissions, showToast, onRefresh }) 
 
   return {
     anulacionModal,
-    selectedPago,
     facturaToCancel,
     cancelDetail,
     showCancelFacturaModal,
     isSubmittingCancelFactura,
     setAnulacionModal,
-    openPagoDetailModal: setSelectedPago,
-    closePagoDetailModal: () => setSelectedPago(null),
     openCancelFacturaModal,
     closeCancelFacturaModal,
     setCancelDetail,

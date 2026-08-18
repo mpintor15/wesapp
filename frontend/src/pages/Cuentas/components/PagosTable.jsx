@@ -1,7 +1,12 @@
 import { formatDate, formatMetodoPago, formatMoney } from '../utils/cuentasFormatters';
 import SortHeader from './SortHeader';
 
-const PagosTable = ({ rows, loading, filters, sort, onSort, onOpenDetail }) => (
+const getFacturasLabel = (pago) => {
+  const count = pago.facturas_count || pago.facturas?.length || 0;
+  return `${count} ${count === 1 ? 'factura' : 'facturas'}`;
+};
+
+const PagosTable = ({ rows, loading, filters, sort, selectedPagoId, onSort, onSelectPago }) => (
   <div className="table-responsive app-table-shell app-table-scroll pagos-table-shell">
     <table className="app-table pagos-table">
       <thead>
@@ -30,13 +35,14 @@ const PagosTable = ({ rows, loading, filters, sort, onSort, onOpenDetail }) => (
           rows.map((pago, index) => (
             <tr
               key={pago.id}
-              className={`${index % 2 === 0 ? 'row-even' : 'row-odd'} clickable-row`}
-              onClick={() => onOpenDetail(pago)}
+              className={`${index % 2 === 0 ? 'row-even' : 'row-odd'} clickable-row${selectedPagoId === pago.id ? ' is-selected' : ''}`}
+              onClick={() => onSelectPago(pago)}
               tabIndex={0}
+              aria-selected={selectedPagoId === pago.id}
               onKeyDown={(event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault();
-                  onOpenDetail(pago);
+                  onSelectPago(pago);
                 }
               }}
             >
@@ -47,9 +53,17 @@ const PagosTable = ({ rows, loading, filters, sort, onSort, onOpenDetail }) => (
               <td>{formatMetodoPago(pago.metodo_pago)}</td>
               <td className="col-money">{formatMoney(pago.total)}</td>
               <td>
-                <span className="payment-invoices-chip">
-                  {pago.facturas_count || pago.facturas?.length || 0} factura(s)
-                </span>
+                <button
+                  className="payment-invoices-chip"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectPago(pago);
+                  }}
+                  aria-label={`Ver ${getFacturasLabel(pago)} del pago #${pago.id}`}
+                >
+                  {getFacturasLabel(pago)}
+                </button>
               </td>
             </tr>
           ))

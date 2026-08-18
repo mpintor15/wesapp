@@ -29,6 +29,7 @@ const Cuentas = () => {
   const permissions = useCuentasPermissions();
   const { isSubmitting: isCreatingFactura, withSubmit: withFacturaSubmit } = useSubmitState();
   const [activeTab, setActiveTab] = useState('facturas');
+  const [pagosSelectionResetKey, setPagosSelectionResetKey] = useState(0);
 
   const {
     clientes,
@@ -130,7 +131,10 @@ const Cuentas = () => {
         onRefreshFacturas={() => loadReporte(facturasTable.params)}
         onOpenBatchPayment={openBatchPaymentModal}
         onShowPagosReport={reports.pagos.open}
-        onRefreshPagos={() => loadPagos(pagosTable.params)}
+        onRefreshPagos={() => {
+          setPagosSelectionResetKey((key) => key + 1);
+          loadPagos(pagosTable.params);
+        }}
       />
 
       {loading ? (
@@ -180,12 +184,12 @@ const Cuentas = () => {
               sort={pagosTable.sort}
               currentPage={pagosTable.currentPage}
               totalPages={pagosTable.totalPages}
+              selectionResetKey={pagosSelectionResetKey}
               onFilterChange={pagosTable.handleFilterChange}
               onApplyFilters={pagosTable.applyFilters}
               onClearFilters={pagosTable.clearFilters}
               onToggleFilter={pagosTable.toggleFilter}
               onSort={pagosTable.handleSort}
-              onOpenDetail={administrativeActions.openPagoDetailModal}
               onPageChange={pagosTable.setCurrentPage}
             />
           )}

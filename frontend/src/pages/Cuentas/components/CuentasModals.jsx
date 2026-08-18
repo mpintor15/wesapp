@@ -4,7 +4,6 @@ import CancelFacturaModal from './CancelFacturaModal';
 import CreateFacturaModal from './CreateFacturaModal';
 import EditFacturaModal from './EditFacturaModal';
 import FacturasReportModal from './FacturasReportModal';
-import PagoDetailModal from './PagoDetailModal';
 import PagosReportModal from './PagosReportModal';
 
 const CuentasModals = ({
@@ -18,11 +17,6 @@ const CuentasModals = ({
   canEditFactura,
 }) => (
   <>
-    <PagoDetailModal
-      pago={administrativeActions.selectedPago}
-      onClose={administrativeActions.closePagoDetailModal}
-    />
-
     <CreateFacturaModal
       isOpen={facturaForm.isOpen}
       formData={facturaForm.formData}

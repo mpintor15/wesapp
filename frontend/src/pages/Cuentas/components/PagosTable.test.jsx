@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { act } from '../../../testUtils/renderHook';
 import PagosTable from './PagosTable';
 
-const renderTable = async () => {
+const renderTable = async (props = {}) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);
@@ -25,7 +25,8 @@ const renderTable = async () => {
         filters={{}}
         sort={{ field: 'fecha', direction: 'desc' }}
         onSort={jest.fn()}
-        onOpenDetail={jest.fn()}
+        selectedPagoId={props.selectedPagoId}
+        onSelectPago={props.onSelectPago || jest.fn()}
       />
     );
   });
@@ -50,6 +51,32 @@ describe('PagosTable', () => {
     expect(table.buttons().some((button) => /Anular pago|Eliminar pago/i.test(button.title))).toBe(
       false
     );
+
+    table.unmount();
+  });
+
+  test('selecciona la fila por click o teclado y pluraliza facturas', async () => {
+    const onSelectPago = jest.fn();
+    const table = await renderTable({ selectedPagoId: 9, onSelectPago });
+    const row = table.container.querySelector('tbody tr');
+    const chip = table.container.querySelector('.payment-invoices-chip');
+
+    expect(row.getAttribute('aria-selected')).toBe('true');
+    expect(row.classList.contains('is-selected')).toBe(true);
+    expect(chip.textContent).toBe('1 factura');
+
+    await act(async () => row.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+    expect(onSelectPago).toHaveBeenCalledTimes(1);
+
+    await act(async () =>
+      row.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    );
+    expect(onSelectPago).toHaveBeenCalledTimes(2);
+
+    await act(async () =>
+      row.dispatchEvent(new window.KeyboardEvent('keydown', { key: ' ', bubbles: true }))
+    );
+    expect(onSelectPago).toHaveBeenCalledTimes(3);
 
     table.unmount();
   });
