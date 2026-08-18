@@ -1,4 +1,4 @@
-export const ROWS_PER_PAGE = 50;
+export const ROWS_PER_PAGE = 25;
 
 export const EMPTY_PERSONAL_FILTERS = { search: '', estado: '', cargo: '' };
 

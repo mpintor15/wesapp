@@ -4,7 +4,6 @@ import ArticulosTable from './ArticulosTable';
 const ArticulosTab = ({
   articuloActionsClass,
   articulosPage,
-  articulosPageSize,
   articulosSort,
   articulosTotalPages,
   canDarBajaArticulo,
@@ -20,14 +19,13 @@ const ArticulosTab = ({
   onEdit,
   onFilterChange,
   onPageChange,
-  onPageSizeChange,
   onSort,
   paginatedArticulos,
   showArticuloActions,
   sortedArticulos,
   ubicaciones,
 }) => (
-  <div className="tab-content">
+  <div className="tab-content tabular-workspace">
     <ArticulosFilters
       filters={filters}
       ubicaciones={ubicaciones}
@@ -50,7 +48,6 @@ const ArticulosTab = ({
         <ArticulosTable
           articulos={sortedArticulos}
           articulosPage={articulosPage}
-          articulosPageSize={articulosPageSize}
           articulosSort={articulosSort}
           articulosTotalPages={articulosTotalPages}
           canDarBajaArticulo={canDarBajaArticulo}
@@ -61,7 +58,6 @@ const ArticulosTab = ({
           onDelete={onDelete}
           onEdit={onEdit}
           onPageChange={onPageChange}
-          onPageSizeChange={onPageSizeChange}
           onSort={onSort}
           paginatedArticulos={paginatedArticulos}
           showArticuloActions={showArticuloActions}

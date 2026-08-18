@@ -2375,25 +2375,27 @@ describe('Configuracion ubicaciones', () => {
     page.unmount();
   });
 
-  test('pagina clientes en 50 registros fijos y deshabilita botones extremos', async () => {
+  test('pagina clientes en 25 registros fijos y deshabilita botones extremos', async () => {
     clientesService.listClientes.mockResolvedValue(clientesSuccess(buildClientes(79)));
     const page = await renderPage();
 
     const rows = page.container.querySelectorAll('.configuracion-clientes-table tbody tr');
-    expect(rows).toHaveLength(50);
-    expect(page.text()).toContain('Mostrando 50 de 79 cliente(s)');
-    expect(page.text()).toContain('Página 1 de 2');
+    expect(rows).toHaveLength(25);
+    expect(page.text()).toContain('Mostrando 25 de 79 cliente(s)');
+    expect(page.text()).toContain('Página 1 de 4');
     expect(page.button('‹ Anterior').disabled).toBe(true);
     expect(page.button('Siguiente ›').disabled).toBe(false);
     expect(page.field('#clientes-page-size')).toBeNull();
 
     await page.click(page.button('Siguiente ›'));
+    await page.click(page.button('Siguiente ›'));
+    await page.click(page.button('Siguiente ›'));
 
     expect(page.container.querySelectorAll('.configuracion-clientes-table tbody tr')).toHaveLength(
-      29
+      4
     );
-    expect(page.text()).toContain('Mostrando 29 de 79 cliente(s)');
-    expect(page.text()).toContain('Página 2 de 2');
+    expect(page.text()).toContain('Mostrando 4 de 79 cliente(s)');
+    expect(page.text()).toContain('Página 4 de 4');
     expect(page.button('‹ Anterior').disabled).toBe(false);
     expect(page.button('Siguiente ›').disabled).toBe(true);
 
@@ -2441,7 +2443,7 @@ describe('Configuracion ubicaciones', () => {
     clientesService.listClientes.mockResolvedValue(clientesSuccess(buildClientes(79)));
     const page = await renderPage();
 
-    expect(page.text()).toContain('Mostrando 50 de 79 cliente(s)');
+    expect(page.text()).toContain('Mostrando 25 de 79 cliente(s)');
     expect(page.text()).toContain('Cliente 01');
     expect(page.text()).toContain('Cliente 02');
     expect(page.text()).toContain('Cliente 22');

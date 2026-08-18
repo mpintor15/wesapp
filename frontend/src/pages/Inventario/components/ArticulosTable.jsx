@@ -13,7 +13,6 @@ import SortHeader from './SortHeader';
 const ArticulosTable = ({
   articulos,
   articulosPage,
-  articulosPageSize,
   articulosSort,
   articulosTotalPages,
   canDarBajaArticulo,
@@ -24,7 +23,6 @@ const ArticulosTable = ({
   onDelete,
   onEdit,
   onPageChange,
-  onPageSizeChange,
   onSort,
   paginatedArticulos,
   showArticuloActions,
@@ -207,10 +205,8 @@ const ArticulosTable = ({
     {articulosTotalPages > 1 && (
       <PaginationControls
         page={articulosPage}
-        pageSize={articulosPageSize}
         totalPages={articulosTotalPages}
         onPageChange={onPageChange}
-        onPageSizeChange={onPageSizeChange}
       />
     )}
   </>

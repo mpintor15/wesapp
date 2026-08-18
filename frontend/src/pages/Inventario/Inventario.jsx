@@ -100,9 +100,9 @@ const Inventario = () => {
   const [bajasExportFilters, setBajasExportFilters] = useState(EMPTY_BAJAS_EXPORT_FILTERS);
   const [articulosSort, setArticulosSort] = useState({ field: 'tipo_articulo', direction: 'asc' });
   const [articulosPage, setArticulosPage] = useState(1);
-  const [articulosPageSize, setArticulosPageSize] = useState(25);
+  const articulosPageSize = DEFAULT_PAGINATION.pageSize;
   const [movimientosPage, setMovimientosPage] = useState(1);
-  const [movimientosPageSize, setMovimientosPageSize] = useState(25);
+  const movimientosPageSize = DEFAULT_PAGINATION.pageSize;
   const [movimientosSort, setMovimientosSort] = useState({
     field: 'fecha_movimiento',
     direction: 'desc',
@@ -768,24 +768,10 @@ const Inventario = () => {
     await fetchArticulos(getArticulosListParams({ page: nextPage }), false, { showLoading: true });
   };
 
-  const handleArticulosPageSizeChange = async (nextPageSize) => {
-    setArticulosPageSize(nextPageSize);
-    setArticulosPage(1);
-    await fetchArticulos(getArticulosListParams({ page: 1, pageSize: nextPageSize }), false, {
-      showLoading: true,
-    });
-  };
-
   const handleMovimientosPageChange = async (updater) => {
     const nextPage = typeof updater === 'function' ? updater(movimientosPage) : updater;
     setMovimientosPage(nextPage);
     await loadMovimientos(getMovimientosListParams({ page: nextPage }));
-  };
-
-  const handleMovimientosPageSizeChange = async (nextPageSize) => {
-    setMovimientosPageSize(nextPageSize);
-    setMovimientosPage(1);
-    await loadMovimientos(getMovimientosListParams({ page: 1, pageSize: nextPageSize }));
   };
 
   const handleTabChange = (tab) => {
@@ -808,7 +794,7 @@ const Inventario = () => {
   }
 
   return (
-    <div className="inventario-container">
+    <div className="inventario-container tabular-page">
       <InventarioPageHeader
         activeTab={activeTab}
         canCreateArticulo={canCreateArticulo}
@@ -840,7 +826,6 @@ const Inventario = () => {
         <ArticulosTab
           articuloActionsClass={articuloActionsClass}
           articulosPage={articulosPage}
-          articulosPageSize={articulosPageSize}
           articulosSort={articulosSort}
           articulosTotalPages={articulosTotalPages}
           canDarBajaArticulo={canDarBajaArticulo}
@@ -856,7 +841,6 @@ const Inventario = () => {
           onEdit={handleOpenEdit}
           onFilterChange={handleFilterChange}
           onPageChange={handleArticulosPageChange}
-          onPageSizeChange={handleArticulosPageSizeChange}
           onSort={handleArticulosSort}
           paginatedArticulos={articulos}
           showArticuloActions={showArticuloActions}
@@ -884,7 +868,6 @@ const Inventario = () => {
           movimientosFiltersDraft={movimientosFiltersDraft}
           movimientosLoading={movimientosLoading}
           movimientosPage={movimientosPage}
-          movimientosPageSize={movimientosPageSize}
           movimientosSort={movimientosSort}
           movimientosTotalPages={movimientosTotalPages}
           onApplyFilters={handleApplyMovimientosFilters}
@@ -893,7 +876,6 @@ const Inventario = () => {
           onDownloadPdf={handleDownloadPdf}
           onDraftChange={handleMovimientosDraftChange}
           onPageChange={handleMovimientosPageChange}
-          onPageSizeChange={handleMovimientosPageSizeChange}
           onRegeneratePdf={handleRegeneratePdf}
           onSort={handleMovimientosSort}
           onVoidMovimiento={handleVoidMovimiento}

@@ -9,7 +9,6 @@ const FacturasTab = ({
   filteredCount,
   sort,
   currentPage,
-  pageSize,
   totalPages,
   totals,
   canManageFacturas,
@@ -23,9 +22,8 @@ const FacturasTab = ({
   onCancel,
   onDelete,
   onPageChange,
-  onPageSizeChange,
 }) => (
-  <div className="tab-content">
+  <div className="tab-content tabular-workspace">
     <FacturaFilters
       filters={filtersDraft}
       onFilterChange={onFilterChange}
@@ -55,13 +53,7 @@ const FacturasTab = ({
     />
 
     {filteredCount > 0 ? (
-      <PaginationControls
-        page={currentPage}
-        pageSize={pageSize}
-        totalPages={totalPages}
-        onPageChange={onPageChange}
-        onPageSizeChange={onPageSizeChange}
-      />
+      <PaginationControls page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
     ) : null}
   </div>
 );

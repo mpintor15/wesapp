@@ -118,7 +118,7 @@ const Cuentas = () => {
   }, [batchPayment, clientesLoaded, loadClientes, permissions.canCreatePago, showToast]);
 
   return (
-    <div className="cuentas-container">
+    <div className="cuentas-container tabular-page">
       <CuentasPageHeader
         activeTab={activeTab}
         canCreateFactura={permissions.canCreateFactura}
@@ -153,7 +153,6 @@ const Cuentas = () => {
               filters={facturasTable.filters}
               rows={facturasTable.rows}
               filteredCount={facturasTable.totalItems}
-              pageSize={facturasTable.pageSize}
               sort={facturasTable.sort}
               currentPage={facturasTable.currentPage}
               totalPages={facturasTable.totalPages}
@@ -168,7 +167,6 @@ const Cuentas = () => {
               onEdit={facturaEditing.open}
               onCancel={administrativeActions.openCancelFacturaModal}
               onPageChange={facturasTable.setCurrentPage}
-              onPageSizeChange={facturasTable.setPageSize}
             />
           )}
 
@@ -178,7 +176,6 @@ const Cuentas = () => {
               filters={pagosTable.filters}
               rows={pagosTable.rows}
               filteredCount={pagosTable.totalItems}
-              pageSize={pagosTable.pageSize}
               loading={pagosLoading}
               sort={pagosTable.sort}
               currentPage={pagosTable.currentPage}
@@ -190,7 +187,6 @@ const Cuentas = () => {
               onSort={pagosTable.handleSort}
               onOpenDetail={administrativeActions.openPagoDetailModal}
               onPageChange={pagosTable.setCurrentPage}
-              onPageSizeChange={pagosTable.setPageSize}
             />
           )}
 

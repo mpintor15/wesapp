@@ -10,7 +10,6 @@ const PagosTab = ({
   loading,
   sort,
   currentPage,
-  pageSize,
   totalPages,
   onFilterChange,
   onApplyFilters,
@@ -19,9 +18,8 @@ const PagosTab = ({
   onSort,
   onOpenDetail,
   onPageChange,
-  onPageSizeChange,
 }) => (
-  <div className="tab-content">
+  <div className="tab-content tabular-workspace">
     <PagoFilters
       filters={filtersDraft}
       onFilterChange={onFilterChange}
@@ -51,13 +49,7 @@ const PagosTab = ({
     />
 
     {!loading && totalPages > 1 ? (
-      <PaginationControls
-        page={currentPage}
-        pageSize={pageSize}
-        totalPages={totalPages}
-        onPageChange={onPageChange}
-        onPageSizeChange={onPageSizeChange}
-      />
+      <PaginationControls page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
     ) : null}
   </div>
 );

@@ -69,17 +69,10 @@ describe('PaginationControls', () => {
     view.unmount();
   });
 
-  test('muestra selector de tamaño solo cuando el consumidor lo habilita', () => {
-    const onPageSizeChange = jest.fn();
-    const view = renderPagination({ pageSize: 25, onPageSizeChange });
-    const select = view.container.querySelector('[aria-label="Registros por página"]');
+  test('no expone controles para cambiar el tamaño estándar de página', () => {
+    const view = renderPagination();
 
-    expect(select).not.toBeNull();
-    act(() => {
-      select.value = '50';
-      select.dispatchEvent(new window.Event('change', { bubbles: true }));
-    });
-    expect(onPageSizeChange).toHaveBeenCalledWith(50);
+    expect(view.container.querySelector('select')).toBeNull();
     view.unmount();
   });
 });

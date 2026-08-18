@@ -291,7 +291,7 @@ const getDisplayValue = (value) => {
   return normalized || 'Sin registrar';
 };
 
-const CLIENTES_ROWS_PER_PAGE = 50;
+const CLIENTES_ROWS_PER_PAGE = 25;
 
 const getTotalPages = (rows) => Math.max(1, Math.ceil(rows.length / CLIENTES_ROWS_PER_PAGE));
 
