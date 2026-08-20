@@ -196,6 +196,19 @@ const inventarioService = {
     }
   },
 
+  deleteManzana: async (manzanaId) => {
+    try {
+      const response = await api.delete(`/inventario/ubicaciones/manzanas/${manzanaId}`);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al eliminar Manzana');
+    }
+  },
+
   getVillas: async (manzanaId) => {
     try {
       const response = await api.get(`/inventario/ubicaciones/manzanas/${manzanaId}/villas`);
@@ -220,6 +233,19 @@ const inventarioService = {
       return { success: response.data.success, data: response.data.data };
     } catch (error) {
       return failure(error, 'Error al actualizar Villa');
+    }
+  },
+
+  deleteVilla: async (villaId) => {
+    try {
+      const response = await api.delete(`/inventario/ubicaciones/villas/${villaId}`);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al eliminar Villa');
     }
   },
 

@@ -98,13 +98,16 @@ describe('inventarioService', () => {
     api.get.mockResolvedValue({ data: { success: true, data: [] } });
     api.post.mockResolvedValue({ data: { success: true, data: { id: 2 } } });
     api.put.mockResolvedValue({ data: { success: true, data: { id: 2 } } });
+    api.delete.mockResolvedValue({ data: { success: true, data: { id: 2 } } });
 
     await inventarioService.getManzanas(4);
     await inventarioService.createManzana(4, { nombre: 'A' });
     await inventarioService.updateManzana(2, { estado: 'inactivo' });
+    await inventarioService.deleteManzana(2);
     await inventarioService.getVillas(2);
     await inventarioService.createVilla(2, { identificador: '1' });
     await inventarioService.updateVilla(7, { estado: 'activo' });
+    await inventarioService.deleteVilla(7);
 
     expect(api.get).toHaveBeenNthCalledWith(1, '/inventario/ubicaciones/4/manzanas');
     expect(api.post).toHaveBeenNthCalledWith(1, '/inventario/ubicaciones/4/manzanas', {
@@ -120,6 +123,8 @@ describe('inventarioService', () => {
     expect(api.put).toHaveBeenNthCalledWith(2, '/inventario/ubicaciones/villas/7', {
       estado: 'activo',
     });
+    expect(api.delete).toHaveBeenNthCalledWith(1, '/inventario/ubicaciones/manzanas/2');
+    expect(api.delete).toHaveBeenNthCalledWith(2, '/inventario/ubicaciones/villas/7');
   });
 
   test('gestiona Residente principal con rutas de Villa', async () => {

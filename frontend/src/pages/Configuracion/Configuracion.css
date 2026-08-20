@@ -304,6 +304,7 @@
 }
 
 .configuracion-ubicaciones-table {
+  min-width: 1120px;
   table-layout: fixed;
   width: 100%;
 }
@@ -340,9 +341,9 @@
 
 .configuracion-ubicaciones-table th.app-col-actions,
 .configuracion-ubicaciones-table td.app-col-actions {
-  width: 116px;
-  min-width: 116px;
-  max-width: 116px;
+  width: 200px !important;
+  min-width: 200px !important;
+  max-width: 200px !important;
   text-align: center !important;
 }
 
@@ -357,7 +358,14 @@
 }
 
 .configuracion-location-table-row .app-table-actions {
+  flex-wrap: nowrap;
+  gap: 8px !important;
   justify-content: center;
+  white-space: nowrap;
+}
+
+.configuracion-location-table-row .action-btn {
+  flex-shrink: 0;
 }
 
 .configuracion-location-toggle-table-row td {
@@ -395,21 +403,64 @@
 
 .urbanizacion-masters {
   display: grid;
-  gap: 1rem;
+  gap: 0;
+}
+
+.urbanizacion-masters-modal .app-modal__header {
+  align-items: flex-start;
+}
+
+.urbanizacion-masters-modal .app-modal__body {
+  padding: 0;
+  background: var(--color-surface);
+}
+
+.urbanizacion-modal-title {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.urbanizacion-modal-title small {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.urbanizacion-masters-modal .status-badge.activo {
+  color: var(--color-success-text);
+  background: var(--color-success-bg);
+}
+
+.urbanizacion-masters-modal .status-badge.inactivo {
+  color: var(--color-neutral-700);
+  background: var(--color-neutral-200);
 }
 
 .urbanizacion-masters-state {
-  padding: 1rem;
-  border: 1px dashed var(--color-border);
-  border-radius: 8px;
+  padding: 1.25rem 1.375rem;
   color: var(--color-text-muted);
   text-align: center;
+}
+
+.urbanizacion-masters-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1.375rem;
+  border-bottom: 1px solid var(--color-danger-border);
+  color: var(--color-danger-text);
+  background: var(--color-danger-bg);
+}
+
+.urbanizacion-masters-error .btn {
+  flex: 0 0 auto;
 }
 
 .urbanizacion-inline-form,
 .urbanizacion-manzana-card {
   display: grid;
-  gap: 0.5rem;
+  gap: 0;
 }
 
 .urbanizacion-inline-form > div {
@@ -425,25 +476,26 @@
 .urbanizacion-manzanas-list,
 .urbanizacion-villas-list {
   display: grid;
-  gap: 0.75rem;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.urbanizacion-manzana-card {
-  padding: 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
+.urbanizacion-manzanas-list {
+  background: var(--color-surface);
 }
 
-.urbanizacion-manzana-card > header,
-.urbanizacion-villas-list > li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  min-width: 0;
+.urbanizacion-manzana-card {
+  border: 0;
+  border-bottom: 1px solid var(--color-neutral-200);
+  border-radius: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.urbanizacion-manzana-card:last-child {
+  border-bottom: 0;
 }
 
 .urbanizacion-manzana-card > header > div:first-child,
@@ -454,24 +506,30 @@
 }
 
 .urbanizacion-villa-card {
-  display: grid !important;
-  gap: 0.75rem;
+  display: grid;
+  gap: 0.625rem;
+  min-width: 0;
 }
 
 .urbanizacion-villa-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 1rem;
+  min-width: 0;
 }
 
-.urbanizacion-resident-card,
+.urbanizacion-resident-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border-left: 2px solid var(--color-neutral-300);
+  background: transparent;
+}
+
 .urbanizacion-resident-form {
   display: grid;
   gap: 0.5rem;
-  padding: 0.75rem;
-  border-left: 3px solid var(--color-border);
-  background: var(--color-surface);
 }
 
 .urbanizacion-resident-card h4,
@@ -488,35 +546,128 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  justify-content: flex-end;
 }
 
-.urbanizacion-card-actions .btn,
-.urbanizacion-villa-heading .btn {
+.urbanizacion-card-actions .btn {
   flex: 0 1 auto;
   max-width: 100%;
   min-width: 0;
-  white-space: normal;
+  min-height: 37px;
+  padding: 6px 10px;
+  white-space: nowrap;
 }
 
 .urbanizacion-manzana-card h3 {
-  margin: 0 0 0.25rem;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.urbanizacion-manzana-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+  padding: 1rem 1.375rem 0.875rem;
+  border-bottom: 1px solid var(--color-neutral-200);
+  background: var(--color-surface);
+}
+
+.urbanizacion-manzana-meta {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.urbanizacion-section-kicker {
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.urbanizacion-create-manzana-form {
+  gap: 0.5rem;
+  padding: 1rem 1.375rem 1.125rem;
+  border-bottom: 1px solid var(--color-neutral-200);
+  background: var(--color-surface);
+}
+
+.urbanizacion-villa-form {
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-neutral-150);
+}
+
+.urbanizacion-create-manzana-form > label,
+.urbanizacion-villa-form > label {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.urbanizacion-villas-section {
+  display: grid;
+  gap: 0.625rem;
+  padding: 0.875rem 1.375rem 1rem;
+}
+
+.urbanizacion-villas-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.urbanizacion-villas-heading > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.urbanizacion-villas-heading h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.urbanizacion-villas-count {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.urbanizacion-villa-form > div {
+  align-items: stretch;
+}
+
+.urbanizacion-inline-form > div > .btn {
+  flex: 0 0 140px;
 }
 
 .urbanizacion-villas-list > li {
-  padding: 0.6rem;
-  border-radius: 8px;
-  background: var(--color-surface-subtle);
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--color-neutral-150);
+  border-radius: 0;
+  background: transparent;
 }
 
 .urbanizacion-villas-empty {
   margin: 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-neutral-150);
   color: var(--color-text-muted);
 }
 
 @media (max-width: 640px) {
   .urbanizacion-inline-form > div,
-  .urbanizacion-manzana-card > header,
-  .urbanizacion-villas-list > li,
   .urbanizacion-card-actions {
     align-items: stretch;
     flex-direction: column;
@@ -524,11 +675,28 @@
 
   .urbanizacion-villa-heading {
     align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .urbanizacion-villa-heading > .status-badge {
+    justify-self: start;
+  }
+
+  .urbanizacion-manzana-header {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .urbanizacion-manzana-header > .status-badge {
+    justify-self: start;
+  }
+
+  .urbanizacion-masters-error {
+    align-items: stretch;
     flex-direction: column;
   }
 
   .urbanizacion-card-actions .btn,
-  .urbanizacion-villa-heading .btn,
   .urbanizacion-inline-form .btn {
     width: 100%;
   }

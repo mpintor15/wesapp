@@ -110,7 +110,7 @@ const BajasTab = ({
                 <th className="cell-motivo-heading">Motivo</th>
                 <th>Estado</th>
                 <th>Reversión</th>
-                <th className="col-actions app-col-actions app-col-actions--double"></th>
+                <th className="col-actions app-col-actions app-col-actions--comfortable"></th>
               </tr>
             </thead>
             <tbody>
@@ -147,7 +147,7 @@ const BajasTab = ({
                           {REVERSAL_STATUS_LABELS[reversalStatus] || reversalStatus}
                         </span>
                       </td>
-                      <td className="col-actions app-col-actions app-col-actions--double">
+                      <td className="col-actions app-col-actions app-col-actions--comfortable">
                         {actions.hasAnyAction ? (
                           <div className="action-buttons app-table-actions">
                             {actions.canVoid && (

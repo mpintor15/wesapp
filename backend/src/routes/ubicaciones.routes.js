@@ -26,6 +26,12 @@ router.put(
   urbanizacionMastersController.updateManzana
 );
 
+router.delete(
+  '/manzanas/:manzanaId',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.deleteManzana
+);
+
 router.get(
   '/manzanas/:manzanaId/villas',
   requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
@@ -42,6 +48,12 @@ router.put(
   '/villas/:villaId',
   requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
   urbanizacionMastersController.updateVilla
+);
+
+router.delete(
+  '/villas/:villaId',
+  requirePermission(PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR),
+  urbanizacionMastersController.deleteVilla
 );
 
 router.get(

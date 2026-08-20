@@ -83,6 +83,16 @@ describe('ubicaciones routes', () => {
     expect(res.status).toBe(403);
   });
 
+  test.each(['/api/inventario/ubicaciones/manzanas/1', '/api/inventario/ubicaciones/villas/1'])(
+    'protege eliminación de maestros con el permiso dedicado: %s',
+    async (url) => {
+      currentUser.tipo_usuario = 'secretario';
+      const res = await requestWithAuth('delete', url);
+      currentUser.tipo_usuario = 'gerente';
+      expect(res.status).toBe(403);
+    }
+  );
+
   test('lista ubicaciones', async () => {
     db.query.mockImplementation(async (sql) => {
       const query = String(sql);

@@ -2,6 +2,10 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const { sanitizeError } = require('../utils/logSanitizer');
 const { parseStrictPositiveInteger } = require('../utils/inputValidation');
+const { logAuditStrict, auditFromReq } = require('../utils/audit');
+
+const RESIDENT_CONTACT_PATTERN = /^09[0-9]{8}$/;
+const RESIDENT_CONTACT_ERROR = 'El contacto debe tener exactamente 10 dígitos y comenzar por 09.';
 
 const normalizeText = (value) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
@@ -40,6 +44,14 @@ const validateResidentText = (value, label) => {
     throw appError(400, 'INVALID_RESIDENT', `${label} no puede exceder 150 caracteres`);
   }
   return normalized;
+};
+
+const validateResidentContact = (value) => {
+  const contacto = typeof value === 'string' ? value : '';
+  if (!RESIDENT_CONTACT_PATTERN.test(contacto)) {
+    throw appError(400, 'INVALID_RESIDENT_CONTACT', RESIDENT_CONTACT_ERROR);
+  }
+  return contacto;
 };
 
 const validateEstado = (value, fallback = 'activo') => {
@@ -223,6 +235,37 @@ const updateManzana = async (req, res) => {
   }
 };
 
+const deleteManzana = async (req, res) => {
+  try {
+    const manzanaId = parseId(req.params.manzanaId, 'La Manzana es inválida');
+    const deleted = await db.transaction(async (client) => {
+      const current = await getManzana(client, manzanaId, 'FOR UPDATE OF m');
+      const villas = await client.query('SELECT 1 FROM villas WHERE manzana_id = $1 LIMIT 1', [
+        manzanaId,
+      ]);
+      if (villas.rowCount > 0) {
+        throw appError(
+          409,
+          'BLOCK_HAS_VILLAS',
+          'No se puede eliminar la Manzana porque tiene Villas registradas.'
+        );
+      }
+      await client.query('DELETE FROM manzanas WHERE id = $1', [manzanaId]);
+      await logAuditStrict(client, {
+        tabla: 'manzanas',
+        operacion: 'DELETE',
+        registro_id: manzanaId,
+        datos_anteriores: current,
+        ...auditFromReq(req),
+      });
+      return current;
+    });
+    return res.json({ success: true, message: 'Manzana eliminada exitosamente', data: deleted });
+  } catch (error) {
+    return sendError(res, error, 'Error al eliminar Manzana');
+  }
+};
+
 const listVillas = async (req, res) => {
   try {
     const manzanaId = parseId(req.params.manzanaId, 'La Manzana es inválida');
@@ -319,6 +362,38 @@ const updateVilla = async (req, res) => {
   }
 };
 
+const deleteVilla = async (req, res) => {
+  try {
+    const villaId = parseId(req.params.villaId, 'La Villa es inválida');
+    const deleted = await db.transaction(async (client) => {
+      const current = await getVilla(client, villaId, 'FOR UPDATE OF v, m');
+      const residentes = await client.query(
+        'SELECT 1 FROM residentes WHERE villa_id = $1 LIMIT 1',
+        [villaId]
+      );
+      if (residentes.rowCount > 0) {
+        throw appError(
+          409,
+          'VILLA_HAS_RESIDENTS',
+          'No se puede eliminar la Villa porque tiene Residentes registrados.'
+        );
+      }
+      await client.query('DELETE FROM villas WHERE id = $1', [villaId]);
+      await logAuditStrict(client, {
+        tabla: 'villas',
+        operacion: 'DELETE',
+        registro_id: villaId,
+        datos_anteriores: current,
+        ...auditFromReq(req),
+      });
+      return current;
+    });
+    return res.json({ success: true, message: 'Villa eliminada exitosamente', data: deleted });
+  } catch (error) {
+    return sendError(res, error, 'Error al eliminar Villa');
+  }
+};
+
 const getResidentePrincipal = async (req, res) => {
   try {
     const villaId = parseId(req.params.villaId, 'La Villa es inválida');
@@ -339,7 +414,7 @@ const createResidentePrincipal = async (req, res) => {
   try {
     const villaId = parseId(req.params.villaId, 'La Villa es inválida');
     const nombre = validateResidentText(req.body?.nombre, 'El nombre');
-    const contacto = validateResidentText(req.body?.contacto, 'El contacto');
+    const contacto = validateResidentContact(req.body?.contacto);
     const reemplazar = req.body?.reemplazar === true;
     const created = await db.transaction(async (client) => {
       const villa = await getVilla(client, villaId, 'FOR UPDATE OF v, m');
@@ -388,7 +463,7 @@ const updateResidentePrincipal = async (req, res) => {
         ? validateResidentText(req.body.nombre, 'El nombre')
         : current.nombre;
       const contacto = Object.prototype.hasOwnProperty.call(req.body || {}, 'contacto')
-        ? validateResidentText(req.body.contacto, 'El contacto')
+        ? validateResidentContact(req.body.contacto)
         : current.contacto;
       let activo = current.activo;
       if (req.body?.activo !== undefined) {
@@ -418,9 +493,11 @@ module.exports = {
   listManzanas,
   createManzana,
   updateManzana,
+  deleteManzana,
   listVillas,
   createVilla,
   updateVilla,
+  deleteVilla,
   getResidentePrincipal,
   createResidentePrincipal,
   updateResidentePrincipal,
