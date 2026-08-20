@@ -60,6 +60,22 @@ const booleanFromForm = z.preprocess((value) => {
 }, z.boolean());
 const optionalBooleanFromForm = z.preprocess(emptyToUndefined, booleanFromForm.optional());
 
+const isValidBitacoraTimestamp = (value) => {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,6})?)?$/.exec(value);
+  if (!match || !isValidDateString(match[1])) {
+    return false;
+  }
+
+  const hour = Number(match[2]);
+  const minute = Number(match[3]);
+  const second = Number(match[4] || 0);
+  return hour <= 23 && minute <= 59 && second <= 59;
+};
+
+const bitacoraTimestamp = z
+  .string({ required_error: 'Ocurrido en es requerido' })
+  .refine(isValidBitacoraTimestamp, 'Ocurrido en debe ser un timestamp válido');
+
 // ============================================
 // AUTH SCHEMAS
 // ============================================
@@ -73,6 +89,20 @@ const loginSchema = z.object({
     .string({ required_error: 'Contraseña es requerida' })
     .min(1, 'Contraseña no puede estar vacía'),
 });
+
+// ============================================
+// BITÁCORAS SCHEMAS
+// ============================================
+
+const bitacoraRegistroCreateSchema = z
+  .object({
+    ubicacion_id: positiveInt('Ubicación ID'),
+    ocurrido_at: bitacoraTimestamp,
+    detalle: z
+      .string({ required_error: 'Detalle es requerido' })
+      .refine((value) => /[^\s]/u.test(value), 'Detalle no puede estar vacío'),
+  })
+  .strict();
 
 const changePasswordSchema = z
   .object({
@@ -269,6 +299,9 @@ module.exports = {
   // Auth
   loginSchema,
   changePasswordSchema,
+
+  // Bitácoras
+  bitacoraRegistroCreateSchema,
 
   // Usuarios
   usuarioCreateSchema,

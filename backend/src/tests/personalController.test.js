@@ -193,6 +193,26 @@ describe('personalController.deleteColaborador', () => {
     );
   });
 
+  test('rechaza eliminar un colaborador con autoría histórica de Bitácora', async () => {
+    db.query.mockRejectedValue({
+      code: '23503',
+      constraint: 'bitacora_registros_autor_colaborador_id_fkey',
+      detail: 'Key (id)=(7) is still referenced from table bitacora_registros.',
+    });
+    const res = mockRes();
+
+    await deleteColaborador(mockReq({ params: { id: '7' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'El colaborador tiene registros históricos de Bitácora y no puede eliminarse',
+    });
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(
+      /bitacora_registros_autor_colaborador_id_fkey|Key \(id\)/
+    );
+  });
+
   test('retorna 404 si el colaborador no existe', async () => {
     db.query.mockResolvedValue({ rows: [], rowCount: 0 });
     const res = mockRes();

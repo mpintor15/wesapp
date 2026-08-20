@@ -270,6 +270,15 @@ const deleteColaborador = async (req, res) => {
         message: 'El colaborador está vinculado a un usuario y no puede eliminarse',
       });
     }
+    if (
+      error.code === '23503' &&
+      error.constraint === 'bitacora_registros_autor_colaborador_id_fkey'
+    ) {
+      return res.status(409).json({
+        success: false,
+        message: 'El colaborador tiene registros históricos de Bitácora y no puede eliminarse',
+      });
+    }
     return handleControllerError(res, error, 'Error al eliminar colaborador:');
   }
 };
