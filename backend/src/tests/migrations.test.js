@@ -1113,4 +1113,351 @@ describe('database migrations', () => {
       );
     });
   });
+
+  test('migration 027 creates constrained immutable logbook persistence and history indexes', async () => {
+    await withTempDatabase('wesapp_migration_bitacora_registros_027', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (id SERIAL PRIMARY KEY);
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO colaboradores DEFAULT VALUES;
+        INSERT INTO colaboradores DEFAULT VALUES;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones DEFAULT VALUES;
+        INSERT INTO ubicaciones DEFAULT VALUES;
+      `);
+
+      await applyMigrationInTransaction(pool, 27);
+
+      const sqlQuote = String.fromCharCode(39);
+
+      const columns = await pool.query(`
+        SELECT column_name, data_type, udt_name, character_maximum_length,
+               is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'bitacora_registros'
+        ORDER BY ordinal_position
+      `);
+      expect(columns.rows.map(({ column_name: name }) => name)).toEqual([
+        'id',
+        'ubicacion_id',
+        'autor_usuario_id',
+        'autor_colaborador_id',
+        'ocurrido_at',
+        'detalle',
+        'estado',
+        'created_at',
+        'anulado_at',
+        'anulado_por_usuario_id',
+        'motivo_anulacion',
+      ]);
+      const columnMap = new Map(columns.rows.map((column) => [column.column_name, column]));
+      expect(
+        Object.fromEntries(
+          columns.rows.map((column) => [
+            column.column_name,
+            {
+              dataType: column.data_type,
+              udtName: column.udt_name,
+              maxLength: column.character_maximum_length,
+            },
+          ])
+        )
+      ).toEqual({
+        id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        ubicacion_id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        autor_usuario_id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        autor_colaborador_id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        ocurrido_at: {
+          dataType: 'timestamp without time zone',
+          udtName: 'timestamp',
+          maxLength: null,
+        },
+        detalle: { dataType: 'text', udtName: 'text', maxLength: null },
+        estado: { dataType: 'character varying', udtName: 'varchar', maxLength: 12 },
+        created_at: {
+          dataType: 'timestamp without time zone',
+          udtName: 'timestamp',
+          maxLength: null,
+        },
+        anulado_at: {
+          dataType: 'timestamp without time zone',
+          udtName: 'timestamp',
+          maxLength: null,
+        },
+        anulado_por_usuario_id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        motivo_anulacion: { dataType: 'text', udtName: 'text', maxLength: null },
+      });
+      for (const requiredColumn of [
+        'id',
+        'ubicacion_id',
+        'autor_usuario_id',
+        'autor_colaborador_id',
+        'ocurrido_at',
+        'detalle',
+        'estado',
+        'created_at',
+      ]) {
+        expect(columnMap.get(requiredColumn).is_nullable).toBe('NO');
+      }
+      for (const nullableColumn of ['anulado_at', 'anulado_por_usuario_id', 'motivo_anulacion']) {
+        expect(columnMap.get(nullableColumn).is_nullable).toBe('YES');
+      }
+      expect(columnMap.get('estado')).toMatchObject({
+        is_nullable: 'NO',
+        column_default: [sqlQuote, 'REGISTRADA', sqlQuote, '::character varying'].join(''),
+      });
+      expect(columnMap.get('created_at').column_default).toMatch(/CURRENT_TIMESTAMP/i);
+      expect(columnMap.get('ocurrido_at')).toMatchObject({
+        is_nullable: 'NO',
+        column_default: null,
+      });
+
+      const primaryKey = await pool.query(`
+        SELECT tc.constraint_name, kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON kcu.constraint_schema = tc.constraint_schema
+         AND kcu.constraint_name = tc.constraint_name
+        WHERE tc.table_schema = 'public'
+          AND tc.table_name = 'bitacora_registros'
+          AND tc.constraint_type = 'PRIMARY KEY'
+        ORDER BY kcu.ordinal_position
+      `);
+      expect(primaryKey.rows).toEqual([
+        { constraint_name: 'bitacora_registros_pkey', column_name: 'id' },
+      ]);
+
+      const registered = await pool.query(
+        `INSERT INTO bitacora_registros
+           (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+         VALUES (1, 1, 1, '2026-08-20 10:00:00', 'Novedad registrada')
+         RETURNING estado, created_at, anulado_at, anulado_por_usuario_id, motivo_anulacion`
+      );
+      expect(registered.rows[0]).toMatchObject({
+        estado: 'REGISTRADA',
+        anulado_at: null,
+        anulado_por_usuario_id: null,
+        motivo_anulacion: null,
+      });
+      expect(registered.rows[0].created_at).toBeInstanceOf(Date);
+
+      await expect(
+        pool.query(
+          `INSERT INTO bitacora_registros
+             (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+              estado, anulado_at, anulado_por_usuario_id, motivo_anulacion)
+           VALUES (1, 1, 1, '2026-08-20 10:05:00', 'Novedad anulada',
+                   'ANULADA', '2026-08-20 10:06:00', 2, 'Registro duplicado')`
+        )
+      ).resolves.toBeDefined();
+
+      await expect(
+        pool.query(
+          `INSERT INTO bitacora_registros
+             (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle, estado)
+           VALUES (1, 1, 1, NOW(), 'Detalle', 'BORRADA')`
+        )
+      ).rejects.toMatchObject({ code: '23514' });
+      for (const cancellationMetadata of [
+        [new Date(), null, null],
+        [null, 2, null],
+        [null, null, 'No aplica'],
+        [new Date(), 2, null],
+        [new Date(), null, 'No aplica'],
+        [null, 2, 'No aplica'],
+        [new Date(), 2, 'No aplica'],
+      ]) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+                estado, anulado_at, anulado_por_usuario_id, motivo_anulacion)
+             VALUES (1, 1, 1, NOW(), 'Detalle', 'REGISTRADA', $1, $2, $3)`,
+            cancellationMetadata
+          )
+        ).rejects.toMatchObject({ code: '23514' });
+      }
+
+      for (const cancellationMetadata of [
+        [null, 2, 'Motivo'],
+        [new Date(), null, 'Motivo'],
+        [new Date(), 2, null],
+        [new Date(), 2, ''],
+        [new Date(), 2, '   '],
+        [new Date(), 2, '\t'],
+        [new Date(), 2, '\n'],
+        [new Date(), 2, '\r'],
+        [new Date(), 2, ' \t \n\r '],
+      ]) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+                estado, anulado_at, anulado_por_usuario_id, motivo_anulacion)
+             VALUES (1, 1, 1, NOW(), 'Detalle', 'ANULADA', $1, $2, $3)`,
+            cancellationMetadata
+          )
+        ).rejects.toMatchObject({ code: '23514' });
+      }
+
+      for (const invalidDetail of ['', ' ', '\t', '\n', '\r', ' \t \n\r ']) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+             VALUES (1, 1, 1, NOW(), $1)`,
+            [invalidDetail]
+          )
+        ).rejects.toMatchObject({ code: '23514' });
+      }
+
+      for (const validDetail of ['texto', ' texto ', '\ntexto\t']) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+             VALUES (1, 1, 1, NOW(), $1)`,
+            [validDetail]
+          )
+        ).resolves.toBeDefined();
+      }
+
+      await expect(
+        pool.query(
+          `INSERT INTO bitacora_registros
+             (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+              estado, anulado_at, anulado_por_usuario_id, motivo_anulacion)
+           VALUES (1, 1, 1, NOW(), 'Detalle', 'ANULADA', NOW(), 999, 'Motivo')`
+        )
+      ).rejects.toMatchObject({ code: '23503' });
+
+      for (const invalidReferences of [
+        [999, 1, 1],
+        [1, 999, 1],
+        [1, 1, 999],
+      ]) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+             VALUES ($1, $2, $3, NOW(), 'Detalle')`,
+            invalidReferences
+          )
+        ).rejects.toMatchObject({ code: '23503' });
+      }
+
+      const foreignKeys = await pool.query(`
+        SELECT con.conname, con.confdeltype,
+               source_attribute.attname AS source_column,
+               target_relation.relname AS target_table,
+               target_attribute.attname AS target_column
+        FROM pg_constraint con
+        JOIN pg_class source_relation ON source_relation.oid = con.conrelid
+        JOIN pg_class target_relation ON target_relation.oid = con.confrelid
+        JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY
+          AS key_columns(source_attnum, target_attnum, position) ON TRUE
+        JOIN pg_attribute source_attribute
+          ON source_attribute.attrelid = source_relation.oid
+         AND source_attribute.attnum = key_columns.source_attnum
+        JOIN pg_attribute target_attribute
+          ON target_attribute.attrelid = target_relation.oid
+         AND target_attribute.attnum = key_columns.target_attnum
+        WHERE source_relation.relname = 'bitacora_registros' AND con.contype = 'f'
+        ORDER BY con.conname, key_columns.position
+      `);
+      expect(foreignKeys.rows).toEqual([
+        {
+          conname: 'bitacora_registros_anulado_por_usuario_id_fkey',
+          confdeltype: 'r',
+          source_column: 'anulado_por_usuario_id',
+          target_table: 'usuarios',
+          target_column: 'id',
+        },
+        {
+          conname: 'bitacora_registros_autor_colaborador_id_fkey',
+          confdeltype: 'r',
+          source_column: 'autor_colaborador_id',
+          target_table: 'colaboradores',
+          target_column: 'id',
+        },
+        {
+          conname: 'bitacora_registros_autor_usuario_id_fkey',
+          confdeltype: 'r',
+          source_column: 'autor_usuario_id',
+          target_table: 'usuarios',
+          target_column: 'id',
+        },
+        {
+          conname: 'bitacora_registros_ubicacion_id_fkey',
+          confdeltype: 'r',
+          source_column: 'ubicacion_id',
+          target_table: 'ubicaciones',
+          target_column: 'id',
+        },
+      ]);
+      await expect(pool.query('DELETE FROM ubicaciones WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM usuarios WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM usuarios WHERE id = 2')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM colaboradores WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+
+      const indexes = await pool.query(`
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = 'bitacora_registros'
+      `);
+      const indexMap = new Map(indexes.rows.map((index) => [index.indexname, index.indexdef]));
+      expect(indexMap.get('idx_bitacora_registros_ubicacion_ocurrido')).toMatch(
+        /\(ubicacion_id, ocurrido_at DESC, id DESC\)/
+      );
+      expect(indexMap.get('idx_bitacora_registros_autor_ocurrido')).toMatch(
+        /\(autor_usuario_id, ocurrido_at DESC, id DESC\)/
+      );
+      expect(indexMap.get('idx_bitacora_registros_ocurrido')).toMatch(
+        /\(ocurrido_at DESC, id DESC\)/
+      );
+      expect(indexMap.get('idx_bitacora_registros_estado_ocurrido')).toMatch(
+        /\(estado, ocurrido_at DESC, id DESC\)/
+      );
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 27');
+      expect(version.rowCount).toBe(1);
+      const schema = await fs.readFile(schemaPath, 'utf8');
+      expect(schema).toContain('CREATE TABLE bitacora_registros');
+      expect(schema).toContain('bitacora_registros_anulacion_coherente_check');
+    });
+  });
+
+  test('migration 027 rolls back without partial version registration on failure', async () => {
+    await withTempDatabase('wesapp_migration_bitacora_registros_027_rollback', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (id SERIAL PRIMARY KEY);
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY);
+        CREATE TABLE bitacora_registros (legacy_id INTEGER PRIMARY KEY);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+      `);
+
+      await expect(applyMigrationInTransaction(pool, 27)).rejects.toMatchObject({ code: '42P07' });
+      const columns = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'bitacora_registros'
+      `);
+      expect(columns.rows).toEqual([{ column_name: 'legacy_id' }]);
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 27');
+      expect(version.rowCount).toBe(0);
+    });
+  });
 });

@@ -11,6 +11,7 @@
 -- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 -- Limpiar tablas existentes (SOLO PARA DESARROLLO LOCAL)
+DROP TABLE IF EXISTS bitacora_registros CASCADE;
 DROP TABLE IF EXISTS usuario_ubicaciones CASCADE;
 DROP TABLE IF EXISTS detalle_movimientos CASCADE;
 DROP TABLE IF EXISTS movimientos CASCADE;
@@ -286,6 +287,50 @@ CREATE TABLE usuario_ubicaciones (
     PRIMARY KEY (usuario_id, ubicacion_id)
 );
 CREATE INDEX idx_usuario_ubicaciones_ubicacion_id ON usuario_ubicaciones(ubicacion_id);
+
+CREATE TABLE bitacora_registros (
+    id SERIAL PRIMARY KEY,
+    ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+    autor_usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+    autor_colaborador_id INTEGER NOT NULL REFERENCES colaboradores(id) ON DELETE RESTRICT,
+    ocurrido_at TIMESTAMP NOT NULL,
+    detalle TEXT NOT NULL,
+    estado VARCHAR(12) NOT NULL DEFAULT 'REGISTRADA',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    anulado_at TIMESTAMP NULL,
+    anulado_por_usuario_id INTEGER NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+    motivo_anulacion TEXT NULL,
+    CONSTRAINT bitacora_registros_detalle_no_vacio_check
+        CHECK (detalle ~ '[^[:space:]]'),
+    CONSTRAINT bitacora_registros_estado_check
+        CHECK (estado IN ('REGISTRADA', 'ANULADA')),
+    CONSTRAINT bitacora_registros_anulacion_coherente_check
+        CHECK (
+            (
+                estado = 'REGISTRADA'
+                AND anulado_at IS NULL
+                AND anulado_por_usuario_id IS NULL
+                AND motivo_anulacion IS NULL
+            )
+            OR
+            (
+                estado = 'ANULADA'
+                AND anulado_at IS NOT NULL
+                AND anulado_por_usuario_id IS NOT NULL
+                AND motivo_anulacion IS NOT NULL
+                AND motivo_anulacion ~ '[^[:space:]]'
+            )
+        )
+);
+
+CREATE INDEX idx_bitacora_registros_ubicacion_ocurrido
+    ON bitacora_registros (ubicacion_id, ocurrido_at DESC, id DESC);
+CREATE INDEX idx_bitacora_registros_autor_ocurrido
+    ON bitacora_registros (autor_usuario_id, ocurrido_at DESC, id DESC);
+CREATE INDEX idx_bitacora_registros_ocurrido
+    ON bitacora_registros (ocurrido_at DESC, id DESC);
+CREATE INDEX idx_bitacora_registros_estado_ocurrido
+    ON bitacora_registros (estado, ocurrido_at DESC, id DESC);
 
 CREATE TABLE audit_log (
     id SERIAL PRIMARY KEY,
@@ -648,7 +693,15 @@ INSERT INTO schema_version (version, description) VALUES
 (16, 'Inventory exact stock effects and reversible history markers'),
 (17, 'Case-insensitive unique normalized locations'),
 (18, 'Clientes catalog normalization'),
-(19, 'Relate locations to clients with nullable cliente_id');
+(19, 'Relate locations to clients with nullable cliente_id'),
+(20, 'Add Guardia and Monitorista user roles'),
+(21, 'Add optional one-to-one Usuario-Colaborador relationship'),
+(22, 'Add Guardia-ubicacion assignments'),
+(23, 'Add location point type'),
+(24, 'Add blocks and villas for urbanization locations'),
+(25, 'Add primary residents for villas'),
+(26, 'Require collaborator for new and updated users'),
+(27, 'Add minimal immutable logbook records persistence');
 
 -- ============================================
 -- FINALIZADO
