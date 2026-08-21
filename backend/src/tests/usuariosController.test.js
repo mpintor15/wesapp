@@ -899,6 +899,8 @@ describe('usuariosController.deleteUsuario', () => {
     bajas: 0,
     bajas_anuladas: 0,
     bajas_eliminadas: 0,
+    bitacoras_autor: 0,
+    bitacoras_anuladas: 0,
     audit_log: 0,
   };
 
@@ -981,6 +983,66 @@ describe('usuariosController.deleteUsuario', () => {
     expect(client.query.mock.calls.map(([sql]) => String(sql)).join('\n')).not.toContain(
       'DELETE FROM usuarios'
     );
+  });
+
+  test('rechaza eliminar un usuario autor de Bitácoras', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ ...noActivity, bitacoras_autor: 1 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'USER_HAS_ACTIVITY' }));
+    expect(client.query.mock.calls.map(([sql]) => String(sql)).join('\n')).not.toContain(
+      'DELETE FROM usuarios'
+    );
+  });
+
+  test('rechaza eliminar un usuario anulador de Bitácoras', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ ...noActivity, bitacoras_anuladas: 1 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'USER_HAS_ACTIVITY' }));
+    expect(client.query.mock.calls.map(([sql]) => String(sql)).join('\n')).not.toContain(
+      'DELETE FROM usuarios'
+    );
+  });
+
+  test('el diagnóstico consulta autoría y anulación de Bitácoras', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 2, tipo_usuario: 'secretario', activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [noActivity], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await deleteUsuario(mockReq({ params: { id: '2' }, user: { id: 1 } }), res);
+
+    const activitySql = String(client.query.mock.calls[1][0]);
+    expect(activitySql).toContain('FROM bitacora_registros');
+    expect(activitySql).toContain('autor_usuario_id = $1');
+    expect(activitySql).toContain('anulado_por_usuario_id = $1');
   });
 
   test('traduce error PostgreSQL 23503 a USER_HAS_ACTIVITY', async () => {

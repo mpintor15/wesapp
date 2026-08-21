@@ -1681,4 +1681,42 @@ describe('ubicaciones routes', () => {
       message: 'No se puede eliminar la ubicación porque está asociada a registros de inventario.',
     });
   });
+
+  test('traduce la dependencia histórica de Bitácora a un 409 específico', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 6, nombre: 'Punto Histórico', cliente_id: 10, cliente_nombre: 'ACME' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            articulos: 0,
+            movimientos_origen: 0,
+            movimientos_destino: 0,
+            bajas: 0,
+            stock_efectos: 0,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockRejectedValueOnce({
+        code: '23503',
+        constraint: 'bitacora_registros_ubicacion_id_fkey',
+        detail: 'Key (id)=(6) is still referenced from table bitacora_registros.',
+      });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('delete', '/api/inventario/ubicaciones/6');
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      success: false,
+      message: 'La ubicación tiene registros históricos de Bitácora y no puede eliminarse.',
+    });
+    expect(JSON.stringify(res.body)).not.toMatch(
+      /bitacora_registros_ubicacion_id_fkey|Key \(id\)|DELETE FROM/
+    );
+  });
 });

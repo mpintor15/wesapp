@@ -22,6 +22,12 @@ const getUsuarioActivityCounts = async (executor, usuarioId) => {
        (SELECT COUNT(*)::int FROM articulos_bajas WHERE usuario_id = $1) AS bajas,
        (SELECT COUNT(*)::int FROM articulos_bajas WHERE anulado_por = $1) AS bajas_anuladas,
        (SELECT COUNT(*)::int FROM articulos_bajas WHERE eliminado_por = $1) AS bajas_eliminadas,
+       (SELECT COUNT(*)::int
+        FROM bitacora_registros
+        WHERE autor_usuario_id = $1) AS bitacoras_autor,
+       (SELECT COUNT(*)::int
+        FROM bitacora_registros
+        WHERE anulado_por_usuario_id = $1) AS bitacoras_anuladas,
        (SELECT COUNT(*)::int FROM audit_log WHERE usuario_id = $1) AS audit_log`,
     [usuarioId]
   );
@@ -34,6 +40,8 @@ const getUsuarioActivityCounts = async (executor, usuarioId) => {
     bajas: toCount(row.bajas),
     bajas_anuladas: toCount(row.bajas_anuladas),
     bajas_eliminadas: toCount(row.bajas_eliminadas),
+    bitacoras_autor: toCount(row.bitacoras_autor),
+    bitacoras_anuladas: toCount(row.bitacoras_anuladas),
     audit_log: toCount(row.audit_log),
   };
 };

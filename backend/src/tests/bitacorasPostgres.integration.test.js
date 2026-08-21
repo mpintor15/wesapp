@@ -52,7 +52,7 @@ describe('bitacoras PostgreSQL API persistence', () => {
         estado VARCHAR(12) NOT NULL DEFAULT 'REGISTRADA',
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         anulado_at TIMESTAMP,
-        anulado_por_usuario_id INTEGER,
+        anulado_por_usuario_id INTEGER REFERENCES ${schemaIdent}.usuarios(id) ON DELETE RESTRICT,
         motivo_anulacion TEXT
       );
       CREATE TABLE ${schemaIdent}.audit_log (
@@ -271,5 +271,70 @@ describe('bitacoras PostgreSQL API persistence', () => {
     );
     expect(preserved.rows[0].colaboradores).toBe(1);
     expect(preserved.rows[0].registros).toBeGreaterThan(0);
+  });
+
+  test('RESTRICT preserva Ubicación y Bitácora histórica', async () => {
+    await expect(
+      db.query(`DELETE FROM ${schemaIdent}.ubicaciones WHERE id = 2`)
+    ).rejects.toMatchObject({
+      code: '23503',
+      constraint: 'bitacora_registros_ubicacion_id_fkey',
+    });
+
+    const preserved = await db.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM ${schemaIdent}.ubicaciones WHERE id = 2) AS ubicaciones,
+         (SELECT COUNT(*)::int FROM ${schemaIdent}.bitacora_registros
+          WHERE ubicacion_id = 2) AS registros`
+    );
+    expect(preserved.rows[0]).toEqual({ ubicaciones: 1, registros: 1 });
+  });
+
+  test('RESTRICT preserva Usuario autor y Bitácora histórica', async () => {
+    await expect(
+      db.query(`DELETE FROM ${schemaIdent}.usuarios WHERE id = 1`)
+    ).rejects.toMatchObject({
+      code: '23503',
+      constraint: 'bitacora_registros_autor_usuario_id_fkey',
+    });
+
+    const preserved = await db.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM ${schemaIdent}.usuarios WHERE id = 1) AS usuarios,
+         (SELECT COUNT(*)::int FROM ${schemaIdent}.bitacora_registros
+          WHERE autor_usuario_id = 1) AS registros`
+    );
+    expect(preserved.rows[0].usuarios).toBe(1);
+    expect(preserved.rows[0].registros).toBeGreaterThan(0);
+  });
+
+  test('RESTRICT preserva Usuario anulador y Bitácora histórica', async () => {
+    await db.query(
+      `INSERT INTO ${schemaIdent}.usuarios (usuario, colaborador_id)
+       VALUES ('anulador', NULL)`
+    );
+    await db.query(
+      `UPDATE ${schemaIdent}.bitacora_registros
+       SET estado = 'ANULADA',
+           anulado_at = '2026-08-20 14:00:00',
+           anulado_por_usuario_id = 2,
+           motivo_anulacion = 'Corrección'
+       WHERE id = 1`
+    );
+
+    await expect(
+      db.query(`DELETE FROM ${schemaIdent}.usuarios WHERE id = 2`)
+    ).rejects.toMatchObject({
+      code: '23503',
+      constraint: 'bitacora_registros_anulado_por_usuario_id_fkey',
+    });
+
+    const preserved = await db.query(
+      `SELECT
+         (SELECT COUNT(*)::int FROM ${schemaIdent}.usuarios WHERE id = 2) AS usuarios,
+         (SELECT COUNT(*)::int FROM ${schemaIdent}.bitacora_registros
+          WHERE anulado_por_usuario_id = 2) AS registros`
+    );
+    expect(preserved.rows[0]).toEqual({ usuarios: 1, registros: 1 });
   });
 });

@@ -88,6 +88,12 @@ const sendError = (res, error, fallback) => {
       message: 'Ya existe una ubicación con ese nombre para el cliente seleccionado',
     });
   }
+  if (error.code === '23503' && error.constraint === 'bitacora_registros_ubicacion_id_fkey') {
+    return res.status(409).json({
+      success: false,
+      message: 'La ubicación tiene registros históricos de Bitácora y no puede eliminarse.',
+    });
+  }
   if (error.code === '23503') {
     return res.status(409).json({
       success: false,
