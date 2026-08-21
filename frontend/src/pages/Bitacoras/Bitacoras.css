@@ -1,0 +1,38 @@
+.bitacoras-container {
+  min-height: 100vh;
+}
+
+.bitacoras-main {
+  min-width: 0;
+}
+
+.bitacoras-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  border-radius: 10px 10px 0 0;
+  background-color: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.bitacoras-panel {
+  min-height: 112px;
+}
+
+.bitacoras-panel h2 {
+  margin: 0 0 8px;
+  color: var(--color-text);
+  font-size: 1.15rem;
+}
+
+.bitacoras-panel p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 768px) {
+  .bitacoras-tabs .tab {
+    flex: 1 1 0;
+  }
+}

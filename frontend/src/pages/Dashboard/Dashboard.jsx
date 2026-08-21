@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Boxes, Building2, Receipt, ShieldCheck, UserRound } from 'lucide-react';
+import { Boxes, Building2, ClipboardList, Receipt, ShieldCheck, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -9,6 +9,7 @@ import logo from '../../assets/branding/logo_horizontal_header.png';
 import { MODULE_ACCESS_PERMISSIONS } from '../../auth/modulePermissions';
 
 const MODULE_META = {
+  bitacoras: { description: 'Registro y consulta de novedades operativas' },
   cuentas: { description: 'Control de facturas, pagos y clientes' },
   configuracion: {
     description: 'Clientes, ubicaciones y organización del inventario',
@@ -46,6 +47,13 @@ const DASHBOARD_MODULES = [
     label: 'Personal',
     Icon: UserRound,
     path: '/personal',
+  },
+  {
+    key: 'bitacoras',
+    permission: MODULE_ACCESS_PERMISSIONS.bitacoras,
+    label: 'Bitácoras',
+    Icon: ClipboardList,
+    path: '/bitacoras',
   },
   {
     key: 'usuarios',

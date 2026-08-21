@@ -146,4 +146,58 @@ describe('Dashboard', () => {
 
     page.unmount();
   });
+
+  test.each([
+    ['solo crear', [PERMISSIONS.BITACORAS_REGISTRO_CREAR]],
+    ['solo historial', [PERMISSIONS.BITACORAS_HISTORIAL_VER]],
+    ['ambos permisos', [PERMISSIONS.BITACORAS_REGISTRO_CREAR, PERMISSIONS.BITACORAS_HISTORIAL_VER]],
+  ])('muestra Bitácoras con %s', async (_caseName, permissions) => {
+    const user = { id: 1, usuario: 'operador', tipo_usuario: 'custom', permisos: permissions };
+    useAuth.mockReturnValue({
+      user,
+      logout: jest.fn(),
+      hasPermission: jest.fn((required) => canAny(user, required)),
+    });
+    const page = await renderDashboard();
+
+    const card = page.button('Bitácoras');
+    expect(card).toBeDefined();
+
+    await act(async () => {
+      card.click();
+      await flushPromises();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('/bitacoras');
+
+    page.unmount();
+  });
+
+  test('oculta Bitácoras cuando faltan ambos permisos', async () => {
+    const user = { id: 1, usuario: 'sin-bitacoras', tipo_usuario: 'custom', permisos: [] };
+    useAuth.mockReturnValue({
+      user,
+      logout: jest.fn(),
+      hasPermission: jest.fn((required) => canAny(user, required)),
+    });
+    const page = await renderDashboard();
+
+    expect(page.button('Bitácoras')).toBeUndefined();
+
+    page.unmount();
+  });
+
+  test('ubica Bitácoras inmediatamente antes de Usuarios', async () => {
+    const page = await renderDashboard();
+    const moduleLabels = Array.from(page.container.querySelectorAll('.module-card')).map((card) =>
+      card.textContent.trim()
+    );
+
+    const bitacorasIndex = moduleLabels.findIndex((label) => label.startsWith('Bitácoras'));
+    const usuariosIndex = moduleLabels.findIndex((label) => label.startsWith('Usuarios'));
+
+    expect(bitacorasIndex).toBeGreaterThanOrEqual(0);
+    expect(usuariosIndex).toBe(bitacorasIndex + 1);
+
+    page.unmount();
+  });
 });
