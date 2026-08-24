@@ -4,35 +4,92 @@
 
 .bitacoras-main {
   min-width: 0;
+  padding: 20px 2px;
 }
 
-.bitacoras-tabs {
-  display: flex;
-  gap: 0;
-  margin-bottom: 0;
-  overflow: hidden;
-  border-radius: 10px 10px 0 0;
-  background-color: var(--color-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.bitacoras-panel {
-  min-height: 112px;
-}
-
-.bitacoras-panel h2 {
+.bitacoras-main h2 {
   margin: 0 0 8px;
   color: var(--color-text);
   font-size: 1.15rem;
 }
 
-.bitacoras-panel p {
+.bitacoras-main p {
   margin: 0;
   color: var(--color-text-secondary);
 }
 
+.bitacoras-registro-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(230px, 0.85fr);
+  gap: 18px;
+}
+
+.bitacoras-registro-modal .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bitacoras-registro-modal .form-group label {
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.bitacoras-registro-modal .form-group input,
+.bitacoras-registro-modal .form-group select,
+.bitacoras-registro-modal .form-group textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.bitacoras-registro-modal .form-group input:focus,
+.bitacoras-registro-modal .form-group select:focus,
+.bitacoras-registro-modal .form-group textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
+}
+
+.bitacoras-registro-modal .form-group textarea {
+  min-height: 132px;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.bitacoras-detalle-field {
+  grid-column: 1 / -1;
+}
+
+.bitacoras-load-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 10px;
+  background: var(--color-surface-muted);
+}
+
+.bitacoras-registro-modal .field-error {
+  color: var(--color-danger);
+  font-size: 0.82rem;
+}
+
 @media (max-width: 768px) {
-  .bitacoras-tabs .tab {
-    flex: 1 1 0;
+  .bitacoras-registro-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bitacoras-detalle-field {
+    grid-column: auto;
   }
 }
