@@ -283,6 +283,7 @@ describe('bitacorasController.getRegistros', () => {
         fecha_desde: '2026-08-01',
         fecha_hasta: '2026-08-20',
         estado: 'REGISTRADA',
+        autor: '  Ana  ',
       },
     });
     const res = makeResponse();
@@ -300,6 +301,7 @@ describe('bitacorasController.getRegistros', () => {
         fechaDesde: '2026-08-01',
         fechaHasta: '2026-08-20',
         estado: 'REGISTRADA',
+        autor: 'Ana',
       },
       hasGlobalScope: true,
       userId: 8,
@@ -318,6 +320,16 @@ describe('bitacorasController.getRegistros', () => {
     await controller.getRegistros(makeRequest(), res);
     expect(repository.findHistory).toHaveBeenCalledWith(
       expect.objectContaining({ hasGlobalScope: false, userId: 7 })
+    );
+  });
+
+  test('omite autor compuesto únicamente por whitespace', async () => {
+    repository.findHistory.mockResolvedValue({ items: [], total: 0 });
+
+    await controller.getRegistros(makeRequest({ query: { autor: '   ' } }), makeResponse());
+
+    expect(repository.findHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ autor: undefined }) })
     );
   });
 
@@ -354,6 +366,7 @@ describe('bitacorasController.getRegistros', () => {
     [{ fecha_desde: '2026-02-30' }, 'fecha_desde debe tener formato'],
     [{ fecha_desde: '2026-08-20', fecha_hasta: '2026-08-01' }, 'rango de fechas'],
     [{ estado: 'BORRADA' }, 'estado debe ser REGISTRADA o ANULADA'],
+    [{ autor: 'a'.repeat(101) }, 'autor no puede exceder'],
     [{ search: 'secreto' }, 'Filtro no permitido'],
   ])('rechaza query inválida %#', async (query, message) => {
     const res = makeResponse();

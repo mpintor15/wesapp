@@ -21,6 +21,7 @@ const userRow = async (overrides = {}) => ({
   tipo_usuario: 'gerente',
   activo: true,
   primer_login: false,
+  colaborador_id: 4,
   password_hash: await bcrypt.hash('correct-password', 4),
   ...overrides,
 });
@@ -31,7 +32,7 @@ const mockAuthQuery = ({ loginUser, verifyUser, updateOk = true }) => {
     if (query.includes('information_schema.columns')) {
       return { rows: [{ column_name: 'nombre' }], rowCount: 1 };
     }
-    if (query.includes('FROM usuarios WHERE usuario = $1')) {
+    if (query.includes('FROM usuarios') && query.includes('WHERE usuario = $1')) {
       return loginUser ? { rows: [loginUser], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
     if (query.includes('SELECT password_hash FROM usuarios WHERE id = $1')) {
@@ -101,6 +102,7 @@ describe('auth routes', () => {
       usuario: 'admin',
       tipo_usuario: 'gerente',
       primer_login: true,
+      colaborador_id: 4,
     });
   });
 
@@ -176,7 +178,18 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.user).toMatchObject({ id: 7, usuario: 'admin' });
+    expect(res.body.data.user).toMatchObject({ id: 7, usuario: 'admin', colaborador_id: 4 });
+  });
+
+  test('verify expone colaborador_id null para una cuenta sin vínculo válido', async () => {
+    mockAuthQuery({ verifyUser: await userRow({ colaborador_id: null }) });
+
+    const res = await request(app)
+      .get('/api/auth/verify')
+      .set('Authorization', `Bearer ${signToken()}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.user.colaborador_id).toBeNull();
   });
 
   test('verify rechaza usuario inactivo con token válido', async () => {

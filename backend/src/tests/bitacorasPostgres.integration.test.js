@@ -165,6 +165,40 @@ describe('bitacoras PostgreSQL API persistence', () => {
       });
       expect(global.total).toBe(4);
       expect(global.items).toHaveLength(2);
+
+      const byCollaborator = await repository.findHistory({
+        filters: {
+          autor: 'uArDiA u',
+          ubicacionId: 1,
+          fechaDesde: '2026-08-20',
+          estado: 'REGISTRADA',
+        },
+        hasGlobalScope: false,
+        userId: 1,
+        pagination: { pageSize: 10, offset: 0 },
+        executor: client,
+      });
+      expect(byCollaborator.total).toBe(3);
+      expect(byCollaborator.items).toHaveLength(3);
+
+      const byUsername = await repository.findHistory({
+        filters: { autor: 'ARDI' },
+        hasGlobalScope: false,
+        userId: 1,
+        pagination: { pageSize: 10, offset: 0 },
+        executor: client,
+      });
+      expect(byUsername.total).toBe(3);
+      expect(byUsername.items.every((item) => item.ubicacion_id === 1)).toBe(true);
+
+      const noAuthorMatch = await repository.findHistory({
+        filters: { autor: 'inexistente' },
+        hasGlobalScope: false,
+        userId: 1,
+        pagination: { pageSize: 10, offset: 0 },
+        executor: client,
+      });
+      expect(noAuthorMatch).toEqual({ items: [], total: 0 });
     });
   });
 

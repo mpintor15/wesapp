@@ -49,6 +49,7 @@ describe('bitacorasService', () => {
       fecha_desde: '2026-08-01',
       fecha_hasta: '',
       estado: 'REGISTRADA',
+      autor: 'Ana',
       search: 'no permitido',
       sortBy: 'ocurrido_at',
     });
@@ -60,6 +61,7 @@ describe('bitacorasService', () => {
         ubicacion_id: 4,
         fecha_desde: '2026-08-01',
         estado: 'REGISTRADA',
+        autor: 'Ana',
       },
     });
   });

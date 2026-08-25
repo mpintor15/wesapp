@@ -18,6 +18,7 @@ const HISTORY_QUERY_FIELDS = new Set([
   'fecha_desde',
   'fecha_hasta',
   'estado',
+  'autor',
 ]);
 
 const hasGlobalLocationScope = (tipoUsuario) =>
@@ -54,6 +55,10 @@ const normalizeHistoryFilters = (query = {}) => {
   const fechaDesde = query.fecha_desde || undefined;
   const fechaHasta = query.fecha_hasta || undefined;
   const estado = query.estado || undefined;
+  if (query.autor !== undefined && typeof query.autor !== 'string') {
+    throw createHttpError(400, 'autor debe ser texto');
+  }
+  const autor = query.autor?.trim() || undefined;
 
   if (fechaDesde && !isValidDateString(fechaDesde)) {
     throw createHttpError(400, 'fecha_desde debe tener formato YYYY-MM-DD y ser real');
@@ -67,8 +72,11 @@ const normalizeHistoryFilters = (query = {}) => {
   if (estado && !BITACORA_STATES.has(estado)) {
     throw createHttpError(400, 'estado debe ser REGISTRADA o ANULADA');
   }
+  if (autor && autor.length > 100) {
+    throw createHttpError(400, 'autor no puede exceder 100 caracteres');
+  }
 
-  return { ubicacionId, fechaDesde, fechaHasta, estado };
+  return { ubicacionId, fechaDesde, fechaHasta, estado, autor };
 };
 
 const assertLocationScope = async ({ client, userId, locationId, hasGlobalScope }) => {

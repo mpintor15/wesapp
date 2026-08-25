@@ -8,6 +8,7 @@ const HISTORY_PARAM_KEYS = [
   'fecha_desde',
   'fecha_hasta',
   'estado',
+  'autor',
 ];
 
 const pickDefined = (source, keys) =>

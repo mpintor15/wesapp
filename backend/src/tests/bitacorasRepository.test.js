@@ -17,6 +17,7 @@ describe('bitacorasRepository', () => {
         fechaDesde: '2026-08-01',
         fechaHasta: '2026-08-20',
         estado: 'REGISTRADA',
+        autor: 'ana',
       },
       hasGlobalScope: false,
       userId: 7,
@@ -33,10 +34,14 @@ describe('bitacorasRepository', () => {
     expect(countSql).toContain('br.ubicacion_id = $2');
     expect(countSql).toContain(String.raw`br.ocurrido_at < ($4::date + INTERVAL '1 day')`);
     expect(countSql).toContain('br.estado = $5');
-    expect(countParams).toEqual([7, 4, '2026-08-01', '2026-08-20', 'REGISTRADA']);
+    expect(countSql).toContain('autor_c.nombres_completos ILIKE $6');
+    expect(countSql).toContain('autor_u.usuario ILIKE $6');
+    expect(dataSql).toContain('autor_c.nombres_completos ILIKE $6');
+    expect(dataSql).toContain('autor_u.usuario ILIKE $6');
+    expect(countParams).toEqual([7, 4, '2026-08-01', '2026-08-20', 'REGISTRADA', '%ana%']);
     expect(dataSql).toContain('ORDER BY br.ocurrido_at DESC, br.id DESC');
-    expect(dataSql).toContain('LIMIT $6 OFFSET $7');
-    expect(dataParams).toEqual([7, 4, '2026-08-01', '2026-08-20', 'REGISTRADA', 10, 10]);
+    expect(dataSql).toContain('LIMIT $7 OFFSET $8');
+    expect(dataParams).toEqual([7, 4, '2026-08-01', '2026-08-20', 'REGISTRADA', '%ana%', 10, 10]);
     expect(result).toEqual({ items: [{ id: 2 }, { id: 1 }], total: 12 });
   });
 

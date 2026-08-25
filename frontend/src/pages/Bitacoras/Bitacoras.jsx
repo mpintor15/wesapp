@@ -7,6 +7,7 @@ import { useToast } from '../../context/ToastContext';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import bitacorasService from '../../services/bitacorasService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
+import HistorialBitacoras from './components/HistorialBitacoras';
 import RegistroForm from './components/RegistroForm';
 import './Bitacoras.css';
 
@@ -14,9 +15,13 @@ const Bitacoras = () => {
   useScrollToTopOnMount();
 
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { user, hasPermission } = useAuth();
   const { showToast } = useToast();
-  const canCreateRegistro = hasPermission(PERMISSIONS.BITACORAS_REGISTRO_CREAR);
+  const hasCreatePermission = hasPermission(PERMISSIONS.BITACORAS_REGISTRO_CREAR);
+  const canCreateBitacora =
+    hasCreatePermission &&
+    Number.isInteger(Number(user?.colaborador_id)) &&
+    Number(user.colaborador_id) > 0;
   const canViewHistorial = hasPermission(PERMISSIONS.BITACORAS_HISTORIAL_VER);
   const locationsRequestRef = useRef(null);
   const [isRegistroModalOpen, setIsRegistroModalOpen] = useState(false);
@@ -26,6 +31,7 @@ const Bitacoras = () => {
   const [locationsLoaded, setLocationsLoaded] = useState(false);
   const [locationsLoadAttempted, setLocationsLoadAttempted] = useState(false);
   const [locationsError, setLocationsError] = useState('');
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   const loadUbicaciones = useCallback(
     async ({ background = false } = {}) => {
@@ -63,16 +69,24 @@ const Bitacoras = () => {
   );
 
   useEffect(() => {
-    if (canCreateRegistro && !locationsLoaded && !locationsLoadAttempted) void loadUbicaciones();
-  }, [canCreateRegistro, loadUbicaciones, locationsLoadAttempted, locationsLoaded]);
+    if ((canCreateBitacora || canViewHistorial) && !locationsLoaded && !locationsLoadAttempted) {
+      void loadUbicaciones();
+    }
+  }, [
+    canCreateBitacora,
+    canViewHistorial,
+    loadUbicaciones,
+    locationsLoadAttempted,
+    locationsLoaded,
+  ]);
 
   useEffect(() => {
-    if (!canCreateRegistro) setIsRegistroModalOpen(false);
-  }, [canCreateRegistro]);
+    if (!canCreateBitacora) setIsRegistroModalOpen(false);
+  }, [canCreateBitacora]);
 
   const handleOpenRegistro = () => setIsRegistroModalOpen(true);
   const handleCloseRegistro = () => setIsRegistroModalOpen(false);
-  const hasModuleAccess = canCreateRegistro || canViewHistorial;
+  const hasModuleAccess = hasCreatePermission || canViewHistorial;
 
   return (
     <div className="page-container bitacoras-container">
@@ -80,8 +94,12 @@ const Bitacoras = () => {
         title="Bitácoras"
         onBack={() => navigate('/')}
         backTitle="Volver al Dashboard"
+        onRefresh={
+          canViewHistorial ? () => setHistoryRefreshKey((current) => current + 1) : undefined
+        }
+        refreshLabel="Actualizar historial"
         actions={
-          canCreateRegistro ? (
+          canCreateBitacora ? (
             <button className="btn btn-ghost btn-sm" type="button" onClick={handleOpenRegistro}>
               Registrar Bitácora
             </button>
@@ -91,8 +109,20 @@ const Bitacoras = () => {
 
       {hasModuleAccess ? (
         <main className="bitacoras-main">
-          <h2>Historial de Bitácoras</h2>
-          <p>El historial se habilitará en el siguiente subbloque.</p>
+          {canViewHistorial ? (
+            <HistorialBitacoras
+              ubicaciones={ubicaciones}
+              locationsLoading={locationsLoading || (!locationsLoaded && !locationsError)}
+              locationsError={locationsError}
+              onReloadUbicaciones={loadUbicaciones}
+              refreshKey={historyRefreshKey}
+            />
+          ) : (
+            <section className="bitacoras-history-unavailable">
+              <h2>Historial de Bitácoras</h2>
+              <p>No tienes permiso para consultar el historial.</p>
+            </section>
+          )}
         </main>
       ) : (
         <main className="bitacoras-main bitacoras-main--denied">

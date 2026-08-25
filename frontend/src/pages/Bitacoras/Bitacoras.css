@@ -84,12 +84,193 @@
   font-size: 0.82rem;
 }
 
+.bitacoras-history {
+  gap: 0;
+}
+
+.bitacoras-filter-controls {
+  flex-wrap: nowrap;
+}
+
+.bitacoras-author-filter {
+  width: auto;
+  flex: 2 1 300px;
+}
+
+.bitacoras-location-filter,
+.bitacoras-status-filter {
+  min-width: 0;
+}
+
+.bitacoras-location-filter {
+  flex: 1 1 190px;
+}
+
+.bitacoras-status-filter {
+  flex: 0 1 150px;
+}
+
+.bitacoras-date-filters {
+  flex: 0 1 310px;
+  min-width: 0;
+}
+
+.bitacoras-filter-error {
+  margin: 10px 0 0;
+  color: var(--color-danger);
+  font-size: 0.82rem;
+}
+
+.bitacoras-inline-retry {
+  align-self: flex-start;
+  padding: 4px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bitacoras-history-state {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  text-align: center;
+}
+
+.bitacoras-history-empty p,
+.bitacoras-history-state p {
+  margin: 0;
+}
+
+.bitacoras-table {
+  table-layout: fixed;
+}
+
+.bitacoras-table th:nth-child(1),
+.bitacoras-table td:nth-child(1) {
+  width: 150px;
+}
+
+.bitacoras-table th:nth-child(2),
+.bitacoras-table td:nth-child(2),
+.bitacoras-table th:nth-child(3),
+.bitacoras-table td:nth-child(3) {
+  width: 190px;
+}
+
+.bitacoras-table th:nth-child(5),
+.bitacoras-table td:nth-child(5) {
+  width: 110px;
+  text-align: center;
+}
+
+.bitacoras-table td {
+  vertical-align: top;
+}
+
+.bitacoras-table td small,
+.bitacoras-record-card small {
+  display: block;
+  margin-top: 3px;
+  color: var(--color-text-muted);
+  font-size: 0.76rem;
+}
+
+.bitacoras-cell-primary {
+  display: block;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.bitacoras-detail-cell {
+  min-width: 260px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.bitacoras-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.bitacoras-status--registered {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.bitacoras-status--cancelled {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.bitacoras-card-detail {
+  grid-column: 1 / -1;
+}
+
+.bitacoras-card-detail dd,
+.bitacoras-cancel-reason {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.bitacoras-cancel-reason {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+}
+
 @media (max-width: 768px) {
+  .bitacoras-main {
+    padding-top: 14px;
+  }
+
+  .bitacoras-filter-controls {
+    flex-wrap: wrap;
+  }
+
+  .bitacoras-author-filter,
+  .bitacoras-location-filter,
+  .bitacoras-date-filters,
+  .bitacoras-status-filter {
+    flex: 0 0 auto;
+  }
+
+  .bitacoras-date-filters {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
   .bitacoras-registro-grid {
     grid-template-columns: 1fr;
   }
 
   .bitacoras-detalle-field {
     grid-column: auto;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  .bitacoras-filter-controls {
+    flex-wrap: wrap;
   }
 }

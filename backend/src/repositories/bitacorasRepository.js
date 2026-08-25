@@ -54,6 +54,23 @@ const buildHistoryFilters = ({ filters, hasGlobalScope, userId }) => {
     params.push(filters.estado);
     conditions.push(`br.estado = $${params.length}`);
   }
+  if (filters.autor) {
+    params.push(`%${filters.autor}%`);
+    conditions.push(`(
+      EXISTS (
+        SELECT 1
+        FROM colaboradores autor_c
+        WHERE autor_c.id = br.autor_colaborador_id
+          AND autor_c.nombres_completos ILIKE $${params.length}
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM usuarios autor_u
+        WHERE autor_u.id = br.autor_usuario_id
+          AND autor_u.usuario ILIKE $${params.length}
+      )
+    )`);
+  }
 
   return {
     params,

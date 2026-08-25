@@ -25,8 +25,19 @@ jest.mock('../../services/bitacorasService', () => ({
   default: {
     getUbicaciones: jest.fn(),
     createRegistro: jest.fn(),
+    getRegistros: jest.fn(),
   },
 }));
+
+jest.mock('./components/HistorialBitacoras', () => {
+  const MockHistorialBitacoras = (props) => (
+    <section data-testid="historial-bitacoras" data-location-count={props.ubicaciones.length}>
+      Historial funcional
+    </section>
+  );
+  MockHistorialBitacoras.displayName = 'MockHistorialBitacoras';
+  return MockHistorialBitacoras;
+});
 
 jest.mock('../../hooks/useScrollToTopOnMount', () => jest.fn());
 
@@ -48,8 +59,9 @@ const setValue = (element, value) => {
   element.dispatchEvent(new globalThis.Event('change', { bubbles: true }));
 };
 
-const renderBitacoras = (permissions) => {
+const renderBitacoras = (permissions, user = { id: 7, colaborador_id: 4 }) => {
   useAuth.mockReturnValue({
+    user,
     hasPermission: jest.fn((permission) => permissions.includes(permission)),
   });
   const container = document.createElement('div');
@@ -87,18 +99,34 @@ describe('Bitacoras', () => {
 
     expect(view.button('Registrar Bitácora')).not.toBeUndefined();
     expect(view.container.querySelector('[role="tablist"]')).toBeNull();
-    expect(view.container.textContent).toContain('Historial de Bitácoras');
+    expect(view.container.textContent).toContain('No tienes permiso para consultar el historial');
+    expect(bitacorasService.getUbicaciones).toHaveBeenCalledTimes(1);
+    expect(bitacorasService.getRegistros).not.toHaveBeenCalled();
+
+    view.unmount();
+  });
+
+  test('solo historial muestra historial funcional, carga Ubicaciones y no muestra Registrar', async () => {
+    const view = renderBitacoras([PERMISSIONS.BITACORAS_HISTORIAL_VER]);
+    await act(async () => Promise.resolve());
+
+    expect(view.button('Registrar Bitácora')).toBeUndefined();
+    expect(view.container.textContent).toContain('Historial funcional');
     expect(bitacorasService.getUbicaciones).toHaveBeenCalledTimes(1);
 
     view.unmount();
   });
 
-  test('solo historial no muestra Registrar ni carga Ubicaciones', () => {
-    const view = renderBitacoras([PERMISSIONS.BITACORAS_HISTORIAL_VER]);
+  test('permiso crear sin Colaborador oculta Registrar pero conserva el historial', async () => {
+    const view = renderBitacoras(
+      [PERMISSIONS.BITACORAS_REGISTRO_CREAR, PERMISSIONS.BITACORAS_HISTORIAL_VER],
+      { id: 2, colaborador_id: null, tipo_usuario: 'gerente' }
+    );
+    await act(async () => Promise.resolve());
 
     expect(view.button('Registrar Bitácora')).toBeUndefined();
-    expect(view.container.textContent).toContain('Historial de Bitácoras');
-    expect(bitacorasService.getUbicaciones).not.toHaveBeenCalled();
+    expect(view.container.textContent).toContain('Historial funcional');
+    expect(bitacorasService.getUbicaciones).toHaveBeenCalledTimes(1);
 
     view.unmount();
   });
@@ -112,6 +140,7 @@ describe('Bitacoras', () => {
 
     expect(view.button('Registrar Bitácora')).not.toBeUndefined();
     expect(view.container.querySelector('[role="tab"]')).toBeNull();
+    expect(view.container.textContent).toContain('Historial funcional');
 
     view.unmount();
   });
