@@ -86,6 +86,10 @@ const Bitacoras = () => {
 
   const handleOpenRegistro = () => setIsRegistroModalOpen(true);
   const handleCloseRegistro = () => setIsRegistroModalOpen(false);
+  const handleRegistroSuccess = () => {
+    handleCloseRegistro();
+    if (canViewHistorial) setHistoryRefreshKey((current) => current + 1);
+  };
   const hasModuleAccess = hasCreatePermission || canViewHistorial;
 
   return (
@@ -141,7 +145,7 @@ const Bitacoras = () => {
           onUbicacionChange={setLastUbicacionId}
           onReloadUbicaciones={loadUbicaciones}
           onClose={handleCloseRegistro}
-          onSuccess={handleCloseRegistro}
+          onSuccess={handleRegistroSuccess}
           showToast={showToast}
         />
       ) : null}

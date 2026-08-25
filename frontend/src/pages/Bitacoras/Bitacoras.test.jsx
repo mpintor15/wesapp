@@ -31,7 +31,11 @@ jest.mock('../../services/bitacorasService', () => ({
 
 jest.mock('./components/HistorialBitacoras', () => {
   const MockHistorialBitacoras = (props) => (
-    <section data-testid="historial-bitacoras" data-location-count={props.ubicaciones.length}>
+    <section
+      data-testid="historial-bitacoras"
+      data-location-count={props.ubicaciones.length}
+      data-refresh-key={props.refreshKey}
+    >
       Historial funcional
     </section>
   );
@@ -164,6 +168,18 @@ describe('Bitacoras', () => {
     view.unmount();
   });
 
+  test('refresh manual continúa invalidando el historial una sola vez', () => {
+    const view = renderBitacoras([PERMISSIONS.BITACORAS_HISTORIAL_VER]);
+    const history = view.container.querySelector('[data-testid="historial-bitacoras"]');
+    const refresh = view.container.querySelector('[aria-label="Actualizar historial"]');
+
+    expect(history.dataset.refreshKey).toBe('0');
+    act(() => refresh.click());
+    expect(history.dataset.refreshKey).toBe('1');
+
+    view.unmount();
+  });
+
   test('el modal inicia cerrado y calcula la hora al abrir, no al montar', async () => {
     const view = renderBitacoras([PERMISSIONS.BITACORAS_REGISTRO_CREAR]);
     await act(async () => Promise.resolve());
@@ -228,6 +244,57 @@ describe('Bitacoras', () => {
     expect(view.container.querySelector('#bitacora-ocurrido-at').value).toBe('2026-08-21T10:25');
     expect(bitacorasService.getUbicaciones).toHaveBeenCalledTimes(1);
 
+    view.unmount();
+  });
+
+  test('éxito con ambos permisos invalida el historial exactamente una vez', async () => {
+    bitacorasService.createRegistro.mockResolvedValue({ success: true, message: 'Creada' });
+    const view = renderBitacoras([
+      PERMISSIONS.BITACORAS_REGISTRO_CREAR,
+      PERMISSIONS.BITACORAS_HISTORIAL_VER,
+    ]);
+    await act(async () => Promise.resolve());
+
+    const history = view.container.querySelector('[data-testid="historial-bitacoras"]');
+    expect(history.dataset.refreshKey).toBe('0');
+    act(() => view.button('Registrar Bitácora').click());
+    act(() => {
+      setValue(view.container.querySelector('#bitacora-ubicacion'), '7');
+      setValue(view.container.querySelector('#bitacora-detalle'), 'Novedad');
+    });
+
+    await act(async () => {
+      view.container
+        .querySelector('form')
+        .dispatchEvent(new globalThis.Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(view.container.querySelector('[role="dialog"]')).toBeNull();
+    expect(history.dataset.refreshKey).toBe('1');
+    view.unmount();
+  });
+
+  test('éxito con solo crear cierra modal sin montar ni invalidar historial', async () => {
+    bitacorasService.createRegistro.mockResolvedValue({ success: true, message: 'Creada' });
+    const view = renderBitacoras([PERMISSIONS.BITACORAS_REGISTRO_CREAR]);
+    await act(async () => Promise.resolve());
+    act(() => view.button('Registrar Bitácora').click());
+    act(() => {
+      setValue(view.container.querySelector('#bitacora-ubicacion'), '7');
+      setValue(view.container.querySelector('#bitacora-detalle'), 'Novedad');
+    });
+
+    await act(async () => {
+      view.container
+        .querySelector('form')
+        .dispatchEvent(new globalThis.Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(view.container.querySelector('[role="dialog"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="historial-bitacoras"]')).toBeNull();
+    expect(bitacorasService.getRegistros).not.toHaveBeenCalled();
     view.unmount();
   });
 

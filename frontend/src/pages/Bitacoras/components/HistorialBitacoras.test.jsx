@@ -226,6 +226,58 @@ describe('HistorialBitacoras', () => {
     view.unmount();
   });
 
+  test('refresh externo conserva página y todos los filtros aplicados', async () => {
+    bitacorasService.getRegistros.mockResolvedValue(
+      successResult({ page: 1, pageSize: 25, totalPages: 3 })
+    );
+    const view = renderHistory();
+    await flush();
+    act(() => {
+      setValue(view.field('#bitacoras-filter-autor'), 'Guardia');
+      setValue(view.field('#bitacoras-filter-ubicacion'), '7');
+      setValue(view.field('#bitacoras-filter-desde'), '2026-08-01');
+      setValue(view.field('#bitacoras-filter-hasta'), '2026-08-21');
+      setValue(view.field('#bitacoras-filter-estado'), 'REGISTRADA');
+      view.button('Aplicar').click();
+    });
+    await flush();
+    act(() => view.button('Siguiente ›').click());
+    await flush();
+
+    view.rerender({ refreshKey: 1 });
+    await flush();
+
+    expect(bitacorasService.getRegistros).toHaveBeenLastCalledWith({
+      page: 2,
+      pageSize: 25,
+      ubicacion_id: 7,
+      fecha_desde: '2026-08-01',
+      fecha_hasta: '2026-08-21',
+      estado: 'REGISTRADA',
+      autor: 'Guardia',
+    });
+    view.unmount();
+  });
+
+  test('una respuesta anterior no sobrescribe el resultado del refresh externo', async () => {
+    let resolveInitial;
+    bitacorasService.getRegistros
+      .mockReturnValueOnce(new Promise((resolve) => (resolveInitial = resolve)))
+      .mockResolvedValueOnce(
+        successResult({ data: [{ ...RECORDS[0], id: 22, detalle: 'Resultado nuevo' }] })
+      );
+    const view = renderHistory();
+
+    view.rerender({ refreshKey: 1 });
+    await flush();
+    expect(view.container.textContent).toContain('Resultado nuevo');
+
+    await act(async () => resolveInitial(successResult()));
+    expect(view.container.textContent).toContain('Resultado nuevo');
+    expect(view.container.textContent).not.toContain('Novedad completa');
+    view.unmount();
+  });
+
   test('corrige una página fuera de rango con una sola consulta adicional', async () => {
     bitacorasService.getRegistros
       .mockResolvedValueOnce(successResult({ page: 1, totalPages: 3 }))
@@ -282,6 +334,25 @@ describe('HistorialBitacoras', () => {
       pageSize: 25,
       estado: 'ANULADA',
     });
+    view.unmount();
+  });
+
+  test('error de refresh externo usa el estado normal de error y retry', async () => {
+    bitacorasService.getRegistros
+      .mockResolvedValueOnce(successResult())
+      .mockResolvedValueOnce({ success: false, status: 500 })
+      .mockResolvedValueOnce(successResult());
+    const view = renderHistory();
+    await flush();
+
+    view.rerender({ refreshKey: 1 });
+    await flush();
+    expect(view.container.textContent).toContain('Ocurrió un error interno');
+
+    act(() => view.button('Reintentar').click());
+    await flush();
+    expect(bitacorasService.getRegistros).toHaveBeenLastCalledWith({ page: 1, pageSize: 25 });
+    expect(view.container.textContent).toContain('Novedad completa');
     view.unmount();
   });
 
