@@ -1460,4 +1460,196 @@ describe('database migrations', () => {
       expect(version.rowCount).toBe(0);
     });
   });
+
+  test('migration 028 adds optional relationally coherent urban context to logbook records', async () => {
+    await withTempDatabase('wesapp_migration_bitacora_contexto_urbano_028', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (id SERIAL PRIMARY KEY);
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (
+          id SERIAL PRIMARY KEY,
+          tipo_punto VARCHAR(20) NOT NULL CHECK (tipo_punto IN ('GENERAL', 'URBANIZACION'))
+        );
+        CREATE TABLE manzanas (
+          id SERIAL PRIMARY KEY,
+          ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+          nombre VARCHAR(100) NOT NULL,
+          estado VARCHAR(10) NOT NULL DEFAULT 'activo'
+        );
+        CREATE TABLE villas (
+          id SERIAL PRIMARY KEY,
+          manzana_id INTEGER NOT NULL REFERENCES manzanas(id) ON DELETE RESTRICT,
+          identificador VARCHAR(100) NOT NULL,
+          estado VARCHAR(10) NOT NULL DEFAULT 'activo'
+        );
+        CREATE TABLE bitacora_registros (
+          id SERIAL PRIMARY KEY,
+          ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+          autor_usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+          autor_colaborador_id INTEGER NOT NULL REFERENCES colaboradores(id) ON DELETE RESTRICT,
+          ocurrido_at TIMESTAMP NOT NULL,
+          detalle TEXT NOT NULL,
+          estado VARCHAR(12) NOT NULL DEFAULT 'REGISTRADA',
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          anulado_at TIMESTAMP NULL,
+          anulado_por_usuario_id INTEGER NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+          motivo_anulacion TEXT NULL
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+
+        INSERT INTO colaboradores DEFAULT VALUES;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones (tipo_punto) VALUES ('GENERAL'), ('URBANIZACION'), ('URBANIZACION');
+        INSERT INTO manzanas (ubicacion_id, nombre) VALUES (2, 'A'), (3, 'B');
+        INSERT INTO villas (manzana_id, identificador) VALUES (1, '1'), (2, '2');
+        INSERT INTO bitacora_registros
+          (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+        VALUES (1, 1, 1, '2026-08-25 09:00:00', 'Registro histórico');
+      `);
+
+      await applyMigrationInTransaction(pool, 28);
+
+      const columns = await pool.query(`
+        SELECT column_name, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'bitacora_registros'
+          AND column_name IN ('manzana_id', 'villa_id')
+        ORDER BY column_name
+      `);
+      expect(columns.rows).toEqual([
+        { column_name: 'manzana_id', is_nullable: 'YES' },
+        { column_name: 'villa_id', is_nullable: 'YES' },
+      ]);
+
+      const historical = await pool.query(
+        'SELECT manzana_id, villa_id FROM bitacora_registros WHERE detalle = $1',
+        ['Registro histórico']
+      );
+      expect(historical.rows[0]).toEqual({ manzana_id: null, villa_id: null });
+
+      const insertRegistro = (ubicacionId, detalle, manzanaId = null, villaId = null) =>
+        pool.query(
+          `INSERT INTO bitacora_registros
+             (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+              manzana_id, villa_id)
+           VALUES ($1, 1, 1, '2026-08-25 10:00:00', $2, $3, $4)`,
+          [ubicacionId, detalle, manzanaId, villaId]
+        );
+
+      await expect(insertRegistro(1, 'GENERAL sin contexto')).resolves.toBeDefined();
+      await expect(insertRegistro(2, 'Urbanización sin contexto')).resolves.toBeDefined();
+      await expect(insertRegistro(2, 'Urbanización con Manzana', 1)).resolves.toBeDefined();
+      await expect(insertRegistro(2, 'Urbanización con Villa', 1, 1)).resolves.toBeDefined();
+
+      await expect(insertRegistro(2, 'Villa sin Manzana', null, 1)).rejects.toMatchObject({
+        code: '23514',
+        constraint: 'bitacora_registros_villa_requiere_manzana_check',
+      });
+      await expect(insertRegistro(2, 'Manzana inexistente', 999)).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_manzana_ubicacion_fkey',
+      });
+      await expect(insertRegistro(1, 'GENERAL con contexto', 1)).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_manzana_ubicacion_fkey',
+      });
+      await expect(insertRegistro(3, 'Manzana de otra Urbanización', 1)).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_manzana_ubicacion_fkey',
+      });
+      await expect(insertRegistro(2, 'Villa de otra Manzana', 1, 2)).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_villa_manzana_fkey',
+      });
+
+      await pool.query('UPDATE manzanas SET estado = $1 WHERE id = 1', ['inactivo']);
+      await pool.query('UPDATE villas SET estado = $1 WHERE id = 1', ['inactivo']);
+      const preserved = await pool.query(
+        `SELECT br.manzana_id, br.villa_id, m.estado AS manzana_estado, v.estado AS villa_estado
+         FROM bitacora_registros br
+         JOIN manzanas m ON m.id = br.manzana_id
+         JOIN villas v ON v.id = br.villa_id
+         WHERE br.detalle = 'Urbanización con Villa'`
+      );
+      expect(preserved.rows[0]).toEqual({
+        manzana_id: 1,
+        villa_id: 1,
+        manzana_estado: 'inactivo',
+        villa_estado: 'inactivo',
+      });
+
+      await expect(pool.query('DELETE FROM villas WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_villa_manzana_fkey',
+      });
+      await expect(pool.query('DELETE FROM manzanas WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+
+      const indexes = await pool.query(`
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = 'bitacora_registros'
+      `);
+      const indexMap = new Map(indexes.rows.map((index) => [index.indexname, index.indexdef]));
+      expect(indexMap.get('idx_bitacora_registros_manzana_ubicacion')).toMatch(
+        /\(manzana_id, ubicacion_id\).*WHERE \(manzana_id IS NOT NULL\)/
+      );
+      expect(indexMap.get('idx_bitacora_registros_villa_manzana')).toMatch(
+        /\(villa_id, manzana_id\).*WHERE \(villa_id IS NOT NULL\)/
+      );
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 28');
+      expect(version.rowCount).toBe(1);
+      const schema = await fs.readFile(schemaPath, 'utf8');
+      expect(schema).toContain('bitacora_registros_manzana_ubicacion_fkey');
+      expect(schema).toContain('bitacora_registros_villa_manzana_fkey');
+      expect(schema).toContain('bitacora_registros_villa_requiere_manzana_check');
+    });
+  });
+
+  test('migration 028 rolls back every schema change and version registration on failure', async () => {
+    await withTempDatabase(
+      'wesapp_migration_bitacora_contexto_urbano_028_rollback',
+      async (pool) => {
+        await pool.query(`
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY);
+        CREATE TABLE manzanas (id SERIAL PRIMARY KEY, ubicacion_id INTEGER NOT NULL);
+        CREATE TABLE villas (id SERIAL PRIMARY KEY, manzana_id INTEGER NOT NULL);
+        CREATE TABLE bitacora_registros (
+          id SERIAL PRIMARY KEY,
+          ubicacion_id INTEGER NOT NULL,
+          villa_id INTEGER NULL
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+      `);
+
+        await expect(applyMigrationInTransaction(pool, 28)).rejects.toMatchObject({
+          code: '42701',
+        });
+
+        const urbanColumns = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'bitacora_registros'
+          AND column_name IN ('manzana_id', 'villa_id')
+        ORDER BY column_name
+      `);
+        expect(urbanColumns.rows).toEqual([{ column_name: 'villa_id' }]);
+
+        const masterConstraints = await pool.query(`
+        SELECT constraint_name
+        FROM information_schema.table_constraints
+        WHERE table_schema = 'public'
+          AND constraint_name IN ('manzanas_id_ubicacion_id_key', 'villas_id_manzana_id_key')
+      `);
+        expect(masterConstraints.rowCount).toBe(0);
+
+        const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 28');
+        expect(version.rowCount).toBe(0);
+      }
+    );
+  });
 });

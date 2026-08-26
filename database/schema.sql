@@ -115,7 +115,8 @@ CREATE TABLE manzanas (
     estado VARCHAR(10) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
     created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT manzanas_id_ubicacion_id_key UNIQUE (id, ubicacion_id)
 );
 
 CREATE UNIQUE INDEX idx_manzanas_ubicacion_nombre_normalizado_unique
@@ -129,7 +130,8 @@ CREATE TABLE villas (
     estado VARCHAR(10) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
     created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT villas_id_manzana_id_key UNIQUE (id, manzana_id)
 );
 
 CREATE UNIQUE INDEX idx_villas_manzana_identificador_normalizado_unique
@@ -300,6 +302,8 @@ CREATE TABLE bitacora_registros (
     anulado_at TIMESTAMP NULL,
     anulado_por_usuario_id INTEGER NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
     motivo_anulacion TEXT NULL,
+    manzana_id INTEGER NULL,
+    villa_id INTEGER NULL,
     CONSTRAINT bitacora_registros_detalle_no_vacio_check
         CHECK (detalle ~ '[^[:space:]]'),
     CONSTRAINT bitacora_registros_estado_check
@@ -320,7 +324,15 @@ CREATE TABLE bitacora_registros (
                 AND motivo_anulacion IS NOT NULL
                 AND motivo_anulacion ~ '[^[:space:]]'
             )
-        )
+    ),
+    CONSTRAINT bitacora_registros_villa_requiere_manzana_check
+        CHECK (villa_id IS NULL OR manzana_id IS NOT NULL),
+    CONSTRAINT bitacora_registros_manzana_ubicacion_fkey
+        FOREIGN KEY (manzana_id, ubicacion_id)
+        REFERENCES manzanas (id, ubicacion_id) ON DELETE RESTRICT,
+    CONSTRAINT bitacora_registros_villa_manzana_fkey
+        FOREIGN KEY (villa_id, manzana_id)
+        REFERENCES villas (id, manzana_id) ON DELETE RESTRICT
 );
 
 CREATE INDEX idx_bitacora_registros_ubicacion_ocurrido
@@ -331,6 +343,10 @@ CREATE INDEX idx_bitacora_registros_ocurrido
     ON bitacora_registros (ocurrido_at DESC, id DESC);
 CREATE INDEX idx_bitacora_registros_estado_ocurrido
     ON bitacora_registros (estado, ocurrido_at DESC, id DESC);
+CREATE INDEX idx_bitacora_registros_manzana_ubicacion
+    ON bitacora_registros (manzana_id, ubicacion_id) WHERE manzana_id IS NOT NULL;
+CREATE INDEX idx_bitacora_registros_villa_manzana
+    ON bitacora_registros (villa_id, manzana_id) WHERE villa_id IS NOT NULL;
 
 CREATE TABLE audit_log (
     id SERIAL PRIMARY KEY,
@@ -701,7 +717,8 @@ INSERT INTO schema_version (version, description) VALUES
 (24, 'Add blocks and villas for urbanization locations'),
 (25, 'Add primary residents for villas'),
 (26, 'Require collaborator for new and updated users'),
-(27, 'Add minimal immutable logbook records persistence');
+(27, 'Add minimal immutable logbook records persistence'),
+(28, 'Add optional urban context to logbook records');
 
 -- ============================================
 -- FINALIZADO
