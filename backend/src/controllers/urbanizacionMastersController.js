@@ -142,6 +142,62 @@ const getVilla = async (executor, villaId, lock = '') => {
   return result.rows[0];
 };
 
+const getVillaForUpdate = async (executor, villaId) => {
+  const blockResult = await executor.query(
+    `SELECT m.id
+     FROM manzanas m
+     WHERE m.id = (SELECT v.manzana_id FROM villas v WHERE v.id = $1)
+     FOR UPDATE OF m`,
+    [villaId]
+  );
+  if (blockResult.rowCount === 0) {
+    throw appError(404, 'VILLA_NOT_FOUND', 'Villa no encontrada');
+  }
+
+  const villa = await getVilla(executor, villaId, 'FOR UPDATE OF v');
+  if (villa.manzana_id !== blockResult.rows[0].id) {
+    throw appError(409, 'INVALID_MASTER_CHAIN', 'La Villa dejó de pertenecer a la Manzana.');
+  }
+  return villa;
+};
+
+const getResidentePrincipalForUpdate = async (executor, residenteId) => {
+  // Step 1: Discover villa_id by reading Resident WITHOUT lock.
+  // This accepts temporary TOCTOU risk, but we'll re-validate after acquiring parent locks.
+  const reference = await executor.query(
+    `SELECT villa_id FROM residentes
+     WHERE id = $1 AND es_principal = TRUE`,
+    [residenteId]
+  );
+  if (reference.rowCount === 0) {
+    throw appError(404, 'RESIDENT_NOT_FOUND', 'Residente principal no encontrado');
+  }
+  const villaId = reference.rows[0].villa_id;
+
+  // Step 2: Lock parents in CANONICAL ORDER: Block → Villa
+  // This prevents deadlock cycles with other transactions that lock Resident first.
+  const villa = await getVillaForUpdate(executor, villaId);
+
+  // Step 3: Lock Resident and re-validate relationships (TOCTOU check).
+  // We now know villa_id and have Block/Villa locks, so we can safely lock Resident.
+  const currentResult = await executor.query(
+    `SELECT id, villa_id, nombre, contacto, activo FROM residentes
+     WHERE id = $1 AND es_principal = TRUE FOR UPDATE`,
+    [residenteId]
+  );
+  if (currentResult.rowCount === 0) {
+    throw appError(404, 'RESIDENT_NOT_FOUND', 'Residente principal no encontrado');
+  }
+  const current = currentResult.rows[0];
+
+  // Step 4: Verify relationships haven't changed during the lock acquisition.
+  // If they have, we may retry from step 1 (rare case).
+  if (current.villa_id !== villa.id) {
+    throw appError(409, 'INVALID_MASTER_CHAIN', 'El Residente dejó de pertenecer a la Villa.');
+  }
+  return { current, villa };
+};
+
 const ensureActiveVillaChain = (villa) => {
   if (
     villa.estado !== 'activo' ||
@@ -310,17 +366,7 @@ const updateVilla = async (req, res) => {
   try {
     const villaId = parseId(req.params.villaId, 'La Villa es inválida');
     const updated = await db.transaction(async (client) => {
-      const currentResult = await client.query(
-        `SELECT v.id, v.manzana_id, v.identificador, v.estado,
-                m.estado AS manzana_estado, m.ubicacion_id
-         FROM villas v JOIN manzanas m ON m.id = v.manzana_id
-         WHERE v.id = $1 FOR UPDATE OF v, m`,
-        [villaId]
-      );
-      if (currentResult.rowCount === 0) {
-        throw appError(404, 'VILLA_NOT_FOUND', 'Villa no encontrada');
-      }
-      const current = currentResult.rows[0];
+      const current = await getVillaForUpdate(client, villaId);
       const identificador = Object.prototype.hasOwnProperty.call(req.body || {}, 'identificador')
         ? validateText(req.body.identificador, 'El identificador de la Villa')
         : current.identificador;
@@ -366,7 +412,7 @@ const deleteVilla = async (req, res) => {
   try {
     const villaId = parseId(req.params.villaId, 'La Villa es inválida');
     const deleted = await db.transaction(async (client) => {
-      const current = await getVilla(client, villaId, 'FOR UPDATE OF v, m');
+      const current = await getVillaForUpdate(client, villaId);
       const residentes = await client.query(
         'SELECT 1 FROM residentes WHERE villa_id = $1 LIMIT 1',
         [villaId]
@@ -417,7 +463,7 @@ const createResidentePrincipal = async (req, res) => {
     const contacto = validateResidentContact(req.body?.contacto);
     const reemplazar = req.body?.reemplazar === true;
     const created = await db.transaction(async (client) => {
-      const villa = await getVilla(client, villaId, 'FOR UPDATE OF v, m');
+      const villa = await getVillaForUpdate(client, villaId);
       ensureActiveVillaChain(villa);
       const current = await client.query(
         `SELECT id FROM residentes
@@ -449,31 +495,22 @@ const createResidentePrincipal = async (req, res) => {
 const updateResidentePrincipal = async (req, res) => {
   try {
     const residenteId = parseId(req.params.residenteId, 'El Residente es inválido');
+    const hasNombre = Object.prototype.hasOwnProperty.call(req.body || {}, 'nombre');
+    const hasContacto = Object.prototype.hasOwnProperty.call(req.body || {}, 'contacto');
+    const nombreInput = hasNombre ? validateResidentText(req.body.nombre, 'El nombre') : undefined;
+    const contactoInput = hasContacto ? validateResidentContact(req.body.contacto) : undefined;
+    if (req.body?.activo !== undefined && typeof req.body.activo !== 'boolean') {
+      throw appError(400, 'INVALID_RESIDENT', 'El estado activo es inválido');
+    }
     const updated = await db.transaction(async (client) => {
-      const currentResult = await client.query(
-        `SELECT id, villa_id, nombre, contacto, activo FROM residentes
-         WHERE id = $1 AND es_principal = TRUE FOR UPDATE`,
-        [residenteId]
-      );
-      if (currentResult.rowCount === 0) {
-        throw appError(404, 'RESIDENT_NOT_FOUND', 'Residente principal no encontrado');
-      }
-      const current = currentResult.rows[0];
-      const nombre = Object.prototype.hasOwnProperty.call(req.body || {}, 'nombre')
-        ? validateResidentText(req.body.nombre, 'El nombre')
-        : current.nombre;
-      const contacto = Object.prototype.hasOwnProperty.call(req.body || {}, 'contacto')
-        ? validateResidentContact(req.body.contacto)
-        : current.contacto;
+      const { current, villa } = await getResidentePrincipalForUpdate(client, residenteId);
+      const nombre = hasNombre ? nombreInput : current.nombre;
+      const contacto = hasContacto ? contactoInput : current.contacto;
       let activo = current.activo;
       if (req.body?.activo !== undefined) {
-        if (typeof req.body.activo !== 'boolean') {
-          throw appError(400, 'INVALID_RESIDENT', 'El estado activo es inválido');
-        }
         activo = req.body.activo;
       }
       if (activo) {
-        const villa = await getVilla(client, current.villa_id, 'FOR UPDATE OF v, m');
         ensureActiveVillaChain(villa);
       }
       const result = await client.query(
@@ -501,4 +538,6 @@ module.exports = {
   getResidentePrincipal,
   createResidentePrincipal,
   updateResidentePrincipal,
+  lockVillaChainForUpdate: getVillaForUpdate,
+  lockResidentChainForUpdate: getResidentePrincipalForUpdate,
 };

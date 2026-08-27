@@ -11,6 +11,62 @@ const findLockedUserLocationAssignment = async ({ client, userId, locationId }) 
   return result.rows[0] || null;
 };
 
+const findLockedBlock = async ({ client, blockId }) => {
+  const result = await client.query(
+    `SELECT id, ubicacion_id, nombre, estado
+     FROM manzanas
+     WHERE id = $1
+     FOR SHARE`,
+    [blockId]
+  );
+  return result.rows[0] || null;
+};
+
+const findVisibleBlock = async ({ blockId, hasGlobalScope, userId, executor = db }) => {
+  const params = [blockId];
+  const scopeCondition = buildScopeCondition({
+    hasGlobalScope,
+    userId,
+    params,
+    locationExpression: 'm.ubicacion_id',
+  });
+  const result = await executor.query(
+    `SELECT m.id, m.ubicacion_id, m.nombre, m.estado
+     FROM manzanas m
+     WHERE m.id = $1${scopeCondition ? ` AND ${scopeCondition}` : ''}`,
+    params
+  );
+  return result.rows[0] || null;
+};
+
+const findVisibleLocation = async ({ locationId, hasGlobalScope, userId, executor = db }) => {
+  const params = [locationId];
+  const scopeCondition = buildScopeCondition({
+    hasGlobalScope,
+    userId,
+    params,
+    locationExpression: 'u.id',
+  });
+  const result = await executor.query(
+    `SELECT u.id, u.nombre, u.cliente_id, u.tipo_punto
+     FROM ubicaciones u
+     WHERE u.id = $1${scopeCondition ? ` AND ${scopeCondition}` : ''}`,
+    params
+  );
+  return result.rows[0] || null;
+};
+
+const findLockedVilla = async ({ client, villaId }) => {
+  const result = await client.query(
+    `SELECT id, manzana_id, identificador, estado
+     FROM villas
+     WHERE id = $1
+     FOR SHARE`,
+    [villaId]
+  );
+  return result.rows[0] || null;
+};
+
 const buildScopeCondition = ({
   hasGlobalScope,
   userId,
@@ -95,6 +151,10 @@ const findHistory = async ({ filters, hasGlobalScope, userId, pagination, execut
        br.ubicacion_id,
        u.nombre AS ubicacion_nombre,
        u.tipo_punto,
+       br.manzana_id,
+       m.nombre AS manzana_nombre,
+       br.villa_id,
+       v.identificador AS villa_identificador,
        br.autor_usuario_id,
        au.usuario AS autor_usuario,
        br.autor_colaborador_id,
@@ -110,6 +170,8 @@ const findHistory = async ({ filters, hasGlobalScope, userId, pagination, execut
      INNER JOIN ubicaciones u ON u.id = br.ubicacion_id
      INNER JOIN usuarios au ON au.id = br.autor_usuario_id
      INNER JOIN colaboradores c ON c.id = br.autor_colaborador_id
+     LEFT JOIN manzanas m ON m.id = br.manzana_id
+     LEFT JOIN villas v ON v.id = br.villa_id
      ${where}
      ORDER BY br.ocurrido_at DESC, br.id DESC
      LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
@@ -117,6 +179,28 @@ const findHistory = async ({ filters, hasGlobalScope, userId, pagination, execut
   );
 
   return { items: dataResult.rows, total: countResult.rows[0]?.total || 0 };
+};
+
+const findActiveBlocksForLocation = async ({ locationId, executor = db }) => {
+  const result = await executor.query(
+    `SELECT id, ubicacion_id, nombre
+     FROM manzanas
+     WHERE ubicacion_id = $1 AND estado = 'activo'
+     ORDER BY nombre ASC, id ASC`,
+    [locationId]
+  );
+  return result.rows;
+};
+
+const findActiveVillasForBlock = async ({ blockId, executor = db }) => {
+  const result = await executor.query(
+    `SELECT id, manzana_id, identificador
+     FROM villas
+     WHERE manzana_id = $1 AND estado = 'activo'
+     ORDER BY identificador ASC, id ASC`,
+    [blockId]
+  );
+  return result.rows;
 };
 
 const findVisibleLocations = async ({ hasGlobalScope, userId, executor = db }) => {
@@ -145,6 +229,12 @@ const findVisibleLocations = async ({ hasGlobalScope, userId, executor = db }) =
 
 module.exports = {
   buildHistoryFilters,
+  findActiveBlocksForLocation,
+  findActiveVillasForBlock,
+  findVisibleBlock,
+  findVisibleLocation,
+  findLockedBlock,
+  findLockedVilla,
   findLockedUserLocationAssignment,
   findHistory,
   findVisibleLocations,

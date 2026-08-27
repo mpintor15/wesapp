@@ -97,12 +97,27 @@ const loginSchema = z.object({
 const bitacoraRegistroCreateSchema = z
   .object({
     ubicacion_id: positiveInt('Ubicación ID'),
+    manzana_id: positiveInt('Manzana ID').nullable().optional(),
+    villa_id: positiveInt('Villa ID').nullable().optional(),
     ocurrido_at: bitacoraTimestamp,
     detalle: z
       .string({ required_error: 'Detalle es requerido' })
       .refine((value) => /[^\s]/u.test(value), 'Detalle no puede estar vacío'),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    if (
+      data.villa_id !== null &&
+      data.villa_id !== undefined &&
+      (data.manzana_id === null || data.manzana_id === undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['villa_id'],
+        message: 'Villa ID requiere Manzana ID',
+      });
+    }
+  });
 
 const changePasswordSchema = z
   .object({

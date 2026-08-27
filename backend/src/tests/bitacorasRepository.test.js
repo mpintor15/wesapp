@@ -40,10 +40,53 @@ describe('bitacorasRepository', () => {
     expect(dataSql).toContain('autor_u.usuario ILIKE $6');
     expect(countParams).toEqual([7, 4, '2026-08-01', '2026-08-20', 'REGISTRADA', '%ana%']);
     expect(dataSql).toContain('ORDER BY br.ocurrido_at DESC, br.id DESC');
+    expect(dataSql).toContain('LEFT JOIN manzanas m ON m.id = br.manzana_id');
+    expect(dataSql).toContain('LEFT JOIN villas v ON v.id = br.villa_id');
+    expect(countSql).not.toContain('JOIN manzanas');
     expect(dataSql).toContain('LIMIT $7 OFFSET $8');
     expect(dataParams).toEqual([7, 4, '2026-08-01', '2026-08-20', 'REGISTRADA', '%ana%', 10, 10]);
     expect(result).toEqual({ items: [{ id: 2 }, { id: 1 }], total: 12 });
   });
+
+  test.each([
+    ['Manzana', 'findLockedBlock', 'FROM manzanas', 8],
+    ['Villa', 'findLockedVilla', 'FROM villas', 9],
+  ])('bloquea %s activa durante validación transaccional', async (_label, method, table, id) => {
+    const client = { query: jest.fn().mockResolvedValue({ rows: [{ id }] }) };
+    await repository[method]({
+      client,
+      [method === 'findLockedBlock' ? 'blockId' : 'villaId']: id,
+    });
+    const [sql, params] = client.query.mock.calls[0];
+    expect(sql).toContain(table);
+    expect(sql).toContain('FOR SHARE');
+    expect(params).toEqual([id]);
+  });
+
+  test('opciones urbanas filtran solo activos y conservan relación', async () => {
+    db.query.mockResolvedValue({ rows: [] });
+    await repository.findActiveBlocksForLocation({ locationId: 3 });
+    await repository.findActiveVillasForBlock({ blockId: 8 });
+    expect(db.query.mock.calls[0][0]).toContain(
+      String.raw`ubicacion_id = $1 AND estado = 'activo'`
+    );
+    expect(db.query.mock.calls[1][0]).toContain(String.raw`manzana_id = $1 AND estado = 'activo'`);
+  });
+
+  test.each([
+    ['Manzana', 'findVisibleBlock', { blockId: 8 }, 'm.ubicacion_id'],
+    ['Ubicación', 'findVisibleLocation', { locationId: 3 }, 'u.id'],
+  ])(
+    'resuelve %s dentro del scope sin revelar existencia global',
+    async (_label, method, ids, parent) => {
+      db.query.mockResolvedValue({ rows: [] });
+      await repository[method]({ ...ids, hasGlobalScope: false, userId: 7 });
+      const [sql, params] = db.query.mock.calls[0];
+      expect(sql).toContain('FROM usuario_ubicaciones uu');
+      expect(sql).toContain(`uu.ubicacion_id = ${parent}`);
+      expect(params).toEqual([Object.values(ids)[0], 7]);
+    }
+  );
 
   test('bloquea la asignación concreta con el helper productivo', async () => {
     const client = {

@@ -22,6 +22,18 @@ router.get(
   bitacorasController.getRegistros
 );
 
+router.get(
+  '/ubicaciones/:ubicacionId/manzanas',
+  requirePermission(PERMISSIONS.BITACORAS_REGISTRO_CREAR),
+  bitacorasController.getManzanasElegibles
+);
+
+router.get(
+  '/manzanas/:manzanaId/villas',
+  requirePermission(PERMISSIONS.BITACORAS_REGISTRO_CREAR),
+  bitacorasController.getVillasElegibles
+);
+
 router.post(
   '/registros',
   requirePermission(PERMISSIONS.BITACORAS_REGISTRO_CREAR),

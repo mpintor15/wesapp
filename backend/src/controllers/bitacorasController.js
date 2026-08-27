@@ -5,12 +5,23 @@ const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { isValidDateString } = require('../utils/inputValidation');
 const {
+  findActiveBlocksForLocation,
+  findActiveVillasForBlock,
   findHistory,
+  findLockedBlock,
   findLockedUserLocationAssignment,
+  findLockedVilla,
+  findVisibleBlock,
+  findVisibleLocation,
   findVisibleLocations,
 } = require('../repositories/bitacorasRepository');
 
 const BITACORA_STATES = new Set(['REGISTRADA', 'ANULADA']);
+const URBAN_CONTEXT_CONSTRAINTS = new Set([
+  'bitacora_registros_villa_requiere_manzana_check',
+  'bitacora_registros_manzana_ubicacion_fkey',
+  'bitacora_registros_villa_manzana_fkey',
+]);
 const HISTORY_QUERY_FIELDS = new Set([
   'page',
   'pageSize',
@@ -23,6 +34,12 @@ const HISTORY_QUERY_FIELDS = new Set([
 
 const hasGlobalLocationScope = (tipoUsuario) =>
   hasPermission(tipoUsuario, PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS);
+
+const domainError = (status, code, message) => {
+  const error = createHttpError(status, message);
+  error.appCode = code;
+  return error;
+};
 
 const getCurrentUserScope = async (userId, executor = db) => {
   const result = await executor.query(
@@ -79,7 +96,13 @@ const normalizeHistoryFilters = (query = {}) => {
   return { ubicacionId, fechaDesde, fechaHasta, estado, autor };
 };
 
-const assertLocationScope = async ({ client, userId, locationId, hasGlobalScope }) => {
+const assertLocationScope = async ({
+  client,
+  userId,
+  locationId,
+  hasGlobalScope,
+  concealUnauthorized = false,
+}) => {
   const locationResult = await client.query(
     `SELECT id, nombre, cliente_id, tipo_punto
      FROM ubicaciones
@@ -94,11 +117,48 @@ const assertLocationScope = async ({ client, userId, locationId, hasGlobalScope 
   if (!hasGlobalScope) {
     const assignment = await findLockedUserLocationAssignment({ client, userId, locationId });
     if (!assignment) {
+      if (concealUnauthorized) {
+        throw domainError(404, 'LOCATION_NOT_FOUND', 'Ubicación no encontrada');
+      }
       throw createHttpError(403, 'No tienes acceso a la Ubicación seleccionada');
     }
   }
 
   return locationResult.rows[0];
+};
+
+const assertUrbanContext = async ({ client, location, blockId, villaId }) => {
+  if (blockId === null || blockId === undefined) {
+    return;
+  }
+  if (location.tipo_punto !== 'URBANIZACION') {
+    throw domainError(409, 'URBAN_CONTEXT_NOT_ALLOWED', 'La Ubicación no admite contexto urbano');
+  }
+
+  const block = await findLockedBlock({ client, blockId });
+  if (!block) {
+    throw domainError(404, 'BLOCK_NOT_FOUND', 'Manzana no encontrada');
+  }
+  if (block.estado !== 'activo') {
+    throw domainError(409, 'BLOCK_INACTIVE', 'La Manzana seleccionada está inactiva');
+  }
+  if (block.ubicacion_id !== location.id) {
+    throw domainError(409, 'INVALID_URBAN_CHAIN', 'La Manzana no pertenece a la Ubicación');
+  }
+
+  if (villaId === null || villaId === undefined) {
+    return;
+  }
+  const villa = await findLockedVilla({ client, villaId });
+  if (!villa) {
+    throw domainError(404, 'VILLA_NOT_FOUND', 'Villa no encontrada');
+  }
+  if (villa.estado !== 'activo') {
+    throw domainError(409, 'VILLA_INACTIVE', 'La Villa seleccionada está inactiva');
+  }
+  if (villa.manzana_id !== block.id) {
+    throw domainError(409, 'INVALID_URBAN_CHAIN', 'La Villa no pertenece a la Manzana');
+  }
 };
 
 const createRegistro = async (req, res) => {
@@ -131,21 +191,31 @@ const createRegistro = async (req, res) => {
         throw createHttpError(409, 'El Colaborador asociado al Usuario no existe');
       }
 
-      await assertLocationScope({
+      const location = await assertLocationScope({
         client,
         userId: actor.id,
         locationId: req.body.ubicacion_id,
         hasGlobalScope,
       });
 
+      await assertUrbanContext({
+        client,
+        location,
+        blockId: req.body.manzana_id ?? null,
+        villaId: req.body.villa_id ?? null,
+      });
+
       const result = await client.query(
         `INSERT INTO bitacora_registros
-          (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, ubicacion_id, autor_usuario_id, autor_colaborador_id,
+          (ubicacion_id, manzana_id, villa_id, autor_usuario_id, autor_colaborador_id,
+           ocurrido_at, detalle)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, ubicacion_id, manzana_id, villa_id, autor_usuario_id, autor_colaborador_id,
                    ocurrido_at, detalle, estado, created_at`,
         [
           req.body.ubicacion_id,
+          req.body.manzana_id ?? null,
+          req.body.villa_id ?? null,
           actor.id,
           actor.colaborador_id,
           req.body.ocurrido_at,
@@ -171,7 +241,69 @@ const createRegistro = async (req, res) => {
       data: created,
     });
   } catch (error) {
+    if (URBAN_CONTEXT_CONSTRAINTS.has(error.constraint)) {
+      error.status = 409;
+      error.appCode = 'INVALID_URBAN_CHAIN';
+      error.message = 'El contexto urbano dejó de ser válido';
+    }
     return handleControllerError(res, error, 'Error al crear registro de Bitácora');
+  }
+};
+
+const getManzanasElegibles = async (req, res) => {
+  try {
+    const locationId = parsePositiveInteger(req.params.ubicacionId, 'La Ubicación es inválida');
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const visibleLocation = await findVisibleLocation({ locationId, hasGlobalScope, userId });
+    if (!visibleLocation) {
+      throw domainError(404, 'LOCATION_NOT_FOUND', 'Ubicación no encontrada');
+    }
+    const data = await db.transaction(async (client) => {
+      const location = await assertLocationScope({
+        client,
+        userId,
+        locationId,
+        hasGlobalScope,
+        concealUnauthorized: true,
+      });
+      return location.tipo_punto === 'URBANIZACION'
+        ? findActiveBlocksForLocation({ locationId, executor: client })
+        : [];
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al consultar Manzanas de Bitácora');
+  }
+};
+
+const getVillasElegibles = async (req, res) => {
+  try {
+    const blockId = parsePositiveInteger(req.params.manzanaId, 'La Manzana es inválida');
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const existingBlock = await findVisibleBlock({ blockId, hasGlobalScope, userId });
+    if (!existingBlock) {
+      throw domainError(404, 'BLOCK_NOT_FOUND', 'Manzana no encontrada');
+    }
+    const data = await db.transaction(async (client) => {
+      const location = await assertLocationScope({
+        client,
+        userId,
+        locationId: existingBlock.ubicacion_id,
+        hasGlobalScope,
+        concealUnauthorized: true,
+      });
+      const block = await findLockedBlock({ client, blockId });
+      if (!block || block.ubicacion_id !== location.id) {
+        throw domainError(409, 'INVALID_URBAN_CHAIN', 'La Manzana dejó de estar disponible');
+      }
+      if (location.tipo_punto !== 'URBANIZACION' || block.estado !== 'activo') {
+        throw domainError(409, 'BLOCK_INACTIVE', 'La Manzana no está disponible');
+      }
+      return findActiveVillasForBlock({ blockId, executor: client });
+    });
+    return res.json({ success: true, data });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al consultar Villas de Bitácora');
   }
 };
 
@@ -230,4 +362,6 @@ module.exports = {
   getUbicacionesVisibles,
   normalizeHistoryFilters,
   getCurrentUserScope,
+  getManzanasElegibles,
+  getVillasElegibles,
 };

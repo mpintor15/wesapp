@@ -9,8 +9,14 @@ jest.mock('../utils/audit', () => ({
 }));
 
 jest.mock('../repositories/bitacorasRepository', () => ({
+  findActiveBlocksForLocation: jest.fn(),
+  findActiveVillasForBlock: jest.fn(),
   findHistory: jest.fn(),
+  findLockedBlock: jest.fn(),
   findLockedUserLocationAssignment: jest.fn(),
+  findLockedVilla: jest.fn(),
+  findVisibleBlock: jest.fn(),
+  findVisibleLocation: jest.fn(),
   findVisibleLocations: jest.fn(),
 }));
 
@@ -57,7 +63,9 @@ const createdRow = {
 
 const transactionForCreate = ({
   assigned = true,
+  created = createdRow,
   locationExists = true,
+  locationType = 'GENERAL',
   persistedRole = 'guardia',
 } = {}) => {
   const client = { query: jest.fn() };
@@ -82,11 +90,11 @@ const transactionForCreate = ({
     }
     if (query.includes('FROM ubicaciones')) {
       return locationExists
-        ? { rowCount: 1, rows: [{ id: 3, nombre: 'Punto', tipo_punto: 'GENERAL' }] }
+        ? { rowCount: 1, rows: [{ id: 3, nombre: 'Punto', tipo_punto: locationType }] }
         : { rowCount: 0, rows: [] };
     }
     if (query.includes('INSERT INTO bitacora_registros')) {
-      return { rowCount: 1, rows: [createdRow] };
+      return { rowCount: 1, rows: [created] };
     }
     throw new Error(`Unexpected query: ${query}`);
   });
@@ -100,6 +108,18 @@ const transactionForCreate = ({
 beforeEach(() => {
   jest.clearAllMocks();
   audit.logAuditStrict.mockResolvedValue(undefined);
+  repository.findLockedBlock.mockResolvedValue({
+    id: 8,
+    ubicacion_id: 3,
+    nombre: 'A',
+    estado: 'activo',
+  });
+  repository.findLockedVilla.mockResolvedValue({
+    id: 9,
+    manzana_id: 8,
+    identificador: 'V1',
+    estado: 'activo',
+  });
 });
 
 describe('bitacorasController.createRegistro', () => {
@@ -117,7 +137,15 @@ describe('bitacorasController.createRegistro', () => {
     const insertCall = client.query.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO bitacora_registros')
     );
-    expect(insertCall[1]).toEqual([3, 7, 21, '2026-08-20T14:30:00', 'Novedad registrada']);
+    expect(insertCall[1]).toEqual([
+      3,
+      null,
+      null,
+      7,
+      21,
+      '2026-08-20T14:30:00',
+      'Novedad registrada',
+    ]);
     expect(audit.logAuditStrict).toHaveBeenCalledWith(
       client,
       expect.objectContaining({
@@ -127,6 +155,99 @@ describe('bitacorasController.createRegistro', () => {
         datos_nuevos: createdRow,
       })
     );
+  });
+
+  test('valida y persiste Manzana y Villa activas de la cadena seleccionada', async () => {
+    const urbanCreated = { ...createdRow, manzana_id: 8, villa_id: 9 };
+    const client = transactionForCreate({
+      created: urbanCreated,
+      locationType: 'URBANIZACION',
+    });
+    const req = makeRequest({
+      body: { ...makeRequest().body, manzana_id: 8, villa_id: 9 },
+    });
+
+    await controller.createRegistro(req, makeResponse());
+
+    expect(repository.findLockedBlock).toHaveBeenCalledWith({ client, blockId: 8 });
+    expect(repository.findLockedVilla).toHaveBeenCalledWith({ client, villaId: 9 });
+    const insertCall = client.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO bitacora_registros')
+    );
+    expect(insertCall[1]).toEqual([3, 8, 9, 7, 21, '2026-08-20T14:30:00', 'Novedad registrada']);
+    expect(audit.logAuditStrict).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ datos_nuevos: urbanCreated })
+    );
+  });
+
+  test.each([
+    ['GENERAL con contexto', {}, 409, 'URBAN_CONTEXT_NOT_ALLOWED'],
+    ['Manzana inexistente', { block: null }, 404, 'BLOCK_NOT_FOUND'],
+    ['Manzana inactiva', { block: { estado: 'inactivo' } }, 409, 'BLOCK_INACTIVE'],
+    ['Manzana de otra Ubicación', { block: { ubicacion_id: 99 } }, 409, 'INVALID_URBAN_CHAIN'],
+    ['Villa inexistente', { villa: null }, 404, 'VILLA_NOT_FOUND'],
+    ['Villa inactiva', { villa: { estado: 'inactivo' } }, 409, 'VILLA_INACTIVE'],
+    ['Villa de otra Manzana', { villa: { manzana_id: 99 } }, 409, 'INVALID_URBAN_CHAIN'],
+  ])('rechaza %s con semántica pública estable', async (_label, overrides, status, code) => {
+    const locationType = _label === 'GENERAL con contexto' ? 'GENERAL' : 'URBANIZACION';
+    transactionForCreate({ locationType });
+    if (Object.hasOwn(overrides, 'block')) {
+      repository.findLockedBlock.mockResolvedValue(
+        overrides.block && {
+          id: 8,
+          ubicacion_id: 3,
+          nombre: 'A',
+          estado: 'activo',
+          ...overrides.block,
+        }
+      );
+    }
+    if (Object.hasOwn(overrides, 'villa')) {
+      repository.findLockedVilla.mockResolvedValue(
+        overrides.villa && {
+          id: 9,
+          manzana_id: 8,
+          identificador: 'V1',
+          estado: 'activo',
+          ...overrides.villa,
+        }
+      );
+    }
+    const res = makeResponse();
+
+    await controller.createRegistro(
+      makeRequest({ body: { ...makeRequest().body, manzana_id: 8, villa_id: 9 } }),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(status);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code }));
+  });
+
+  test('convierte una defensa FK de D1 en 409 sin filtrar detalles SQL', async () => {
+    const client = transactionForCreate({ locationType: 'URBANIZACION' });
+    const original = client.query.getMockImplementation();
+    client.query.mockImplementation(async (sql, params) => {
+      if (String(sql).includes('INSERT INTO bitacora_registros')) {
+        const error = new Error('constraint interna secreta');
+        error.code = '23503';
+        error.constraint = 'bitacora_registros_manzana_ubicacion_fkey';
+        throw error;
+      }
+      return original(sql, params);
+    });
+    const res = makeResponse();
+    await controller.createRegistro(
+      makeRequest({ body: { ...makeRequest().body, manzana_id: 8 } }),
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      code: 'INVALID_URBAN_CHAIN',
+      message: 'El contexto urbano dejó de ser válido',
+    });
   });
 
   test('crea con alcance global sin consultar asignación', async () => {
@@ -416,6 +537,119 @@ describe('bitacorasController.getUbicacionesVisibles', () => {
     expect(repository.findVisibleLocations).toHaveBeenCalledWith({
       hasGlobalScope: true,
       userId: 7,
+    });
+  });
+});
+
+describe('bitacorasController opciones urbanas', () => {
+  const scopeClient = (location = { id: 3, tipo_punto: 'URBANIZACION' }) => ({
+    query: jest.fn().mockResolvedValue({ rowCount: 1, rows: [location] }),
+  });
+
+  beforeEach(() => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
+    });
+    repository.findLockedUserLocationAssignment.mockResolvedValue({
+      usuario_id: 7,
+      ubicacion_id: 3,
+    });
+    repository.findActiveBlocksForLocation.mockResolvedValue([{ id: 8, nombre: 'A' }]);
+    repository.findActiveVillasForBlock.mockResolvedValue([{ id: 9, identificador: 'A-1' }]);
+    repository.findVisibleBlock.mockResolvedValue({ id: 8, ubicacion_id: 3, estado: 'activo' });
+    repository.findVisibleLocation.mockResolvedValue({
+      id: 3,
+      tipo_punto: 'URBANIZACION',
+    });
+    repository.findLockedBlock.mockResolvedValue({ id: 8, ubicacion_id: 3, estado: 'activo' });
+  });
+
+  test('lista Manzanas activas dentro del alcance y GENERAL devuelve vacío', async () => {
+    let client = scopeClient();
+    db.transaction.mockImplementation(async (callback) => callback(client));
+    const urbanResponse = makeResponse();
+    await controller.getManzanasElegibles(
+      makeRequest({ params: { ubicacionId: '3' } }),
+      urbanResponse
+    );
+    expect(repository.findActiveBlocksForLocation).toHaveBeenCalledWith({
+      locationId: 3,
+      executor: client,
+    });
+
+    client = scopeClient({ id: 3, tipo_punto: 'GENERAL' });
+    const generalResponse = makeResponse();
+    await controller.getManzanasElegibles(
+      makeRequest({ params: { ubicacionId: '3' } }),
+      generalResponse
+    );
+    expect(generalResponse.json).toHaveBeenCalledWith({ success: true, data: [] });
+  });
+
+  test('lista Villas activas solo después de validar alcance y Manzana activa', async () => {
+    const client = scopeClient();
+    db.transaction.mockImplementation(async (callback) => callback(client));
+    const res = makeResponse();
+    await controller.getVillasElegibles(makeRequest({ params: { manzanaId: '8' } }), res);
+    expect(repository.findActiveVillasForBlock).toHaveBeenCalledWith({
+      blockId: 8,
+      executor: client,
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [{ id: 9, identificador: 'A-1' }],
+    });
+  });
+
+  test('opciones de Manzanas colapsan inexistente y fuera de alcance a la misma respuesta', async () => {
+    const client = scopeClient();
+    db.transaction.mockImplementation(async (callback) => callback(client));
+    repository.findVisibleLocation.mockResolvedValue(null);
+    const missing = makeResponse();
+    await controller.getManzanasElegibles(makeRequest({ params: { ubicacionId: '999' } }), missing);
+    const outsideScope = makeResponse();
+    await controller.getManzanasElegibles(
+      makeRequest({ params: { ubicacionId: '3' } }),
+      outsideScope
+    );
+    expect(missing.status).toHaveBeenCalledWith(404);
+    expect(outsideScope.status).toHaveBeenCalledWith(404);
+    expect(missing.json.mock.calls[0][0]).toEqual(outsideScope.json.mock.calls[0][0]);
+    expect(repository.findActiveBlocksForLocation).not.toHaveBeenCalled();
+  });
+
+  test('opciones de Villas colapsan Manzana inexistente y fuera de alcance', async () => {
+    repository.findVisibleBlock.mockResolvedValue(null);
+    const missing = makeResponse();
+    await controller.getVillasElegibles(makeRequest({ params: { manzanaId: '999' } }), missing);
+    const outsideScope = makeResponse();
+    await controller.getVillasElegibles(makeRequest({ params: { manzanaId: '8' } }), outsideScope);
+    expect(missing.status).toHaveBeenCalledWith(404);
+    expect(outsideScope.status).toHaveBeenCalledWith(404);
+    expect(missing.json.mock.calls[0][0]).toEqual(outsideScope.json.mock.calls[0][0]);
+    expect(repository.findActiveVillasForBlock).not.toHaveBeenCalled();
+  });
+
+  test('alcance global puede resolver una Manzana de otra Urbanización', async () => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'supervisor', activo: true }],
+    });
+    repository.findVisibleBlock.mockResolvedValue({ id: 18, ubicacion_id: 4, estado: 'activo' });
+    repository.findLockedBlock.mockResolvedValue({ id: 18, ubicacion_id: 4, estado: 'activo' });
+    const client = scopeClient({ id: 4, tipo_punto: 'URBANIZACION' });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+    const res = makeResponse();
+    await controller.getVillasElegibles(makeRequest({ params: { manzanaId: '18' } }), res);
+    expect(repository.findVisibleBlock).toHaveBeenCalledWith({
+      blockId: 18,
+      hasGlobalScope: true,
+      userId: 7,
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [{ id: 9, identificador: 'A-1' }],
     });
   });
 });

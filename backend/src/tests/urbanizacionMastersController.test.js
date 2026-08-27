@@ -162,6 +162,7 @@ describe('urbanizacion masters controller', () => {
   test('desactiva y reactiva Villa validando la cadena al reactivar', async () => {
     const inactiveClient = { query: jest.fn() };
     inactiveClient.query
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
       .mockResolvedValueOnce({
         rows: [
           {
@@ -184,6 +185,7 @@ describe('urbanizacion masters controller', () => {
 
     const activeClient = { query: jest.fn() };
     activeClient.query
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
       .mockResolvedValueOnce({
         rows: [
           {
@@ -220,8 +222,17 @@ describe('urbanizacion masters controller', () => {
   test('crea Residente principal bloqueando la Villa para evitar concurrencia', async () => {
     const client = { query: jest.fn() };
     client.query
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
       .mockResolvedValueOnce({
-        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rows: [
+          {
+            id: 5,
+            manzana_id: 2,
+            estado: 'activo',
+            manzana_estado: 'activo',
+            tipo_punto: 'URBANIZACION',
+          },
+        ],
         rowCount: 1,
       })
       .mockResolvedValueOnce({ rows: [], rowCount: 0 })
@@ -236,7 +247,8 @@ describe('urbanizacion masters controller', () => {
       res
     );
     expect(res.statusCode).toBe(201);
-    expect(client.query.mock.calls[0][0]).toContain('FOR UPDATE OF v, m');
+    expect(client.query.mock.calls[0][0]).toContain('FOR UPDATE OF m');
+    expect(client.query.mock.calls[1][0]).toContain('FOR UPDATE OF v');
   });
 
   test.each([
@@ -259,13 +271,6 @@ describe('urbanizacion masters controller', () => {
   });
 
   test('rechaza contacto inválido al editar Residente', async () => {
-    const client = {
-      query: jest.fn().mockResolvedValueOnce({
-        rows: [{ id: 8, villa_id: 5, nombre: 'Ana', contacto: '0991234567', activo: true }],
-        rowCount: 1,
-      }),
-    };
-    db.transaction.mockImplementation((callback) => callback(client));
     const res = response();
     await controller.updateResidentePrincipal(
       request({ residenteId: '8' }, { contacto: '099-123-4567' }),
@@ -273,14 +278,23 @@ describe('urbanizacion masters controller', () => {
     );
     expect(res.statusCode).toBe(400);
     expect(res.body.code).toBe('INVALID_RESIDENT_CONTACT');
-    expect(client.query).toHaveBeenCalledTimes(1);
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   test('reemplaza Residente principal transaccionalmente', async () => {
     const client = { query: jest.fn() };
     client.query
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
       .mockResolvedValueOnce({
-        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rows: [
+          {
+            id: 5,
+            manzana_id: 2,
+            estado: 'activo',
+            manzana_estado: 'activo',
+            tipo_punto: 'URBANIZACION',
+          },
+        ],
         rowCount: 1,
       })
       .mockResolvedValueOnce({ rows: [{ id: 7 }], rowCount: 1 })
@@ -293,17 +307,26 @@ describe('urbanizacion masters controller', () => {
       res
     );
     expect(res.statusCode).toBe(201);
-    expect(client.query.mock.calls[2][0]).toContain('UPDATE residentes SET activo = FALSE');
-    expect(client.query.mock.calls[3][0]).toContain('INSERT INTO residentes');
+    expect(client.query.mock.calls[3][0]).toContain('UPDATE residentes SET activo = FALSE');
+    expect(client.query.mock.calls[4][0]).toContain('INSERT INTO residentes');
   });
 
   test('Villa inactiva rechaza crear y reactivar Residente', async () => {
-    const createClient = {
-      query: jest.fn().mockResolvedValueOnce({
-        rows: [{ id: 5, estado: 'inactivo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+    const createClient = { query: jest.fn() };
+    createClient.query
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 5,
+            manzana_id: 2,
+            estado: 'inactivo',
+            manzana_estado: 'activo',
+            tipo_punto: 'URBANIZACION',
+          },
+        ],
         rowCount: 1,
-      }),
-    };
+      });
     db.transaction.mockImplementationOnce((callback) => callback(createClient));
     const created = response();
     await controller.createResidentePrincipal(
@@ -314,12 +337,22 @@ describe('urbanizacion masters controller', () => {
 
     const updateClient = { query: jest.fn() };
     updateClient.query
+      .mockResolvedValueOnce({ rows: [{ villa_id: 5 }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
       .mockResolvedValueOnce({
-        rows: [{ id: 8, villa_id: 5, nombre: 'Ana', contacto: '0991234567', activo: false }],
+        rows: [
+          {
+            id: 5,
+            manzana_id: 2,
+            estado: 'inactivo',
+            manzana_estado: 'activo',
+            tipo_punto: 'URBANIZACION',
+          },
+        ],
         rowCount: 1,
       })
       .mockResolvedValueOnce({
-        rows: [{ id: 5, estado: 'inactivo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rows: [{ id: 8, villa_id: 5, nombre: 'Ana', contacto: '0991234567', activo: false }],
         rowCount: 1,
       });
     db.transaction.mockImplementationOnce((callback) => callback(updateClient));
@@ -334,6 +367,20 @@ describe('urbanizacion masters controller', () => {
   test('edita, desactiva y reactiva Residente principal', async () => {
     const editClient = { query: jest.fn() };
     editClient.query
+      .mockResolvedValueOnce({ rows: [{ villa_id: 5 }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 5,
+            manzana_id: 2,
+            estado: 'activo',
+            manzana_estado: 'activo',
+            tipo_punto: 'URBANIZACION',
+          },
+        ],
+        rowCount: 1,
+      })
       .mockResolvedValueOnce({
         rows: [{ id: 8, villa_id: 5, nombre: 'Ana', contacto: '0991234567', activo: true }],
         rowCount: 1,
@@ -345,19 +392,38 @@ describe('urbanizacion masters controller', () => {
     db.transaction.mockImplementationOnce((callback) => callback(editClient));
     const edited = response();
     await controller.updateResidentePrincipal(
-      request({ residenteId: '8' }, { nombre: 'Ana P.', contacto: '0981234567', activo: false }),
+      request(
+        { residenteId: '8' },
+        { nombre: '  Ana   P.  ', contacto: '0981234567', activo: false }
+      ),
       edited
     );
     expect(edited.statusCode).toBe(200);
+    expect(editClient.query.mock.calls[0][0]).not.toContain('FOR UPDATE');
+    expect(editClient.query.mock.calls[1][0]).toContain('FOR UPDATE OF m');
+    expect(editClient.query.mock.calls[2][0]).toContain('FOR UPDATE OF v');
+    expect(editClient.query.mock.calls[3][0]).toContain('FROM residentes');
+    expect(editClient.query.mock.calls[3][0]).toContain('FOR UPDATE');
+    expect(editClient.query.mock.calls[4][1]).toEqual(['Ana P.', '0981234567', false, 8]);
 
     const reactivateClient = { query: jest.fn() };
     reactivateClient.query
+      .mockResolvedValueOnce({ rows: [{ villa_id: 5 }], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
       .mockResolvedValueOnce({
-        rows: [{ id: 8, villa_id: 5, nombre: 'Ana P.', contacto: '0981234567', activo: false }],
+        rows: [
+          {
+            id: 5,
+            manzana_id: 2,
+            estado: 'activo',
+            manzana_estado: 'activo',
+            tipo_punto: 'URBANIZACION',
+          },
+        ],
         rowCount: 1,
       })
       .mockResolvedValueOnce({
-        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', tipo_punto: 'URBANIZACION' }],
+        rows: [{ id: 8, villa_id: 5, nombre: 'Ana P.', contacto: '0981234567', activo: false }],
         rowCount: 1,
       })
       .mockResolvedValueOnce({ rows: [{ id: 8, activo: true }], rowCount: 1 });
@@ -368,13 +434,20 @@ describe('urbanizacion masters controller', () => {
       reactivated
     );
     expect(reactivated.body.data.activo).toBe(true);
+    expect(reactivateClient.query.mock.calls[0][0]).not.toContain('FOR UPDATE');
+    expect(reactivateClient.query.mock.calls[1][0]).toContain('FOR UPDATE OF m');
+    expect(reactivateClient.query.mock.calls[2][0]).toContain('FOR UPDATE OF v');
+    expect(reactivateClient.query.mock.calls[3][0]).toContain('FOR UPDATE');
   });
 
   test('desactivar Villa con Residente principal activo devuelve conflicto', async () => {
     const client = { query: jest.fn() };
     client.query
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
       .mockResolvedValueOnce({
-        rows: [{ id: 5, estado: 'activo', manzana_estado: 'activo', ubicacion_id: 1 }],
+        rows: [
+          { id: 5, manzana_id: 2, estado: 'activo', manzana_estado: 'activo', ubicacion_id: 1 },
+        ],
         rowCount: 1,
       })
       .mockResolvedValueOnce({ rows: [{ '?column?': 1 }], rowCount: 1 });
@@ -444,6 +517,7 @@ describe('urbanizacion masters controller', () => {
   test('elimina Villa sin Residentes con lock y auditoría estricta', async () => {
     const client = { query: jest.fn() };
     client.query
+      .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
       .mockResolvedValueOnce({
         rows: [
           {
@@ -465,8 +539,9 @@ describe('urbanizacion masters controller', () => {
 
     await controller.deleteVilla(request({ villaId: '5' }), res);
 
-    expect(client.query.mock.calls[0][0]).toContain('FOR UPDATE OF v, m');
-    expect(client.query.mock.calls[2][0]).toContain('DELETE FROM villas');
+    expect(client.query.mock.calls[0][0]).toContain('FOR UPDATE OF m');
+    expect(client.query.mock.calls[1][0]).toContain('FOR UPDATE OF v');
+    expect(client.query.mock.calls[3][0]).toContain('DELETE FROM villas');
     expect(audit.logAuditStrict).toHaveBeenCalledWith(
       client,
       expect.objectContaining({ tabla: 'villas', operacion: 'DELETE', registro_id: 5 })
@@ -488,8 +563,16 @@ describe('urbanizacion masters controller', () => {
     async () => {
       const client = { query: jest.fn() };
       client.query
+        .mockResolvedValueOnce({ rows: [{ id: 2 }], rowCount: 1 })
         .mockResolvedValueOnce({
-          rows: [{ id: 5, manzana_id: 2, identificador: '1', estado: 'activo' }],
+          rows: [
+            {
+              id: 5,
+              manzana_id: 2,
+              identificador: '1',
+              estado: 'activo',
+            },
+          ],
           rowCount: 1,
         })
         .mockResolvedValueOnce({ rows: [{ '?column?': 1 }], rowCount: 1 });

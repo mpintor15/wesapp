@@ -1,6 +1,10 @@
 const db = require('../config/database');
 const repository = require('../repositories/bitacorasRepository');
 const {
+  lockResidentChainForUpdate,
+  lockVillaChainForUpdate,
+} = require('../controllers/urbanizacionMastersController');
+const {
   assertSafeTestDatabase,
   buildSafeTestResourceName,
 } = require('./helpers/testDatabaseSafety');
@@ -27,6 +31,28 @@ describe('bitacoras PostgreSQL API persistence', () => {
         cliente_id INTEGER REFERENCES ${schemaIdent}.clientes(id),
         tipo_punto VARCHAR(20) NOT NULL DEFAULT 'GENERAL'
       );
+      CREATE TABLE ${schemaIdent}.manzanas (
+        id SERIAL PRIMARY KEY,
+        ubicacion_id INTEGER NOT NULL REFERENCES ${schemaIdent}.ubicaciones(id) ON DELETE RESTRICT,
+        nombre TEXT NOT NULL,
+        estado VARCHAR(10) NOT NULL DEFAULT 'activo',
+        UNIQUE (id, ubicacion_id)
+      );
+      CREATE TABLE ${schemaIdent}.villas (
+        id SERIAL PRIMARY KEY,
+        manzana_id INTEGER NOT NULL REFERENCES ${schemaIdent}.manzanas(id) ON DELETE RESTRICT,
+        identificador TEXT NOT NULL,
+        estado VARCHAR(10) NOT NULL DEFAULT 'activo',
+        UNIQUE (id, manzana_id)
+      );
+      CREATE TABLE ${schemaIdent}.residentes (
+        id SERIAL PRIMARY KEY,
+        villa_id INTEGER NOT NULL REFERENCES ${schemaIdent}.villas(id) ON DELETE RESTRICT,
+        nombre TEXT NOT NULL,
+        contacto TEXT,
+        es_principal BOOLEAN NOT NULL DEFAULT FALSE,
+        activo BOOLEAN NOT NULL DEFAULT TRUE
+      );
       CREATE TABLE ${schemaIdent}.usuarios (
         id SERIAL PRIMARY KEY,
         usuario TEXT NOT NULL,
@@ -45,6 +71,8 @@ describe('bitacoras PostgreSQL API persistence', () => {
       CREATE TABLE ${schemaIdent}.bitacora_registros (
         id SERIAL PRIMARY KEY,
         ubicacion_id INTEGER NOT NULL REFERENCES ${schemaIdent}.ubicaciones(id) ON DELETE RESTRICT,
+        manzana_id INTEGER,
+        villa_id INTEGER,
         autor_usuario_id INTEGER NOT NULL REFERENCES ${schemaIdent}.usuarios(id) ON DELETE RESTRICT,
         autor_colaborador_id INTEGER NOT NULL REFERENCES ${schemaIdent}.colaboradores(id) ON DELETE RESTRICT,
         ocurrido_at TIMESTAMP NOT NULL,
@@ -53,7 +81,12 @@ describe('bitacoras PostgreSQL API persistence', () => {
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         anulado_at TIMESTAMP,
         anulado_por_usuario_id INTEGER REFERENCES ${schemaIdent}.usuarios(id) ON DELETE RESTRICT,
-        motivo_anulacion TEXT
+        motivo_anulacion TEXT,
+        CHECK (villa_id IS NULL OR manzana_id IS NOT NULL),
+        FOREIGN KEY (manzana_id, ubicacion_id)
+          REFERENCES ${schemaIdent}.manzanas(id, ubicacion_id) ON DELETE RESTRICT,
+        FOREIGN KEY (villa_id, manzana_id)
+          REFERENCES ${schemaIdent}.villas(id, manzana_id) ON DELETE RESTRICT
       );
       CREATE TABLE ${schemaIdent}.audit_log (
         id SERIAL PRIMARY KEY,
@@ -78,6 +111,14 @@ describe('bitacoras PostgreSQL API persistence', () => {
     await client.query(`
       INSERT INTO ubicaciones (nombre, cliente_id, tipo_punto)
       VALUES ('Asignada', 1, 'GENERAL'), ('No asignada', 1, 'URBANIZACION')
+    `);
+    await client.query(`
+      INSERT INTO manzanas (ubicacion_id, nombre, estado)
+      VALUES (2, 'A', 'activo'), (2, 'B', 'activo'), (2, 'Inactiva', 'inactivo');
+      INSERT INTO villas (manzana_id, identificador, estado)
+      VALUES (1, 'A-1', 'activo'), (2, 'B-1', 'activo'), (1, 'A-X', 'inactivo');
+      INSERT INTO residentes (villa_id, nombre, contacto, es_principal, activo)
+      VALUES (1, 'Residente A', '0990000000', TRUE, TRUE)
     `);
     await client.query(
       String.raw`INSERT INTO colaboradores (nombres_completos) VALUES ('Guardia Uno')`
@@ -202,6 +243,228 @@ describe('bitacoras PostgreSQL API persistence', () => {
     });
   });
 
+  test('historial devuelve contexto opcional actual sin duplicar COUNT ni paginación', async () => {
+    await db.transaction(async (client) => {
+      await client.query(`SET LOCAL search_path TO ${schemaIdent}`);
+      await client.query('INSERT INTO usuario_ubicaciones VALUES (1, 2) ON CONFLICT DO NOTHING');
+      await client.query(`
+        INSERT INTO bitacora_registros
+          (ubicacion_id, manzana_id, villa_id, autor_usuario_id, autor_colaborador_id,
+           ocurrido_at, detalle)
+        VALUES
+          (2, 1, NULL, 1, 1, '2026-08-20 15:00:00', 'Solo Manzana'),
+          (2, 1, 1, 1, 1, '2026-08-20 16:00:00', 'Manzana y Villa')
+      `);
+
+      const history = await repository.findHistory({
+        filters: { ubicacionId: 2 },
+        hasGlobalScope: false,
+        userId: 1,
+        pagination: { pageSize: 25, offset: 0 },
+        executor: client,
+      });
+      expect(history.total).toBe(3);
+      expect(history.items).toHaveLength(3);
+      expect(history.items.find((item) => item.detalle === 'Solo Manzana')).toEqual(
+        expect.objectContaining({
+          manzana_id: 1,
+          manzana_nombre: 'A',
+          villa_id: null,
+          villa_identificador: null,
+        })
+      );
+      expect(history.items.find((item) => item.detalle === 'Manzana y Villa')).toEqual(
+        expect.objectContaining({ villa_id: 1, villa_identificador: 'A-1' })
+      );
+
+      await client.query(String.raw`UPDATE manzanas SET nombre = 'A Renombrada' WHERE id = 1`);
+      await client.query(
+        String.raw`UPDATE villas SET identificador = 'A-1 Renombrada' WHERE id = 1`
+      );
+      const renamed = await repository.findHistory({
+        filters: { ubicacionId: 2 },
+        hasGlobalScope: true,
+        userId: 1,
+        pagination: { pageSize: 25, offset: 0 },
+        executor: client,
+      });
+      expect(renamed.items.find((item) => item.detalle === 'Manzana y Villa')).toEqual(
+        expect.objectContaining({
+          manzana_nombre: 'A Renombrada',
+          villa_identificador: 'A-1 Renombrada',
+        })
+      );
+      await client.query(
+        'DELETE FROM usuario_ubicaciones WHERE usuario_id = 1 AND ubicacion_id = 2'
+      );
+    });
+  });
+
+  test('constraints D1 rechazan cadenas cruzadas y Villa sin Manzana', async () => {
+    const insert = (locationId, blockId, villaId) =>
+      db.query(
+        `INSERT INTO ${schemaIdent}.bitacora_registros
+            (ubicacion_id, manzana_id, villa_id, autor_usuario_id, autor_colaborador_id,
+             ocurrido_at, detalle)
+           VALUES ($1, $2, $3, 1, 1, '2026-08-20 17:00:00', 'Adversarial')`,
+        [locationId, blockId, villaId]
+      );
+    await expect(insert(1, 1, null)).rejects.toMatchObject({ code: '23503' });
+    await expect(insert(2, 1, 2)).rejects.toMatchObject({ code: '23503' });
+    await expect(insert(2, null, 1)).rejects.toMatchObject({ code: '23514' });
+  });
+
+  test.each([
+    ['Manzana', 'findLockedBlock', 'manzanas', 'blockId'],
+    ['Villa', 'findLockedVilla', 'villas', 'villaId'],
+  ])(
+    'lock de %s serializa su inactivación hasta terminar el POST',
+    async (_label, method, table, idKey) => {
+      const creator = await db.getClient();
+      const editor = await db.getClient();
+      try {
+        await creator.query('BEGIN');
+        await creator.query(`SET LOCAL search_path TO ${schemaIdent}`);
+        await repository[method]({ client: creator, [idKey]: 1 });
+
+        await editor.query('BEGIN');
+        await editor.query(`SET LOCAL search_path TO ${schemaIdent}`);
+        await editor.query(String.raw`SET LOCAL lock_timeout = '100ms'`);
+        await expect(
+          editor.query(`UPDATE ${table} SET estado = 'inactivo' WHERE id = 1`)
+        ).rejects.toMatchObject({
+          code: '55P03',
+        });
+        await editor.query('ROLLBACK');
+        await creator.query('COMMIT');
+
+        await editor.query('BEGIN');
+        await editor.query(`SET LOCAL search_path TO ${schemaIdent}`);
+        const updated = await editor.query(`UPDATE ${table} SET estado = 'inactivo' WHERE id = 1`);
+        expect(updated.rowCount).toBe(1);
+        await editor.query('ROLLBACK');
+      } finally {
+        await creator.query('ROLLBACK').catch(() => undefined);
+        creator.release();
+        await editor.query('ROLLBACK').catch(() => undefined);
+        editor.release();
+      }
+    }
+  );
+
+  test('orden Manzana → Villa evita el deadlock con el flujo administrativo', async () => {
+    const creator = await db.getClient();
+    const administrator = await db.getClient();
+    const observer = await db.getClient();
+    try {
+      await creator.query('BEGIN');
+      await creator.query(`SET LOCAL search_path TO ${schemaIdent}`);
+      await repository.findLockedBlock({ client: creator, blockId: 1 });
+
+      await administrator.query('BEGIN');
+      await administrator.query(`SET LOCAL search_path TO ${schemaIdent}`);
+      const pidResult = await administrator.query('SELECT pg_backend_pid() AS pid');
+      const administratorPid = pidResult.rows[0].pid;
+      const administrativeLock = lockVillaChainForUpdate(administrator, 1);
+
+      let waitingForBlock = false;
+      for (let attempt = 0; attempt < 100 && !waitingForBlock; attempt += 1) {
+        const state = await observer.query(
+          `SELECT wait_event_type
+           FROM pg_stat_activity
+           WHERE pid = $1`,
+          [administratorPid]
+        );
+        waitingForBlock = state.rows[0]?.wait_event_type === 'Lock';
+      }
+      expect(waitingForBlock).toBe(true);
+
+      const lockedVilla = await repository.findLockedVilla({ client: creator, villaId: 1 });
+      expect(lockedVilla).toEqual(expect.objectContaining({ id: 1, manzana_id: 1 }));
+      await creator.query('COMMIT');
+
+      await expect(administrativeLock).resolves.toEqual(
+        expect.objectContaining({ id: 1, manzana_id: 1 })
+      );
+      await administrator.query('ROLLBACK');
+
+      const state = await observer.query(
+        `SELECT m.estado AS manzana_estado, v.estado AS villa_estado
+         FROM ${schemaIdent}.manzanas m
+         JOIN ${schemaIdent}.villas v ON v.manzana_id = m.id
+         WHERE m.id = 1 AND v.id = 1`
+      );
+      expect(state.rows[0]).toEqual({ manzana_estado: 'activo', villa_estado: 'activo' });
+    } finally {
+      await creator.query('ROLLBACK').catch(() => undefined);
+      creator.release();
+      await administrator.query('ROLLBACK').catch(() => undefined);
+      administrator.release();
+      observer.release();
+    }
+  });
+
+  test('orden Manzana → Villa → Residente evita el deadlock entre crear y actualizar principal', async () => {
+    const creator = await db.getClient();
+    const updater = await db.getClient();
+    const observer = await db.getClient();
+    try {
+      await creator.query('BEGIN');
+      await creator.query(`SET LOCAL search_path TO ${schemaIdent}`);
+      await repository.findLockedBlock({ client: creator, blockId: 1 });
+      await repository.findLockedVilla({ client: creator, villaId: 1 });
+
+      await updater.query('BEGIN');
+      await updater.query(`SET LOCAL search_path TO ${schemaIdent}`);
+      const pidResult = await updater.query('SELECT pg_backend_pid() AS pid');
+      const updaterPid = pidResult.rows[0].pid;
+      const updateLock = lockResidentChainForUpdate(updater, 1);
+
+      let waitingForBlock = false;
+      for (let attempt = 0; attempt < 100 && !waitingForBlock; attempt += 1) {
+        const state = await observer.query(
+          `SELECT wait_event_type
+           FROM pg_stat_activity
+           WHERE pid = $1`,
+          [updaterPid]
+        );
+        waitingForBlock = state.rows[0]?.wait_event_type === 'Lock';
+      }
+      expect(waitingForBlock).toBe(true);
+
+      await creator.query(String.raw`SET LOCAL lock_timeout = '100ms'`);
+      const resident = await creator.query('SELECT id FROM residentes WHERE id = 1 FOR UPDATE');
+      expect(resident.rows[0]).toEqual({ id: 1 });
+      await creator.query('COMMIT');
+
+      await expect(updateLock).resolves.toEqual({
+        current: expect.objectContaining({ id: 1, villa_id: 1, activo: true }),
+        villa: expect.objectContaining({ id: 1, manzana_id: 1 }),
+      });
+      await updater.query('COMMIT');
+
+      const state = await observer.query(
+        `SELECT m.estado AS manzana_estado, v.estado AS villa_estado,
+                r.activo AS residente_activo
+         FROM ${schemaIdent}.manzanas m
+         JOIN ${schemaIdent}.villas v ON v.manzana_id = m.id
+         JOIN ${schemaIdent}.residentes r ON r.villa_id = v.id
+         WHERE m.id = 1 AND v.id = 1 AND r.id = 1`
+      );
+      expect(state.rows[0]).toEqual({
+        manzana_estado: 'activo',
+        villa_estado: 'activo',
+        residente_activo: true,
+      });
+    } finally {
+      await creator.query('ROLLBACK').catch(() => undefined);
+      creator.release();
+      await updater.query('ROLLBACK').catch(() => undefined);
+      updater.release();
+      observer.release();
+    }
+  });
+
   test('lista solo Ubicaciones asignadas o todas según alcance', async () => {
     await db.transaction(async (client) => {
       await client.query(`SET LOCAL search_path TO ${schemaIdent}`);
@@ -217,6 +480,48 @@ describe('bitacoras PostgreSQL API persistence', () => {
       });
       expect(assigned.map((location) => location.nombre)).toEqual(['Asignada']);
       expect(global).toHaveLength(2);
+    });
+  });
+
+  test('resolución de opciones colapsa recursos inexistentes y fuera de scope', async () => {
+    await db.transaction(async (client) => {
+      await client.query(`SET LOCAL search_path TO ${schemaIdent}`);
+      const missingBlock = await repository.findVisibleBlock({
+        blockId: 999,
+        hasGlobalScope: false,
+        userId: 1,
+        executor: client,
+      });
+      const hiddenBlock = await repository.findVisibleBlock({
+        blockId: 1,
+        hasGlobalScope: false,
+        userId: 1,
+        executor: client,
+      });
+      const globalBlock = await repository.findVisibleBlock({
+        blockId: 1,
+        hasGlobalScope: true,
+        userId: 1,
+        executor: client,
+      });
+      expect(missingBlock).toBeNull();
+      expect(hiddenBlock).toBeNull();
+      expect(globalBlock).toEqual(expect.objectContaining({ id: 1, ubicacion_id: 2 }));
+
+      const missingLocation = await repository.findVisibleLocation({
+        locationId: 999,
+        hasGlobalScope: false,
+        userId: 1,
+        executor: client,
+      });
+      const hiddenLocation = await repository.findVisibleLocation({
+        locationId: 2,
+        hasGlobalScope: false,
+        userId: 1,
+        executor: client,
+      });
+      expect(missingLocation).toBeNull();
+      expect(hiddenLocation).toBeNull();
     });
   });
 
@@ -309,7 +614,7 @@ describe('bitacoras PostgreSQL API persistence', () => {
 
   test('RESTRICT preserva Ubicación y Bitácora histórica', async () => {
     await expect(
-      db.query(`DELETE FROM ${schemaIdent}.ubicaciones WHERE id = 2`)
+      db.query(`DELETE FROM ${schemaIdent}.ubicaciones WHERE id = 1`)
     ).rejects.toMatchObject({
       code: '23503',
       constraint: 'bitacora_registros_ubicacion_id_fkey',
@@ -317,11 +622,12 @@ describe('bitacoras PostgreSQL API persistence', () => {
 
     const preserved = await db.query(
       `SELECT
-         (SELECT COUNT(*)::int FROM ${schemaIdent}.ubicaciones WHERE id = 2) AS ubicaciones,
+         (SELECT COUNT(*)::int FROM ${schemaIdent}.ubicaciones WHERE id = 1) AS ubicaciones,
          (SELECT COUNT(*)::int FROM ${schemaIdent}.bitacora_registros
-          WHERE ubicacion_id = 2) AS registros`
+          WHERE ubicacion_id = 1) AS registros`
     );
-    expect(preserved.rows[0]).toEqual({ ubicaciones: 1, registros: 1 });
+    expect(preserved.rows[0].ubicaciones).toBe(1);
+    expect(preserved.rows[0].registros).toBeGreaterThan(0);
   });
 
   test('RESTRICT preserva Usuario autor y Bitácora histórica', async () => {
