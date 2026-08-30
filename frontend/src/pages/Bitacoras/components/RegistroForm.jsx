@@ -1,10 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppModal from '../../../components/AppModal';
+import SearchableSelect from '../../../components/SearchableSelect';
 import { getVisibleErrorMessage } from '../../../services/serviceUtils';
 import bitacorasService from '../../../services/bitacorasService';
 import { getLocalDateTimeValue, normalizeLocalDateTimeForPayload } from '../utils/bitacorasHelpers';
 
-const EMPTY_ERRORS = { ubicacion_id: '', ocurrido_at: '', detalle: '' };
+const EMPTY_ERRORS = {
+  ubicacion_id: '',
+  manzana_id: '',
+  villa_id: '',
+  ocurrido_at: '',
+  detalle: '',
+};
+const URBANIZATION_TYPE = 'URBANIZACION';
 
 const getBackendFieldErrors = (result) => {
   const errors = result?.originalError?.response?.data?.errors;
@@ -24,6 +32,19 @@ const getInitialUbicacionId = (ubicaciones, initialUbicacionId) => {
   return ubicaciones.length === 1 ? String(ubicaciones[0].id) : '';
 };
 
+const getUrbanInvalidField = (result, backendErrors = {}) => {
+  if (backendErrors.manzana_id) return 'manzana_id';
+  if (backendErrors.villa_id) return 'villa_id';
+  if (result?.code?.startsWith('BLOCK_') || result?.code === 'URBAN_CONTEXT_NOT_ALLOWED') {
+    return 'manzana_id';
+  }
+  if (result?.code?.startsWith('VILLA_')) return 'villa_id';
+  if (result?.code === 'INVALID_URBAN_CHAIN') {
+    return result?.message?.toLowerCase().includes('villa') ? 'villa_id' : 'manzana_id';
+  }
+  return '';
+};
+
 const RegistroForm = ({
   isOpen,
   ubicaciones,
@@ -39,15 +60,36 @@ const RegistroForm = ({
   const [ubicacionId, setUbicacionId] = useState(() =>
     getInitialUbicacionId(ubicaciones, initialUbicacionId)
   );
+  const [manzanaId, setManzanaId] = useState('');
+  const [villaId, setVillaId] = useState('');
+  const [manzanas, setManzanas] = useState([]);
+  const [villas, setVillas] = useState([]);
+  const [manzanasLoading, setManzanasLoading] = useState(false);
+  const [villasLoading, setVillasLoading] = useState(false);
+  const [manzanasError, setManzanasError] = useState('');
+  const [villasError, setVillasError] = useState('');
   const [ocurridoAt, setOcurridoAt] = useState(() => getLocalDateTimeValue());
   const [detalle, setDetalle] = useState('');
   const [errors, setErrors] = useState(EMPTY_ERRORS);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+  const manzanasRequestRef = useRef(0);
+  const villasRequestRef = useRef(0);
+  const mountedRef = useRef(false);
+  const currentUbicacionIdRef = useRef(ubicacionId);
+  const currentManzanaIdRef = useRef(manzanaId);
+  const currentIsUrbanizationRef = useRef(false);
   const ubicacionRef = useRef(null);
+  const manzanaRef = useRef(null);
+  const villaRef = useRef(null);
   const ocurridoAtRef = useRef(null);
   const detalleRef = useRef(null);
 
+  const selectedLocation = useMemo(
+    () => ubicaciones.find((ubicacion) => String(ubicacion.id) === String(ubicacionId)) || null,
+    [ubicacionId, ubicaciones]
+  );
+  const isUrbanization = selectedLocation?.tipo_punto === URBANIZATION_TYPE;
   const normalizedTimestamp = normalizeLocalDateTimeForPayload(ocurridoAt);
   const normalizedDetail = detalle.trim();
   const canSubmit =
@@ -69,6 +111,70 @@ const RegistroForm = ({
   }, [ubicaciones]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      manzanasRequestRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    currentUbicacionIdRef.current = ubicacionId;
+    currentManzanaIdRef.current = manzanaId;
+    currentIsUrbanizationRef.current = isUrbanization;
+  }, [isUrbanization, manzanaId, ubicacionId]);
+
+  const loadManzanas = useCallback(async (nextUbicacionId) => {
+    if (!nextUbicacionId) return;
+    const requestedUbicacionId = String(nextUbicacionId);
+    const requestId = manzanasRequestRef.current + 1;
+    manzanasRequestRef.current = requestId;
+    setManzanasLoading(true);
+    setManzanasError('');
+    const result = await bitacorasService.getManzanas(nextUbicacionId);
+    if (
+      !mountedRef.current ||
+      manzanasRequestRef.current !== requestId ||
+      currentUbicacionIdRef.current !== requestedUbicacionId ||
+      !currentIsUrbanizationRef.current
+    ) {
+      return;
+    }
+    setManzanasLoading(false);
+    if (result.success) {
+      setManzanas(Array.isArray(result.data) ? result.data : []);
+      return;
+    }
+    setManzanas([]);
+    setManzanasError(getVisibleErrorMessage(result, 'No se pudieron cargar las Manzanas.'));
+  }, []);
+
+  const loadVillas = useCallback(async (nextManzanaId) => {
+    if (!nextManzanaId) return;
+    const requestedManzanaId = String(nextManzanaId);
+    const requestId = villasRequestRef.current + 1;
+    villasRequestRef.current = requestId;
+    setVillasLoading(true);
+    setVillasError('');
+    const result = await bitacorasService.getVillas(nextManzanaId);
+    if (
+      !mountedRef.current ||
+      villasRequestRef.current !== requestId ||
+      currentManzanaIdRef.current !== requestedManzanaId ||
+      !currentIsUrbanizationRef.current
+    ) {
+      return;
+    }
+    setVillasLoading(false);
+    if (result.success) {
+      setVillas(Array.isArray(result.data) ? result.data : []);
+      return;
+    }
+    setVillas([]);
+    setVillasError(getVisibleErrorMessage(result, 'No se pudieron cargar las Villas.'));
+  }, []);
+
+  useEffect(() => {
     const hasValidInitial = ubicaciones.some(
       (ubicacion) => String(ubicacion.id) === String(initialUbicacionId)
     );
@@ -79,15 +185,81 @@ const RegistroForm = ({
   }, [initialUbicacionId, onUbicacionChange, ubicacionId, ubicaciones]);
 
   useEffect(() => {
+    setManzanaId('');
+    setVillaId('');
+    setManzanas([]);
+    setVillas([]);
+    setManzanasError('');
+    setVillasError('');
+    manzanasRequestRef.current += 1;
+    villasRequestRef.current += 1;
+    setManzanasLoading(false);
+    setVillasLoading(false);
+    if (isUrbanization && ubicacionId) {
+      void loadManzanas(ubicacionId);
+    }
+  }, [isUrbanization, loadManzanas, ubicacionId]);
+
+  useEffect(() => {
+    setVillaId('');
+    setVillas([]);
+    setVillasError('');
+    villasRequestRef.current += 1;
+    setVillasLoading(false);
+    if (isUrbanization && manzanaId) {
+      void loadVillas(manzanaId);
+    }
+  }, [isUrbanization, loadVillas, manzanaId]);
+
+  useEffect(() => {
     if (errors.ubicacion_id) ubicacionRef.current?.focus();
+    else if (errors.manzana_id) manzanaRef.current?.focus();
+    else if (errors.villa_id) villaRef.current?.focus();
     else if (errors.ocurrido_at) ocurridoAtRef.current?.focus();
     else if (errors.detalle) detalleRef.current?.focus();
   }, [errors]);
 
   const handleLocationChange = (value) => {
-    setUbicacionId(value);
-    onUbicacionChange(value);
-    setErrors((current) => ({ ...current, ubicacion_id: '' }));
+    const nextUbicacionId = String(value || '');
+    const nextLocation =
+      ubicaciones.find((ubicacion) => String(ubicacion.id) === nextUbicacionId) || null;
+    currentUbicacionIdRef.current = nextUbicacionId;
+    currentManzanaIdRef.current = '';
+    currentIsUrbanizationRef.current = nextLocation?.tipo_punto === URBANIZATION_TYPE;
+    setUbicacionId(nextUbicacionId);
+    setManzanaId('');
+    setVillaId('');
+    setManzanas([]);
+    setVillas([]);
+    setManzanasError('');
+    setVillasError('');
+    manzanasRequestRef.current += 1;
+    villasRequestRef.current += 1;
+    setManzanasLoading(false);
+    setVillasLoading(false);
+    onUbicacionChange(nextUbicacionId);
+    setErrors((current) => ({ ...current, ubicacion_id: '', manzana_id: '', villa_id: '' }));
+  };
+
+  const handleManzanaChange = (value) => {
+    const nextManzanaId = String(value || '');
+    const previousManzanaId = currentManzanaIdRef.current;
+    currentManzanaIdRef.current = nextManzanaId;
+    villasRequestRef.current += 1;
+    setManzanaId(nextManzanaId);
+    setVillaId('');
+    setVillas([]);
+    setVillasError('');
+    setVillasLoading(false);
+    setErrors((current) => ({ ...current, manzana_id: '', villa_id: '' }));
+    if (isUrbanization && nextManzanaId && nextManzanaId === previousManzanaId) {
+      void loadVillas(nextManzanaId);
+    }
+  };
+
+  const handleVillaChange = (value) => {
+    setVillaId(value);
+    setErrors((current) => ({ ...current, villa_id: '' }));
   };
 
   const handleClose = () => {
@@ -101,6 +273,7 @@ const RegistroForm = ({
     if (isSubmittingRef.current) return;
 
     const nextErrors = {
+      ...EMPTY_ERRORS,
       ubicacion_id: Number(ubicacionId) > 0 ? '' : 'Selecciona una Ubicación.',
       ocurrido_at: normalizedTimestamp ? '' : 'Ingresa una fecha y hora válidas.',
       detalle: normalizedDetail ? '' : 'Ingresa el detalle de la novedad.',
@@ -115,11 +288,16 @@ const RegistroForm = ({
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
-      const result = await bitacorasService.createRegistro({
+      const payload = {
         ubicacion_id: Number(ubicacionId),
         ocurrido_at: normalizedTimestamp,
         detalle: normalizedDetail,
-      });
+      };
+      if (isUrbanization && Number(manzanaId) > 0) {
+        payload.manzana_id = Number(manzanaId);
+        if (Number(villaId) > 0) payload.villa_id = Number(villaId);
+      }
+      const result = await bitacorasService.createRegistro(payload);
 
       if (result.success) {
         isSubmittingRef.current = false;
@@ -128,8 +306,8 @@ const RegistroForm = ({
         return;
       }
 
+      const backendErrors = getBackendFieldErrors(result);
       if (result.status === 400) {
-        const backendErrors = getBackendFieldErrors(result);
         setErrors((current) => ({ ...current, ...backendErrors }));
       }
 
@@ -140,6 +318,29 @@ const RegistroForm = ({
           !refreshedLocations.some((ubicacion) => ubicacion.id === Number(ubicacionId))
         ) {
           handleLocationChange('');
+        }
+      }
+
+      if (
+        (result.status === 404 || result.status === 409) &&
+        currentUbicacionIdRef.current &&
+        currentIsUrbanizationRef.current
+      ) {
+        const message = getVisibleErrorMessage(result, 'El contexto urbano dejó de ser válido.');
+        const invalidField = getUrbanInvalidField(result, backendErrors);
+        const selectedManzanaId = currentManzanaIdRef.current;
+        if (invalidField === 'villa_id') {
+          setVillaId('');
+          setErrors((current) => ({ ...current, villa_id: message }));
+          if (selectedManzanaId) void loadVillas(selectedManzanaId);
+        } else if (invalidField === 'manzana_id' || selectedManzanaId) {
+          currentManzanaIdRef.current = '';
+          setManzanaId('');
+          setVillaId('');
+          setErrors((current) => ({ ...current, manzana_id: message, villa_id: '' }));
+          if (currentUbicacionIdRef.current && currentIsUrbanizationRef.current) {
+            void loadManzanas(currentUbicacionIdRef.current);
+          }
         }
       }
 
@@ -218,6 +419,114 @@ const RegistroForm = ({
                   </span>
                 ) : null}
               </div>
+
+              {isUrbanization ? (
+                <div className="form-group">
+                  <label htmlFor="bitacora-manzana">Manzana</label>
+                  <SearchableSelect
+                    ref={manzanaRef}
+                    inputId="bitacora-manzana"
+                    value={manzanaId}
+                    onChange={handleManzanaChange}
+                    options={manzanas}
+                    getOptionLabel={(manzana) => manzana.nombre}
+                    disabled={isSubmitting || manzanasLoading}
+                    loading={manzanasLoading}
+                    loadingMessage="Cargando Manzanas..."
+                    placeholder="Sin Manzana"
+                    emptyMessage="No hay Manzanas activas disponibles."
+                    aria-invalid={Boolean(errors.manzana_id)}
+                    aria-describedby={
+                      [
+                        errors.manzana_id || manzanasError ? 'bitacora-manzana-error' : '',
+                        manzanasLoading ? 'bitacora-manzana-status' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                  />
+                  {manzanasLoading ? (
+                    <span
+                      id="bitacora-manzana-status"
+                      className="bitacoras-field-hint"
+                      role="status"
+                    >
+                      Cargando Manzanas activas...
+                    </span>
+                  ) : errors.manzana_id ? (
+                    <span id="bitacora-manzana-error" className="field-error">
+                      {errors.manzana_id}
+                    </span>
+                  ) : manzanasError ? (
+                    <span id="bitacora-manzana-error" className="field-error" role="alert">
+                      {manzanasError}{' '}
+                      <button
+                        type="button"
+                        className="bitacoras-inline-retry"
+                        onClick={() => loadManzanas(ubicacionId)}
+                        disabled={isSubmitting}
+                      >
+                        Reintentar
+                      </button>
+                    </span>
+                  ) : manzanas.length === 0 ? (
+                    <span className="bitacoras-field-hint">
+                      No hay Manzanas activas disponibles.
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {isUrbanization && manzanaId ? (
+                <div className="form-group">
+                  <label htmlFor="bitacora-villa">Villa</label>
+                  <SearchableSelect
+                    ref={villaRef}
+                    inputId="bitacora-villa"
+                    value={villaId}
+                    onChange={handleVillaChange}
+                    options={villas}
+                    getOptionLabel={(villa) => villa.identificador}
+                    disabled={isSubmitting || villasLoading}
+                    loading={villasLoading}
+                    loadingMessage="Cargando Villas..."
+                    placeholder="Sin Villa"
+                    emptyMessage="No hay Villas activas disponibles."
+                    aria-invalid={Boolean(errors.villa_id)}
+                    aria-describedby={
+                      [
+                        errors.villa_id || villasError ? 'bitacora-villa-error' : '',
+                        villasLoading ? 'bitacora-villa-status' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ') || undefined
+                    }
+                  />
+                  {villasLoading ? (
+                    <span id="bitacora-villa-status" className="bitacoras-field-hint" role="status">
+                      Cargando Villas activas…
+                    </span>
+                  ) : errors.villa_id ? (
+                    <span id="bitacora-villa-error" className="field-error">
+                      {errors.villa_id}
+                    </span>
+                  ) : villasError ? (
+                    <span id="bitacora-villa-error" className="field-error" role="alert">
+                      {villasError}{' '}
+                      <button
+                        type="button"
+                        className="bitacoras-inline-retry"
+                        onClick={() => loadVillas(manzanaId)}
+                        disabled={isSubmitting}
+                      >
+                        Reintentar
+                      </button>
+                    </span>
+                  ) : villas.length === 0 ? (
+                    <span className="bitacoras-field-hint">No hay Villas activas disponibles.</span>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="form-group">
                 <label htmlFor="bitacora-ocurrido-at">Fecha y hora</label>

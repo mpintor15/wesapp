@@ -24,6 +24,8 @@ jest.mock('../../services/bitacorasService', () => ({
   __esModule: true,
   default: {
     getUbicaciones: jest.fn(),
+    getManzanas: jest.fn(),
+    getVillas: jest.fn(),
     createRegistro: jest.fn(),
     getRegistros: jest.fn(),
   },
@@ -48,8 +50,8 @@ jest.mock('../../hooks/useScrollToTopOnMount', () => jest.fn());
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const LOCATIONS = [
-  { id: 7, nombre: 'Garita principal', cliente_nombre: 'Cliente X', tipo_punto: 'GARITA' },
-  { id: 8, nombre: 'Bodega', cliente_nombre: 'Cliente X', tipo_punto: 'BODEGA' },
+  { id: 7, nombre: 'Garita principal', cliente_nombre: 'Cliente X', tipo_punto: 'GENERAL' },
+  { id: 8, nombre: 'Urbanización Norte', cliente_nombre: 'Cliente X', tipo_punto: 'URBANIZACION' },
 ];
 
 const setValue = (element, value) => {
@@ -61,6 +63,33 @@ const setValue = (element, value) => {
         : globalThis.HTMLInputElement.prototype;
   Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, value);
   element.dispatchEvent(new globalThis.Event('change', { bubbles: true }));
+};
+
+const flushPromises = async (cycles = 3) => {
+  for (let index = 0; index < cycles; index += 1) {
+    await Promise.resolve();
+  }
+};
+
+const changeAndFlush = async (element, value, cycles = 3) => {
+  act(() => setValue(element, value));
+  await act(async () => flushPromises(cycles));
+};
+
+const selectSearchOption = async (container, input, text, cycles = 3) => {
+  await act(async () => {
+    input.dispatchEvent(new globalThis.FocusEvent('focusin', { bubbles: true }));
+    await flushPromises();
+  });
+  const option = Array.from(container.querySelectorAll('[role="option"]')).find(
+    (item) => item.textContent === text
+  );
+  expect(option).not.toBeUndefined();
+  await act(async () => {
+    option.dispatchEvent(new globalThis.MouseEvent('mousedown', { bubbles: true }));
+    option.dispatchEvent(new globalThis.MouseEvent('click', { bubbles: true }));
+    await flushPromises(cycles);
+  });
 };
 
 const renderBitacoras = (permissions, user = { id: 7, colaborador_id: 4 }) => {
@@ -93,6 +122,14 @@ describe('Bitacoras', () => {
     jest.useFakeTimers().setSystemTime(new Date(2026, 7, 21, 10, 0));
     useToast.mockReturnValue({ showToast: jest.fn() });
     bitacorasService.getUbicaciones.mockResolvedValue({ success: true, data: LOCATIONS });
+    bitacorasService.getManzanas.mockResolvedValue({
+      success: true,
+      data: [{ id: 31, nombre: 'Manzana A' }],
+    });
+    bitacorasService.getVillas.mockResolvedValue({
+      success: true,
+      data: [{ id: 41, identificador: 'A-1' }],
+    });
   });
 
   afterEach(() => jest.useRealTimers());
@@ -213,7 +250,38 @@ describe('Bitacoras', () => {
     expect(view.container.querySelector('#bitacora-ubicacion').value).toBe('8');
     expect(view.container.querySelector('#bitacora-detalle').value).toBe('');
     expect(view.container.querySelector('#bitacora-ocurrido-at').value).toBe('2026-08-21T10:20');
+    expect(view.container.querySelector('#bitacora-manzana')?.value || '').toBe('');
+    expect(view.container.querySelector('#bitacora-villa')).toBeNull();
 
+    view.unmount();
+  });
+
+  test('cerrar y reabrir conserva Ubicación urbana pero reinicia Manzana y Villa', async () => {
+    const view = renderBitacoras([PERMISSIONS.BITACORAS_REGISTRO_CREAR]);
+    await act(async () => Promise.resolve());
+    act(() => view.button('Registrar Bitácora').click());
+    await changeAndFlush(view.container.querySelector('#bitacora-ubicacion'), '8');
+    await selectSearchOption(
+      view.container,
+      view.container.querySelector('#bitacora-manzana'),
+      'Manzana A'
+    );
+    await selectSearchOption(
+      view.container,
+      view.container.querySelector('#bitacora-villa'),
+      'A-1'
+    );
+    act(() => view.button('Cancelar').click());
+
+    expect(view.container.querySelector('[role="dialog"]')).toBeNull();
+    act(() => view.button('Registrar Bitácora').click());
+    await act(async () => {
+      await flushPromises();
+    });
+
+    expect(view.container.querySelector('#bitacora-ubicacion').value).toBe('8');
+    expect(view.container.querySelector('#bitacora-manzana').value).toBe('');
+    expect(view.container.querySelector('#bitacora-villa')).toBeNull();
     view.unmount();
   });
 

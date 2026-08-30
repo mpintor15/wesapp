@@ -28,8 +28,32 @@ const bitacorasService = {
     }
   },
 
+  async getManzanas(ubicacionId) {
+    try {
+      const response = await api.get(`/bitacoras/ubicaciones/${ubicacionId}/manzanas`);
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener Manzanas de Bitácora');
+    }
+  },
+
+  async getVillas(manzanaId) {
+    try {
+      const response = await api.get(`/bitacoras/manzanas/${manzanaId}/villas`);
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener Villas de Bitácora');
+    }
+  },
+
   async createRegistro(data = {}) {
-    const payload = pickDefined(data, ['ubicacion_id', 'ocurrido_at', 'detalle']);
+    const payload = pickDefined(data, [
+      'ubicacion_id',
+      'manzana_id',
+      'villa_id',
+      'ocurrido_at',
+      'detalle',
+    ]);
     try {
       const response = await api.post('/bitacoras/registros', payload);
       return response.data;

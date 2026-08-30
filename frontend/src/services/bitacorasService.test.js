@@ -25,11 +25,34 @@ describe('bitacorasService', () => {
 
     await bitacorasService.createRegistro({
       ubicacion_id: 1,
+      manzana_id: 3,
+      villa_id: 4,
       ocurrido_at: '2026-08-21T08:30',
       detalle: 'Novedad',
       autor_usuario_id: 99,
       estado: 'ANULADA',
+      tipo_punto: 'URBANIZACION',
       created_at: undefined,
+    });
+
+    expect(api.post).toHaveBeenCalledWith('/bitacoras/registros', {
+      ubicacion_id: 1,
+      manzana_id: 3,
+      villa_id: 4,
+      ocurrido_at: '2026-08-21T08:30',
+      detalle: 'Novedad',
+    });
+  });
+
+  test('crea un registro sin enviar claves urbanas vacías', async () => {
+    api.post.mockResolvedValue({ data: { success: true, data: { id: 11 } } });
+
+    await bitacorasService.createRegistro({
+      ubicacion_id: 1,
+      manzana_id: '',
+      villa_id: null,
+      ocurrido_at: '2026-08-21T08:30',
+      detalle: 'Novedad',
     });
 
     expect(api.post).toHaveBeenCalledWith('/bitacoras/registros', {
@@ -37,6 +60,26 @@ describe('bitacorasService', () => {
       ocurrido_at: '2026-08-21T08:30',
       detalle: 'Novedad',
     });
+  });
+
+  test('obtiene opciones urbanas usando endpoints de Bitácoras', async () => {
+    api.get
+      .mockResolvedValueOnce({ data: { success: true, data: [{ id: 3, nombre: 'A' }] } })
+      .mockResolvedValueOnce({
+        data: { success: true, data: [{ id: 4, identificador: 'A-1' }] },
+      });
+
+    await expect(bitacorasService.getManzanas(1)).resolves.toEqual({
+      success: true,
+      data: [{ id: 3, nombre: 'A' }],
+    });
+    await expect(bitacorasService.getVillas(3)).resolves.toEqual({
+      success: true,
+      data: [{ id: 4, identificador: 'A-1' }],
+    });
+
+    expect(api.get).toHaveBeenNthCalledWith(1, '/bitacoras/ubicaciones/1/manzanas');
+    expect(api.get).toHaveBeenNthCalledWith(2, '/bitacoras/manzanas/3/villas');
   });
 
   test('consulta historial con params soportados y elimina vacíos o desconocidos', async () => {
