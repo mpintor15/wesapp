@@ -40,12 +40,35 @@ const buildHistoryParams = (page, filters) => ({
 const getAuthorName = (registro) =>
   registro.autor_colaborador_nombre || registro.autor_usuario || '—';
 
+const getLocationSegments = (registro) =>
+  [registro.ubicacion_nombre, registro.manzana_nombre, registro.villa_identificador].filter(
+    Boolean
+  );
+
 const getStatusClass = (estado) =>
   estado === 'ANULADA' ? 'bitacoras-status--cancelled' : 'bitacoras-status--registered';
 
 const StatusBadge = ({ estado }) => {
   const label = estado === 'ANULADA' ? 'ANULADA' : 'REGISTRADA';
   return <span className={`bitacoras-status ${getStatusClass(label)}`}>{label}</span>;
+};
+
+const LocationContext = ({ registro, heading = false }) => {
+  const segments = getLocationSegments(registro);
+  const content =
+    segments.length > 0 ? (
+      segments.map((segment, index) => (
+        <React.Fragment key={`${segment}-${index}`}>
+          {index > 0 ? <span className="bitacoras-location-separator">·</span> : null}
+          <span>{segment}</span>
+        </React.Fragment>
+      ))
+    ) : (
+      <span>—</span>
+    );
+
+  if (heading) return <h3 className="bitacoras-location-context">{content}</h3>;
+  return <span className="bitacoras-cell-primary bitacoras-location-context">{content}</span>;
 };
 
 const RecordDetails = ({ registro }) => (
@@ -57,7 +80,7 @@ const RecordDetails = ({ registro }) => (
     <div>
       <dt>Ubicación</dt>
       <dd>
-        {registro.ubicacion_nombre || '—'}
+        <LocationContext registro={registro} />
         {registro.tipo_punto ? <small>{registro.tipo_punto}</small> : null}
       </dd>
     </div>
@@ -353,9 +376,7 @@ const HistorialBitacoras = ({
                       {formatLocalTimestamp(registro.ocurrido_at) || '—'}
                     </td>
                     <td>
-                      <span className="bitacoras-cell-primary">
-                        {registro.ubicacion_nombre || '—'}
-                      </span>
+                      <LocationContext registro={registro} />
                       {registro.tipo_punto ? <small>{registro.tipo_punto}</small> : null}
                     </td>
                     <td>
@@ -383,7 +404,7 @@ const HistorialBitacoras = ({
             {records.map((registro) => (
               <article key={registro.id} className="record-card bitacoras-record-card">
                 <div className="record-card-header">
-                  <h3>{registro.ubicacion_nombre || 'Bitácora'}</h3>
+                  <LocationContext registro={registro} heading />
                   <StatusBadge estado={registro.estado} />
                 </div>
                 <dl className="record-card-details">

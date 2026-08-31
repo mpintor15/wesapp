@@ -197,6 +197,19 @@
   color: var(--color-text);
 }
 
+.bitacoras-location-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 6px;
+  min-width: 0;
+}
+
+.bitacoras-location-separator {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
 .bitacoras-detail-cell {
   min-width: 260px;
   white-space: normal;

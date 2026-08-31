@@ -23,6 +23,8 @@ const RECORDS = [
     ubicacion_id: 7,
     ubicacion_nombre: 'Garita principal',
     tipo_punto: 'GARITA',
+    manzana_nombre: null,
+    villa_identificador: null,
     autor_usuario: 'guardia1',
     autor_colaborador_nombre: 'Ana Guardia',
     ocurrido_at: '2026-08-21T10:15:00',
@@ -34,6 +36,8 @@ const RECORDS = [
     ubicacion_id: 8,
     ubicacion_nombre: 'Bodega',
     tipo_punto: 'BODEGA',
+    manzana_nombre: null,
+    villa_identificador: null,
     autor_usuario: 'supervisor1',
     autor_colaborador_nombre: null,
     ocurrido_at: '2026-08-21T09:00:00',
@@ -133,6 +137,64 @@ describe('HistorialBitacoras', () => {
     expect(view.container.textContent).toContain('ANULADA');
     expect(view.container.textContent).toContain('Duplicado');
 
+    view.unmount();
+  });
+
+  test('muestra contexto urbano en tabla y cards omitiendo segmentos ausentes', async () => {
+    bitacorasService.getRegistros.mockResolvedValue(
+      successResult({
+        data: [
+          {
+            ...RECORDS[0],
+            id: 30,
+            ubicacion_nombre: 'Urbanización Norte',
+            tipo_punto: 'URBANIZACION',
+            manzana_nombre: 'Manzana A',
+            villa_identificador: 'Villa 12',
+          },
+          {
+            ...RECORDS[0],
+            id: 31,
+            ubicacion_nombre: 'Urbanización Sur',
+            tipo_punto: 'URBANIZACION',
+            manzana_nombre: 'Manzana B',
+            villa_identificador: null,
+          },
+          {
+            ...RECORDS[1],
+            id: 32,
+            ubicacion_nombre: 'Garita principal',
+            tipo_punto: 'GENERAL',
+            manzana_nombre: null,
+            villa_identificador: null,
+          },
+        ],
+      })
+    );
+    const view = renderHistory();
+    await flush();
+
+    const tableRows = Array.from(view.container.querySelectorAll('tbody tr'));
+    expect(tableRows).toHaveLength(3);
+    expect(tableRows[0].querySelector('td:nth-child(2)').textContent).toContain(
+      'Urbanización Norte·Manzana A·Villa 12'
+    );
+    expect(tableRows[1].querySelector('td:nth-child(2)').textContent).toContain(
+      'Urbanización Sur·Manzana B'
+    );
+    expect(tableRows[1].querySelector('td:nth-child(2)').textContent).not.toContain('Villa');
+    expect(tableRows[2].querySelector('td:nth-child(2)').textContent).toContain('Garita principal');
+    expect(tableRows[2].querySelector('td:nth-child(2)').textContent).not.toContain('Manzana');
+
+    const cardHeadings = Array.from(view.container.querySelectorAll('.record-card-header h3')).map(
+      (heading) => heading.textContent
+    );
+    expect(cardHeadings).toEqual([
+      'Urbanización Norte·Manzana A·Villa 12',
+      'Urbanización Sur·Manzana B',
+      'Garita principal',
+    ]);
+    expect(view.container.querySelectorAll('.record-card')).toHaveLength(3);
     view.unmount();
   });
 
