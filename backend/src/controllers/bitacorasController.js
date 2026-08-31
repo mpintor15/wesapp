@@ -6,6 +6,7 @@ const { createHttpError, handleControllerError, parsePositiveInteger } = require
 const { isValidDateString } = require('../utils/inputValidation');
 const {
   findActiveBlocksForLocation,
+  findActivePrincipalResidentForVilla,
   findActiveVillasForBlock,
   findHistory,
   findLockedBlock,
@@ -128,11 +129,18 @@ const assertLocationScope = async ({
 };
 
 const assertUrbanContext = async ({ client, location, blockId, villaId }) => {
-  if (blockId === null || blockId === undefined) {
+  const hasBlock = blockId !== null && blockId !== undefined;
+  const hasVilla = villaId !== null && villaId !== undefined;
+
+  if (location.tipo_punto !== 'URBANIZACION') {
+    if (hasBlock || hasVilla) {
+      throw domainError(409, 'URBAN_CONTEXT_NOT_ALLOWED', 'La Ubicación no admite contexto urbano');
+    }
     return;
   }
-  if (location.tipo_punto !== 'URBANIZACION') {
-    throw domainError(409, 'URBAN_CONTEXT_NOT_ALLOWED', 'La Ubicación no admite contexto urbano');
+
+  if (!hasBlock || !hasVilla) {
+    throw domainError(400, 'COMPLETE_HOUSE_REQUIRED', 'Selecciona Manzana y Villa para la Casa');
   }
 
   const block = await findLockedBlock({ client, blockId });
@@ -146,9 +154,6 @@ const assertUrbanContext = async ({ client, location, blockId, villaId }) => {
     throw domainError(409, 'INVALID_URBAN_CHAIN', 'La Manzana no pertenece a la Ubicación');
   }
 
-  if (villaId === null || villaId === undefined) {
-    return;
-  }
   const villa = await findLockedVilla({ client, villaId });
   if (!villa) {
     throw domainError(404, 'VILLA_NOT_FOUND', 'Villa no encontrada');
@@ -158,6 +163,11 @@ const assertUrbanContext = async ({ client, location, blockId, villaId }) => {
   }
   if (villa.manzana_id !== block.id) {
     throw domainError(409, 'INVALID_URBAN_CHAIN', 'La Villa no pertenece a la Manzana');
+  }
+
+  const principalResident = await findActivePrincipalResidentForVilla({ client, villaId });
+  if (!principalResident) {
+    throw domainError(409, 'VILLA_WITHOUT_ACTIVE_RESIDENT', 'La Villa no tiene titular activo');
   }
 };
 

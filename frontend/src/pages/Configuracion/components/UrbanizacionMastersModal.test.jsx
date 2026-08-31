@@ -96,12 +96,19 @@ test('crea Villa y permite desactivar/reactivar con confirmación', async () => 
 
   act(() => {
     Simulate.change(page.field('#villa-2'), { target: { value: 'Villa 2' } });
+    Simulate.change(page.field('#villa-residente-nombre-2'), { target: { value: 'Ana Pérez' } });
+    Simulate.change(page.field('#villa-residente-contacto-2'), {
+      target: { value: '0991234567' },
+    });
   });
   await act(async () => {
     Simulate.submit(page.field('#villa-2').closest('form'));
   });
   await flushPromises();
-  expect(inventarioService.createVilla).toHaveBeenCalledWith(2, { identificador: 'Villa 2' });
+  expect(inventarioService.createVilla).toHaveBeenCalledWith(2, {
+    identificador: 'Villa 2',
+    residente_principal: { nombre: 'Ana Pérez', contacto: '0991234567' },
+  });
 
   const exactVillaButton = (text) =>
     Array.from(document.body.querySelectorAll('.urbanizacion-villa-heading button')).find(
@@ -114,6 +121,28 @@ test('crea Villa y permite desactivar/reactivar con confirmación', async () => 
   await act(async () => confirmButton.click());
   await flushPromises();
   expect(inventarioService.updateVilla).toHaveBeenCalledWith(3, { estado: 'inactivo' });
+  page.unmount();
+});
+
+test('crear Villa exige titular antes de enviar', async () => {
+  inventarioService.getManzanas.mockResolvedValue(
+    success([{ id: 2, nombre: 'Etapa A', estado: 'activo' }])
+  );
+  const page = await renderModal();
+
+  act(() => {
+    Simulate.change(page.field('#villa-2'), { target: { value: 'Villa 2' } });
+    Simulate.change(page.field('#villa-residente-nombre-2'), { target: { value: 'Ana Pérez' } });
+    Simulate.change(page.field('#villa-residente-contacto-2'), { target: { value: '123' } });
+  });
+  expect(page.field('#villa-residente-contacto-2').getAttribute('aria-invalid')).toBe('true');
+  expect(page.field('#villa-2').closest('form').querySelector('button').disabled).toBe(true);
+
+  await act(async () => {
+    Simulate.submit(page.field('#villa-2').closest('form'));
+  });
+  await flushPromises();
+  expect(inventarioService.createVilla).not.toHaveBeenCalled();
   page.unmount();
 });
 

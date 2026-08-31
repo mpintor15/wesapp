@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import './SelectionControls.css';
 
 const normalize = (value) =>
@@ -22,6 +22,7 @@ const GroupedMultiSelect = ({
 }) => {
   const generatedId = useId();
   const id = inputId || generatedId;
+  const rootRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const selectedIds = useMemo(() => new Set(value.map(String)), [value]);
@@ -47,8 +48,21 @@ const GroupedMultiSelect = ({
     );
   };
 
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, [open]);
+
   return (
-    <div className="selection-control selection-control--multi">
+    <div className="selection-control selection-control--multi" ref={rootRef}>
       <button
         className="selection-trigger"
         type="button"
@@ -67,6 +81,9 @@ const GroupedMultiSelect = ({
             placeholder={placeholder}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setOpen(false);
+            }}
           />
           {loading ? (
             <p className="selection-empty" role="status">
@@ -81,7 +98,7 @@ const GroupedMultiSelect = ({
                 <section className="selection-group" key={group}>
                   <h4>{group}</h4>
                   {groupOptions.slice(0, 50).map((option) => (
-                    <label key={option.id}>
+                    <label className="selection-option-row" key={option.id}>
                       <input
                         type="checkbox"
                         checked={selectedIds.has(String(option.id))}

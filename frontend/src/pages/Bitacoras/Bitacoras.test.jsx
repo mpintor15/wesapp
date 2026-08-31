@@ -128,7 +128,14 @@ describe('Bitacoras', () => {
     });
     bitacorasService.getVillas.mockResolvedValue({
       success: true,
-      data: [{ id: 41, identificador: 'A-1' }],
+      data: [
+        {
+          id: 41,
+          identificador: 'A-1',
+          residente_principal_nombre: 'Ana Titular',
+          residente_principal_contacto: '0991234567',
+        },
+      ],
     });
   });
 
@@ -181,6 +188,9 @@ describe('Bitacoras', () => {
 
     expect(view.button('Registrar Bitácora')).not.toBeUndefined();
     expect(view.container.querySelector('[role="tab"]')).toBeNull();
+    expect(view.container.querySelector('.bitacoras-container').className).toContain(
+      'tabular-page'
+    );
     expect(view.container.textContent).toContain('Historial funcional');
 
     view.unmount();

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FilterDateInput from '../../../components/FilterDateInput';
 import PaginationControls from '../../../components/PaginationControls';
 import TabularWorkspace from '../../../components/TabularWorkspace';
@@ -40,10 +40,12 @@ const buildHistoryParams = (page, filters) => ({
 const getAuthorName = (registro) =>
   registro.autor_colaborador_nombre || registro.autor_usuario || '—';
 
-const getLocationSegments = (registro) =>
-  [registro.ubicacion_nombre, registro.manzana_nombre, registro.villa_identificador].filter(
-    Boolean
-  );
+const getCasaLabel = (registro) => {
+  if (registro.manzana_nombre && registro.villa_identificador) {
+    return `${registro.manzana_nombre} - ${registro.villa_identificador}`;
+  }
+  return registro.manzana_nombre || registro.villa_identificador || '—';
+};
 
 const getStatusClass = (estado) =>
   estado === 'ANULADA' ? 'bitacoras-status--cancelled' : 'bitacoras-status--registered';
@@ -51,24 +53,6 @@ const getStatusClass = (estado) =>
 const StatusBadge = ({ estado }) => {
   const label = estado === 'ANULADA' ? 'ANULADA' : 'REGISTRADA';
   return <span className={`bitacoras-status ${getStatusClass(label)}`}>{label}</span>;
-};
-
-const LocationContext = ({ registro, heading = false }) => {
-  const segments = getLocationSegments(registro);
-  const content =
-    segments.length > 0 ? (
-      segments.map((segment, index) => (
-        <React.Fragment key={`${segment}-${index}`}>
-          {index > 0 ? <span className="bitacoras-location-separator">·</span> : null}
-          <span>{segment}</span>
-        </React.Fragment>
-      ))
-    ) : (
-      <span>—</span>
-    );
-
-  if (heading) return <h3 className="bitacoras-location-context">{content}</h3>;
-  return <span className="bitacoras-cell-primary bitacoras-location-context">{content}</span>;
 };
 
 const RecordDetails = ({ registro }) => (
@@ -80,8 +64,14 @@ const RecordDetails = ({ registro }) => (
     <div>
       <dt>Ubicación</dt>
       <dd>
-        <LocationContext registro={registro} />
+        <span className="bitacoras-cell-primary">{registro.ubicacion_nombre || '—'}</span>
         {registro.tipo_punto ? <small>{registro.tipo_punto}</small> : null}
+      </dd>
+    </div>
+    <div>
+      <dt>Casa</dt>
+      <dd>
+        <span className="bitacoras-cell-primary">{getCasaLabel(registro)}</span>
       </dd>
     </div>
     <div>
@@ -323,7 +313,7 @@ const HistorialBitacoras = ({
   );
 
   const pagination =
-    meta.totalPages > 0 ? (
+    !loading && !error && meta.totalItems > 0 ? (
       <PaginationControls page={page} totalPages={meta.totalPages} onPageChange={setPage} />
     ) : null;
 
@@ -364,20 +354,26 @@ const HistorialBitacoras = ({
                 <tr>
                   <th scope="col">Fecha/hora</th>
                   <th scope="col">Ubicación</th>
+                  <th scope="col">Casa</th>
                   <th scope="col">Autor</th>
                   <th scope="col">Detalle</th>
                   <th scope="col">Estado</th>
                 </tr>
               </thead>
               <tbody>
-                {records.map((registro) => (
-                  <tr key={registro.id}>
+                {records.map((registro, index) => (
+                  <tr key={registro.id} className={index % 2 === 0 ? 'row-even' : 'row-odd'}>
                     <td className="app-cell-date">
                       {formatLocalTimestamp(registro.ocurrido_at) || '—'}
                     </td>
                     <td>
-                      <LocationContext registro={registro} />
+                      <span className="bitacoras-cell-primary">
+                        {registro.ubicacion_nombre || '—'}
+                      </span>
                       {registro.tipo_punto ? <small>{registro.tipo_punto}</small> : null}
+                    </td>
+                    <td>
+                      <span className="bitacoras-cell-primary">{getCasaLabel(registro)}</span>
                     </td>
                     <td>
                       <span className="bitacoras-cell-primary">{getAuthorName(registro)}</span>
@@ -404,7 +400,7 @@ const HistorialBitacoras = ({
             {records.map((registro) => (
               <article key={registro.id} className="record-card bitacoras-record-card">
                 <div className="record-card-header">
-                  <LocationContext registro={registro} heading />
+                  <h3>{registro.ubicacion_nombre || '—'}</h3>
                   <StatusBadge estado={registro.estado} />
                 </div>
                 <dl className="record-card-details">

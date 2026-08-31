@@ -19,8 +19,18 @@ const BLOCKS = [
   { id: 32, nombre: 'Manzana B' },
 ];
 const VILLAS = [
-  { id: 41, identificador: 'A-1' },
-  { id: 42, identificador: 'A-2' },
+  {
+    id: 41,
+    identificador: 'A-1',
+    residente_principal_nombre: 'Ana Titular',
+    residente_principal_contacto: '0991234567',
+  },
+  {
+    id: 42,
+    identificador: 'A-2',
+    residente_principal_nombre: 'Luis Titular',
+    residente_principal_contacto: '0987654321',
+  },
 ];
 
 const setValue = (element, value) => {
@@ -182,7 +192,7 @@ describe('RegistroForm modal', () => {
     view.unmount();
   });
 
-  test('URBANIZACION carga Manzanas, permite Manzana opcional y carga Villas al seleccionar Manzana', async () => {
+  test('URBANIZACION exige Casa completa, carga Villas con titular y envía Manzana/Villa', async () => {
     bitacorasService.createRegistro.mockResolvedValue({ success: false, status: 500 });
     const view = renderForm();
 
@@ -190,7 +200,8 @@ describe('RegistroForm modal', () => {
 
     expect(bitacorasService.getManzanas).toHaveBeenCalledWith('8');
     expect(view.block()).not.toBeNull();
-    expect(view.block().placeholder).toBe('Sin Manzana');
+    expect(view.submit().disabled).toBe(true);
+    expect(view.block().placeholder).toBe('Selecciona una Manzana');
     await act(async () => {
       view.block().dispatchEvent(new globalThis.FocusEvent('focusin', { bubbles: true }));
       await flushPromises();
@@ -212,15 +223,15 @@ describe('RegistroForm modal', () => {
         .dispatchEvent(new globalThis.Event('submit', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
-    expect(bitacorasService.createRegistro).toHaveBeenLastCalledWith({
-      ubicacion_id: 8,
-      ocurrido_at: '2026-08-21T08:30',
-      detalle: 'Novedad urbana',
-    });
+    expect(bitacorasService.createRegistro).not.toHaveBeenCalled();
+    expect(view.block().getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(view.block());
 
     await selectSearchOption(view, view.block(), 'Manzana A');
     expect(bitacorasService.getVillas).toHaveBeenCalledWith('31');
     expect(view.villa()).not.toBeNull();
+    expect(view.villa().placeholder).toBe('Selecciona una Villa');
+    expect(view.submit().disabled).toBe(true);
     await act(async () => {
       view.villa().dispatchEvent(new globalThis.FocusEvent('focusin', { bubbles: true }));
       await flushPromises();
@@ -233,14 +244,12 @@ describe('RegistroForm modal', () => {
         .dispatchEvent(new globalThis.Event('submit', { bubbles: true, cancelable: true }));
       await Promise.resolve();
     });
-    expect(bitacorasService.createRegistro).toHaveBeenLastCalledWith({
-      ubicacion_id: 8,
-      manzana_id: 31,
-      ocurrido_at: '2026-08-21T08:30',
-      detalle: 'Novedad urbana',
-    });
+    expect(bitacorasService.createRegistro).not.toHaveBeenCalled();
+    expect(view.villa().getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(view.villa());
 
     await selectSearchOption(view, view.villa(), 'A-1');
+    expect(view.container.textContent).toContain('Titular: Ana Titular · 0991234567');
     await act(async () => {
       view
         .form()
@@ -724,7 +733,7 @@ describe('RegistroForm modal', () => {
       view.button('Reintentar').click();
       await flushPromises();
     });
-    expect(view.container.textContent).toContain('No hay Villas activas disponibles.');
+    expect(view.container.textContent).toContain('No hay Villas con titular activo disponibles.');
     expect(view.block().value).toBe('Manzana A');
     expect(view.date().value).toBe('2026-08-21T08:30');
     expect(view.detail().value).toBe('Novedad urbana');

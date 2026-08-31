@@ -93,7 +93,7 @@ const Bitacoras = () => {
   const hasModuleAccess = hasCreatePermission || canViewHistorial;
 
   return (
-    <div className="page-container bitacoras-container">
+    <div className="page-container bitacoras-container tabular-page">
       <PageHeader
         title="Bitácoras"
         onBack={() => navigate('/')}

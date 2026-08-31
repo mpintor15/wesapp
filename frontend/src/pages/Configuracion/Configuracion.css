@@ -648,6 +648,12 @@
   align-items: stretch;
 }
 
+.urbanizacion-villa-form > .urbanizacion-villa-create-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.9fr) minmax(140px, 1.2fr) minmax(120px, 1fr) 140px;
+  gap: 0.5rem;
+}
+
 .urbanizacion-inline-form > div > .btn {
   flex: 0 0 140px;
 }
@@ -671,6 +677,10 @@
   .urbanizacion-card-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .urbanizacion-villa-form > .urbanizacion-villa-create-grid {
+    grid-template-columns: 1fr;
   }
 
   .urbanizacion-villa-heading {

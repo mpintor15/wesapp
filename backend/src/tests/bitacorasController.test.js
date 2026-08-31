@@ -10,6 +10,7 @@ jest.mock('../utils/audit', () => ({
 
 jest.mock('../repositories/bitacorasRepository', () => ({
   findActiveBlocksForLocation: jest.fn(),
+  findActivePrincipalResidentForVilla: jest.fn(),
   findActiveVillasForBlock: jest.fn(),
   findHistory: jest.fn(),
   findLockedBlock: jest.fn(),
@@ -120,6 +121,12 @@ beforeEach(() => {
     identificador: 'V1',
     estado: 'activo',
   });
+  repository.findActivePrincipalResidentForVilla.mockResolvedValue({
+    id: 15,
+    villa_id: 9,
+    nombre: 'Ana Titular',
+    contacto: '0991234567',
+  });
 });
 
 describe('bitacorasController.createRegistro', () => {
@@ -171,6 +178,10 @@ describe('bitacorasController.createRegistro', () => {
 
     expect(repository.findLockedBlock).toHaveBeenCalledWith({ client, blockId: 8 });
     expect(repository.findLockedVilla).toHaveBeenCalledWith({ client, villaId: 9 });
+    expect(repository.findActivePrincipalResidentForVilla).toHaveBeenCalledWith({
+      client,
+      villaId: 9,
+    });
     const insertCall = client.query.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO bitacora_registros')
     );
@@ -189,6 +200,7 @@ describe('bitacorasController.createRegistro', () => {
     ['Villa inexistente', { villa: null }, 404, 'VILLA_NOT_FOUND'],
     ['Villa inactiva', { villa: { estado: 'inactivo' } }, 409, 'VILLA_INACTIVE'],
     ['Villa de otra Manzana', { villa: { manzana_id: 99 } }, 409, 'INVALID_URBAN_CHAIN'],
+    ['Villa sin titular activo', { resident: null }, 409, 'VILLA_WITHOUT_ACTIVE_RESIDENT'],
   ])('rechaza %s con semántica pública estable', async (_label, overrides, status, code) => {
     const locationType = _label === 'GENERAL con contexto' ? 'GENERAL' : 'URBANIZACION';
     transactionForCreate({ locationType });
@@ -214,6 +226,9 @@ describe('bitacorasController.createRegistro', () => {
         }
       );
     }
+    if (Object.hasOwn(overrides, 'resident')) {
+      repository.findActivePrincipalResidentForVilla.mockResolvedValue(overrides.resident);
+    }
     const res = makeResponse();
 
     await controller.createRegistro(
@@ -224,6 +239,30 @@ describe('bitacorasController.createRegistro', () => {
     expect(res.status).toHaveBeenCalledWith(status);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code }));
   });
+
+  test.each([
+    ['sin Manzana ni Villa', {}],
+    ['solo con Manzana', { manzana_id: 8 }],
+    ['solo con Villa', { villa_id: 9 }],
+  ])(
+    'rechaza URBANIZACION %s porque Casa completa es obligatoria',
+    async (_label, urbanContext) => {
+      transactionForCreate({ locationType: 'URBANIZACION' });
+      const res = makeResponse();
+
+      await controller.createRegistro(
+        makeRequest({ body: { ...makeRequest().body, ...urbanContext } }),
+        res
+      );
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'COMPLETE_HOUSE_REQUIRED',
+        })
+      );
+    }
+  );
 
   test('convierte una defensa FK de D1 en 409 sin filtrar detalles SQL', async () => {
     const client = transactionForCreate({ locationType: 'URBANIZACION' });
@@ -239,7 +278,7 @@ describe('bitacorasController.createRegistro', () => {
     });
     const res = makeResponse();
     await controller.createRegistro(
-      makeRequest({ body: { ...makeRequest().body, manzana_id: 8 } }),
+      makeRequest({ body: { ...makeRequest().body, manzana_id: 8, villa_id: 9 } }),
       res
     );
     expect(res.status).toHaveBeenCalledWith(409);

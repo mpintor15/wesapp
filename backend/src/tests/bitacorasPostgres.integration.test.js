@@ -525,6 +525,33 @@ describe('bitacoras PostgreSQL API persistence', () => {
     });
   });
 
+  test('opciones de Villas para Bitácoras solo incluyen Casas activas con titular activo', async () => {
+    await db.transaction(async (client) => {
+      await client.query(`SET LOCAL search_path TO ${schemaIdent}`);
+      const options = await repository.findActiveVillasForBlock({
+        blockId: 1,
+        executor: client,
+      });
+
+      expect(options).toEqual([
+        expect.objectContaining({
+          id: 1,
+          identificador: 'A-1 Renombrada',
+          residente_principal_nombre: 'Residente A',
+          residente_principal_contacto: '0990000000',
+        }),
+      ]);
+      expect(options.map((option) => option.identificador)).not.toContain('A-X');
+
+      const optionsWithoutResident = await repository.findActiveVillasForBlock({
+        blockId: 2,
+        executor: client,
+      });
+
+      expect(optionsWithoutResident).toEqual([]);
+    });
+  });
+
   test('FOR KEY SHARE impide retirar la asignación durante la creación', async () => {
     const creator = await db.getClient();
     const assignmentEditor = await db.getClient();

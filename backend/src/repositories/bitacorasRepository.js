@@ -67,6 +67,19 @@ const findLockedVilla = async ({ client, villaId }) => {
   return result.rows[0] || null;
 };
 
+const findActivePrincipalResidentForVilla = async ({ client, villaId }) => {
+  const result = await client.query(
+    `SELECT id, villa_id, nombre, contacto
+     FROM residentes
+     WHERE villa_id = $1 AND es_principal = TRUE AND activo = TRUE
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1
+     FOR SHARE`,
+    [villaId]
+  );
+  return result.rows[0] || null;
+};
+
 const buildScopeCondition = ({
   hasGlobalScope,
   userId,
@@ -194,10 +207,20 @@ const findActiveBlocksForLocation = async ({ locationId, executor = db }) => {
 
 const findActiveVillasForBlock = async ({ blockId, executor = db }) => {
   const result = await executor.query(
-    `SELECT id, manzana_id, identificador
-     FROM villas
-     WHERE manzana_id = $1 AND estado = 'activo'
-     ORDER BY identificador ASC, id ASC`,
+    `SELECT
+       v.id,
+       v.manzana_id,
+       v.identificador,
+       r.id AS residente_principal_id,
+       r.nombre AS residente_principal_nombre,
+       r.contacto AS residente_principal_contacto
+     FROM villas v
+     INNER JOIN residentes r
+       ON r.villa_id = v.id
+      AND r.es_principal = TRUE
+      AND r.activo = TRUE
+     WHERE v.manzana_id = $1 AND v.estado = 'activo'
+     ORDER BY v.identificador ASC, v.id ASC`,
     [blockId]
   );
   return result.rows;
@@ -231,6 +254,7 @@ module.exports = {
   buildHistoryFilters,
   findActiveBlocksForLocation,
   findActiveVillasForBlock,
+  findActivePrincipalResidentForVilla,
   findVisibleBlock,
   findVisibleLocation,
   findLockedBlock,

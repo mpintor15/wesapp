@@ -140,7 +140,7 @@ describe('HistorialBitacoras', () => {
     view.unmount();
   });
 
-  test('muestra contexto urbano en tabla y cards omitiendo segmentos ausentes', async () => {
+  test('muestra Casa separada de Ubicación en tabla y cards', async () => {
     bitacorasService.getRegistros.mockResolvedValue(
       successResult({
         data: [
@@ -176,24 +176,27 @@ describe('HistorialBitacoras', () => {
 
     const tableRows = Array.from(view.container.querySelectorAll('tbody tr'));
     expect(tableRows).toHaveLength(3);
+    expect(tableRows[0].className).toContain('row-even');
+    expect(tableRows[1].className).toContain('row-odd');
     expect(tableRows[0].querySelector('td:nth-child(2)').textContent).toContain(
-      'Urbanización Norte·Manzana A·Villa 12'
+      'Urbanización Norte'
     );
-    expect(tableRows[1].querySelector('td:nth-child(2)').textContent).toContain(
-      'Urbanización Sur·Manzana B'
+    expect(tableRows[0].querySelector('td:nth-child(2)').textContent).not.toContain('Manzana A');
+    expect(tableRows[0].querySelector('td:nth-child(3)').textContent).toContain(
+      'Manzana A - Villa 12'
     );
-    expect(tableRows[1].querySelector('td:nth-child(2)').textContent).not.toContain('Villa');
+    expect(tableRows[1].querySelector('td:nth-child(2)').textContent).toContain('Urbanización Sur');
+    expect(tableRows[1].querySelector('td:nth-child(3)').textContent).toContain('Manzana B');
     expect(tableRows[2].querySelector('td:nth-child(2)').textContent).toContain('Garita principal');
-    expect(tableRows[2].querySelector('td:nth-child(2)').textContent).not.toContain('Manzana');
+    expect(tableRows[2].querySelector('td:nth-child(3)').textContent).toContain('—');
 
     const cardHeadings = Array.from(view.container.querySelectorAll('.record-card-header h3')).map(
       (heading) => heading.textContent
     );
-    expect(cardHeadings).toEqual([
-      'Urbanización Norte·Manzana A·Villa 12',
-      'Urbanización Sur·Manzana B',
-      'Garita principal',
-    ]);
+    expect(cardHeadings).toEqual(['Urbanización Norte', 'Urbanización Sur', 'Garita principal']);
+    const cardDetails = view.container.querySelectorAll('.record-card-details');
+    expect(cardDetails[0].textContent).toContain('CasaManzana A - Villa 12');
+    expect(cardDetails[2].textContent).toContain('Casa—');
     expect(view.container.querySelectorAll('.record-card')).toHaveLength(3);
     view.unmount();
   });
@@ -285,6 +288,18 @@ describe('HistorialBitacoras', () => {
     });
     expect(view.container.textContent).not.toContain('Registros por página');
     expect(view.field('#bitacoras-page-size')).toBeNull();
+    view.unmount();
+  });
+
+  test('paginación sigue patrón compartido aun con una sola página de resultados', async () => {
+    bitacorasService.getRegistros.mockResolvedValue(successResult({ totalPages: 1 }));
+    const view = renderHistory();
+    await flush();
+
+    expect(view.container.querySelector('.pagination')).not.toBeNull();
+    expect(view.container.querySelector('.pagination-info').textContent).toContain('Página 1 de 1');
+    expect(view.button('‹ Anterior').disabled).toBe(true);
+    expect(view.button('Siguiente ›').disabled).toBe(true);
     view.unmount();
   });
 

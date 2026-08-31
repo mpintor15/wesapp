@@ -20,6 +20,12 @@ const ubicaciones = [
   { id: 4, nombre: 'Norte', direccion: 'Av. Amazonas', cliente_nombre: 'Cliente A' },
   { id: 5, nombre: 'Sur', direccion: 'Av. Maldonado', cliente_nombre: 'Cliente B' },
   { id: 6, nombre: 'Valle', direccion: 'Cumbayá', cliente_nombre: 'Cliente A' },
+  {
+    id: 7,
+    nombre: 'Punto con nombre largo para validar ajuste de texto',
+    direccion: 'Dirección extensa con referencia interna y número de lote 12345',
+    cliente_nombre: 'Cliente A',
+  },
 ];
 
 const renderModal = (element) => {
@@ -95,6 +101,8 @@ const inputText = (input, value) =>
   });
 const click = (element) =>
   act(() => element.dispatchEvent(new window.MouseEvent('click', { bubbles: true })));
+const mouseDown = (element) =>
+  act(() => element.dispatchEvent(new window.MouseEvent('mousedown', { bubbles: true })));
 const submit = (container) =>
   act(() =>
     container
@@ -178,6 +186,26 @@ describe('UX de selectores de Usuarios', () => {
     view.unmount();
   });
 
+  test('selector de puntos usa filas compactas con checkbox seguido del texto', () => {
+    const view = renderModal(
+      <EditHarness canManageAssignments initialData={{ tipo_usuario: 'guardia' }} />
+    );
+    click(view.container.querySelector('.selection-trigger'));
+
+    const rows = view.container.querySelectorAll('.selection-option-row');
+    expect(rows.length).toBeGreaterThan(0);
+    rows.forEach((row) => {
+      expect(row.children).toHaveLength(2);
+      expect(row.children[0].tagName).toBe('INPUT');
+      expect(row.children[0].getAttribute('type')).toBe('checkbox');
+      expect(row.children[1].tagName).toBe('SPAN');
+      expect(row.children[1].textContent.trim()).not.toBe('');
+    });
+    expect(view.container.querySelector('.selection-multi-panel > input#e-puntos')).not.toBeNull();
+    expect(view.container.textContent).toContain('Punto con nombre largo');
+    view.unmount();
+  });
+
   test.each([[[]], [['4']], [['4', '5']]])('Guardia conserva selección 0/1/N: %s', (selected) => {
     const onSubmit = jest.fn();
     const view = renderModal(
@@ -207,6 +235,46 @@ describe('UX de selectores de Usuarios', () => {
     expect([...checks].filter((check) => check.checked)).toHaveLength(1);
     click(checks[1]);
     expect(view.container.querySelector('.selection-trigger').textContent).toContain('2 puntos');
+    view.unmount();
+  });
+
+  test('selector de puntos en edición cierra al hacer click afuera sin romper selección interna', () => {
+    const view = renderModal(
+      <EditHarness
+        canManageAssignments
+        initialData={{ tipo_usuario: 'guardia', ubicacion_ids: ['4'] }}
+      />
+    );
+    click(view.container.querySelector('.selection-trigger'));
+    expect(view.container.querySelector('.selection-multi-panel')).not.toBeNull();
+
+    const secondCheck = view.container.querySelectorAll('.selection-group input')[1];
+    mouseDown(secondCheck);
+    expect(view.container.querySelector('.selection-multi-panel')).not.toBeNull();
+    click(secondCheck);
+    expect(view.container.querySelector('.selection-trigger').textContent).toContain('2 puntos');
+
+    mouseDown(document.body);
+    expect(view.container.querySelector('.selection-multi-panel')).toBeNull();
+    expect(view.container.querySelector('.selection-trigger').textContent).toContain('2 puntos');
+    view.unmount();
+  });
+
+  test('selector de colaborador en edición cierra al hacer click afuera y conserva selección normal', () => {
+    const view = renderModal(
+      <EditHarness initialData={{ tipo_usuario: 'secretario', colaborador_id: '' }} />
+    );
+    const input = view.container.querySelector('#e-colaborador');
+
+    act(() => input.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true })));
+    expect(view.container.querySelector('[role="listbox"]')).not.toBeNull();
+    mouseDown(document.body);
+    expect(view.container.querySelector('[role="listbox"]')).toBeNull();
+
+    act(() => input.dispatchEvent(new window.FocusEvent('focusin', { bubbles: true })));
+    click(view.container.querySelector('[role="option"]'));
+    expect(input.value).toContain('Ana María Vera');
+    expect(view.container.querySelector('[role="listbox"]')).toBeNull();
     view.unmount();
   });
 

@@ -23,6 +23,7 @@ jest.mock('../utils/audit', () => ({
 
 jest.mock('../repositories/bitacorasRepository', () => ({
   findActiveBlocksForLocation: jest.fn(),
+  findActivePrincipalResidentForVilla: jest.fn(),
   findActiveVillasForBlock: jest.fn(),
   findHistory: jest.fn(),
   findLockedBlock: jest.fn(),
@@ -80,6 +81,12 @@ beforeEach(() => {
     estado: 'activo',
   });
   repository.findLockedVilla.mockResolvedValue({ id: 9, manzana_id: 8, estado: 'activo' });
+  repository.findActivePrincipalResidentForVilla.mockResolvedValue({
+    id: 15,
+    villa_id: 9,
+    nombre: 'Ana Titular',
+    contacto: '0991234567',
+  });
 });
 
 describe('bitacoras routes', () => {
@@ -168,7 +175,7 @@ describe('bitacoras routes', () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
-  test('POST acepta contexto urbano opcional y null explícito', async () => {
+  test('POST rechaza contexto urbano incompleto', async () => {
     const client = { query: jest.fn() };
     client.query
       .mockResolvedValueOnce({
@@ -179,22 +186,17 @@ describe('bitacoras routes', () => {
       .mockResolvedValueOnce({
         rowCount: 1,
         rows: [{ id: 1, nombre: 'Urbanización', tipo_punto: 'URBANIZACION' }],
-      })
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [{ id: 10, ubicacion_id: 1, manzana_id: 8, villa_id: null }],
       });
     db.transaction.mockImplementation(async (callback) => callback(client));
 
     const response = await authRequest('post', '/api/bitacoras/registros').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: null,
       ocurrido_at: '2026-08-20T10:00:00',
       detalle: 'Novedad',
     });
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('COMPLETE_HOUSE_REQUIRED');
   });
 
   test.each(['/api/bitacoras/ubicaciones/1/manzanas', '/api/bitacoras/manzanas/8/villas'])(
@@ -231,7 +233,15 @@ describe('bitacoras routes', () => {
     currentUser.tipo_usuario = 'supervisor';
     repository.findVisibleBlock.mockResolvedValue({ id: 18, ubicacion_id: 2, estado: 'activo' });
     repository.findLockedBlock.mockResolvedValue({ id: 18, ubicacion_id: 2, estado: 'activo' });
-    repository.findActiveVillasForBlock.mockResolvedValue([{ id: 19, identificador: 'B-1' }]);
+    repository.findActiveVillasForBlock.mockResolvedValue([
+      {
+        id: 19,
+        identificador: 'B-1',
+        residente_principal_id: 29,
+        residente_principal_nombre: 'Ana Titular',
+        residente_principal_contacto: '0991234567',
+      },
+    ]);
     const client = {
       query: jest.fn().mockResolvedValue({
         rowCount: 1,
@@ -241,7 +251,15 @@ describe('bitacoras routes', () => {
     db.transaction.mockImplementation(async (callback) => callback(client));
     const response = await authRequest('get', '/api/bitacoras/manzanas/18/villas');
     expect(response.status).toBe(200);
-    expect(response.body.data).toEqual([{ id: 19, identificador: 'B-1' }]);
+    expect(response.body.data).toEqual([
+      {
+        id: 19,
+        identificador: 'B-1',
+        residente_principal_id: 29,
+        residente_principal_nombre: 'Ana Titular',
+        residente_principal_contacto: '0991234567',
+      },
+    ]);
   });
 
   test('POST acepta únicamente el contrato permitido', async () => {

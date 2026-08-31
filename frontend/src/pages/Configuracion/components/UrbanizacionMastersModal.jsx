@@ -16,6 +16,8 @@ const UrbanizacionMastersModal = ({ ubicacion, onClose }) => {
   const [error, setError] = useState('');
   const [manzanaNombre, setManzanaNombre] = useState('');
   const [villaDrafts, setVillaDrafts] = useState({});
+  const [villaResidentDrafts, setVillaResidentDrafts] = useState({});
+  const [villaResidentContactErrors, setVillaResidentContactErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
@@ -91,15 +93,36 @@ const UrbanizacionMastersModal = ({ ubicacion, onClose }) => {
   const createVilla = async (event, manzanaId) => {
     event.preventDefault();
     const identificador = (villaDrafts[manzanaId] || '').trim();
-    if (!identificador) return;
+    const residentDraft = villaResidentDrafts[manzanaId] || { nombre: '', contacto: '' };
+    const residentName = residentDraft.nombre.trim();
+    const residentContact = residentDraft.contacto.trim();
+    if (!identificador || !residentName) return;
+    if (!RESIDENT_CONTACT_PATTERN.test(residentContact) || villaResidentContactErrors[manzanaId]) {
+      setVillaResidentContactErrors((current) => ({
+        ...current,
+        [manzanaId]: RESIDENT_CONTACT_ERROR,
+      }));
+      return;
+    }
     setSaving(true);
-    const result = await inventarioService.createVilla(manzanaId, { identificador });
+    const result = await inventarioService.createVilla(manzanaId, {
+      identificador,
+      residente_principal: {
+        nombre: residentName,
+        contacto: residentContact,
+      },
+    });
     setSaving(false);
     if (!result.success) {
       setError(result.message || 'No se pudo crear la Villa.');
       return;
     }
     setVillaDrafts((current) => ({ ...current, [manzanaId]: '' }));
+    setVillaResidentDrafts((current) => ({
+      ...current,
+      [manzanaId]: { nombre: '', contacto: '' },
+    }));
+    setVillaResidentContactErrors((current) => ({ ...current, [manzanaId]: '' }));
     await load();
   };
 
@@ -440,9 +463,10 @@ const UrbanizacionMastersModal = ({ ubicacion, onClose }) => {
                               onSubmit={(event) => createVilla(event, manzana.id)}
                             >
                               <label htmlFor={`villa-${manzana.id}`}>Nueva Villa</label>
-                              <div>
+                              <div className="urbanizacion-villa-create-grid">
                                 <input
                                   id={`villa-${manzana.id}`}
+                                  aria-label="Identificador de Villa"
                                   value={villaDrafts[manzana.id] || ''}
                                   onChange={(event) =>
                                     setVillaDrafts((current) => ({
@@ -453,13 +477,83 @@ const UrbanizacionMastersModal = ({ ubicacion, onClose }) => {
                                   maxLength={100}
                                   disabled={saving}
                                 />
+                                <input
+                                  id={`villa-residente-nombre-${manzana.id}`}
+                                  aria-label="Nombre del titular"
+                                  placeholder="Titular"
+                                  value={villaResidentDrafts[manzana.id]?.nombre || ''}
+                                  onChange={(event) =>
+                                    setVillaResidentDrafts((current) => ({
+                                      ...current,
+                                      [manzana.id]: {
+                                        ...(current[manzana.id] || { nombre: '', contacto: '' }),
+                                        nombre: event.target.value,
+                                      },
+                                    }))
+                                  }
+                                  maxLength={150}
+                                  disabled={saving}
+                                />
+                                <input
+                                  id={`villa-residente-contacto-${manzana.id}`}
+                                  aria-label="Contacto del titular"
+                                  placeholder="09XXXXXXXX"
+                                  type="tel"
+                                  inputMode="numeric"
+                                  pattern="09[0-9]{8}"
+                                  value={villaResidentDrafts[manzana.id]?.contacto || ''}
+                                  onChange={(event) => {
+                                    const rawValue = event.target.value;
+                                    const sanitizedValue = rawValue.replace(/\D/g, '').slice(0, 10);
+                                    setVillaResidentDrafts((current) => ({
+                                      ...current,
+                                      [manzana.id]: {
+                                        ...(current[manzana.id] || { nombre: '', contacto: '' }),
+                                        contacto: sanitizedValue,
+                                      },
+                                    }));
+                                    setVillaResidentContactErrors((current) => ({
+                                      ...current,
+                                      [manzana.id]:
+                                        rawValue !== sanitizedValue ||
+                                        (sanitizedValue.length > 0 &&
+                                          !RESIDENT_CONTACT_PATTERN.test(sanitizedValue))
+                                          ? RESIDENT_CONTACT_ERROR
+                                          : '',
+                                    }));
+                                  }}
+                                  maxLength={10}
+                                  aria-invalid={Boolean(villaResidentContactErrors[manzana.id])}
+                                  aria-describedby={
+                                    villaResidentContactErrors[manzana.id]
+                                      ? `villa-residente-contacto-error-${manzana.id}`
+                                      : undefined
+                                  }
+                                  disabled={saving}
+                                />
                                 <button
                                   className="btn btn-primary"
-                                  disabled={saving || !(villaDrafts[manzana.id] || '').trim()}
+                                  disabled={
+                                    saving ||
+                                    !(villaDrafts[manzana.id] || '').trim() ||
+                                    !(villaResidentDrafts[manzana.id]?.nombre || '').trim() ||
+                                    (villaResidentDrafts[manzana.id]?.contacto || '').length !==
+                                      10 ||
+                                    Boolean(villaResidentContactErrors[manzana.id])
+                                  }
                                 >
                                   Crear Villa
                                 </button>
                               </div>
+                              {villaResidentContactErrors[manzana.id] ? (
+                                <span
+                                  id={`villa-residente-contacto-error-${manzana.id}`}
+                                  className="field-error"
+                                  role="alert"
+                                >
+                                  {villaResidentContactErrors[manzana.id]}
+                                </span>
+                              ) : null}
                             </form>
                           )}
 

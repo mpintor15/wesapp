@@ -342,6 +342,12 @@ const createVilla = async (req, res) => {
   try {
     const manzanaId = parseId(req.params.manzanaId, 'La Manzana es inválida');
     const identificador = validateText(req.body?.identificador, 'El identificador de la Villa');
+    const residentePrincipal = req.body?.residente_principal || {};
+    const residenteNombre = validateResidentText(
+      residentePrincipal.nombre,
+      'El nombre del titular'
+    );
+    const residenteContacto = validateResidentContact(residentePrincipal.contacto);
     const created = await db.transaction(async (client) => {
       const manzana = await getManzana(client, manzanaId, 'FOR UPDATE OF m');
       if (manzana.estado !== 'activo') {
@@ -354,7 +360,14 @@ const createVilla = async (req, res) => {
          RETURNING id, manzana_id, identificador, estado, created_at, updated_at`,
         [manzanaId, identificador, req.user.id]
       );
-      return result.rows[0];
+      const villa = result.rows[0];
+      const resident = await client.query(
+        `INSERT INTO residentes (villa_id, nombre, contacto, es_principal, activo, created_by)
+         VALUES ($1, $2, $3, TRUE, TRUE, $4)
+         RETURNING id, villa_id, nombre, contacto, es_principal, activo, created_at, updated_at`,
+        [villa.id, residenteNombre, residenteContacto, req.user.id]
+      );
+      return { ...villa, residente_principal: resident.rows[0] };
     });
     return res.status(201).json({ success: true, data: created });
   } catch (error) {

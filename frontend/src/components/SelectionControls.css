@@ -1,10 +1,12 @@
 .selection-control {
   position: relative;
   min-width: 0;
+  max-width: 100%;
 }
 
 .selection-control > input,
 .selection-trigger {
+  box-sizing: border-box;
   width: 100%;
 }
 
@@ -25,7 +27,10 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
+  box-sizing: border-box;
+  max-width: 100%;
   max-height: 260px;
+  overflow-x: hidden;
   overflow-y: auto;
   margin: 0;
   padding: 6px;
@@ -40,6 +45,7 @@
   padding: 9px 10px;
   border-radius: 6px;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .selection-popover[role='listbox'] li.is-active,
@@ -57,9 +63,14 @@
   position: sticky;
   top: 0;
   z-index: 1;
+  box-sizing: border-box;
   width: 100%;
   margin-bottom: 6px;
   background: var(--color-surface);
+}
+
+.selection-multi-panel .selection-group {
+  min-width: 0;
 }
 
 .selection-group h4 {
@@ -69,15 +80,38 @@
   text-transform: uppercase;
 }
 
-.selection-group label {
-  display: flex;
+.selection-multi-panel .selection-option-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
   align-items: flex-start;
   gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   padding: 8px 6px;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0;
   line-height: 1.35;
+  text-transform: none;
+  cursor: pointer;
 }
 
-.selection-group input {
-  flex: 0 0 auto;
+.selection-multi-panel .selection-option-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.selection-multi-panel .selection-option-row input[type='checkbox'] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  box-sizing: border-box;
   margin-top: 2px;
+  padding: 0;
+  accent-color: var(--color-primary);
 }

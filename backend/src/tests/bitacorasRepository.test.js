@@ -51,6 +51,7 @@ describe('bitacorasRepository', () => {
   test.each([
     ['Manzana', 'findLockedBlock', 'FROM manzanas', 8],
     ['Villa', 'findLockedVilla', 'FROM villas', 9],
+    ['Residente principal', 'findActivePrincipalResidentForVilla', 'FROM residentes', 9],
   ])('bloquea %s activa durante validación transaccional', async (_label, method, table, id) => {
     const client = { query: jest.fn().mockResolvedValue({ rows: [{ id }] }) };
     await repository[method]({
@@ -70,7 +71,12 @@ describe('bitacorasRepository', () => {
     expect(db.query.mock.calls[0][0]).toContain(
       String.raw`ubicacion_id = $1 AND estado = 'activo'`
     );
-    expect(db.query.mock.calls[1][0]).toContain(String.raw`manzana_id = $1 AND estado = 'activo'`);
+    expect(db.query.mock.calls[1][0]).toContain(
+      String.raw`v.manzana_id = $1 AND v.estado = 'activo'`
+    );
+    expect(db.query.mock.calls[1][0]).toContain('INNER JOIN residentes r');
+    expect(db.query.mock.calls[1][0]).toContain('r.es_principal = TRUE');
+    expect(db.query.mock.calls[1][0]).toContain('r.activo = TRUE');
   });
 
   test.each([

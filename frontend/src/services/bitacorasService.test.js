@@ -66,7 +66,17 @@ describe('bitacorasService', () => {
     api.get
       .mockResolvedValueOnce({ data: { success: true, data: [{ id: 3, nombre: 'A' }] } })
       .mockResolvedValueOnce({
-        data: { success: true, data: [{ id: 4, identificador: 'A-1' }] },
+        data: {
+          success: true,
+          data: [
+            {
+              id: 4,
+              identificador: 'A-1',
+              residente_principal_nombre: 'Ana Titular',
+              residente_principal_contacto: '0991234567',
+            },
+          ],
+        },
       });
 
     await expect(bitacorasService.getManzanas(1)).resolves.toEqual({
@@ -75,7 +85,14 @@ describe('bitacorasService', () => {
     });
     await expect(bitacorasService.getVillas(3)).resolves.toEqual({
       success: true,
-      data: [{ id: 4, identificador: 'A-1' }],
+      data: [
+        {
+          id: 4,
+          identificador: 'A-1',
+          residente_principal_nombre: 'Ana Titular',
+          residente_principal_contacto: '0991234567',
+        },
+      ],
     });
 
     expect(api.get).toHaveBeenNthCalledWith(1, '/bitacoras/ubicaciones/1/manzanas');

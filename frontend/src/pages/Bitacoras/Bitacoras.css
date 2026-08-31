@@ -1,8 +1,10 @@
 .bitacoras-container {
+  box-sizing: border-box;
   min-height: 100vh;
 }
 
 .bitacoras-main {
+  box-sizing: border-box;
   min-width: 0;
   padding: 20px 2px;
 }
@@ -158,25 +160,40 @@
 }
 
 .bitacoras-table {
-  table-layout: fixed;
+  width: 100% !important;
+  min-width: 920px !important;
+  table-layout: fixed !important;
 }
 
 .bitacoras-table th:nth-child(1),
 .bitacoras-table td:nth-child(1) {
-  width: 150px;
+  width: 14% !important;
 }
 
 .bitacoras-table th:nth-child(2),
-.bitacoras-table td:nth-child(2),
+.bitacoras-table td:nth-child(2) {
+  width: 18% !important;
+}
+
 .bitacoras-table th:nth-child(3),
 .bitacoras-table td:nth-child(3) {
-  width: 190px;
+  width: 13% !important;
+}
+
+.bitacoras-table th:nth-child(4),
+.bitacoras-table td:nth-child(4) {
+  width: 17% !important;
 }
 
 .bitacoras-table th:nth-child(5),
 .bitacoras-table td:nth-child(5) {
-  width: 110px;
-  text-align: center;
+  width: 27% !important;
+}
+
+.bitacoras-table th:nth-child(6),
+.bitacoras-table td:nth-child(6) {
+  width: 11% !important;
+  text-align: center !important;
 }
 
 .bitacoras-table td {
@@ -197,21 +214,7 @@
   color: var(--color-text);
 }
 
-.bitacoras-location-context {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 3px 6px;
-  min-width: 0;
-}
-
-.bitacoras-location-separator {
-  color: var(--color-text-muted);
-  font-weight: 700;
-}
-
 .bitacoras-detail-cell {
-  min-width: 260px;
   white-space: normal;
   overflow-wrap: anywhere;
   line-height: 1.45;
@@ -256,6 +259,12 @@
   font-size: 0.84rem;
 }
 
+.bitacoras-resident-summary {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 @media (max-width: 768px) {
   .bitacoras-main {
     padding-top: 14px;
@@ -290,5 +299,26 @@
 @media (min-width: 769px) and (max-width: 1100px) {
   .bitacoras-filter-controls {
     flex-wrap: wrap;
+  }
+}
+
+@media (min-width: 1024px) {
+  .bitacoras-container.tabular-page {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .bitacoras-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .bitacoras-history,
+  .bitacoras-table-shell {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 }

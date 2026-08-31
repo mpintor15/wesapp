@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useId, useMemo, useState } from 'react';
+import { forwardRef, useEffect, useId, useMemo, useRef, useState } from 'react';
 import './SelectionControls.css';
 
 const normalize = (value) =>
@@ -29,6 +29,7 @@ const SearchableSelect = forwardRef(
     const generatedId = useId();
     const id = inputId || generatedId;
     const listboxId = `${id}-listbox`;
+    const rootRef = useRef(null);
     const selected = options.find((option) => String(option.id) === String(value));
     const [query, setQuery] = useState(selected ? getOptionLabel(selected) : '');
     const [open, setOpen] = useState(false);
@@ -50,6 +51,19 @@ const SearchableSelect = forwardRef(
       setOpen(false);
     };
 
+    useEffect(() => {
+      if (!open) return undefined;
+      const handlePointerDown = (event) => {
+        if (!rootRef.current?.contains(event.target)) setOpen(false);
+      };
+      document.addEventListener('mousedown', handlePointerDown);
+      document.addEventListener('touchstart', handlePointerDown);
+      return () => {
+        document.removeEventListener('mousedown', handlePointerDown);
+        document.removeEventListener('touchstart', handlePointerDown);
+      };
+    }, [open]);
+
     const handleKeyDown = (event) => {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
@@ -67,7 +81,7 @@ const SearchableSelect = forwardRef(
     };
 
     return (
-      <div className="selection-control">
+      <div className="selection-control" ref={rootRef}>
         <input
           ref={ref}
           id={id}

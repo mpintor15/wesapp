@@ -107,6 +107,17 @@ const bitacoraRegistroCreateSchema = z
   .strict()
   .superRefine((data, ctx) => {
     if (
+      data.manzana_id !== null &&
+      data.manzana_id !== undefined &&
+      (data.villa_id === null || data.villa_id === undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['villa_id'],
+        message: 'Villa ID es requerida con Manzana ID',
+      });
+    }
+    if (
       data.villa_id !== null &&
       data.villa_id !== undefined &&
       (data.manzana_id === null || data.manzana_id === undefined)

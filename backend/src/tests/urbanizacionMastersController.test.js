@@ -79,7 +79,7 @@ describe('urbanizacion masters controller', () => {
     expect(res.body.code).toBe('DUPLICATE_MASTER');
   });
 
-  test('crea Villa válida y rechaza Manzana inactiva', async () => {
+  test('crea Villa válida con titular y rechaza Manzana inactiva', async () => {
     const activeClient = { query: jest.fn() };
     activeClient.query
       .mockResolvedValueOnce({
@@ -90,14 +90,38 @@ describe('urbanizacion masters controller', () => {
       .mockResolvedValueOnce({
         rows: [{ id: 9, manzana_id: 2, identificador: 'Villa 1' }],
         rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 20,
+            villa_id: 9,
+            nombre: 'Ana Titular',
+            contacto: '0991234567',
+            es_principal: true,
+            activo: true,
+          },
+        ],
+        rowCount: 1,
       });
     db.transaction.mockImplementationOnce((callback) => callback(activeClient));
     const created = response();
     await controller.createVilla(
-      request({ manzanaId: '2' }, { identificador: ' Villa   1 ' }),
+      request(
+        { manzanaId: '2' },
+        {
+          identificador: ' Villa   1 ',
+          residente_principal: { nombre: ' Ana   Titular ', contacto: '0991234567' },
+        }
+      ),
       created
     );
     expect(created.statusCode).toBe(201);
+    expect(activeClient.query.mock.calls[2][1]).toEqual([2, 'Villa 1', 50]);
+    expect(activeClient.query.mock.calls[3][1]).toEqual([9, 'Ana Titular', '0991234567', 50]);
+    expect(created.body.data.residente_principal).toEqual(
+      expect.objectContaining({ nombre: 'Ana Titular' })
+    );
 
     const inactiveClient = {
       query: jest.fn().mockResolvedValueOnce({
@@ -107,9 +131,30 @@ describe('urbanizacion masters controller', () => {
     };
     db.transaction.mockImplementationOnce((callback) => callback(inactiveClient));
     const rejected = response();
-    await controller.createVilla(request({ manzanaId: '2' }, { identificador: '2' }), rejected);
+    await controller.createVilla(
+      request(
+        { manzanaId: '2' },
+        { identificador: '2', residente_principal: { nombre: 'Ana', contacto: '0991234567' } }
+      ),
+      rejected
+    );
     expect(rejected.statusCode).toBe(409);
     expect(rejected.body.code).toBe('BLOCK_INACTIVE');
+  });
+
+  test('crear Villa exige titular completo', async () => {
+    const res = response();
+    await controller.createVilla(
+      request(
+        { manzanaId: '2' },
+        { identificador: 'Villa 1', residente_principal: { nombre: '' } }
+      ),
+      res
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.code).toBe('INVALID_RESIDENT');
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   test('duplicado normalizado de Villa devuelve conflicto controlado', async () => {
@@ -123,7 +168,13 @@ describe('urbanizacion masters controller', () => {
       .mockRejectedValueOnce({ code: '23505' });
     db.transaction.mockImplementation((callback) => callback(client));
     const res = response();
-    await controller.createVilla(request({ manzanaId: '2' }, { identificador: 'A' }), res);
+    await controller.createVilla(
+      request(
+        { manzanaId: '2' },
+        { identificador: 'A', residente_principal: { nombre: 'Ana', contacto: '0991234567' } }
+      ),
+      res
+    );
     expect(res.statusCode).toBe(409);
     expect(res.body.code).toBe('DUPLICATE_MASTER');
   });

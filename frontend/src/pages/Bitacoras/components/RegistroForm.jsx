@@ -90,6 +90,10 @@ const RegistroForm = ({
     [ubicacionId, ubicaciones]
   );
   const isUrbanization = selectedLocation?.tipo_punto === URBANIZATION_TYPE;
+  const selectedVilla = useMemo(
+    () => villas.find((villa) => String(villa.id) === String(villaId)) || null,
+    [villaId, villas]
+  );
   const normalizedTimestamp = normalizeLocalDateTimeForPayload(ocurridoAt);
   const normalizedDetail = detalle.trim();
   const canSubmit =
@@ -98,6 +102,7 @@ const RegistroForm = ({
     Number(ubicacionId) > 0 &&
     Boolean(normalizedTimestamp) &&
     Boolean(normalizedDetail) &&
+    (!isUrbanization || (Number(manzanaId) > 0 && Number(villaId) > 0)) &&
     !isSubmitting;
 
   const groupedLocations = useMemo(() => {
@@ -275,12 +280,17 @@ const RegistroForm = ({
     const nextErrors = {
       ...EMPTY_ERRORS,
       ubicacion_id: Number(ubicacionId) > 0 ? '' : 'Selecciona una Ubicación.',
+      manzana_id:
+        isUrbanization && Number(manzanaId) <= 0 ? 'Selecciona la Manzana de la Casa.' : '',
+      villa_id: isUrbanization && Number(villaId) <= 0 ? 'Selecciona la Villa de la Casa.' : '',
       ocurrido_at: normalizedTimestamp ? '' : 'Ingresa una fecha y hora válidas.',
       detalle: normalizedDetail ? '' : 'Ingresa el detalle de la novedad.',
     };
     setErrors(nextErrors);
 
     if (nextErrors.ubicacion_id) ubicacionRef.current?.focus();
+    else if (nextErrors.manzana_id) manzanaRef.current?.focus();
+    else if (nextErrors.villa_id) villaRef.current?.focus();
     else if (nextErrors.ocurrido_at) ocurridoAtRef.current?.focus();
     else if (nextErrors.detalle) detalleRef.current?.focus();
     if (Object.values(nextErrors).some(Boolean)) return;
@@ -293,9 +303,9 @@ const RegistroForm = ({
         ocurrido_at: normalizedTimestamp,
         detalle: normalizedDetail,
       };
-      if (isUrbanization && Number(manzanaId) > 0) {
+      if (isUrbanization) {
         payload.manzana_id = Number(manzanaId);
-        if (Number(villaId) > 0) payload.villa_id = Number(villaId);
+        payload.villa_id = Number(villaId);
       }
       const result = await bitacorasService.createRegistro(payload);
 
@@ -422,7 +432,9 @@ const RegistroForm = ({
 
               {isUrbanization ? (
                 <div className="form-group">
-                  <label htmlFor="bitacora-manzana">Manzana</label>
+                  <label htmlFor="bitacora-manzana">
+                    Manzana <span className="required">*</span>
+                  </label>
                   <SearchableSelect
                     ref={manzanaRef}
                     inputId="bitacora-manzana"
@@ -433,7 +445,7 @@ const RegistroForm = ({
                     disabled={isSubmitting || manzanasLoading}
                     loading={manzanasLoading}
                     loadingMessage="Cargando Manzanas..."
-                    placeholder="Sin Manzana"
+                    placeholder="Selecciona una Manzana"
                     emptyMessage="No hay Manzanas activas disponibles."
                     aria-invalid={Boolean(errors.manzana_id)}
                     aria-describedby={
@@ -479,7 +491,9 @@ const RegistroForm = ({
 
               {isUrbanization && manzanaId ? (
                 <div className="form-group">
-                  <label htmlFor="bitacora-villa">Villa</label>
+                  <label htmlFor="bitacora-villa">
+                    Villa <span className="required">*</span>
+                  </label>
                   <SearchableSelect
                     ref={villaRef}
                     inputId="bitacora-villa"
@@ -490,8 +504,8 @@ const RegistroForm = ({
                     disabled={isSubmitting || villasLoading}
                     loading={villasLoading}
                     loadingMessage="Cargando Villas..."
-                    placeholder="Sin Villa"
-                    emptyMessage="No hay Villas activas disponibles."
+                    placeholder="Selecciona una Villa"
+                    emptyMessage="No hay Villas con titular activo disponibles."
                     aria-invalid={Boolean(errors.villa_id)}
                     aria-describedby={
                       [
@@ -523,7 +537,17 @@ const RegistroForm = ({
                       </button>
                     </span>
                   ) : villas.length === 0 ? (
-                    <span className="bitacoras-field-hint">No hay Villas activas disponibles.</span>
+                    <span className="bitacoras-field-hint">
+                      No hay Villas con titular activo disponibles.
+                    </span>
+                  ) : null}
+                  {selectedVilla ? (
+                    <span className="bitacoras-resident-summary">
+                      Titular: <strong>{selectedVilla.residente_principal_nombre}</strong>
+                      {selectedVilla.residente_principal_contacto
+                        ? ` · ${selectedVilla.residente_principal_contacto}`
+                        : ''}
+                    </span>
                   ) : null}
                 </div>
               ) : null}
