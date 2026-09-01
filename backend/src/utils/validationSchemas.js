@@ -130,6 +130,138 @@ const bitacoraRegistroCreateSchema = z
     }
   });
 
+const visitFormTipoNameSchema = requiredTrimmedString(60, 'Nombre del tipo de visita');
+
+const visitFormFieldAplicaASchema = z.union([
+  z.literal('TODOS'),
+  z.array(visitFormTipoNameSchema).min(1, 'Selecciona al menos un tipo de visita'),
+]);
+
+const visitFormFieldSchema = z
+  .object({
+    field_key: z
+      .string({ required_error: 'field_key es requerido' })
+      .trim()
+      .min(1, 'field_key no puede estar vacío')
+      .max(80, 'field_key no puede exceder 80 caracteres')
+      .regex(/^[a-zA-Z][a-zA-Z0-9_]*$/, 'field_key debe ser alfanumérico'),
+    label: z
+      .string({ required_error: 'label es requerido' })
+      .trim()
+      .min(1, 'label no puede estar vacío')
+      .max(120, 'label no puede exceder 120 caracteres'),
+    type: z.enum(['text', 'textarea', 'number', 'select', 'checkbox', 'cedula', 'placa']),
+    aplica_a: visitFormFieldAplicaASchema.optional().default('TODOS'),
+    required: z.boolean().optional().default(false),
+    options: z.array(z.string().trim().min(1).max(120)).optional().default([]),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.type === 'select' && data.options.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'options es requerido para campos select',
+      });
+    }
+    if (data.type !== 'select' && data.options.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['options'],
+        message: 'options solo aplica a campos select',
+      });
+    }
+  });
+
+const bitacoraVisitFormPublishSchema = z
+  .object({
+    titulo: z.string().trim().min(1).max(150).optional(),
+    mostrar_fecha_hora: z.boolean().optional().default(true),
+    tipos_visita: z
+      .array(visitFormTipoNameSchema)
+      .min(1, 'Se requiere al menos un tipo de visita')
+      .max(20, 'No se pueden configurar más de 20 tipos de visita'),
+    fields: z.array(visitFormFieldSchema).max(30).default([]),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    const keys = new Set();
+    data.fields.forEach((field, index) => {
+      const key = field.field_key.toLowerCase();
+      if (keys.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['fields', index, 'field_key'],
+          message: 'field_key duplicado',
+        });
+      }
+      keys.add(key);
+    });
+
+    const tipoNames = new Set();
+    const normalizedTipos = new Set();
+    data.tipos_visita.forEach((tipo, index) => {
+      const normalized = tipo.toLowerCase();
+      if (normalizedTipos.has(normalized)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['tipos_visita', index],
+          message: 'Tipo de visita duplicado',
+        });
+      }
+      normalizedTipos.add(normalized);
+      tipoNames.add(tipo);
+    });
+
+    data.fields.forEach((field, index) => {
+      if (field.aplica_a === 'TODOS') {
+        return;
+      }
+      field.aplica_a.forEach((tipo, tipoIndex) => {
+        if (!tipoNames.has(tipo)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['fields', index, 'aplica_a', tipoIndex],
+            message: `El tipo de visita "${tipo}" no está configurado en tipos_visita`,
+          });
+        }
+      });
+    });
+  });
+
+const visitResponsesSchema = z.record(z.string(), z.unknown()).optional().default({});
+
+const bitacoraVisitCreateSchema = z
+  .object({
+    ubicacion_id: positiveInt('Ubicación ID'),
+    manzana_id: positiveInt('Manzana ID'),
+    villa_id: positiveInt('Villa ID'),
+    visitante_nombre: requiredTrimmedString(150, 'Nombre del visitante'),
+    visitante_documento: z
+      .string({ required_error: 'Cédula es requerida' })
+      .regex(/^\d{10}$/, 'Cédula debe tener exactamente 10 dígitos'),
+    visitante_telefono: requiredTrimmedString(80, 'Teléfono del visitante'),
+    tipo_visita_id: positiveInt('Tipo de visita'),
+    placa: z
+      .string()
+      .trim()
+      .transform((value) => value.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+      .pipe(z.string().max(10, 'Placa no puede exceder 10 caracteres'))
+      .optional(),
+    respuestas: visitResponsesSchema,
+  })
+  .strict();
+
+const bitacoraVisitCloseSchema = z.object({}).strict();
+
+const bitacoraVisitFormArchiveSchema = z.object({}).strict();
+
+const bitacoraVisitCancelSchema = z
+  .object({
+    motivo: requiredTrimmedString(200, 'Motivo'),
+  })
+  .strict();
+
 const changePasswordSchema = z
   .object({
     nueva_password: z
@@ -328,6 +460,11 @@ module.exports = {
 
   // Bitácoras
   bitacoraRegistroCreateSchema,
+  bitacoraVisitCancelSchema,
+  bitacoraVisitCloseSchema,
+  bitacoraVisitCreateSchema,
+  bitacoraVisitFormPublishSchema,
+  bitacoraVisitFormArchiveSchema,
 
   // Usuarios
   usuarioCreateSchema,

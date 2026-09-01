@@ -60,6 +60,24 @@ const buildSchema = async (pool) => {
   await pool.query(schemaSql);
 };
 
+// database/schema.sql is a maintained snapshot that currently reflects migrations up to #28.
+// Migrations #29-32 (Visitas + Formularios de visita + motivo_anulacion + tipos de visita
+// configurables) are still pending on this branch and haven't been folded into the snapshot
+// yet, so apply them explicitly here.
+const PENDING_MIGRATIONS = [
+  '029_bitacora_visitas.sql',
+  '030_bitacora_visit_form_applicability.sql',
+  '031_bitacora_visita_anulacion.sql',
+  '032_bitacora_visit_form_tipos.sql',
+];
+
+const applyPendingMigrations = async (pool) => {
+  for (const fileName of PENDING_MIGRATIONS) {
+    const sql = await fs.readFile(path.join(ROOT_DIR, 'database/migrations', fileName), 'utf8');
+    await pool.query(sql);
+  }
+};
+
 const clearDevelopmentSeed = async (pool) => {
   await pool.query(`
     TRUNCATE
@@ -87,7 +105,9 @@ const seedE2eFixtures = async (pool) => {
     INSERT INTO colaboradores (nombres_completos, cedula, fecha_nacimiento, cargo, estado)
     VALUES
       ('Gerente E2E', 'E2E-COL-001', '1990-01-01', 'Gerente', 'activo'),
-      ('Contador E2E', 'E2E-COL-002', '1990-01-01', 'Contador', 'activo')
+      ('Contador E2E', 'E2E-COL-002', '1990-01-01', 'Contador', 'activo'),
+      ('Guardia E2E', 'E2E-COL-003', '1990-01-01', 'Guardia', 'activo'),
+      ('Supervisor E2E', 'E2E-COL-004', '1990-01-01', 'Supervisor', 'activo')
     RETURNING id
   `);
 
@@ -108,6 +128,72 @@ const seedE2eFixtures = async (pool) => {
       VALUES ($1, $2, 'Contador', 'E2E', 'contador', $3, FALSE, TRUE)
     `,
     ['e2e_contador', passwordHash, colaboradores.rows[1].id]
+  );
+
+  const guardia = await pool.query(
+    `
+      INSERT INTO usuarios
+        (usuario, password_hash, nombre, apellido, tipo_usuario, colaborador_id, primer_login, activo)
+      VALUES ($1, $2, 'Guardia', 'E2E', 'guardia', $3, FALSE, TRUE)
+      RETURNING id
+    `,
+    ['e2e_guardia', passwordHash, colaboradores.rows[2].id]
+  );
+
+  const supervisor = await pool.query(
+    `
+      INSERT INTO usuarios
+        (usuario, password_hash, nombre, apellido, tipo_usuario, colaborador_id, primer_login, activo)
+      VALUES ($1, $2, 'Supervisor', 'E2E', 'supervisor', $3, FALSE, TRUE)
+      RETURNING id
+    `,
+    ['e2e_supervisor', passwordHash, colaboradores.rows[3].id]
+  );
+
+  // Urbanización fixture for the Bitácoras/Visitas/Formularios E2E smoke suite. Kept on its own
+  // client-less location (cliente_id NULL) so it never overlaps with the Cuentas/Inventario
+  // fixtures above.
+  const ubicacionUrbanizacion = await pool.query(
+    `
+      INSERT INTO ubicaciones (nombre, cliente_id, tipo_punto)
+      VALUES ($1, NULL, 'URBANIZACION')
+      RETURNING id
+    `,
+    ['Urbanización E2E Bitácoras']
+  );
+
+  await pool.query(
+    `
+      INSERT INTO usuario_ubicaciones (usuario_id, ubicacion_id)
+      VALUES ($1, $3), ($2, $3)
+    `,
+    [guardia.rows[0].id, supervisor.rows[0].id, ubicacionUrbanizacion.rows[0].id]
+  );
+
+  const manzanaUrbanizacion = await pool.query(
+    `
+      INSERT INTO manzanas (ubicacion_id, nombre, estado)
+      VALUES ($1, 'Manzana E2E', 'activo')
+      RETURNING id
+    `,
+    [ubicacionUrbanizacion.rows[0].id]
+  );
+
+  const villaUrbanizacion = await pool.query(
+    `
+      INSERT INTO villas (manzana_id, identificador, estado)
+      VALUES ($1, 'V1 E2E', 'activo')
+      RETURNING id
+    `,
+    [manzanaUrbanizacion.rows[0].id]
+  );
+
+  await pool.query(
+    `
+      INSERT INTO residentes (villa_id, nombre, contacto, es_principal, activo)
+      VALUES ($1, 'Residente E2E Principal', '0991234567', TRUE, TRUE)
+    `,
+    [villaUrbanizacion.rows[0].id]
   );
 
   const cliente = await pool.query(
@@ -245,6 +331,7 @@ const main = async () => {
   const e2ePool = createPool(E2E_DB_NAME);
   try {
     await buildSchema(e2ePool);
+    await applyPendingMigrations(e2ePool);
     await clearDevelopmentSeed(e2ePool);
     await seedE2eFixtures(e2ePool);
   } finally {
@@ -252,7 +339,7 @@ const main = async () => {
   }
 
   console.log(`E2E database prepared: ${E2E_DB_NAME}`);
-  console.log('E2E fixture users: e2e_gerente, e2e_contador');
+  console.log('E2E fixture users: e2e_gerente, e2e_contador, e2e_guardia, e2e_supervisor');
 };
 
 main().catch((error) => {

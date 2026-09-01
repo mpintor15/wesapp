@@ -7,15 +7,31 @@ const { isValidDateString } = require('../utils/inputValidation');
 const {
   findActiveBlocksForLocation,
   findActivePrincipalResidentForVilla,
+  findActiveVisitFormForLocation,
+  findVisitForms,
+  findVisitFormCreators,
   findActiveVillasForBlock,
   findHistory,
   findLockedBlock,
+  findLockedVisit,
   findLockedUserLocationAssignment,
   findLockedVilla,
+  findVisits,
+  findVisitCreators,
   findVisibleBlock,
   findVisibleLocation,
   findVisibleLocations,
+  insertBitacoraRegistro,
+  insertVisitResponses,
+  publishVisitFormForLocation,
+  acquireVisitFormPublishLock,
+  findLockedVisitFormVersion,
+  archiveVisitFormVersion,
+  createVisit,
+  closeVisit,
+  cancelVisit,
 } = require('../repositories/bitacorasRepository');
+const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 
 const BITACORA_STATES = new Set(['REGISTRADA', 'ANULADA']);
 const URBAN_CONTEXT_CONSTRAINTS = new Set([
@@ -32,6 +48,26 @@ const HISTORY_QUERY_FIELDS = new Set([
   'estado',
   'autor',
 ]);
+const VISIT_QUERY_FIELDS = new Set([
+  'page',
+  'pageSize',
+  'estado',
+  'creator',
+  'fecha_desde',
+  'fecha_hasta',
+  'search',
+]);
+const VISIT_STATES = new Set(['ABIERTA', 'CERRADA', 'ANULADA']);
+const VISIT_FORM_STATES = new Set(['ACTIVE', 'ARCHIVED']);
+const VISIT_FORM_QUERY_FIELDS = new Set([
+  'page',
+  'pageSize',
+  'nombre',
+  'ubicacion_id',
+  'creator',
+  'estado',
+]);
+const EXPORT_PAGE = { page: 1, pageSize: 100000, offset: 0 };
 
 const hasGlobalLocationScope = (tipoUsuario) =>
   hasPermission(tipoUsuario, PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS);
@@ -55,6 +91,37 @@ const getCurrentUserScope = async (userId, executor = db) => {
   return {
     userId: result.rows[0].id,
     hasGlobalScope: hasGlobalLocationScope(result.rows[0].tipo_usuario),
+  };
+};
+
+const getCurrentActor = async (userId, client) => {
+  const userResult = await client.query(
+    `SELECT id, usuario, tipo_usuario, colaborador_id, activo
+     FROM usuarios
+     WHERE id = $1
+     FOR SHARE`,
+    [userId]
+  );
+  if (userResult.rowCount === 0 || !userResult.rows[0].activo) {
+    throw createHttpError(403, 'El Usuario autenticado no está disponible');
+  }
+  const actor = userResult.rows[0];
+  if (!actor.colaborador_id) {
+    throw createHttpError(409, 'El Usuario autenticado no tiene un Colaborador asociado');
+  }
+  const collaboratorResult = await client.query(
+    `SELECT id
+     FROM colaboradores
+     WHERE id = $1
+     FOR SHARE`,
+    [actor.colaborador_id]
+  );
+  if (collaboratorResult.rowCount === 0) {
+    throw createHttpError(409, 'El Colaborador asociado al Usuario no existe');
+  }
+  return {
+    ...actor,
+    hasGlobalScope: hasGlobalLocationScope(actor.tipo_usuario),
   };
 };
 
@@ -95,6 +162,90 @@ const normalizeHistoryFilters = (query = {}) => {
   }
 
   return { ubicacionId, fechaDesde, fechaHasta, estado, autor };
+};
+
+const normalizeVisitFilters = (query = {}) => {
+  const unknownFields = Object.keys(query).filter((field) => !VISIT_QUERY_FIELDS.has(field));
+  if (unknownFields.length > 0) {
+    throw createHttpError(400, `Filtro no permitido: ${unknownFields[0]}`);
+  }
+  const repeatedField = Object.entries(query).find(([, value]) => Array.isArray(value));
+  if (repeatedField) {
+    throw createHttpError(400, `El filtro ${repeatedField[0]} no puede repetirse`);
+  }
+  const estado = query.estado || undefined;
+  if (estado && !VISIT_STATES.has(estado)) {
+    throw createHttpError(400, 'estado debe ser ABIERTA, CERRADA o ANULADA');
+  }
+  const fechaDesde = query.fecha_desde || undefined;
+  const fechaHasta = query.fecha_hasta || undefined;
+  if (fechaDesde && !isValidDateString(fechaDesde)) {
+    throw createHttpError(400, 'fecha_desde debe tener formato YYYY-MM-DD y ser real');
+  }
+  if (fechaHasta && !isValidDateString(fechaHasta)) {
+    throw createHttpError(400, 'fecha_hasta debe tener formato YYYY-MM-DD y ser real');
+  }
+  if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+    throw createHttpError(400, 'El rango de fechas es inválido');
+  }
+  const textFilter = (value, field) => {
+    if (value === undefined) {
+      return undefined;
+    }
+    if (typeof value !== 'string') {
+      throw createHttpError(400, `${field} debe ser texto`);
+    }
+    const trimmed = value.trim();
+    if (trimmed.length > 100) {
+      throw createHttpError(400, `${field} no puede exceder 100 caracteres`);
+    }
+    return trimmed || undefined;
+  };
+  return {
+    estado,
+    fechaDesde,
+    fechaHasta,
+    creator: textFilter(query.creator, 'creator'),
+    search: textFilter(query.search, 'search'),
+  };
+};
+
+const normalizeVisitFormFilters = (query = {}) => {
+  const unknownField = Object.keys(query).find((field) => !VISIT_FORM_QUERY_FIELDS.has(field));
+  if (unknownField) {
+    throw createHttpError(400, `Filtro no permitido: ${unknownField}`);
+  }
+  const repeatedField = Object.entries(query).find(([, value]) => Array.isArray(value));
+  if (repeatedField) {
+    throw createHttpError(400, `El filtro ${repeatedField[0]} no puede repetirse`);
+  }
+  const normalizeTextFilter = (value, field) => {
+    const normalized = value?.trim() || undefined;
+    if (normalized && normalized.length > 100) {
+      throw createHttpError(400, `${field} no puede exceder 100 caracteres`);
+    }
+    return normalized;
+  };
+  const locationId = query.ubicacion_id
+    ? parsePositiveInteger(query.ubicacion_id, 'La Urbanización es inválida')
+    : undefined;
+  const estado = query.estado || undefined;
+  if (estado && !VISIT_FORM_STATES.has(estado)) {
+    throw createHttpError(400, 'estado debe ser ACTIVE o ARCHIVED');
+  }
+  return {
+    nombre: normalizeTextFilter(query.nombre, 'nombre'),
+    creator: normalizeTextFilter(query.creator, 'creator'),
+    locationId,
+    estado,
+  };
+};
+
+const addRowsAndSend = async ({ rows, sheetName, columns, filename, res }) => {
+  const { workbook, worksheet } = createWorkbook(sheetName, columns);
+  rows.forEach((row) => worksheet.addRow(row));
+  styleDataRows(worksheet);
+  await sendExcel(workbook, res, filename);
 };
 
 const assertLocationScope = async ({
@@ -169,6 +320,127 @@ const assertUrbanContext = async ({ client, location, blockId, villaId }) => {
   if (!principalResident) {
     throw domainError(409, 'VILLA_WITHOUT_ACTIVE_RESIDENT', 'La Villa no tiene titular activo');
   }
+  return { block, villa, principalResident };
+};
+
+const validateVisitResponses = (fields, responses = {}, tipoVisitaId) => {
+  const allowedKeys = new Set(fields.map((field) => field.field_key));
+  const unknownKey = Object.keys(responses).find((key) => !allowedKeys.has(key));
+  if (unknownKey) {
+    const error = domainError(
+      400,
+      'VISIT_RESPONSE_FIELD_NOT_ALLOWED',
+      'Campo de visita no permitido'
+    );
+    error.details = { respuestas: [`Campo no permitido: ${unknownKey}`] };
+    throw error;
+  }
+
+  const normalized = {};
+  fields.forEach((field) => {
+    const rawValue = responses[field.field_key];
+    const applies =
+      !field.aplica_a ||
+      field.aplica_a === 'TODOS' ||
+      (Array.isArray(field.tipos) && field.tipos.includes(tipoVisitaId));
+    if (!applies) {
+      if (rawValue !== undefined) {
+        const error = domainError(
+          400,
+          'VISIT_RESPONSE_NOT_APPLICABLE',
+          `${field.label} no aplica al tipo de ingreso`
+        );
+        error.details = { [`respuestas.${field.field_key}`]: [error.message] };
+        throw error;
+      }
+      return;
+    }
+    const missing = rawValue === undefined || rawValue === null || rawValue === '';
+    if (field.required && (missing || (field.type === 'checkbox' && rawValue !== true))) {
+      const error = domainError(400, 'VISIT_RESPONSE_REQUIRED', `${field.label} es requerido`);
+      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
+      throw error;
+    }
+    if (missing) {
+      return;
+    }
+
+    if (field.type === 'checkbox') {
+      if (typeof rawValue !== 'boolean') {
+        const error = domainError(400, 'VISIT_RESPONSE_INVALID', `${field.label} debe ser sí/no`);
+        error.details = { [`respuestas.${field.field_key}`]: [error.message] };
+        throw error;
+      }
+      normalized[field.field_key] = rawValue;
+      return;
+    }
+    const stringValue = String(rawValue).trim();
+    if (!stringValue && field.required) {
+      const error = domainError(400, 'VISIT_RESPONSE_REQUIRED', `${field.label} es requerido`);
+      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
+      throw error;
+    }
+    if (!stringValue) {
+      return;
+    }
+    if (field.type === 'number' && !Number.isFinite(Number(stringValue))) {
+      const error = domainError(400, 'VISIT_RESPONSE_INVALID', `${field.label} debe ser numérico`);
+      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
+      throw error;
+    }
+    if (
+      field.type === 'cedula' &&
+      (typeof rawValue !== 'string' || !/^\d{10}$/.test(stringValue))
+    ) {
+      const error = domainError(
+        400,
+        'VISIT_RESPONSE_INVALID',
+        `${field.label} debe tener 10 dígitos`
+      );
+      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
+      throw error;
+    }
+    const normalizedPlate =
+      field.type === 'placa' && typeof rawValue === 'string'
+        ? stringValue.toUpperCase().replace(/[^A-Z0-9]/g, '')
+        : stringValue;
+    if (
+      field.type === 'placa' &&
+      (typeof rawValue !== 'string' || !/^[A-Z0-9]{5,10}$/.test(normalizedPlate))
+    ) {
+      const error = domainError(
+        400,
+        'VISIT_RESPONSE_INVALID',
+        `${field.label} debe tener entre 5 y 10 letras o números`
+      );
+      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
+      throw error;
+    }
+    if (field.type === 'select') {
+      const options = Array.isArray(field.options) ? field.options : [];
+      if (!options.includes(stringValue)) {
+        const error = domainError(
+          400,
+          'VISIT_RESPONSE_INVALID',
+          `${field.label} no es una opción válida`
+        );
+        error.details = { [`respuestas.${field.field_key}`]: [error.message] };
+        throw error;
+      }
+    }
+    normalized[field.field_key] =
+      field.type === 'number'
+        ? Number(stringValue)
+        : field.type === 'placa'
+          ? normalizedPlate
+          : stringValue;
+  });
+  return normalized;
+};
+
+const visitDetail = ({ action, visitorName, tipoVisitaNombre, plate, house }) => {
+  const access = plate ? `${tipoVisitaNombre} · Placa ${plate}` : tipoVisitaNombre;
+  return `${action} visita: ${visitorName} · ${access} · Casa ${house}`;
 };
 
 const createRegistro = async (req, res) => {
@@ -366,12 +638,559 @@ const getUbicacionesVisibles = async (req, res) => {
   }
 };
 
+const getActiveVisitForm = async (req, res) => {
+  try {
+    const locationId = parsePositiveInteger(req.params.ubicacionId, 'La Ubicación es inválida');
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const location = await findVisibleLocation({ locationId, hasGlobalScope, userId });
+    if (!location) {
+      throw domainError(404, 'LOCATION_NOT_FOUND', 'Ubicación no encontrada');
+    }
+    if (location.tipo_punto !== 'URBANIZACION') {
+      throw domainError(
+        409,
+        'VISIT_FORM_NOT_ALLOWED',
+        'La Ubicación no admite formulario de visitas'
+      );
+    }
+    const form = await findActiveVisitFormForLocation({ locationId });
+    if (!form) {
+      throw domainError(404, 'ACTIVE_VISIT_FORM_NOT_FOUND', 'No hay formulario activo');
+    }
+    return res.json({ success: true, data: form });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al consultar formulario de visitas');
+  }
+};
+
+const getVisitForms = async (req, res) => {
+  try {
+    const pagination = normalizePaginationQuery(req.query);
+    const filters = normalizeVisitFormFilters(req.query);
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const [{ items, total }, creators] = await Promise.all([
+      findVisitForms({ hasGlobalScope, userId, filters, pagination }),
+      findVisitFormCreators({ hasGlobalScope, userId }),
+    ]);
+    const meta = buildPaginationMetadata({
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalItems: total,
+    });
+    return res.json({ success: true, data: items, meta, filters: { creators } });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al consultar formularios de visitas');
+  }
+};
+
+const exportRegistros = async (req, res) => {
+  try {
+    const filters = normalizeHistoryFilters(req.query);
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const { items } = await findHistory({
+      filters,
+      hasGlobalScope,
+      userId,
+      pagination: EXPORT_PAGE,
+    });
+    await addRowsAndSend({
+      rows: items.map((item) => ({
+        fecha: item.ocurrido_at,
+        ubicacion: item.ubicacion_nombre,
+        casa:
+          item.manzana_nombre && item.villa_identificador
+            ? `${item.manzana_nombre} - ${item.villa_identificador}`
+            : '',
+        autor: item.autor_colaborador_nombre || item.autor_usuario,
+        detalle: item.detalle,
+        estado: item.estado,
+      })),
+      sheetName: 'Bitácoras',
+      columns: [
+        { header: 'Fecha/hora', key: 'fecha', width: 22 },
+        { header: 'Ubicación', key: 'ubicacion', width: 28 },
+        { header: 'Casa', key: 'casa', width: 18 },
+        { header: 'Autor', key: 'autor', width: 28 },
+        { header: 'Detalle', key: 'detalle', width: 55 },
+        { header: 'Estado', key: 'estado', width: 15 },
+      ],
+      filename: 'reporte_bitacoras.xlsx',
+      res,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al exportar Bitácoras');
+  }
+};
+
+const exportVisitas = async (req, res) => {
+  try {
+    const filters = normalizeVisitFilters(req.query);
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const { items } = await findVisits({
+      filters,
+      hasGlobalScope,
+      userId,
+      pagination: EXPORT_PAGE,
+    });
+    await addRowsAndSend({
+      rows: items.map((item) => ({
+        entrada: item.entrada_at,
+        salida: item.salida_at,
+        visitante: item.visitante_nombre,
+        cedula: item.visitante_documento,
+        tipo: item.tipo_visita_nombre,
+        placa: item.placa || '',
+        ubicacion: item.ubicacion_nombre,
+        casa: `${item.manzana_nombre} - ${item.villa_identificador}`,
+        titular: item.residente_principal_nombre,
+        creador: item.registrado_por_colaborador_nombre || item.registrado_por_usuario,
+        estado: item.estado,
+      })),
+      sheetName: 'Visitas',
+      columns: [
+        { header: 'Ingreso', key: 'entrada', width: 22 },
+        { header: 'Salida', key: 'salida', width: 22 },
+        { header: 'Visitante', key: 'visitante', width: 28 },
+        { header: 'Cédula', key: 'cedula', width: 15 },
+        { header: 'Tipo', key: 'tipo', width: 14 },
+        { header: 'Placa', key: 'placa', width: 14 },
+        { header: 'Urbanización', key: 'ubicacion', width: 28 },
+        { header: 'Casa', key: 'casa', width: 16 },
+        { header: 'Titular', key: 'titular', width: 28 },
+        { header: 'Creador', key: 'creador', width: 28 },
+        { header: 'Estado', key: 'estado', width: 14 },
+      ],
+      filename: 'reporte_visitas.xlsx',
+      res,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al exportar Visitas');
+  }
+};
+
+const exportVisitForms = async (req, res) => {
+  try {
+    const filters = normalizeVisitFormFilters(req.query);
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const { items } = await findVisitForms({
+      filters,
+      hasGlobalScope,
+      userId,
+      pagination: EXPORT_PAGE,
+    });
+    await addRowsAndSend({
+      rows: items.map((item) => ({
+        nombre: item.titulo,
+        ubicacion: item.ubicacion_nombre,
+        version: item.version,
+        estado: item.estado,
+        creador: item.creador,
+        publicado: item.published_at,
+      })),
+      sheetName: 'Formularios',
+      columns: [
+        { header: 'Nombre', key: 'nombre', width: 32 },
+        { header: 'Urbanización', key: 'ubicacion', width: 28 },
+        { header: 'Versión', key: 'version', width: 12 },
+        { header: 'Estado', key: 'estado', width: 14 },
+        { header: 'Creador', key: 'creador', width: 24 },
+        { header: 'Publicado', key: 'publicado', width: 22 },
+      ],
+      filename: 'reporte_formularios_visitas.xlsx',
+      res,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al exportar Formularios');
+  }
+};
+
+const publishVisitForm = async (req, res) => {
+  try {
+    const locationId = parsePositiveInteger(req.params.ubicacionId, 'La Ubicación es inválida');
+    const published = await db.transaction(async (client) => {
+      const actor = await getCurrentActor(req.user.id, client);
+      const location = await assertLocationScope({
+        client,
+        userId: actor.id,
+        locationId,
+        hasGlobalScope: actor.hasGlobalScope,
+      });
+      if (location.tipo_punto !== 'URBANIZACION') {
+        throw domainError(
+          409,
+          'VISIT_FORM_NOT_ALLOWED',
+          'La Ubicación no admite formulario de visitas'
+        );
+      }
+      await acquireVisitFormPublishLock({ client, locationId });
+      const existingActive = await findActiveVisitFormForLocation({
+        locationId,
+        executor: client,
+      });
+      if (
+        existingActive &&
+        !hasPermission(actor.tipo_usuario, PERMISSIONS.BITACORAS_FORMULARIOS_GESTIONAR)
+      ) {
+        throw createHttpError(
+          403,
+          'Solo Gerente o Supervisor pueden editar un formulario ya publicado'
+        );
+      }
+      const form = await publishVisitFormForLocation({
+        client,
+        locationId,
+        title: req.body.titulo,
+        showDateTime: req.body.mostrar_fecha_hora,
+        tiposVisita: req.body.tipos_visita,
+        fields: req.body.fields || [],
+        userId: actor.id,
+      });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_visit_form_versions',
+        operacion: 'INSERT',
+        registro_id: form.id,
+        datos_nuevos: form,
+        ...auditFromReq(req),
+      });
+      return form;
+    });
+    return res.status(201).json({
+      success: true,
+      message: 'Formulario de visitas publicado',
+      data: published,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al publicar formulario de visitas');
+  }
+};
+
+const archiveVisitForm = async (req, res) => {
+  try {
+    const formId = parsePositiveInteger(req.params.formId, 'El formulario es inválido');
+    const archived = await db.transaction(async (client) => {
+      const actor = await getCurrentActor(req.user.id, client);
+      const form = await findLockedVisitFormVersion({ client, formId });
+      if (!form) {
+        throw domainError(404, 'VISIT_FORM_NOT_FOUND', 'Formulario no encontrado');
+      }
+      await assertLocationScope({
+        client,
+        userId: actor.id,
+        locationId: form.ubicacion_id,
+        hasGlobalScope: actor.hasGlobalScope,
+        concealUnauthorized: true,
+      });
+      if (form.estado !== 'ACTIVE') {
+        throw domainError(
+          409,
+          'VISIT_FORM_NOT_ACTIVE',
+          'Solo se puede cambiar el estado de un formulario activo'
+        );
+      }
+      const updated = await archiveVisitFormVersion({ client, formId });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_visit_form_versions',
+        operacion: 'UPDATE',
+        registro_id: updated.id,
+        datos_anteriores: form,
+        datos_nuevos: updated,
+        ...auditFromReq(req),
+      });
+      return updated;
+    });
+    return res.json({
+      success: true,
+      message: 'Formulario archivado',
+      data: archived,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al cambiar el estado del formulario');
+  }
+};
+
+const createVisita = async (req, res) => {
+  try {
+    const created = await db.transaction(async (client) => {
+      const actor = await getCurrentActor(req.user.id, client);
+      const location = await assertLocationScope({
+        client,
+        userId: actor.id,
+        locationId: req.body.ubicacion_id,
+        hasGlobalScope: actor.hasGlobalScope,
+      });
+      if (location.tipo_punto !== 'URBANIZACION') {
+        throw domainError(
+          409,
+          'VISIT_NOT_ALLOWED',
+          'Solo se registran visitas para Urbanizaciones'
+        );
+      }
+      const urban = await assertUrbanContext({
+        client,
+        location,
+        blockId: req.body.manzana_id,
+        villaId: req.body.villa_id,
+      });
+      const form = await findActiveVisitFormForLocation({
+        locationId: location.id,
+        executor: client,
+      });
+      if (!form) {
+        throw domainError(
+          409,
+          'ACTIVE_VISIT_FORM_REQUIRED',
+          'La Urbanización no tiene formulario activo'
+        );
+      }
+      const tipoVisita = form.tipos.find((tipo) => tipo.id === req.body.tipo_visita_id);
+      if (!tipoVisita) {
+        const error = domainError(
+          400,
+          'VISIT_TYPE_NOT_APPLICABLE',
+          'El tipo de visita no pertenece al formulario activo'
+        );
+        error.details = { tipo_visita_id: [error.message] };
+        throw error;
+      }
+      const responses = validateVisitResponses(
+        form.fields,
+        req.body.respuestas || {},
+        req.body.tipo_visita_id
+      );
+      const house = `${urban.block.nombre} - ${urban.villa.identificador}`;
+      const detail = visitDetail({
+        action: 'Ingreso',
+        visitorName: req.body.visitante_nombre,
+        tipoVisitaNombre: tipoVisita.nombre,
+        plate: req.body.placa,
+        house,
+      });
+      const registro = await insertBitacoraRegistro({
+        client,
+        locationId: location.id,
+        blockId: urban.block.id,
+        villaId: urban.villa.id,
+        actorUserId: actor.id,
+        actorCollaboratorId: actor.colaborador_id,
+        occurredAt: new Date(),
+        detail,
+      });
+      const visita = await createVisit({
+        client,
+        locationId: location.id,
+        blockId: urban.block.id,
+        villaId: urban.villa.id,
+        principalResidentId: urban.principalResident.id,
+        formVersionId: form.id,
+        visitor: {
+          nombre: req.body.visitante_nombre,
+          documento: req.body.visitante_documento,
+          telefono: req.body.visitante_telefono,
+          tipoVisitaId: req.body.tipo_visita_id,
+          placa: req.body.placa || null,
+        },
+        actorUserId: actor.id,
+        actorCollaboratorId: actor.colaborador_id,
+        entryLogId: registro.id,
+      });
+      await insertVisitResponses({ client, visitId: visita.id, fields: form.fields, responses });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_visitas',
+        operacion: 'INSERT',
+        registro_id: visita.id,
+        datos_nuevos: { ...visita, respuestas: responses },
+        ...auditFromReq(req),
+      });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_registros',
+        operacion: 'INSERT',
+        registro_id: registro.id,
+        datos_nuevos: registro,
+        ...auditFromReq(req),
+      });
+      return { ...visita, respuestas: responses };
+    });
+    return res.status(201).json({
+      success: true,
+      message: 'Visita registrada',
+      data: created,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al registrar visita');
+  }
+};
+
+const getVisitas = async (req, res) => {
+  try {
+    const pagination = normalizePaginationQuery(req.query);
+    const filters = normalizeVisitFilters(req.query);
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const [{ items, total }, creators] = await Promise.all([
+      findVisits({ filters, hasGlobalScope, userId, pagination }),
+      findVisitCreators({ hasGlobalScope, userId }),
+    ]);
+    const meta = buildPaginationMetadata({
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+      totalItems: total,
+    });
+    return res.json({ success: true, data: items, meta, filters: { creators } });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al consultar visitas');
+  }
+};
+
+const closeVisita = async (req, res) => {
+  try {
+    const visitId = parsePositiveInteger(req.params.visitaId, 'La Visita es inválida');
+    const closed = await db.transaction(async (client) => {
+      const actor = await getCurrentActor(req.user.id, client);
+      const visita = await findLockedVisit({ client, visitId });
+      if (!visita) {
+        throw domainError(404, 'VISIT_NOT_FOUND', 'Visita no encontrada');
+      }
+      await assertLocationScope({
+        client,
+        userId: actor.id,
+        locationId: visita.ubicacion_id,
+        hasGlobalScope: actor.hasGlobalScope,
+        concealUnauthorized: true,
+      });
+      if (visita.estado !== 'ABIERTA') {
+        throw domainError(409, 'VISIT_ALREADY_CLOSED', 'La visita ya no está abierta');
+      }
+      const detail = visitDetail({
+        action: 'Salida',
+        visitorName: visita.visitante_nombre,
+        tipoVisitaNombre: visita.tipo_visita_nombre,
+        plate: visita.placa,
+        house: `${visita.manzana_nombre} - ${visita.villa_identificador}`,
+      });
+      const registro = await insertBitacoraRegistro({
+        client,
+        locationId: visita.ubicacion_id,
+        blockId: visita.manzana_id,
+        villaId: visita.villa_id,
+        actorUserId: actor.id,
+        actorCollaboratorId: actor.colaborador_id,
+        occurredAt: new Date(),
+        detail,
+      });
+      const updated = await closeVisit({
+        client,
+        visitId,
+        actorUserId: actor.id,
+        actorCollaboratorId: actor.colaborador_id,
+        exitLogId: registro.id,
+      });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_visitas',
+        operacion: 'UPDATE',
+        registro_id: updated.id,
+        datos_anteriores: visita,
+        datos_nuevos: updated,
+        ...auditFromReq(req),
+      });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_registros',
+        operacion: 'INSERT',
+        registro_id: registro.id,
+        datos_nuevos: registro,
+        ...auditFromReq(req),
+      });
+      return updated;
+    });
+    return res.json({ success: true, message: 'Visita cerrada', data: closed });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al cerrar visita');
+  }
+};
+
+const cancelVisita = async (req, res) => {
+  try {
+    const visitId = parsePositiveInteger(req.params.visitaId, 'La Visita es inválida');
+    const cancelled = await db.transaction(async (client) => {
+      const actor = await getCurrentActor(req.user.id, client);
+      const visita = await findLockedVisit({ client, visitId });
+      if (!visita) {
+        throw domainError(404, 'VISIT_NOT_FOUND', 'Visita no encontrada');
+      }
+      await assertLocationScope({
+        client,
+        userId: actor.id,
+        locationId: visita.ubicacion_id,
+        hasGlobalScope: actor.hasGlobalScope,
+        concealUnauthorized: true,
+      });
+      if (visita.estado !== 'ABIERTA') {
+        throw domainError(409, 'VISIT_NOT_OPEN', 'Solo se puede anular una visita abierta');
+      }
+      const detail = visitDetail({
+        action: 'Anulación',
+        visitorName: visita.visitante_nombre,
+        tipoVisitaNombre: visita.tipo_visita_nombre,
+        plate: visita.placa,
+        house: `${visita.manzana_nombre} - ${visita.villa_identificador}`,
+      });
+      const registro = await insertBitacoraRegistro({
+        client,
+        locationId: visita.ubicacion_id,
+        blockId: visita.manzana_id,
+        villaId: visita.villa_id,
+        actorUserId: actor.id,
+        actorCollaboratorId: actor.colaborador_id,
+        occurredAt: new Date(),
+        detail,
+      });
+      const updated = await cancelVisit({
+        client,
+        visitId,
+        actorUserId: actor.id,
+        actorCollaboratorId: actor.colaborador_id,
+        exitLogId: registro.id,
+        motivo: req.body.motivo,
+      });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_visitas',
+        operacion: 'UPDATE',
+        registro_id: updated.id,
+        datos_anteriores: visita,
+        datos_nuevos: updated,
+        ...auditFromReq(req),
+      });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_registros',
+        operacion: 'INSERT',
+        registro_id: registro.id,
+        datos_nuevos: registro,
+        ...auditFromReq(req),
+      });
+      return updated;
+    });
+    return res.json({ success: true, message: 'Visita anulada', data: cancelled });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al anular visita');
+  }
+};
+
 module.exports = {
+  cancelVisita,
+  closeVisita,
   createRegistro,
+  createVisita,
+  exportRegistros,
+  exportVisitas,
+  exportVisitForms,
+  getActiveVisitForm,
+  getVisitForms,
   getRegistros,
+  getVisitas,
   getUbicacionesVisibles,
   normalizeHistoryFilters,
+  normalizeVisitFilters,
   getCurrentUserScope,
   getManzanasElegibles,
   getVillasElegibles,
+  publishVisitForm,
+  archiveVisitForm,
 };

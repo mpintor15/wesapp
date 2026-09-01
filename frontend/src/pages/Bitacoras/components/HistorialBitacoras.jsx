@@ -96,6 +96,8 @@ const HistorialBitacoras = ({
   locationsError,
   onReloadUbicaciones,
   refreshKey,
+  onFiltersChange,
+  onTotalChange,
 }) => {
   const [draftFilters, setDraftFilters] = useState({ ...EMPTY_FILTERS });
   const [appliedFilters, setAppliedFilters] = useState({ ...EMPTY_FILTERS });
@@ -151,6 +153,10 @@ const HistorialBitacoras = ({
     };
   }, [loadHistory, refreshKey]);
 
+  useEffect(() => {
+    onTotalChange?.(meta.totalItems);
+  }, [meta.totalItems, onTotalChange]);
+
   const handleDraftChange = (event) => {
     const { name, value } = event.target;
     setDraftFilters((current) => ({ ...current, [name]: value }));
@@ -169,6 +175,7 @@ const HistorialBitacoras = ({
 
     setDateError('');
     setAppliedFilters({ ...draftFilters, autor: draftFilters.autor.trim() });
+    onFiltersChange?.(buildHistoryParams(undefined, draftFilters));
     setPage(1);
   };
 
@@ -176,6 +183,7 @@ const HistorialBitacoras = ({
     setDateError('');
     setDraftFilters({ ...EMPTY_FILTERS });
     setAppliedFilters({ ...EMPTY_FILTERS });
+    onFiltersChange?.({});
     setPage(1);
   };
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PERMISSIONS } from '../../auth/permissions';
 import PageHeader from '../../components/PageHeader';
@@ -7,8 +7,11 @@ import { useToast } from '../../context/ToastContext';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import bitacorasService from '../../services/bitacorasService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
+import FormularioVisitasAdmin from './components/FormularioVisitasAdmin';
 import HistorialBitacoras from './components/HistorialBitacoras';
+import HistorialVisitas from './components/HistorialVisitas';
 import RegistroForm from './components/RegistroForm';
+import VisitaForm from './components/VisitaForm';
 import './Bitacoras.css';
 
 const Bitacoras = () => {
@@ -18,6 +21,8 @@ const Bitacoras = () => {
   const { user, hasPermission } = useAuth();
   const { showToast } = useToast();
   const hasCreatePermission = hasPermission(PERMISSIONS.BITACORAS_REGISTRO_CREAR);
+  const canManageVisitForms = hasPermission(PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR);
+  const canGestionarFormularios = hasPermission(PERMISSIONS.BITACORAS_FORMULARIOS_GESTIONAR);
   const canCreateBitacora =
     hasCreatePermission &&
     Number.isInteger(Number(user?.colaborador_id)) &&
@@ -25,6 +30,9 @@ const Bitacoras = () => {
   const canViewHistorial = hasPermission(PERMISSIONS.BITACORAS_HISTORIAL_VER);
   const locationsRequestRef = useRef(null);
   const [isRegistroModalOpen, setIsRegistroModalOpen] = useState(false);
+  const [isVisitaModalOpen, setIsVisitaModalOpen] = useState(false);
+  const [isFormBuilderOpen, setIsFormBuilderOpen] = useState(false);
+  const [activeView, setActiveView] = useState('historial');
   const [lastUbicacionId, setLastUbicacionId] = useState('');
   const [ubicaciones, setUbicaciones] = useState([]);
   const [locationsLoading, setLocationsLoading] = useState(false);
@@ -32,6 +40,17 @@ const Bitacoras = () => {
   const [locationsLoadAttempted, setLocationsLoadAttempted] = useState(false);
   const [locationsError, setLocationsError] = useState('');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [reportFilters, setReportFilters] = useState({
+    historial: {},
+    visitas: {},
+    formularios: {},
+  });
+  const [isExporting, setIsExporting] = useState(false);
+  const [tabCounts, setTabCounts] = useState({
+    historial: null,
+    visitas: null,
+    formularios: null,
+  });
 
   const loadUbicaciones = useCallback(
     async ({ background = false } = {}) => {
@@ -69,11 +88,16 @@ const Bitacoras = () => {
   );
 
   useEffect(() => {
-    if ((canCreateBitacora || canViewHistorial) && !locationsLoaded && !locationsLoadAttempted) {
+    if (
+      (canCreateBitacora || canViewHistorial || canManageVisitForms) &&
+      !locationsLoaded &&
+      !locationsLoadAttempted
+    ) {
       void loadUbicaciones();
     }
   }, [
     canCreateBitacora,
+    canManageVisitForms,
     canViewHistorial,
     loadUbicaciones,
     locationsLoadAttempted,
@@ -90,10 +114,75 @@ const Bitacoras = () => {
     handleCloseRegistro();
     if (canViewHistorial) setHistoryRefreshKey((current) => current + 1);
   };
-  const hasModuleAccess = hasCreatePermission || canViewHistorial;
+  const handleVisitaSuccess = () => {
+    setIsVisitaModalOpen(false);
+    if (canViewHistorial) setHistoryRefreshKey((current) => current + 1);
+  };
+  const exportActiveReport = async () => {
+    if (isExporting) return;
+    const exporters = {
+      historial: bitacorasService.exportRegistros.bind(bitacorasService),
+      visitas: bitacorasService.exportVisitas.bind(bitacorasService),
+      formularios: bitacorasService.exportFormulariosVisitas.bind(bitacorasService),
+    };
+    const exporter = exporters[activeView];
+    if (!exporter) return;
+    setIsExporting(true);
+    const result = await exporter(reportFilters[activeView]);
+    setIsExporting(false);
+    if (result.success) showToast('Reporte exportado exitosamente.', 'success');
+    else if (!result.cancelled)
+      showToast(result.message || 'No se pudo exportar el reporte.', 'error');
+  };
+  const updateHistorialReportFilters = useCallback(
+    (filters) => setReportFilters((current) => ({ ...current, historial: filters })),
+    []
+  );
+  const updateVisitasReportFilters = useCallback(
+    (filters) => setReportFilters((current) => ({ ...current, visitas: filters })),
+    []
+  );
+  const updateFormulariosReportFilters = useCallback(
+    (filters) => setReportFilters((current) => ({ ...current, formularios: filters })),
+    []
+  );
+  const updateTabCount = useCallback((tabId, total) => {
+    setTabCounts((current) => {
+      if (current[tabId] === total) return current;
+      return { ...current, [tabId]: total };
+    });
+  }, []);
+  const handleHistorialTotalChange = useCallback(
+    (total) => updateTabCount('historial', total),
+    [updateTabCount]
+  );
+  const handleVisitasTotalChange = useCallback(
+    (total) => updateTabCount('visitas', total),
+    [updateTabCount]
+  );
+  const handleFormulariosTotalChange = useCallback(
+    (total) => updateTabCount('formularios', total),
+    [updateTabCount]
+  );
+  const hasModuleAccess = hasCreatePermission || canViewHistorial || canManageVisitForms;
+  const visibleTabs = useMemo(
+    () =>
+      [
+        canViewHistorial ? { id: 'historial', label: 'Registro' } : null,
+        canViewHistorial ? { id: 'visitas', label: 'Visitas' } : null,
+        canManageVisitForms ? { id: 'formularios', label: 'Formularios' } : null,
+      ].filter(Boolean),
+    [canManageVisitForms, canViewHistorial]
+  );
+
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeView)) {
+      setActiveView(visibleTabs[0]?.id || 'historial');
+    }
+  }, [activeView, visibleTabs]);
 
   return (
-    <div className="page-container bitacoras-container tabular-page">
+    <div className="bitacoras-container tabular-page">
       <PageHeader
         title="Bitácoras"
         onBack={() => navigate('/')}
@@ -103,23 +192,112 @@ const Bitacoras = () => {
         }
         refreshLabel="Actualizar historial"
         actions={
-          canCreateBitacora ? (
-            <button className="btn btn-ghost btn-sm" type="button" onClick={handleOpenRegistro}>
-              Registrar Bitácora
-            </button>
-          ) : null
+          <>
+            {activeView === 'historial' && canCreateBitacora ? (
+              <button className="btn btn-ghost btn-sm" type="button" onClick={handleOpenRegistro}>
+                Registrar Bitácora
+              </button>
+            ) : null}
+            {activeView === 'historial' && canViewHistorial ? (
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={exportActiveReport}
+                disabled={isExporting}
+              >
+                Generar reporte de Bitácoras
+              </button>
+            ) : null}
+            {activeView === 'visitas' && canCreateBitacora ? (
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={() => setIsVisitaModalOpen(true)}
+              >
+                Registrar Visita
+              </button>
+            ) : null}
+            {activeView === 'visitas' && canViewHistorial ? (
+              <button
+                className="btn btn-ghost btn-sm"
+                type="button"
+                onClick={exportActiveReport}
+                disabled={isExporting}
+              >
+                Generar reporte de Visitas
+              </button>
+            ) : null}
+            {activeView === 'formularios' && canManageVisitForms ? (
+              <>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={() => setIsFormBuilderOpen(true)}
+                >
+                  Crear formulario
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={exportActiveReport}
+                  disabled={isExporting}
+                >
+                  Generar reporte de Formularios
+                </button>
+              </>
+            ) : null}
+          </>
         }
       />
 
       {hasModuleAccess ? (
-        <main className="bitacoras-main">
-          {canViewHistorial ? (
+        <main className="bitacoras-main bitacoras-module-workspace">
+          {visibleTabs.length > 1 ? (
+            <div className="module-tabs bitacoras-tabs" role="tablist" aria-label="Bitácoras">
+              {visibleTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`tab ${activeView === tab.id ? 'active' : ''}`}
+                  role="tab"
+                  aria-selected={activeView === tab.id}
+                  onClick={() => setActiveView(tab.id)}
+                >
+                  {tab.label}
+                  {tabCounts[tab.id] > 0 && <span className="tab-badge">{tabCounts[tab.id]}</span>}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {activeView === 'historial' && canViewHistorial ? (
             <HistorialBitacoras
               ubicaciones={ubicaciones}
               locationsLoading={locationsLoading || (!locationsLoaded && !locationsError)}
               locationsError={locationsError}
               onReloadUbicaciones={loadUbicaciones}
               refreshKey={historyRefreshKey}
+              onFiltersChange={updateHistorialReportFilters}
+              onTotalChange={handleHistorialTotalChange}
+            />
+          ) : activeView === 'visitas' && canViewHistorial ? (
+            <HistorialVisitas
+              refreshKey={historyRefreshKey}
+              onChanged={() => setHistoryRefreshKey((current) => current + 1)}
+              showToast={showToast}
+              onFiltersChange={updateVisitasReportFilters}
+              canCancelVisita={canManageVisitForms}
+              onTotalChange={handleVisitasTotalChange}
+            />
+          ) : activeView === 'formularios' && canManageVisitForms ? (
+            <FormularioVisitasAdmin
+              ubicaciones={ubicaciones}
+              showToast={showToast}
+              isBuilderOpen={isFormBuilderOpen}
+              onOpenBuilder={() => setIsFormBuilderOpen(true)}
+              onCloseBuilder={() => setIsFormBuilderOpen(false)}
+              onFiltersChange={updateFormulariosReportFilters}
+              canGestionar={canGestionarFormularios}
+              onTotalChange={handleFormulariosTotalChange}
             />
           ) : (
             <section className="bitacoras-history-unavailable">
@@ -146,6 +324,15 @@ const Bitacoras = () => {
           onReloadUbicaciones={loadUbicaciones}
           onClose={handleCloseRegistro}
           onSuccess={handleRegistroSuccess}
+          showToast={showToast}
+        />
+      ) : null}
+      {isVisitaModalOpen ? (
+        <VisitaForm
+          isOpen
+          ubicaciones={ubicaciones}
+          onClose={() => setIsVisitaModalOpen(false)}
+          onSuccess={handleVisitaSuccess}
           showToast={showToast}
         />
       ) : null}

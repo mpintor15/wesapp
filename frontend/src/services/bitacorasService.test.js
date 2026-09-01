@@ -126,6 +126,161 @@ describe('bitacorasService', () => {
     });
   });
 
+  test('gestiona visitas y formularios con endpoints Bitácoras y allowlists estrictas', async () => {
+    api.get
+      .mockResolvedValueOnce({ data: { success: true, data: [{ id: 4, version: 1 }] } })
+      .mockResolvedValueOnce({ data: { success: true, data: { id: 5, fields: [] } } });
+    api.post
+      .mockResolvedValueOnce({ data: { success: true, data: { id: 6 } } })
+      .mockResolvedValueOnce({ data: { success: true, data: { id: 7 } } })
+      .mockResolvedValueOnce({ data: { success: true, data: { id: 8 } } });
+
+    await bitacorasService.getFormulariosVisitas({ page: 2, nombre: 'Ingreso', extra: 'no' });
+    await bitacorasService.getFormularioVisitasActivo(3);
+    await bitacorasService.publishFormularioVisitas(3, {
+      titulo: 'Formulario',
+      mostrar_fecha_hora: false,
+      tipos_visita: ['Peatón', 'Vehículo'],
+      fields: [{ field_key: 'motivo', label: 'Motivo', type: 'text' }],
+      estado: 'ACTIVE',
+    });
+    await bitacorasService.createVisita({
+      ubicacion_id: 3,
+      manzana_id: 4,
+      villa_id: 5,
+      visitante_nombre: 'Ana',
+      visitante_documento: '0912345678',
+      visitante_telefono: '0991234567',
+      tipo_visita_id: 901,
+      placa: 'ABC123',
+      respuestas: { motivo: 'Entrega' },
+      residente_principal_id: 99,
+      form_version_id: 10,
+      registrado_por_usuario_id: 11,
+      entrada_at: '2026-09-01T08:00:00Z',
+      ocurrido_at: '2026-09-01T08:00:00Z',
+    });
+    await bitacorasService.closeVisita(7);
+
+    expect(api.get).toHaveBeenNthCalledWith(1, '/bitacoras/formularios-visitas', {
+      params: { page: 2, nombre: 'Ingreso' },
+    });
+    expect(api.get).toHaveBeenNthCalledWith(
+      2,
+      '/bitacoras/ubicaciones/3/formulario-visitas/activo'
+    );
+    expect(api.post).toHaveBeenNthCalledWith(
+      1,
+      '/bitacoras/ubicaciones/3/formulario-visitas/publicar',
+      {
+        titulo: 'Formulario',
+        mostrar_fecha_hora: false,
+        tipos_visita: ['Peatón', 'Vehículo'],
+        fields: [{ field_key: 'motivo', label: 'Motivo', type: 'text' }],
+      }
+    );
+    expect(api.post).toHaveBeenNthCalledWith(2, '/bitacoras/visitas', {
+      ubicacion_id: 3,
+      manzana_id: 4,
+      villa_id: 5,
+      visitante_nombre: 'Ana',
+      visitante_documento: '0912345678',
+      visitante_telefono: '0991234567',
+      tipo_visita_id: 901,
+      placa: 'ABC123',
+      respuestas: { motivo: 'Entrega' },
+    });
+    expect(api.post).toHaveBeenNthCalledWith(3, '/bitacoras/visitas/7/cerrar', {});
+  });
+
+  test('consulta visitas con filtros soportados y elimina desconocidos', async () => {
+    api.get.mockResolvedValue({ data: { success: true, data: [], meta: {} } });
+
+    await bitacorasService.getVisitas({
+      page: 2,
+      pageSize: 25,
+      estado: 'ABIERTA',
+      creator: 'Ana',
+      fecha_desde: '2026-08-01',
+      fecha_hasta: '',
+      search: 'Luis',
+      sortBy: 'entrada_at',
+    });
+
+    expect(api.get).toHaveBeenCalledWith('/bitacoras/visitas', {
+      params: {
+        page: 2,
+        pageSize: 25,
+        estado: 'ABIERTA',
+        creator: 'Ana',
+        fecha_desde: '2026-08-01',
+        search: 'Luis',
+      },
+    });
+  });
+
+  test('exporta cada tab con su endpoint y allowlist de filtros', async () => {
+    const exportSpy = jest.spyOn(bitacorasService, 'exportExcel').mockResolvedValue({
+      success: true,
+    });
+
+    await bitacorasService.exportRegistros({ ubicacion_id: 3, autor: 'Ana', extra: 'no' });
+    await bitacorasService.exportVisitas({ estado: 'ABIERTA', search: 'ABC', extra: 'no' });
+    await bitacorasService.exportFormulariosVisitas({
+      nombre: 'Ingreso',
+      creator: 'monitor',
+      extra: 'no',
+    });
+
+    expect(exportSpy).toHaveBeenNthCalledWith(
+      1,
+      '/bitacoras/registros/excel',
+      { ubicacion_id: 3, autor: 'Ana' },
+      'reporte_bitacoras.xlsx'
+    );
+    expect(exportSpy).toHaveBeenNthCalledWith(
+      2,
+      '/bitacoras/visitas/excel',
+      { estado: 'ABIERTA', search: 'ABC' },
+      'reporte_visitas.xlsx'
+    );
+    expect(exportSpy).toHaveBeenNthCalledWith(
+      3,
+      '/bitacoras/formularios-visitas/excel',
+      { nombre: 'Ingreso', creator: 'monitor' },
+      'reporte_formularios_visitas.xlsx'
+    );
+
+    exportSpy.mockRestore();
+  });
+
+  test('no envía placa cuando no se ingresa (opcional para cualquier tipo de visita)', async () => {
+    api.post.mockResolvedValue({ data: { success: true, data: { id: 9 } } });
+
+    await bitacorasService.createVisita({
+      ubicacion_id: 3,
+      manzana_id: 4,
+      villa_id: 5,
+      visitante_nombre: 'Ana',
+      visitante_documento: '0912345678',
+      visitante_telefono: '0991234567',
+      tipo_visita_id: 900,
+      placa: undefined,
+      respuestas: {},
+    });
+
+    expect(api.post).toHaveBeenCalledWith('/bitacoras/visitas', {
+      ubicacion_id: 3,
+      manzana_id: 4,
+      villa_id: 5,
+      visitante_nombre: 'Ana',
+      visitante_documento: '0912345678',
+      visitante_telefono: '0991234567',
+      tipo_visita_id: 900,
+      respuestas: {},
+    });
+  });
+
   test('normaliza errores siguiendo el patrón compartido del frontend', async () => {
     api.get.mockRejectedValue({
       response: { status: 403, data: { message: 'Acceso denegado' } },

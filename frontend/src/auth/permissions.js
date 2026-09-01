@@ -60,6 +60,7 @@ export const PERMISSIONS = {
   BITACORAS_HISTORIAL_VER: 'bitacoras.historial.ver',
   BITACORAS_PUNTOS_VER_TODOS: 'bitacoras.puntos.ver_todos',
   BITACORAS_FORMULARIOS_ADMINISTRAR: 'bitacoras.formularios.administrar',
+  BITACORAS_FORMULARIOS_GESTIONAR: 'bitacoras.formularios.gestionar',
   BITACORAS_ASIGNACIONES_ADMINISTRAR: 'bitacoras.asignaciones.administrar',
   BITACORAS_URBANIZACION_ADMINISTRAR: 'bitacoras.urbanizacion.administrar',
 };

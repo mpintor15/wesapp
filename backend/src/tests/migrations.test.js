@@ -538,6 +538,22 @@ describe('database migrations', () => {
     }
   });
 
+  test('migration 030 upgrades already-applied D6 schemas without rewriting migration 029', async () => {
+    const migration029 = await readMigration(29);
+    const migration030 = await readMigration(30);
+
+    expect(migration029).toMatch(/tipo_ingreso IN \('PEATONAL', 'VEHICULO'\)/);
+    expect(migration029).not.toContain('mostrar_fecha_hora');
+    expect(migration029).not.toContain('aplica_a');
+    expect(migration030).toContain('ADD COLUMN IF NOT EXISTS mostrar_fecha_hora');
+    expect(migration030).toContain('ADD COLUMN IF NOT EXISTS aplica_a');
+    expect(migration030).toContain('ADD COLUMN IF NOT EXISTS tipo_ingreso');
+    expect(migration030).toMatch(/WHERE tipo_ingreso = 'PEATONAL'/);
+    expect(migration030).toContain('WHERE tipo_ingreso IS NULL');
+    expect(migration030).toMatch(/tipo_ingreso IN \('PEATON', 'VEHICULO'\)/);
+    expect(hasSchemaVersionRegistration(migration030, 30)).toBe(true);
+  });
+
   test('inventory integrity migration prevalidates negative stock before constraints', async () => {
     const sql = await fs.readFile(
       path.resolve(

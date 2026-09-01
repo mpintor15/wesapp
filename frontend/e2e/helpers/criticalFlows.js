@@ -17,6 +17,14 @@ const USERS = {
     username: process.env.E2E_CONTADOR_USERNAME || 'e2e_contador',
     password: E2E_PASSWORD,
   },
+  guardia: {
+    username: process.env.E2E_GUARDIA_USERNAME || 'e2e_guardia',
+    password: E2E_PASSWORD,
+  },
+  supervisor: {
+    username: process.env.E2E_SUPERVISOR_USERNAME || 'e2e_supervisor',
+    password: E2E_PASSWORD,
+  },
 };
 
 const getApiURL = () =>
@@ -48,6 +56,8 @@ const loginWithRole = async ({ request, page, role = 'gerente' }) => {
     window.localStorage.setItem('token', token);
     window.localStorage.setItem('user', JSON.stringify(user));
   }, body.data);
+
+  return body.data;
 };
 
 const expectDashboardReady = async (page) => {

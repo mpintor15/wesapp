@@ -26,21 +26,36 @@ jest.mock('../../services/bitacorasService', () => ({
     getUbicaciones: jest.fn(),
     getManzanas: jest.fn(),
     getVillas: jest.fn(),
+    getFormulariosVisitas: jest.fn(),
+    getFormularioVisitasActivo: jest.fn(),
+    publishFormularioVisitas: jest.fn(),
+    createVisita: jest.fn(),
+    getVisitas: jest.fn(),
+    closeVisita: jest.fn(),
     createRegistro: jest.fn(),
     getRegistros: jest.fn(),
+    exportRegistros: jest.fn(),
+    exportVisitas: jest.fn(),
+    exportFormulariosVisitas: jest.fn(),
   },
 }));
 
 jest.mock('./components/HistorialBitacoras', () => {
-  const MockHistorialBitacoras = (props) => (
-    <section
-      data-testid="historial-bitacoras"
-      data-location-count={props.ubicaciones.length}
-      data-refresh-key={props.refreshKey}
-    >
-      Historial funcional
-    </section>
-  );
+  const { useEffect } = jest.requireActual('react');
+  const MockHistorialBitacoras = (props) => {
+    useEffect(() => {
+      props.onTotalChange?.(3);
+    }, [props]);
+    return (
+      <section
+        data-testid="historial-bitacoras"
+        data-location-count={props.ubicaciones.length}
+        data-refresh-key={props.refreshKey}
+      >
+        Historial funcional
+      </section>
+    );
+  };
   MockHistorialBitacoras.displayName = 'MockHistorialBitacoras';
   return MockHistorialBitacoras;
 });
@@ -109,6 +124,16 @@ const renderBitacoras = (permissions, user = { id: 7, colaborador_id: 4 }) => {
       Array.from(container.querySelectorAll('button')).find(
         (button) => button.textContent === text
       ),
+    tab: (label) =>
+      Array.from(container.querySelectorAll('[role="tab"]')).find((tabButton) =>
+        tabButton.textContent.startsWith(label)
+      ),
+    tabBadge: (label) => {
+      const tabButton = Array.from(container.querySelectorAll('[role="tab"]')).find((candidate) =>
+        candidate.textContent.startsWith(label)
+      );
+      return tabButton?.querySelector('.tab-badge')?.textContent ?? null;
+    },
     unmount: () => {
       act(() => root.unmount());
       container.remove();
@@ -122,6 +147,15 @@ describe('Bitacoras', () => {
     jest.useFakeTimers().setSystemTime(new Date(2026, 7, 21, 10, 0));
     useToast.mockReturnValue({ showToast: jest.fn() });
     bitacorasService.getUbicaciones.mockResolvedValue({ success: true, data: LOCATIONS });
+    bitacorasService.getFormulariosVisitas.mockResolvedValue({ success: true, data: [] });
+    bitacorasService.getVisitas.mockResolvedValue({
+      success: true,
+      data: [],
+      meta: { page: 1, totalPages: 1, totalItems: 0 },
+    });
+    bitacorasService.exportRegistros.mockResolvedValue({ success: true });
+    bitacorasService.exportVisitas.mockResolvedValue({ success: true });
+    bitacorasService.exportFormulariosVisitas.mockResolvedValue({ success: true });
     bitacorasService.getManzanas.mockResolvedValue({
       success: true,
       data: [{ id: 31, nombre: 'Manzana A' }],
@@ -146,6 +180,7 @@ describe('Bitacoras', () => {
     await act(async () => Promise.resolve());
 
     expect(view.button('Registrar Bitácora')).not.toBeUndefined();
+    expect(view.button('Registrar Visita')).toBeUndefined();
     expect(view.container.querySelector('[role="tablist"]')).toBeNull();
     expect(view.container.textContent).toContain('No tienes permiso para consultar el historial');
     expect(bitacorasService.getUbicaciones).toHaveBeenCalledTimes(1);
@@ -187,11 +222,100 @@ describe('Bitacoras', () => {
     await act(async () => Promise.resolve());
 
     expect(view.button('Registrar Bitácora')).not.toBeUndefined();
-    expect(view.container.querySelector('[role="tab"]')).toBeNull();
+    expect(view.button('Generar reporte de Bitácoras')).not.toBeUndefined();
+    expect(view.button('Registrar Visita')).toBeUndefined();
+    expect(view.container.querySelector('[role="tab"]')).not.toBeNull();
     expect(view.container.querySelector('.bitacoras-container').className).toContain(
       'tabular-page'
     );
     expect(view.container.textContent).toContain('Historial funcional');
+
+    await act(async () => {
+      view.button('Generar reporte de Bitácoras').click();
+      await Promise.resolve();
+    });
+    expect(bitacorasService.exportRegistros).toHaveBeenCalledWith({});
+
+    await act(async () => {
+      view.button('Visitas').click();
+      await Promise.resolve();
+    });
+    expect(view.button('Registrar Bitácora')).toBeUndefined();
+    expect(view.button('Registrar Visita')).not.toBeUndefined();
+    expect(view.button('Generar reporte de Visitas')).not.toBeUndefined();
+
+    await act(async () => {
+      view.button('Generar reporte de Visitas').click();
+      await Promise.resolve();
+    });
+    expect(bitacorasService.exportVisitas).toHaveBeenCalledWith({
+      pageSize: 25,
+      estado: 'ABIERTA',
+    });
+
+    view.unmount();
+  });
+
+  test('el tab de historial se muestra como "Registro" y no como "Bitácoras"', async () => {
+    const view = renderBitacoras([PERMISSIONS.BITACORAS_HISTORIAL_VER]);
+    await act(async () => Promise.resolve());
+
+    expect(view.tab('Registro')).not.toBeUndefined();
+    expect(view.tab('Bitácoras')).toBeUndefined();
+    expect(view.container.querySelector('h1, h2')?.textContent).not.toBe('Registro');
+
+    view.unmount();
+  });
+
+  test('cada tab muestra el total visible (meta.total) como badge, oculto cuando es 0', async () => {
+    bitacorasService.getFormulariosVisitas.mockResolvedValue({
+      success: true,
+      data: [],
+      meta: { totalItems: 4, totalPages: 1 },
+    });
+    const view = renderBitacoras([
+      PERMISSIONS.BITACORAS_HISTORIAL_VER,
+      PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR,
+    ]);
+    await act(async () => Promise.resolve());
+
+    expect(view.tabBadge('Registro')).toBe('3');
+    expect(view.tabBadge('Visitas')).toBeNull();
+
+    await act(async () => {
+      view.tab('Formularios').click();
+      await flushPromises();
+    });
+    expect(view.tabBadge('Formularios')).toBe('4');
+    expect(view.tabBadge('Registro')).toBe('3');
+
+    view.unmount();
+  });
+
+  test('sin permiso de Formularios, ese tab y su badge no se renderizan', async () => {
+    bitacorasService.getFormulariosVisitas.mockResolvedValue({
+      success: true,
+      data: [],
+      meta: { totalItems: 9, totalPages: 1 },
+    });
+    const view = renderBitacoras([PERMISSIONS.BITACORAS_HISTORIAL_VER]);
+    await act(async () => Promise.resolve());
+
+    expect(view.tab('Formularios')).toBeUndefined();
+    expect(view.container.textContent).not.toContain('9');
+
+    view.unmount();
+  });
+
+  test('permiso de formularios muestra administración sin habilitar registro', async () => {
+    const view = renderBitacoras([PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR]);
+    await act(async () => Promise.resolve());
+
+    expect(view.button('Registrar Bitácora')).toBeUndefined();
+    expect(view.button('Registrar Visita')).toBeUndefined();
+    expect(view.button('Crear formulario')).not.toBeUndefined();
+    expect(view.container.textContent).toContain('No hay formularios publicados.');
+    expect(bitacorasService.getUbicaciones).toHaveBeenCalledTimes(1);
 
     view.unmount();
   });

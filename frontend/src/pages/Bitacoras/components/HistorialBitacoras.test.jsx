@@ -336,6 +336,21 @@ describe('HistorialBitacoras', () => {
     view.unmount();
   });
 
+  test('reporta el total visible vía onTotalChange y lo actualiza tras un refresh (crear registro)', async () => {
+    const onTotalChange = jest.fn();
+    const view = renderHistory({ onTotalChange });
+    await flush();
+
+    expect(onTotalChange).toHaveBeenLastCalledWith(RECORDS.length);
+
+    bitacorasService.getRegistros.mockResolvedValue(successResult({ data: [RECORDS[0]] }));
+    view.rerender({ refreshKey: 1, onTotalChange });
+    await flush();
+
+    expect(onTotalChange).toHaveBeenLastCalledWith(1);
+    view.unmount();
+  });
+
   test('una respuesta anterior no sobrescribe el resultado del refresh externo', async () => {
     let resolveInitial;
     bitacorasService.getRegistros
