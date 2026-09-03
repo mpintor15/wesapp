@@ -15,8 +15,10 @@ const CancelFacturaModal = ({
     <AppModal
       isOpen={isOpen}
       onClose={onClose}
-      closeOnBackdrop
-      title="Anular Factura"
+      closeOnBackdrop={!isSubmitting}
+      closeOnEscape={!isSubmitting}
+      closeButtonDisabled={isSubmitting}
+      title="Anular factura"
       size="lg"
       className="modal-cancel-factura"
     >
@@ -31,6 +33,10 @@ const CancelFacturaModal = ({
               Cliente: <strong>{factura.cliente}</strong>
             </span>
           </div>
+          <p className="modal-help-text">
+            La factura quedará conservada en el historial contable, no sumará deuda pendiente y no
+            admitirá nuevos abonos.
+          </p>
           <div className="form-group">
             <label>Detalle de anulación</label>
             <textarea
@@ -39,6 +45,7 @@ const CancelFacturaModal = ({
               placeholder="Explica por qué se anula la factura..."
               rows={4}
               maxLength={300}
+              disabled={isSubmitting}
             />
             <span className="field-help">{detail.length}/300</span>
           </div>

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import { useToast } from '../../context/ToastContext';
-import ClientesTab from './components/ClientesTab';
 import CuentasModals from './components/CuentasModals';
 import CuentasPageHeader from './components/CuentasPageHeader';
 import { CuentasErrorBanner, CuentasLoading } from './components/CuentasStatus';
@@ -30,14 +29,16 @@ const Cuentas = () => {
   const permissions = useCuentasPermissions();
   const { isSubmitting: isCreatingFactura, withSubmit: withFacturaSubmit } = useSubmitState();
   const [activeTab, setActiveTab] = useState('facturas');
-  const [showClienteForm, setShowClienteForm] = useState(false);
+  const [pagosSelectionResetKey, setPagosSelectionResetKey] = useState(0);
 
   const {
     clientes,
     reporte,
+    facturasCatalogo,
     pagos,
+    reportePagination,
+    pagosPagination,
     loading,
-    clientesLoading,
     clientesLoaded,
     pagosLoading,
     pagosLoaded,
@@ -48,35 +49,20 @@ const Cuentas = () => {
     refreshFinancialData,
   } = useCuentasData({ showToast });
 
-  const refreshActiveTab = useCallback(() => {
-    if (activeTab === 'pagos') return loadPagos();
-    if (activeTab === 'clientes') return loadClientes();
-    return loadReporte();
-  }, [activeTab, loadClientes, loadPagos, loadReporte]);
+  const facturasTable = useFacturasTableState(reporte, reportePagination);
+  const pagosTable = usePagosTableState(pagos, pagosPagination);
 
-  useEffect(() => {
-    if (activeTab === 'pagos' && !pagosLoaded && !pagosLoading) {
-      loadPagos();
-    }
-    if (activeTab === 'clientes' && !clientesLoaded && !clientesLoading) {
-      loadClientes();
-    }
-  }, [
-    activeTab,
-    clientesLoaded,
-    clientesLoading,
-    loadClientes,
-    loadPagos,
-    pagosLoaded,
-    pagosLoading,
-  ]);
+  const refreshActiveTab = useCallback(() => {
+    if (activeTab === 'pagos') return loadPagos(pagosTable.params);
+    return loadReporte(facturasTable.params);
+  }, [activeTab, facturasTable.params, loadPagos, loadReporte, pagosTable.params]);
 
   const facturaForm = useFacturaForm({
     clientes,
-    reporte,
+    reporte: facturasCatalogo,
     canCreateFactura: permissions.canCreateFactura,
     showToast,
-    onCreated: refreshFinancialData,
+    onCreated: () => refreshFinancialData(facturasTable.params, pagosTable.params),
   });
   const facturaFormModal = {
     ...facturaForm,
@@ -86,22 +72,33 @@ const Cuentas = () => {
   const facturaEditing = useFacturaEditing({
     canEditFactura: permissions.canEditFactura,
     showToast,
-    onUpdated: refreshFinancialData,
+    onUpdated: () => refreshFinancialData(facturasTable.params, pagosTable.params),
   });
-  const facturasTable = useFacturasTableState(reporte);
-  const pagosTable = usePagosTableState(pagos);
-  const batchPayment = useBatchPaymentState({ clientes, reporte });
+  const batchPayment = useBatchPaymentState({ clientes, reporte: facturasCatalogo });
   const batchPaymentSubmission = useBatchPaymentSubmission({
     batchPayment,
     showToast,
-    onCreated: refreshFinancialData,
+    onCreated: () => refreshFinancialData(facturasTable.params, pagosTable.params),
   });
-  const reports = useCuentasReports({ showToast });
+  const reports = useCuentasReports({
+    canExportReportes: permissions.canExportReportes,
+    showToast,
+  });
   const administrativeActions = useCuentasAdministrativeActions({
     permissions,
     showToast,
-    onRefresh: refreshFinancialData,
+    onRefresh: () => refreshFinancialData(facturasTable.params, pagosTable.params),
   });
+
+  useEffect(() => {
+    loadReporte(facturasTable.params);
+  }, [facturasTable.params, loadReporte]);
+
+  useEffect(() => {
+    if (activeTab === 'pagos' || pagosLoaded) {
+      loadPagos(pagosTable.params);
+    }
+  }, [activeTab, loadPagos, pagosLoaded, pagosTable.params]);
 
   const openCreateFacturaModal = useCallback(async () => {
     if (!permissions.canCreateFactura) {
@@ -113,26 +110,31 @@ const Cuentas = () => {
   }, [clientesLoaded, facturaForm, loadClientes, permissions.canCreateFactura, showToast]);
 
   const openBatchPaymentModal = useCallback(async () => {
+    if (!permissions.canCreatePago) {
+      showToast('No tienes permisos para registrar pagos', 'error');
+      return;
+    }
     if (!clientesLoaded && !(await loadClientes())) return;
     batchPayment.open();
-  }, [batchPayment, clientesLoaded, loadClientes]);
+  }, [batchPayment, clientesLoaded, loadClientes, permissions.canCreatePago, showToast]);
 
   return (
-    <div className="cuentas-container">
+    <div className="cuentas-container tabular-page">
       <CuentasPageHeader
         activeTab={activeTab}
         canCreateFactura={permissions.canCreateFactura}
-        showClienteForm={showClienteForm}
+        canCreatePago={permissions.canCreatePago}
+        canExportReportes={permissions.canExportReportes}
         onBack={() => navigate('/')}
         onCreateFactura={openCreateFacturaModal}
         onShowFacturasReport={reports.facturas.open}
-        onRefreshFacturas={loadReporte}
+        onRefreshFacturas={() => loadReporte(facturasTable.params)}
         onOpenBatchPayment={openBatchPaymentModal}
         onShowPagosReport={reports.pagos.open}
-        onRefreshPagos={loadPagos}
-        onToggleClienteForm={() => setShowClienteForm(!showClienteForm)}
-        onShowClientesReport={reports.clientes.open}
-        onRefreshClientes={loadClientes}
+        onRefreshPagos={() => {
+          setPagosSelectionResetKey((key) => key + 1);
+          loadPagos(pagosTable.params);
+        }}
       />
 
       {loading ? (
@@ -142,7 +144,10 @@ const Cuentas = () => {
           <CuentasErrorBanner message={loadError} onRetry={refreshActiveTab} />
           <CuentasTabs
             activeTab={activeTab}
-            counts={{ facturas: reporte.length, pagos: pagos.length, clientes: clientes.length }}
+            counts={{
+              facturas: facturasTable.totalItems,
+              pagos: pagosTable.totalItems,
+            }}
             onChange={setActiveTab}
           />
 
@@ -151,7 +156,7 @@ const Cuentas = () => {
               filtersDraft={facturasTable.filtersDraft}
               filters={facturasTable.filters}
               rows={facturasTable.rows}
-              filteredCount={facturasTable.filteredRows.length}
+              filteredCount={facturasTable.totalItems}
               sort={facturasTable.sort}
               currentPage={facturasTable.currentPage}
               totalPages={facturasTable.totalPages}
@@ -165,7 +170,6 @@ const Cuentas = () => {
               onShowAnulacion={administrativeActions.setAnulacionModal}
               onEdit={facturaEditing.open}
               onCancel={administrativeActions.openCancelFacturaModal}
-              onDelete={administrativeActions.requestDeleteFactura}
               onPageChange={facturasTable.setCurrentPage}
             />
           )}
@@ -175,36 +179,22 @@ const Cuentas = () => {
               filtersDraft={pagosTable.filtersDraft}
               filters={pagosTable.filters}
               rows={pagosTable.rows}
-              filteredCount={pagosTable.filteredRows.length}
+              filteredCount={pagosTable.totalItems}
               loading={pagosLoading}
               sort={pagosTable.sort}
               currentPage={pagosTable.currentPage}
               totalPages={pagosTable.totalPages}
-              canDeletePago={permissions.canDeletePago}
+              selectionResetKey={pagosSelectionResetKey}
               onFilterChange={pagosTable.handleFilterChange}
               onApplyFilters={pagosTable.applyFilters}
               onClearFilters={pagosTable.clearFilters}
               onToggleFilter={pagosTable.toggleFilter}
               onSort={pagosTable.handleSort}
-              onOpenDetail={administrativeActions.openPagoDetailModal}
-              onDelete={administrativeActions.requestDeletePago}
               onPageChange={pagosTable.setCurrentPage}
             />
           )}
 
-          {activeTab === 'clientes' && (
-            <ClientesTab
-              clientes={clientes}
-              loading={clientesLoading}
-              onClienteCreated={loadClientes}
-              onClienteDeleted={loadClientes}
-              showClienteForm={showClienteForm}
-              setShowClienteForm={setShowClienteForm}
-            />
-          )}
-
           <CuentasModals
-            clientesCount={clientes.length}
             facturaForm={facturaFormModal}
             facturaEditing={facturaEditing}
             batchPayment={batchPayment}

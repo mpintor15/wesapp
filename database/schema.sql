@@ -11,6 +11,8 @@
 -- !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 -- Limpiar tablas existentes (SOLO PARA DESARROLLO LOCAL)
+DROP TABLE IF EXISTS bitacora_registros CASCADE;
+DROP TABLE IF EXISTS usuario_ubicaciones CASCADE;
 DROP TABLE IF EXISTS detalle_movimientos CASCADE;
 DROP TABLE IF EXISTS movimientos CASCADE;
 DROP TABLE IF EXISTS articulos CASCADE;
@@ -35,7 +37,7 @@ CREATE TABLE usuarios (
     password_hash VARCHAR(255) NOT NULL,
     nombre VARCHAR(100),
     apellido VARCHAR(100),
-    tipo_usuario VARCHAR(20) NOT NULL CHECK (tipo_usuario IN ('gerente', 'secretario', 'supervisor', 'contador')),
+    tipo_usuario VARCHAR(20) NOT NULL CHECK (tipo_usuario IN ('gerente', 'secretario', 'supervisor', 'contador', 'guardia', 'monitorista')),
     primer_login BOOLEAN DEFAULT TRUE,
     activo BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -47,8 +49,14 @@ CREATE TABLE usuarios (
 -- ============================================
 CREATE TABLE clientes (
     id SERIAL PRIMARY KEY,
-    nombre TEXT UNIQUE NOT NULL,
-    identificacion TEXT UNIQUE NOT NULL,
+    nombre TEXT NOT NULL,
+    identificacion TEXT,
+    tipo_identificacion TEXT,
+    telefono TEXT,
+    correo TEXT,
+    direccion TEXT,
+    ciudad TEXT,
+    estado VARCHAR(20) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -93,9 +101,63 @@ CREATE TABLE abonos (
 -- ============================================
 CREATE TABLE ubicaciones (
     id SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) UNIQUE NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    tipo_punto VARCHAR(20) NOT NULL DEFAULT 'GENERAL'
+        CHECK (tipo_punto IN ('GENERAL', 'URBANIZACION')),
+    cliente_id INTEGER CONSTRAINT fk_ubicaciones_cliente REFERENCES clientes(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE manzanas (
+    id SERIAL PRIMARY KEY,
+    ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    nombre VARCHAR(100) NOT NULL,
+    estado VARCHAR(10) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
+    created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT manzanas_id_ubicacion_id_key UNIQUE (id, ubicacion_id)
+);
+
+CREATE UNIQUE INDEX idx_manzanas_ubicacion_nombre_normalizado_unique
+    ON manzanas (ubicacion_id, LOWER(REGEXP_REPLACE(TRIM(nombre), '\s+', ' ', 'g')));
+CREATE INDEX idx_manzanas_ubicacion ON manzanas (ubicacion_id);
+
+CREATE TABLE villas (
+    id SERIAL PRIMARY KEY,
+    manzana_id INTEGER NOT NULL REFERENCES manzanas(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    identificador VARCHAR(100) NOT NULL,
+    estado VARCHAR(10) NOT NULL DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
+    created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT villas_id_manzana_id_key UNIQUE (id, manzana_id)
+);
+
+CREATE UNIQUE INDEX idx_villas_manzana_identificador_normalizado_unique
+    ON villas (manzana_id, LOWER(REGEXP_REPLACE(TRIM(identificador), '\s+', ' ', 'g')));
+CREATE INDEX idx_villas_manzana ON villas (manzana_id);
+
+CREATE TABLE residentes (
+    id SERIAL PRIMARY KEY,
+    villa_id INTEGER NOT NULL REFERENCES villas(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    nombre VARCHAR(150) NOT NULL,
+    contacto VARCHAR(150) NOT NULL,
+    es_principal BOOLEAN NOT NULL DEFAULT TRUE,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX idx_residentes_villa_principal_activo_unique
+    ON residentes (villa_id) WHERE es_principal = TRUE AND activo = TRUE;
+CREATE INDEX idx_residentes_villa ON residentes (villa_id);
+
+CREATE INDEX idx_ubicaciones_cliente_id ON ubicaciones(cliente_id);
+CREATE UNIQUE INDEX idx_ubicaciones_cliente_nombre_lower_unique
+    ON ubicaciones(cliente_id, LOWER(TRIM(nombre)))
+    WHERE cliente_id IS NOT NULL;
 
 CREATE TABLE articulos (
     id SERIAL PRIMARY KEY,
@@ -213,6 +275,79 @@ CREATE TABLE colaboradores (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE usuarios
+    ADD COLUMN colaborador_id INTEGER NOT NULL,
+    ADD CONSTRAINT usuarios_colaborador_id_fkey
+        FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id) ON DELETE RESTRICT,
+    ADD CONSTRAINT usuarios_colaborador_id_key UNIQUE (colaborador_id);
+
+CREATE TABLE usuario_ubicaciones (
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by INTEGER NULL REFERENCES usuarios(id) ON DELETE SET NULL,
+    PRIMARY KEY (usuario_id, ubicacion_id)
+);
+CREATE INDEX idx_usuario_ubicaciones_ubicacion_id ON usuario_ubicaciones(ubicacion_id);
+
+CREATE TABLE bitacora_registros (
+    id SERIAL PRIMARY KEY,
+    ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+    autor_usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+    autor_colaborador_id INTEGER NOT NULL REFERENCES colaboradores(id) ON DELETE RESTRICT,
+    ocurrido_at TIMESTAMP NOT NULL,
+    detalle TEXT NOT NULL,
+    estado VARCHAR(12) NOT NULL DEFAULT 'REGISTRADA',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    anulado_at TIMESTAMP NULL,
+    anulado_por_usuario_id INTEGER NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+    motivo_anulacion TEXT NULL,
+    manzana_id INTEGER NULL,
+    villa_id INTEGER NULL,
+    CONSTRAINT bitacora_registros_detalle_no_vacio_check
+        CHECK (detalle ~ '[^[:space:]]'),
+    CONSTRAINT bitacora_registros_estado_check
+        CHECK (estado IN ('REGISTRADA', 'ANULADA')),
+    CONSTRAINT bitacora_registros_anulacion_coherente_check
+        CHECK (
+            (
+                estado = 'REGISTRADA'
+                AND anulado_at IS NULL
+                AND anulado_por_usuario_id IS NULL
+                AND motivo_anulacion IS NULL
+            )
+            OR
+            (
+                estado = 'ANULADA'
+                AND anulado_at IS NOT NULL
+                AND anulado_por_usuario_id IS NOT NULL
+                AND motivo_anulacion IS NOT NULL
+                AND motivo_anulacion ~ '[^[:space:]]'
+            )
+    ),
+    CONSTRAINT bitacora_registros_villa_requiere_manzana_check
+        CHECK (villa_id IS NULL OR manzana_id IS NOT NULL),
+    CONSTRAINT bitacora_registros_manzana_ubicacion_fkey
+        FOREIGN KEY (manzana_id, ubicacion_id)
+        REFERENCES manzanas (id, ubicacion_id) ON DELETE RESTRICT,
+    CONSTRAINT bitacora_registros_villa_manzana_fkey
+        FOREIGN KEY (villa_id, manzana_id)
+        REFERENCES villas (id, manzana_id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_bitacora_registros_ubicacion_ocurrido
+    ON bitacora_registros (ubicacion_id, ocurrido_at DESC, id DESC);
+CREATE INDEX idx_bitacora_registros_autor_ocurrido
+    ON bitacora_registros (autor_usuario_id, ocurrido_at DESC, id DESC);
+CREATE INDEX idx_bitacora_registros_ocurrido
+    ON bitacora_registros (ocurrido_at DESC, id DESC);
+CREATE INDEX idx_bitacora_registros_estado_ocurrido
+    ON bitacora_registros (estado, ocurrido_at DESC, id DESC);
+CREATE INDEX idx_bitacora_registros_manzana_ubicacion
+    ON bitacora_registros (manzana_id, ubicacion_id) WHERE manzana_id IS NOT NULL;
+CREATE INDEX idx_bitacora_registros_villa_manzana
+    ON bitacora_registros (villa_id, manzana_id) WHERE villa_id IS NOT NULL;
+
 CREATE TABLE audit_log (
     id SERIAL PRIMARY KEY,
     tabla VARCHAR(50) NOT NULL,
@@ -270,18 +405,34 @@ CREATE INDEX idx_colaboradores_cedula ON colaboradores(cedula);
 CREATE INDEX idx_audit_tabla ON audit_log(tabla);
 CREATE INDEX idx_audit_fecha ON audit_log(created_at);
 CREATE INDEX idx_audit_usuario ON audit_log(usuario_id);
+CREATE INDEX idx_clientes_nombre_normalizado ON clientes(LOWER(TRIM(nombre)));
+CREATE INDEX idx_clientes_estado ON clientes(estado);
+CREATE UNIQUE INDEX idx_clientes_identificacion_normalizada_unique
+    ON clientes(LOWER(TRIM(identificacion)))
+    WHERE identificacion IS NOT NULL AND TRIM(identificacion) <> '';
 
 -- ============================================
 -- DATOS DE PRUEBA
 -- ============================================
 
+-- Colaboradores vinculados a los Usuarios de prueba
+INSERT INTO colaboradores
+    (nombres_completos, cedula, fecha_nacimiento, cargo, estado)
+VALUES
+('Gerente Prueba', 'TEST-COL-001', '1990-01-01', 'Gerente', 'activo'),
+('Secretario Prueba', 'TEST-COL-002', '1990-01-01', 'Secretario', 'activo'),
+('Supervisor Prueba', 'TEST-COL-003', '1990-01-01', 'Supervisor', 'activo'),
+('Contador Prueba', 'TEST-COL-004', '1990-01-01', 'Contador', 'activo');
+
 -- Usuarios de prueba
 -- Password para todos: "password123"
-INSERT INTO usuarios (usuario, password_hash, tipo_usuario, primer_login, activo) VALUES
-('gerente1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'gerente', FALSE, TRUE),
-('secretario1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'secretario', FALSE, TRUE),
-('supervisor1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'supervisor', FALSE, TRUE),
-('contador1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'contador', FALSE, TRUE);
+INSERT INTO usuarios
+    (usuario, password_hash, tipo_usuario, colaborador_id, primer_login, activo)
+VALUES
+('gerente1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'gerente', 1, FALSE, TRUE),
+('secretario1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'secretario', 2, FALSE, TRUE),
+('supervisor1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'supervisor', 3, FALSE, TRUE),
+('contador1', '$2b$10$l2GA3Vzunm2AlLfERjfQtOh.8TnYbxMmyxzCTTbIzT5A/3wKR.UYS', 'contador', 4, FALSE, TRUE);
 
 -- Clientes de prueba
 INSERT INTO clientes (nombre, identificacion) VALUES
@@ -423,9 +574,12 @@ SELECT
         WHEN a.fecha_caducidad < CURRENT_DATE THEN 'vencida'
         WHEN a.fecha_caducidad <= CURRENT_DATE + INTERVAL '30 days' THEN 'proxima_a_vencer'
         ELSE 'vigente'
-    END AS estado_caducidad
+    END AS estado_caducidad,
+    u.cliente_id,
+    c.nombre AS cliente_nombre
 FROM articulos a
 LEFT JOIN ubicaciones u ON a.ubicacion_id = u.id
+LEFT JOIN clientes c ON c.id = u.cliente_id
 WHERE a.activo = TRUE;
 
 -- ============================================
@@ -441,6 +595,78 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+CREATE OR REPLACE FUNCTION enforce_manzana_urbanizacion()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM ubicaciones
+        WHERE id = NEW.ubicacion_id AND tipo_punto = 'URBANIZACION'
+    ) THEN
+        RAISE EXCEPTION 'Las Manzanas solo pertenecen a ubicaciones URBANIZACION'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE OR REPLACE FUNCTION prevent_urbanizacion_downgrade_with_manzanas()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.tipo_punto = 'URBANIZACION'
+       AND NEW.tipo_punto <> 'URBANIZACION'
+       AND EXISTS (SELECT 1 FROM manzanas WHERE ubicacion_id = OLD.id) THEN
+        RAISE EXCEPTION 'No se puede cambiar a GENERAL una Urbanización con Manzanas'
+            USING ERRCODE = '23503';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE OR REPLACE FUNCTION enforce_residente_active_chain()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.activo = TRUE AND NOT EXISTS (
+        SELECT 1 FROM villas v
+        JOIN manzanas m ON m.id = v.manzana_id
+        JOIN ubicaciones u ON u.id = m.ubicacion_id
+        WHERE v.id = NEW.villa_id AND v.estado = 'activo'
+          AND m.estado = 'activo' AND u.tipo_punto = 'URBANIZACION'
+    ) THEN
+        RAISE EXCEPTION 'El Residente activo requiere Villa, Manzana y Urbanización activas'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE OR REPLACE FUNCTION prevent_villa_deactivation_with_resident()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.estado = 'activo' AND NEW.estado = 'inactivo'
+       AND EXISTS (SELECT 1 FROM residentes WHERE villa_id = OLD.id AND es_principal = TRUE AND activo = TRUE) THEN
+        RAISE EXCEPTION 'No se puede desactivar una Villa con Residente principal activo'
+            USING ERRCODE = '23503';
+    END IF;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER enforce_manzana_urbanizacion_trigger
+    BEFORE INSERT OR UPDATE OF ubicacion_id ON manzanas
+    FOR EACH ROW EXECUTE FUNCTION enforce_manzana_urbanizacion();
+
+CREATE TRIGGER prevent_urbanizacion_downgrade_trigger
+    BEFORE UPDATE OF tipo_punto ON ubicaciones
+    FOR EACH ROW EXECUTE FUNCTION prevent_urbanizacion_downgrade_with_manzanas();
+
+CREATE TRIGGER enforce_residente_active_chain_trigger
+    BEFORE INSERT OR UPDATE OF villa_id, activo ON residentes
+    FOR EACH ROW EXECUTE FUNCTION enforce_residente_active_chain();
+
+CREATE TRIGGER prevent_villa_deactivation_with_resident_trigger
+    BEFORE UPDATE OF estado ON villas
+    FOR EACH ROW EXECUTE FUNCTION prevent_villa_deactivation_with_resident();
+
 CREATE TRIGGER update_usuarios_updated_at BEFORE UPDATE ON usuarios
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -454,6 +680,15 @@ CREATE TRIGGER update_articulos_updated_at BEFORE UPDATE ON articulos
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_colaboradores_updated_at BEFORE UPDATE ON colaboradores
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_manzanas_updated_at BEFORE UPDATE ON manzanas
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_villas_updated_at BEFORE UPDATE ON villas
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_residentes_updated_at BEFORE UPDATE ON residentes
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 INSERT INTO schema_version (version, description) VALUES
@@ -471,7 +706,19 @@ INSERT INTO schema_version (version, description) VALUES
 (13, 'Reconcile production schema, constraints, triggers and indexes'),
 (14, 'Improve inventory table query performance'),
 (15, 'Inventory transactional integrity, voiding and logical deletion metadata'),
-(16, 'Inventory exact stock effects and reversible history markers');
+(16, 'Inventory exact stock effects and reversible history markers'),
+(17, 'Case-insensitive unique normalized locations'),
+(18, 'Clientes catalog normalization'),
+(19, 'Relate locations to clients with nullable cliente_id'),
+(20, 'Add Guardia and Monitorista user roles'),
+(21, 'Add optional one-to-one Usuario-Colaborador relationship'),
+(22, 'Add Guardia-ubicacion assignments'),
+(23, 'Add location point type'),
+(24, 'Add blocks and villas for urbanization locations'),
+(25, 'Add primary residents for villas'),
+(26, 'Require collaborator for new and updated users'),
+(27, 'Add minimal immutable logbook records persistence'),
+(28, 'Add optional urban context to logbook records');
 
 -- ============================================
 -- FINALIZADO

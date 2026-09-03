@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const inventarioController = require('../controllers/inventarioController');
+const ubicacionesRoutes = require('./ubicaciones.routes');
 const { verifyToken } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
 const { PERMISSIONS } = require('../config/permissions');
@@ -12,22 +13,13 @@ const {
   movimientoCreateSchema,
 } = require('../utils/validationSchemas');
 
-router.use(verifyToken);
-
 // ============================================
 // UBICACIONES
 // ============================================
 
-/**
- * @route   GET /api/inventario/ubicaciones
- * @desc    Obtener todas las ubicaciones
- * @access  Private (inventario)
- */
-router.get(
-  '/ubicaciones',
-  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_VER),
-  inventarioController.getUbicaciones
-);
+router.use('/ubicaciones', ubicacionesRoutes);
+
+router.use(verifyToken);
 
 // ============================================
 // ARTICULOS
@@ -42,6 +34,12 @@ router.get(
   '/articulos',
   requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_VER),
   inventarioController.getArticulos
+);
+
+router.get(
+  '/articulos/catalogo',
+  requirePermission(PERMISSIONS.INVENTARIO_ARTICULOS_VER),
+  inventarioController.getArticulosCatalogo
 );
 
 /**

@@ -38,8 +38,18 @@ const useMovimientoForm = ({
 
   const handleMovimientoFormChange = useCallback((e) => {
     const { name, value } = e.target;
-    setMovimientoForm((prev) => ({ ...prev, [name]: value }));
-    setMovimientoErrors((prev) => ({ ...prev, [name]: '' }));
+    setMovimientoForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'cliente_destino_id'
+        ? { ubicacion_destino_id: '', ubicacion_destino_nombre: '' }
+        : {}),
+    }));
+    setMovimientoErrors((prev) => ({
+      ...prev,
+      [name]: '',
+      ...(name === 'ubicacion_destino_id' ? { ubicacion_destino_nombre: '' } : {}),
+    }));
   }, []);
 
   const handleMovimientoItemChange = useCallback((index, field, value) => {

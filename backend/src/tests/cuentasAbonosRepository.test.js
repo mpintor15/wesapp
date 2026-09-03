@@ -103,18 +103,6 @@ describe('cuentasAbonosRepository', () => {
     expect(db.query.mock.calls[0][1]).toEqual([10, 1001, '2024-01-01', 250]);
   });
 
-  test('deleteAbonoById conserva DELETE y parámetros', async () => {
-    const expected = { rows: [], rowCount: 1 };
-    db.query.mockResolvedValueOnce(expected);
-
-    const result = await cuentasAbonosRepository.deleteAbonoById(5);
-
-    expect(result).toBe(expected);
-    expect(db.query).toHaveBeenCalledTimes(1);
-    expect(normalizeSql(db.query.mock.calls[0][0])).toBe('DELETE FROM abonos WHERE id = $1');
-    expect(db.query.mock.calls[0][1]).toEqual([5]);
-  });
-
   test('countAbonosByPagoId conserva COUNT, alias y parámetros', async () => {
     const expected = { rows: [{ cnt: '0' }], rowCount: 1 };
     db.query.mockResolvedValueOnce(expected);
@@ -129,7 +117,7 @@ describe('cuentasAbonosRepository', () => {
     expect(db.query.mock.calls[0][1]).toEqual([10]);
   });
 
-  test('las consultas de eliminación permiten usar un executor explícito', async () => {
+  test('las consultas de abonos permiten usar un executor explícito sin DELETE', async () => {
     const executor = { query: jest.fn().mockResolvedValue({ rows: [] }) };
 
     await cuentasAbonosRepository.createAbono(
@@ -141,18 +129,19 @@ describe('cuentasAbonosRepository', () => {
       },
       executor
     );
-    await cuentasAbonosRepository.deleteAbonoById(5, executor);
+    await cuentasAbonosRepository.countAbonosByPagoId(5, executor);
 
     expect(executor.query).toHaveBeenCalledTimes(2);
     expect(executor.query.mock.calls[0][1]).toEqual([10, 1001, '2024-01-01', 250]);
+    expect(executor.query.mock.calls[1][0]).not.toMatch(/DELETE FROM/i);
     expect(executor.query.mock.calls[1][1]).toEqual([5]);
     expect(db.query).not.toHaveBeenCalled();
   });
 
-  test('las consultas de eliminación propagan errores sin transformarlos', async () => {
-    const error = new Error('delete failed');
+  test('las consultas de abonos propagan errores sin transformarlos', async () => {
+    const error = new Error('count failed');
     db.query.mockRejectedValueOnce(error);
 
-    await expect(cuentasAbonosRepository.deleteAbonoById(5)).rejects.toBe(error);
+    await expect(cuentasAbonosRepository.countAbonosByPagoId(5)).rejects.toBe(error);
   });
 });

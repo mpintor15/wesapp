@@ -6,8 +6,6 @@ jest.mock('../../../services/cuentasService');
 
 const permissions = {
   canCancelFactura: true,
-  canDeleteFactura: true,
-  canDeletePago: true,
 };
 
 const baseProps = (overrides = {}) => ({
@@ -20,27 +18,19 @@ const baseProps = (overrides = {}) => ({
 describe('useCuentasAdministrativeActions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    cuentasService.deleteFactura.mockResolvedValue({ success: true });
     cuentasService.cancelFactura.mockResolvedValue({ success: true });
-    cuentasService.deletePago.mockResolvedValue({ success: true });
   });
 
-  test('elimina factura y limpia estado', async () => {
+  test('abre el modal de anulación de factura sin llamar eliminación', async () => {
     const props = baseProps();
     const hook = renderHook(() => useCuentasAdministrativeActions(props));
 
     act(() => {
-      hook.result.requestDeleteFactura({ num_factura: 10 });
+      hook.result.openCancelFacturaModal({ num_factura: 10 });
     });
 
-    await act(async () => {
-      await hook.result.confirmDeleteFactura();
-    });
-
-    expect(cuentasService.deleteFactura).toHaveBeenCalledWith(10);
-    expect(props.showToast).toHaveBeenCalledWith('Factura eliminada', 'success');
-    expect(props.onRefresh).toHaveBeenCalled();
-    expect(hook.result.facturaToDelete).toBeNull();
+    expect(hook.result.facturaToCancel).toEqual({ num_factura: 10 });
+    expect(hook.result.showCancelFacturaModal).toBe(true);
 
     hook.unmount();
   });
@@ -80,40 +70,23 @@ describe('useCuentasAdministrativeActions', () => {
     hook.unmount();
   });
 
-  test('elimina pago, abre/cierra detalles y respeta permisos de factura', async () => {
+  test('respeta permisos de factura y no expone acciones destructivas', async () => {
     const props = baseProps({
-      permissions: { canCancelFactura: false, canDeleteFactura: false, canDeletePago: true },
+      permissions: { canCancelFactura: false },
     });
     const hook = renderHook(() => useCuentasAdministrativeActions(props));
 
     act(() => {
-      hook.result.requestDeleteFactura({ num_factura: 1 });
       hook.result.openCancelFacturaModal({ num_factura: 1 });
-      hook.result.openPagoDetailModal({ id: 3 });
-      hook.result.requestDeletePago({ id: 9 });
     });
 
-    expect(props.showToast).toHaveBeenCalledWith(
-      'Solo un usuario Gerente puede eliminar facturas',
-      'error'
-    );
     expect(props.showToast).toHaveBeenCalledWith(
       'Solo un usuario Gerente puede anular facturas',
       'error'
     );
-    expect(hook.result.selectedPago).toEqual({ id: 3 });
-
-    act(() => {
-      hook.result.closePagoDetailModal();
-    });
-    expect(hook.result.selectedPago).toBeNull();
-
-    await act(async () => {
-      await hook.result.confirmDeletePago();
-    });
-
-    expect(cuentasService.deletePago).toHaveBeenCalledWith(9);
-    expect(props.showToast).toHaveBeenCalledWith('Pago eliminado exitosamente', 'success');
+    expect(hook.result.requestDeletePago).toBeUndefined();
+    expect(hook.result.confirmDeletePago).toBeUndefined();
+    expect(hook.result.requestDeleteFactura).toBeUndefined();
 
     hook.unmount();
   });

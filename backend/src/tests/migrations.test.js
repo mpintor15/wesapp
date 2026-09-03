@@ -2,6 +2,10 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { Pool } = require('pg');
 const { listMigrations } = require('../config/migrations');
+const {
+  assertSafeTestDatabase,
+  buildSafeTestResourceName,
+} = require('./helpers/testDatabaseSafety');
 
 const projectRoot = path.resolve(__dirname, '../../..');
 const migrationsDir = path.resolve(projectRoot, 'database/migrations');
@@ -22,7 +26,8 @@ const createAdminPool = () => new Pool(adminConfig());
 const createDbPool = (database) => new Pool({ ...adminConfig(), database });
 
 const withTempDatabase = async (prefix, callback) => {
-  const database = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+  assertSafeTestDatabase(process.env.DB_NAME);
+  const database = buildSafeTestResourceName(prefix);
   const admin = createAdminPool();
   await admin.query(`CREATE DATABASE ${quoteIdent(database)}`);
   await admin.end();
@@ -47,6 +52,26 @@ const readMigration = async (version) => {
   return fs.readFile(path.join(migrationsDir, migration.fileName), 'utf8');
 };
 
+const normalizeSqlWhitespace = (sql) => sql.replace(/\s+/g, ' ').trim();
+
+const hasSchemaVersionRegistration = (sql, version) => {
+  const normalized = normalizeSqlWhitespace(sql);
+  const versionTuple = String.raw`\(\s*${version}\s*,\s*'[^']+'\s*\)`;
+  const pattern = new RegExp(
+    String.raw`\bINSERT\s+INTO\s+schema_version\s*\(\s*version\s*,\s*description\s*\)\s+VALUES\b.*${versionTuple}`,
+    'i'
+  );
+
+  return pattern.test(normalized);
+};
+
+const hasDropUbicacionesNombreConstraint = (sql) => {
+  const normalized = normalizeSqlWhitespace(sql);
+  return /\bALTER\s+TABLE\s+ubicaciones\s+DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+ubicaciones_nombre_key\b/i.test(
+    normalized
+  );
+};
+
 const applyPendingMigrations = async (pool) => {
   const migrations = await listMigrations();
   const appliedResult = await pool.query('SELECT version FROM schema_version');
@@ -62,12 +87,27 @@ const applyPendingMigrations = async (pool) => {
   }
 };
 
+const applyMigrationInTransaction = async (pool, version) => {
+  const sql = await readMigration(version);
+  await pool.query('BEGIN');
+  try {
+    await pool.query(sql);
+    await pool.query('COMMIT');
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    throw error;
+  }
+};
+
 const createPre015OriginalSchema = async (pool) => {
   await pool.query(`
     CREATE TABLE usuarios (
       id SERIAL PRIMARY KEY,
       usuario TEXT,
       tipo_usuario TEXT
+    );
+    CREATE TABLE colaboradores (
+      id SERIAL PRIMARY KEY
     );
     CREATE TABLE ubicaciones (
       id SERIAL PRIMARY KEY,
@@ -78,6 +118,17 @@ const createPre015OriginalSchema = async (pool) => {
       tipo_articulo TEXT,
       nombre_articulo TEXT,
       cantidad INTEGER DEFAULT 1,
+      talla TEXT,
+      marca TEXT,
+      modelo TEXT,
+      numero_serie TEXT,
+      calibre TEXT,
+      fecha_caducidad DATE,
+      codigo_pantalla TEXT,
+      codigo_radio TEXT,
+      version TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       activo BOOLEAN DEFAULT TRUE,
       ubicacion_id INTEGER REFERENCES ubicaciones(id)
     );
@@ -143,6 +194,122 @@ const createPre015OriginalSchema = async (pool) => {
   `);
 };
 
+const createPre018ClientesSchema = async (pool, { duplicatedIdentification = false } = {}) => {
+  await pool.query(`
+    CREATE TABLE clientes (
+      id SERIAL PRIMARY KEY,
+      nombre TEXT UNIQUE NOT NULL,
+      identificacion TEXT UNIQUE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE cuentas (
+      num_factura INTEGER PRIMARY KEY,
+      cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+      fecha_factura DATE NOT NULL,
+      valor_factura NUMERIC(10,2) NOT NULL CHECK (valor_factura > 0),
+      incluye_iva BOOLEAN DEFAULT FALSE,
+      incluye_retencion_fuente BOOLEAN DEFAULT FALSE,
+      incluye_retencion_iva BOOLEAN DEFAULT FALSE,
+      cancelada BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE schema_version (
+      version INTEGER PRIMARY KEY,
+      description TEXT NOT NULL,
+      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO schema_version (version, description)
+    SELECT version, 'already applied'
+    FROM generate_series(2, 17) AS version;
+  `);
+
+  if (duplicatedIdentification) {
+    await pool.query(`
+      INSERT INTO clientes (nombre, identificacion)
+      VALUES ('Cliente Uno', 'ABC-001'), ('Cliente Dos', ' abc-001 ');
+    `);
+  } else {
+    await pool.query(`
+      INSERT INTO clientes (nombre, identificacion)
+      VALUES
+        ('Cliente Historico', '  ABC-001  '),
+        ('Cliente Identificacion Vacia', ''),
+        ('Cliente Facturado', 'FAC-001');
+      INSERT INTO cuentas (num_factura, cliente_id, fecha_factura, valor_factura)
+      VALUES (1001, 3, '2026-01-10', 150.00);
+    `);
+  }
+};
+
+const createPre019UbicacionesSchema = async (pool) => {
+  await pool.query(`
+    CREATE TABLE clientes (
+      id SERIAL PRIMARY KEY,
+      nombre TEXT UNIQUE NOT NULL,
+      identificacion TEXT,
+      estado VARCHAR(20) NOT NULL DEFAULT 'activo'
+    );
+    CREATE TABLE cuentas (
+      num_factura INTEGER PRIMARY KEY,
+      cliente_id INTEGER REFERENCES clientes(id) ON DELETE CASCADE,
+      fecha_factura DATE NOT NULL,
+      valor_factura NUMERIC(10,2) NOT NULL CHECK (valor_factura > 0)
+    );
+    CREATE TABLE pagos (
+      id SERIAL PRIMARY KEY,
+      cliente_id INTEGER REFERENCES clientes(id) ON DELETE SET NULL,
+      fecha DATE NOT NULL,
+      metodo_pago TEXT,
+      total NUMERIC(10,2) NOT NULL
+    );
+    CREATE TABLE ubicaciones (
+      id SERIAL PRIMARY KEY,
+      nombre VARCHAR(100) UNIQUE NOT NULL
+    );
+    CREATE TABLE articulos (
+      id SERIAL PRIMARY KEY,
+      tipo_articulo TEXT,
+      nombre_articulo TEXT,
+      cantidad INTEGER DEFAULT 1,
+      talla TEXT,
+      marca TEXT,
+      modelo TEXT,
+      numero_serie TEXT,
+      calibre TEXT,
+      fecha_caducidad DATE,
+      codigo_pantalla TEXT,
+      codigo_radio TEXT,
+      version TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      activo BOOLEAN DEFAULT TRUE,
+      ubicacion_id INTEGER REFERENCES ubicaciones(id)
+    );
+    CREATE TABLE schema_version (
+      version INTEGER PRIMARY KEY,
+      description TEXT NOT NULL,
+      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX idx_ubicaciones_nombre_lower_unique
+      ON ubicaciones (LOWER(TRIM(nombre)));
+    INSERT INTO schema_version (version, description)
+    SELECT version, 'already applied'
+    FROM generate_series(2, 18) AS version;
+    INSERT INTO clientes (nombre, identificacion)
+    VALUES ('Cliente Norte', 'NORTE'), ('Cliente Sur', 'SUR');
+    INSERT INTO cuentas (num_factura, cliente_id, fecha_factura, valor_factura)
+    VALUES (1001, 1, '2026-01-01', 200.00);
+    INSERT INTO pagos (cliente_id, fecha, metodo_pago, total)
+    VALUES (2, '2026-01-02', 'transferencia', 50.00);
+    INSERT INTO ubicaciones (nombre)
+    VALUES ('Bodega Norte'), ('Bodega Sur');
+    INSERT INTO articulos (tipo_articulo, nombre_articulo, cantidad, ubicacion_id)
+    VALUES ('equipo', 'Chaleco', 2, 1);
+  `);
+};
+
 const expectStockEffectsModel = async (pool) => {
   const table = await pool.query(
     'SELECT to_regclass($$public.inventario_stock_efectos$$) AS table'
@@ -195,6 +362,80 @@ const expectStockEffectsModel = async (pool) => {
   expect(indexNames).toContain('idx_inventario_stock_efectos_articulo');
 };
 
+const expectUbicacionesClienteModel = async (pool) => {
+  const columns = await pool.query(`
+    SELECT column_name, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'ubicaciones'
+  `);
+  const columnMap = new Map(columns.rows.map((row) => [row.column_name, row]));
+  expect(columnMap.get('cliente_id')).toMatchObject({ is_nullable: 'YES' });
+
+  const foreignKeys = await pool.query(`
+    SELECT conname, confdeltype
+    FROM pg_constraint
+    WHERE conrelid = 'public.ubicaciones'::regclass
+      AND contype = 'f'
+      AND conname = 'fk_ubicaciones_cliente'
+  `);
+  expect(foreignKeys.rowCount).toBe(1);
+  expect(foreignKeys.rows[0].confdeltype).toBe('r');
+
+  const indexes = await pool.query(`
+    SELECT indexname, indexdef
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'ubicaciones'
+  `);
+  const indexMap = new Map(indexes.rows.map((row) => [row.indexname, row.indexdef]));
+
+  expect(indexMap.has('idx_ubicaciones_nombre_lower_unique')).toBe(false);
+  expect(indexMap.get('idx_ubicaciones_cliente_id')).toContain('cliente_id');
+  expect(indexMap.get('idx_ubicaciones_cliente_nombre_lower_unique')).toMatch(
+    /cliente_id, lower\(TRIM\(BOTH FROM nombre\)\)/i
+  );
+  expect(indexMap.get('idx_ubicaciones_cliente_nombre_lower_unique')).toMatch(
+    /WHERE \(cliente_id IS NOT NULL\)/i
+  );
+};
+
+const expectClientesCatalogModel = async (pool) => {
+  const table = await pool.query('SELECT to_regclass($$public.clientes$$) AS table');
+  expect(table.rows[0].table).toBe('clientes');
+
+  const columns = await pool.query(`
+    SELECT column_name, is_nullable, column_default
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'clientes'
+  `);
+  const columnMap = new Map(columns.rows.map((row) => [row.column_name, row]));
+  expect(columnMap.get('nombre')).toMatchObject({ is_nullable: 'NO' });
+  expect(columnMap.get('identificacion')).toMatchObject({ is_nullable: 'YES' });
+  expect(columnMap.get('tipo_identificacion')).toBeDefined();
+  expect(columnMap.get('telefono')).toBeDefined();
+  expect(columnMap.get('correo')).toBeDefined();
+  expect(columnMap.get('direccion')).toBeDefined();
+  expect(columnMap.get('ciudad')).toBeDefined();
+  expect(columnMap.get('estado')).toMatchObject({ is_nullable: 'NO' });
+
+  const indexes = await pool.query(`
+    SELECT indexname, indexdef
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'clientes'
+  `);
+  const indexMap = new Map(indexes.rows.map((row) => [row.indexname, row.indexdef]));
+  expect(indexMap.get('idx_clientes_nombre_normalizado')).toMatch(
+    /lower\(TRIM\(BOTH FROM nombre\)\)/i
+  );
+  expect(indexMap.get('idx_clientes_estado')).toContain('estado');
+  expect(indexMap.get('idx_clientes_identificacion_normalizada_unique')).toMatch(
+    /lower\(TRIM\(BOTH FROM identificacion\)\)/i
+  );
+};
+
 describe('database migrations', () => {
   test('have unique versions and are returned in ascending order', async () => {
     const migrations = await listMigrations();
@@ -203,7 +444,85 @@ describe('database migrations', () => {
     expect(versions).toEqual([...versions].sort((a, b) => a - b));
     expect(new Set(versions).size).toBe(versions.length);
     expect(versions).toContain(13);
-    expect(versions).toContain(16);
+    expect(versions).toContain(18);
+    expect(versions).toContain(19);
+  });
+
+  test('schema version registration matcher is strict but whitespace tolerant', () => {
+    const descriptionLiteral = [
+      String.fromCharCode(39),
+      'Description',
+      String.fromCharCode(39),
+    ].join('');
+
+    expect(
+      hasSchemaVersionRegistration(
+        'INSERT INTO schema_version (version, description) VALUES (19, ' + descriptionLiteral + ')',
+        19
+      )
+    ).toBe(true);
+    expect(
+      hasSchemaVersionRegistration(
+        `
+          INSERT INTO schema_version (
+            version,
+            description
+          )
+          VALUES (
+            19,
+            'Description'
+          )
+        `,
+        19
+      )
+    ).toBe(true);
+    expect(
+      hasSchemaVersionRegistration(
+        'INSERT  INTO  schema_version  ( version , description )  VALUES  ( 19 , ' +
+          descriptionLiteral +
+          ' )',
+        19
+      )
+    ).toBe(true);
+
+    expect(
+      hasSchemaVersionRegistration(
+        'INSERT INTO schema_version (version, description) VALUES (18, ' + descriptionLiteral + ')',
+        19
+      )
+    ).toBe(false);
+    expect(
+      hasSchemaVersionRegistration(
+        'INSERT INTO schema_version (version, description) VALUES (19, NULL)',
+        19
+      )
+    ).toBe(false);
+  });
+
+  test('ubicaciones constraint drop matcher is strict but whitespace tolerant', () => {
+    expect(
+      hasDropUbicacionesNombreConstraint(
+        'ALTER TABLE ubicaciones DROP CONSTRAINT IF EXISTS ubicaciones_nombre_key'
+      )
+    ).toBe(true);
+    expect(
+      hasDropUbicacionesNombreConstraint(`
+        ALTER TABLE ubicaciones
+          DROP CONSTRAINT IF EXISTS ubicaciones_nombre_key
+      `)
+    ).toBe(true);
+    expect(
+      hasDropUbicacionesNombreConstraint(
+        'ALTER   TABLE   ubicaciones   DROP   CONSTRAINT   IF   EXISTS   ubicaciones_nombre_key'
+      )
+    ).toBe(true);
+
+    expect(
+      hasDropUbicacionesNombreConstraint(
+        'ALTER TABLE ubicaciones DROP CONSTRAINT IF EXISTS otra_constraint'
+      )
+    ).toBe(false);
+    expect(hasDropUbicacionesNombreConstraint('SELECT 1')).toBe(false);
   });
 
   test('each migration registers its own schema version', async () => {
@@ -215,8 +534,38 @@ describe('database migrations', () => {
         'utf8'
       );
       expect(sql).toContain('schema_version');
-      expect(sql).toMatch(new RegExp(`\\(${migration.version},\\s*'`));
+      expect(hasSchemaVersionRegistration(sql, migration.version)).toBe(true);
     }
+  });
+
+  test('migration 030 upgrades already-applied D6 schemas without rewriting migration 029', async () => {
+    const migration029 = await readMigration(29);
+    const migration030 = await readMigration(30);
+
+    expect(migration029).toMatch(/tipo_ingreso IN \('PEATONAL', 'VEHICULO'\)/);
+    expect(migration029).not.toContain('mostrar_fecha_hora');
+    expect(migration029).not.toContain('aplica_a');
+    expect(migration030).toContain('ADD COLUMN IF NOT EXISTS mostrar_fecha_hora');
+    expect(migration030).toContain('ADD COLUMN IF NOT EXISTS aplica_a');
+    expect(migration030).toContain('ADD COLUMN IF NOT EXISTS tipo_ingreso');
+    expect(migration030).toMatch(/WHERE tipo_ingreso = 'PEATONAL'/);
+    expect(migration030).toContain('WHERE tipo_ingreso IS NULL');
+    expect(migration030).toMatch(/tipo_ingreso IN \('PEATON', 'VEHICULO'\)/);
+    expect(hasSchemaVersionRegistration(migration030, 30)).toBe(true);
+  });
+
+  test('migration 038 agrega soft delete sin habilitar borrado físico ni CASCADE', async () => {
+    const migration038 = await readMigration(38);
+
+    expect(migration038).toContain('ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
+    expect(migration038).toContain(String.raw`OLD.estado = 'ARCHIVED'`);
+    expect(migration038).toContain('OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL');
+    expect(migration038.match(/NEW\.mostrar_fecha_hora = OLD\.mostrar_fecha_hora/g)).toHaveLength(
+      3
+    );
+    expect(migration038).toContain(String.raw`IF TG_OP = 'DELETE'`);
+    expect(migration038).not.toMatch(/ON\s+DELETE\s+CASCADE/i);
+    expect(hasSchemaVersionRegistration(migration038, 38)).toBe(true);
   });
 
   test('inventory integrity migration prevalidates negative stock before constraints', async () => {
@@ -253,13 +602,175 @@ describe('database migrations', () => {
     expect(sql).not.toMatch(/UPDATE movimientos\s+m\s+SET reversion_datos_completos = TRUE/i);
   });
 
-  test('scenario A: fresh schema has stock effects model and schema version 16', async () => {
+  test('ubicaciones migration enforces case-insensitive unique names safely', async () => {
+    const sql = await readMigration(17);
+
+    expect(sql).toContain('LOCK TABLE ubicaciones IN SHARE ROW EXCLUSIVE MODE');
+    expect(sql).toContain('LOWER(TRIM(nombre))');
+    expect(sql).toContain('HAVING COUNT(*) > 1');
+    expect(sql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_ubicaciones_nombre_lower_unique');
+    expect(sql).toContain('ubicaciones_duplicate_diagnostics.sql');
+    expect(sql).toMatch(/VALUES \(17, 'Case-insensitive unique normalized locations'\)/);
+  });
+
+  test('clientes migration prepares catalog fields and normalized identification uniqueness', async () => {
+    const sql = await readMigration(18);
+
+    expect(sql).toContain('CREATE TABLE IF NOT EXISTS clientes');
+    expect(sql).toContain('LOWER(TRIM(identificacion))');
+    expect(sql).toContain('HAVING COUNT(*) > 1');
+    expect(sql).toContain('idx_clientes_identificacion_normalizada_unique');
+    expect(sql).toMatch(/VALUES \(18, 'Clientes catalog normalization'\)/);
+    expect(sql).not.toMatch(/DELETE FROM clientes/i);
+    expect(sql).not.toMatch(/nombre\s*=\s*TRIM\(nombre\)/i);
+    expect(sql).not.toMatch(/correo\s*=\s*NULLIF/i);
+  });
+
+  test('ubicaciones-clientes migration keeps historical locations nullable and scopes uniqueness by client', async () => {
+    const sql = await readMigration(19);
+    const normalizedSql = normalizeSqlWhitespace(sql);
+
+    expect(hasSchemaVersionRegistration(sql, 19)).toBe(true);
+    expect(normalizedSql).toContain('ADD COLUMN IF NOT EXISTS cliente_id INTEGER NULL');
+    expect(hasDropUbicacionesNombreConstraint(sql)).toBe(true);
+    expect(normalizedSql).toContain('FOREIGN KEY (cliente_id)');
+    expect(normalizedSql).toMatch(
+      /\bDROP INDEX IF EXISTS (public\.)?idx_ubicaciones_nombre_lower_unique\b/i
+    );
+    expect(normalizedSql).toContain('idx_ubicaciones_cliente_nombre_lower_unique');
+    expect(normalizedSql).toMatch(/WHERE cliente_id IS NOT NULL/i);
+    expect(sql).not.toMatch(/UPDATE ubicaciones\s+SET cliente_id/i);
+    expect(sql).not.toMatch(/cliente_id\s+INTEGER\s+NOT NULL/i);
+
+    await withTempDatabase('wesapp_migration_ubicaciones_019', async (pool) => {
+      await createPre019UbicacionesSchema(pool);
+
+      await applyMigrationInTransaction(pool, 19);
+      await expectUbicacionesClienteModel(pool);
+
+      const historicas = await pool.query(
+        'SELECT COUNT(*)::int AS total FROM ubicaciones WHERE cliente_id IS NULL'
+      );
+      expect(historicas.rows[0].total).toBe(2);
+
+      await pool.query('INSERT INTO clientes (nombre, identificacion) VALUES ($1, $2)', [
+        'Cliente Norte',
+        'NORTE-2',
+      ]);
+
+      await pool.query('UPDATE ubicaciones SET cliente_id = 1 WHERE id = 1');
+      await pool.query('UPDATE ubicaciones SET cliente_id = 2 WHERE id = 2');
+      await pool.query('INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2)', [
+        'Bodega Norte',
+        2,
+      ]);
+      await expect(
+        pool.query('INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2)', [
+          ' bodega norte ',
+          1,
+        ])
+      ).rejects.toMatchObject({ code: '23505' });
+
+      await expect(pool.query('DELETE FROM clientes WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+
+      const factura = await pool.query('SELECT cliente_id FROM cuentas WHERE num_factura = 1001');
+      expect(factura.rows[0].cliente_id).toBe(1);
+
+      const pago = await pool.query('SELECT cliente_id FROM pagos WHERE id = 1');
+      expect(pago.rows[0].cliente_id).toBe(2);
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 19');
+      expect(version.rowCount).toBe(1);
+    });
+  });
+
+  test('clientes migration 018 preserves historical cuentas data and allows optional identification', async () => {
+    await withTempDatabase('wesapp_migration_clientes_018', async (pool) => {
+      await createPre018ClientesSchema(pool);
+
+      await applyMigrationInTransaction(pool, 18);
+      await expectClientesCatalogModel(pool);
+
+      const historical = await pool.query(
+        `SELECT nombre, identificacion, estado
+         FROM clientes
+         WHERE nombre = 'Cliente Historico'`
+      );
+      expect(historical.rows[0]).toMatchObject({
+        nombre: 'Cliente Historico',
+        identificacion: '  ABC-001  ',
+        estado: 'activo',
+      });
+
+      const emptyIdentification = await pool.query(
+        `SELECT identificacion
+         FROM clientes
+         WHERE nombre = 'Cliente Identificacion Vacia'`
+      );
+      expect(emptyIdentification.rows[0].identificacion).toBeNull();
+
+      const factura = await pool.query(
+        `SELECT c.num_factura, cl.nombre
+         FROM cuentas c
+         JOIN clientes cl ON cl.id = c.cliente_id
+         WHERE c.num_factura = 1001`
+      );
+      expect(factura.rows[0]).toEqual({
+        num_factura: 1001,
+        nombre: 'Cliente Facturado',
+      });
+
+      await pool.query('INSERT INTO clientes (nombre, identificacion) VALUES ($1, NULL)', [
+        'Sin Ident 1',
+      ]);
+      await pool.query('INSERT INTO clientes (nombre, identificacion) VALUES ($1, NULL)', [
+        'Sin Ident 2',
+      ]);
+      await expect(
+        pool.query('INSERT INTO clientes (nombre, identificacion) VALUES ($1, $2)', [
+          'Duplicado',
+          'abc-001',
+        ])
+      ).rejects.toMatchObject({ code: '23505' });
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 18');
+      expect(version.rowCount).toBe(1);
+    });
+  });
+
+  test('clientes migration 018 fails transactionally when normalized identifications are duplicated', async () => {
+    await withTempDatabase('wesapp_migration_clientes_018_dup', async (pool) => {
+      await createPre018ClientesSchema(pool, { duplicatedIdentification: true });
+
+      await expect(applyMigrationInTransaction(pool, 18)).rejects.toThrow(
+        /identificaciones duplicadas/
+      );
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 18');
+      expect(version.rowCount).toBe(0);
+
+      const columns = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'clientes'
+          AND column_name = 'estado'
+      `);
+      expect(columns.rowCount).toBe(0);
+    });
+  });
+
+  test('scenario A: fresh schema has stock effects model and schema version 19', async () => {
     await withTempDatabase('wesapp_migration_fresh', async (pool) => {
       const schemaSql = await fs.readFile(schemaPath, 'utf8');
       await pool.query(schemaSql);
 
       await expectStockEffectsModel(pool);
-      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 16');
+      await expectUbicacionesClienteModel(pool);
+      await expectClientesCatalogModel(pool);
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 19');
       expect(version.rowCount).toBe(1);
     });
   });
@@ -271,7 +782,9 @@ describe('database migrations', () => {
       await applyPendingMigrations(pool);
 
       await expectStockEffectsModel(pool);
-      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 16');
+      await expectUbicacionesClienteModel(pool);
+      await expectClientesCatalogModel(pool);
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 19');
       expect(version.rowCount).toBe(1);
 
       const bajas = await pool.query(
@@ -339,5 +852,834 @@ describe('database migrations', () => {
       `);
       expect(columns.rowCount).toBe(0);
     });
+  });
+
+  test('migration 020 preserves users and accepts all existing and new roles', async () => {
+    await withTempDatabase('wesapp_migration_roles_020', async (pool) => {
+      await pool.query(`
+        CREATE TABLE usuarios (
+          id SERIAL PRIMARY KEY,
+          usuario TEXT NOT NULL,
+          tipo_usuario VARCHAR(20) NOT NULL
+            CONSTRAINT usuarios_tipo_usuario_check
+            CHECK (tipo_usuario IN ('gerente', 'secretario', 'supervisor', 'contador'))
+        );
+        CREATE TABLE schema_version (
+          version INTEGER PRIMARY KEY,
+          description TEXT NOT NULL,
+          applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO usuarios (usuario, tipo_usuario) VALUES
+          ('g', 'gerente'),
+          ('s', 'secretario'),
+          ('v', 'supervisor'),
+          ('c', 'contador');
+      `);
+
+      await applyMigrationInTransaction(pool, 20);
+
+      const existing = await pool.query(
+        'SELECT usuario, tipo_usuario FROM usuarios ORDER BY usuario'
+      );
+      expect(existing.rows).toHaveLength(4);
+      await expect(
+        pool.query(
+          `INSERT INTO usuarios (usuario, tipo_usuario)
+           VALUES ('guardia', 'guardia'), ('monitorista', 'monitorista')`
+        )
+      ).resolves.toBeDefined();
+      await expect(
+        pool.query(`
+          INSERT INTO usuarios (usuario, tipo_usuario)
+          VALUES ('otro', 'otro')
+        `)
+      ).rejects.toMatchObject({ code: '23514' });
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 20');
+      expect(version.rowCount).toBe(1);
+    });
+  });
+
+  test('migration 021 adds nullable unique restricted colaborador relationship', async () => {
+    await withTempDatabase('wesapp_migration_usuario_colaborador_021', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (
+          id SERIAL PRIMARY KEY,
+          nombres_completos TEXT NOT NULL,
+          estado TEXT NOT NULL
+        );
+        CREATE TABLE usuarios (
+          id SERIAL PRIMARY KEY,
+          usuario TEXT NOT NULL
+        );
+        CREATE TABLE schema_version (
+          version INTEGER PRIMARY KEY,
+          description TEXT NOT NULL,
+          applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO colaboradores (nombres_completos, estado)
+        VALUES ('Uno', 'activo'), ('Dos', 'activo');
+        INSERT INTO usuarios (usuario) VALUES ('sin-vinculo'), ('segundo');
+      `);
+
+      await applyMigrationInTransaction(pool, 21);
+
+      const preserved = await pool.query(
+        'SELECT COUNT(*)::int AS total FROM usuarios WHERE colaborador_id IS NULL'
+      );
+      expect(preserved.rows[0].total).toBe(2);
+      await pool.query('UPDATE usuarios SET colaborador_id = 1 WHERE id = 1');
+      await expect(
+        pool.query('UPDATE usuarios SET colaborador_id = 1 WHERE id = 2')
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(pool.query('DELETE FROM colaboradores WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 21');
+      expect(version.rowCount).toBe(1);
+    });
+  });
+
+  test('migration 022 creates unique assignments with cascade and restrict behavior', async () => {
+    await withTempDatabase('wesapp_migration_usuario_ubicaciones_022', async (pool) => {
+      await pool.query(`
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones DEFAULT VALUES;
+      `);
+      await applyMigrationInTransaction(pool, 22);
+      await pool.query('INSERT INTO usuario_ubicaciones (usuario_id, ubicacion_id) VALUES (1, 1)');
+      await expect(
+        pool.query('INSERT INTO usuario_ubicaciones (usuario_id, ubicacion_id) VALUES (1, 1)')
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(pool.query('DELETE FROM ubicaciones WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await pool.query('DELETE FROM usuarios WHERE id = 1');
+      const assignments = await pool.query('SELECT * FROM usuario_ubicaciones');
+      expect(assignments.rowCount).toBe(0);
+    });
+  });
+
+  test('migration 023 preserves locations as GENERAL and validates point types', async () => {
+    await withTempDatabase('wesapp_migration_ubicaciones_tipo_023', async (pool) => {
+      await pool.query(`
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY, nombre VARCHAR(100) NOT NULL);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO ubicaciones (nombre) VALUES ('Existente');
+      `);
+      await applyMigrationInTransaction(pool, 23);
+      const existing = await pool.query('SELECT tipo_punto FROM ubicaciones WHERE id = 1');
+      expect(existing.rows[0].tipo_punto).toBe('GENERAL');
+      await pool.query('INSERT INTO ubicaciones (nombre, tipo_punto) VALUES ($1, $2)', [
+        'Urb',
+        'URBANIZACION',
+      ]);
+      await expect(
+        pool.query('INSERT INTO ubicaciones (nombre, tipo_punto) VALUES ($1, $2)', [
+          'Inválida',
+          'OTRO',
+        ])
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
+
+  test('migration 024 enforces normalized uniqueness and historical RESTRICT relationships', async () => {
+    await withTempDatabase('wesapp_migration_manzanas_villas_024', async (pool) => {
+      await pool.query(`
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (
+          id SERIAL PRIMARY KEY,
+          nombre VARCHAR(100) NOT NULL,
+          tipo_punto VARCHAR(20) NOT NULL DEFAULT 'GENERAL'
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        CREATE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$
+        BEGIN NEW.updated_at = CURRENT_TIMESTAMP; RETURN NEW; END;
+        $$ LANGUAGE plpgsql;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones (nombre, tipo_punto)
+        VALUES ('Urb', 'URBANIZACION'), ('General', 'GENERAL');
+      `);
+      await applyMigrationInTransaction(pool, 24);
+      await expect(
+        pool.query('INSERT INTO manzanas (ubicacion_id, nombre) VALUES ($1, $2)', [2, 'A'])
+      ).rejects.toMatchObject({ code: '23514' });
+      const manzana = await pool.query(
+        `INSERT INTO manzanas (ubicacion_id, nombre, created_by)
+         VALUES (1, 'Etapa A', 1) RETURNING id`
+      );
+      await expect(
+        pool.query('INSERT INTO manzanas (ubicacion_id, nombre) VALUES ($1, $2)', [
+          1,
+          '  etapa   a ',
+        ])
+      ).rejects.toMatchObject({ code: '23505' });
+      await pool.query('INSERT INTO villas (manzana_id, identificador) VALUES ($1, $2)', [
+        manzana.rows[0].id,
+        'Villa 1',
+      ]);
+      await expect(
+        pool.query('INSERT INTO villas (manzana_id, identificador) VALUES ($1, $2)', [
+          manzana.rows[0].id,
+          ' villa   1 ',
+        ])
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(
+        pool.query('DELETE FROM manzanas WHERE id = $1', [manzana.rows[0].id])
+      ).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM ubicaciones WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(
+        pool.query('UPDATE ubicaciones SET tipo_punto = $1 WHERE id = $2', ['GENERAL', 1])
+      ).rejects.toMatchObject({ code: '23503' });
+    });
+  });
+
+  test('migration 025 enforces one active principal, active chain and historical RESTRICT', async () => {
+    await withTempDatabase('wesapp_migration_residentes_025', async (pool) => {
+      await pool.query(`
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY, tipo_punto VARCHAR(20) NOT NULL);
+        CREATE TABLE manzanas (
+          id SERIAL PRIMARY KEY,
+          ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+          estado VARCHAR(10) NOT NULL
+        );
+        CREATE TABLE villas (
+          id SERIAL PRIMARY KEY,
+          manzana_id INTEGER NOT NULL REFERENCES manzanas(id) ON DELETE RESTRICT,
+          estado VARCHAR(10) NOT NULL
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones (tipo_punto) VALUES ('URBANIZACION');
+        INSERT INTO manzanas (ubicacion_id, estado) VALUES (1, 'activo');
+        INSERT INTO villas (manzana_id, estado) VALUES (1, 'activo'), (1, 'inactivo');
+      `);
+      await applyMigrationInTransaction(pool, 25);
+      await pool.query(
+        `INSERT INTO residentes (villa_id, nombre, contacto, created_by)
+         VALUES (1, 'Ana', '099', 1)`
+      );
+      await expect(
+        pool.query(
+          `INSERT INTO residentes (villa_id, nombre, contacto)
+           VALUES (1, 'Luis', '098')`
+        )
+      ).rejects.toMatchObject({ code: '23505' });
+      await expect(
+        pool.query(
+          `INSERT INTO residentes (villa_id, nombre, contacto)
+           VALUES (2, 'Luis', '098')`
+        )
+      ).rejects.toMatchObject({ code: '23514' });
+      await expect(
+        pool.query('UPDATE villas SET estado = $1 WHERE id = 1', ['inactivo'])
+      ).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM villas WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await pool.query('UPDATE residentes SET activo = FALSE WHERE villa_id = 1');
+      await pool.query('UPDATE villas SET estado = $1 WHERE id = 1', ['inactivo']);
+    });
+  });
+
+  test('migration 026 preserves legacy users and requires collaborator on new or updated rows', async () => {
+    await withTempDatabase('wesapp_migration_usuario_colaborador_026', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (id SERIAL PRIMARY KEY);
+        CREATE TABLE usuarios (
+          id SERIAL PRIMARY KEY,
+          usuario TEXT NOT NULL,
+          password_hash TEXT NOT NULL DEFAULT 'legacy-hash',
+          primer_login BOOLEAN NOT NULL DEFAULT TRUE,
+          colaborador_id INTEGER UNIQUE REFERENCES colaboradores(id) ON DELETE RESTRICT
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO colaboradores DEFAULT VALUES;
+        INSERT INTO usuarios (usuario, colaborador_id) VALUES ('vinculado', 1), ('legacy', NULL);
+      `);
+      await applyMigrationInTransaction(pool, 26);
+
+      const legacy = await pool.query('SELECT colaborador_id FROM usuarios WHERE usuario = $1', [
+        'legacy',
+      ]);
+      expect(legacy.rows[0].colaborador_id).toBeNull();
+      await expect(
+        pool.query('INSERT INTO usuarios (usuario, colaborador_id) VALUES ($1, NULL)', ['nuevo'])
+      ).rejects.toMatchObject({ code: '23514' });
+      await pool.query(
+        `UPDATE usuarios
+         SET password_hash = $1, primer_login = FALSE
+         WHERE usuario = $2`,
+        ['new-hash', 'legacy']
+      );
+      const legacyAfterFirstLogin = await pool.query(
+        'SELECT colaborador_id, password_hash, primer_login FROM usuarios WHERE usuario = $1',
+        ['legacy']
+      );
+      expect(legacyAfterFirstLogin.rows[0]).toEqual({
+        colaborador_id: null,
+        password_hash: 'new-hash',
+        primer_login: false,
+      });
+      await expect(
+        pool.query('UPDATE usuarios SET colaborador_id = NULL WHERE usuario = $1', ['vinculado'])
+      ).rejects.toMatchObject({ code: '23514' });
+      await pool.query('INSERT INTO colaboradores DEFAULT VALUES');
+      await pool.query('INSERT INTO usuarios (usuario, colaborador_id) VALUES ($1, 2)', ['nuevo']);
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 26');
+      expect(version.rowCount).toBe(1);
+      expect(await fs.readFile(schemaPath, 'utf8')).toMatch(
+        /ADD COLUMN colaborador_id INTEGER NOT NULL/
+      );
+    });
+  });
+
+  test('migration 027 creates constrained immutable logbook persistence and history indexes', async () => {
+    await withTempDatabase('wesapp_migration_bitacora_registros_027', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (id SERIAL PRIMARY KEY);
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+        INSERT INTO colaboradores DEFAULT VALUES;
+        INSERT INTO colaboradores DEFAULT VALUES;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones DEFAULT VALUES;
+        INSERT INTO ubicaciones DEFAULT VALUES;
+      `);
+
+      await applyMigrationInTransaction(pool, 27);
+
+      const sqlQuote = String.fromCharCode(39);
+
+      const columns = await pool.query(`
+        SELECT column_name, data_type, udt_name, character_maximum_length,
+               is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'bitacora_registros'
+        ORDER BY ordinal_position
+      `);
+      expect(columns.rows.map(({ column_name: name }) => name)).toEqual([
+        'id',
+        'ubicacion_id',
+        'autor_usuario_id',
+        'autor_colaborador_id',
+        'ocurrido_at',
+        'detalle',
+        'estado',
+        'created_at',
+        'anulado_at',
+        'anulado_por_usuario_id',
+        'motivo_anulacion',
+      ]);
+      const columnMap = new Map(columns.rows.map((column) => [column.column_name, column]));
+      expect(
+        Object.fromEntries(
+          columns.rows.map((column) => [
+            column.column_name,
+            {
+              dataType: column.data_type,
+              udtName: column.udt_name,
+              maxLength: column.character_maximum_length,
+            },
+          ])
+        )
+      ).toEqual({
+        id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        ubicacion_id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        autor_usuario_id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        autor_colaborador_id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        ocurrido_at: {
+          dataType: 'timestamp without time zone',
+          udtName: 'timestamp',
+          maxLength: null,
+        },
+        detalle: { dataType: 'text', udtName: 'text', maxLength: null },
+        estado: { dataType: 'character varying', udtName: 'varchar', maxLength: 12 },
+        created_at: {
+          dataType: 'timestamp without time zone',
+          udtName: 'timestamp',
+          maxLength: null,
+        },
+        anulado_at: {
+          dataType: 'timestamp without time zone',
+          udtName: 'timestamp',
+          maxLength: null,
+        },
+        anulado_por_usuario_id: { dataType: 'integer', udtName: 'int4', maxLength: null },
+        motivo_anulacion: { dataType: 'text', udtName: 'text', maxLength: null },
+      });
+      for (const requiredColumn of [
+        'id',
+        'ubicacion_id',
+        'autor_usuario_id',
+        'autor_colaborador_id',
+        'ocurrido_at',
+        'detalle',
+        'estado',
+        'created_at',
+      ]) {
+        expect(columnMap.get(requiredColumn).is_nullable).toBe('NO');
+      }
+      for (const nullableColumn of ['anulado_at', 'anulado_por_usuario_id', 'motivo_anulacion']) {
+        expect(columnMap.get(nullableColumn).is_nullable).toBe('YES');
+      }
+      expect(columnMap.get('estado')).toMatchObject({
+        is_nullable: 'NO',
+        column_default: [sqlQuote, 'REGISTRADA', sqlQuote, '::character varying'].join(''),
+      });
+      expect(columnMap.get('created_at').column_default).toMatch(/CURRENT_TIMESTAMP/i);
+      expect(columnMap.get('ocurrido_at')).toMatchObject({
+        is_nullable: 'NO',
+        column_default: null,
+      });
+
+      const primaryKey = await pool.query(`
+        SELECT tc.constraint_name, kcu.column_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON kcu.constraint_schema = tc.constraint_schema
+         AND kcu.constraint_name = tc.constraint_name
+        WHERE tc.table_schema = 'public'
+          AND tc.table_name = 'bitacora_registros'
+          AND tc.constraint_type = 'PRIMARY KEY'
+        ORDER BY kcu.ordinal_position
+      `);
+      expect(primaryKey.rows).toEqual([
+        { constraint_name: 'bitacora_registros_pkey', column_name: 'id' },
+      ]);
+
+      const registered = await pool.query(
+        `INSERT INTO bitacora_registros
+           (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+         VALUES (1, 1, 1, '2026-08-20 10:00:00', 'Novedad registrada')
+         RETURNING estado, created_at, anulado_at, anulado_por_usuario_id, motivo_anulacion`
+      );
+      expect(registered.rows[0]).toMatchObject({
+        estado: 'REGISTRADA',
+        anulado_at: null,
+        anulado_por_usuario_id: null,
+        motivo_anulacion: null,
+      });
+      expect(registered.rows[0].created_at).toBeInstanceOf(Date);
+
+      await expect(
+        pool.query(
+          `INSERT INTO bitacora_registros
+             (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+              estado, anulado_at, anulado_por_usuario_id, motivo_anulacion)
+           VALUES (1, 1, 1, '2026-08-20 10:05:00', 'Novedad anulada',
+                   'ANULADA', '2026-08-20 10:06:00', 2, 'Registro duplicado')`
+        )
+      ).resolves.toBeDefined();
+
+      await expect(
+        pool.query(
+          `INSERT INTO bitacora_registros
+             (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle, estado)
+           VALUES (1, 1, 1, NOW(), 'Detalle', 'BORRADA')`
+        )
+      ).rejects.toMatchObject({ code: '23514' });
+      for (const cancellationMetadata of [
+        [new Date(), null, null],
+        [null, 2, null],
+        [null, null, 'No aplica'],
+        [new Date(), 2, null],
+        [new Date(), null, 'No aplica'],
+        [null, 2, 'No aplica'],
+        [new Date(), 2, 'No aplica'],
+      ]) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+                estado, anulado_at, anulado_por_usuario_id, motivo_anulacion)
+             VALUES (1, 1, 1, NOW(), 'Detalle', 'REGISTRADA', $1, $2, $3)`,
+            cancellationMetadata
+          )
+        ).rejects.toMatchObject({ code: '23514' });
+      }
+
+      for (const cancellationMetadata of [
+        [null, 2, 'Motivo'],
+        [new Date(), null, 'Motivo'],
+        [new Date(), 2, null],
+        [new Date(), 2, ''],
+        [new Date(), 2, '   '],
+        [new Date(), 2, '\t'],
+        [new Date(), 2, '\n'],
+        [new Date(), 2, '\r'],
+        [new Date(), 2, ' \t \n\r '],
+      ]) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+                estado, anulado_at, anulado_por_usuario_id, motivo_anulacion)
+             VALUES (1, 1, 1, NOW(), 'Detalle', 'ANULADA', $1, $2, $3)`,
+            cancellationMetadata
+          )
+        ).rejects.toMatchObject({ code: '23514' });
+      }
+
+      for (const invalidDetail of ['', ' ', '\t', '\n', '\r', ' \t \n\r ']) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+             VALUES (1, 1, 1, NOW(), $1)`,
+            [invalidDetail]
+          )
+        ).rejects.toMatchObject({ code: '23514' });
+      }
+
+      for (const validDetail of ['texto', ' texto ', '\ntexto\t']) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+             VALUES (1, 1, 1, NOW(), $1)`,
+            [validDetail]
+          )
+        ).resolves.toBeDefined();
+      }
+
+      await expect(
+        pool.query(
+          `INSERT INTO bitacora_registros
+             (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+              estado, anulado_at, anulado_por_usuario_id, motivo_anulacion)
+           VALUES (1, 1, 1, NOW(), 'Detalle', 'ANULADA', NOW(), 999, 'Motivo')`
+        )
+      ).rejects.toMatchObject({ code: '23503' });
+
+      for (const invalidReferences of [
+        [999, 1, 1],
+        [1, 999, 1],
+        [1, 1, 999],
+      ]) {
+        await expect(
+          pool.query(
+            `INSERT INTO bitacora_registros
+               (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+             VALUES ($1, $2, $3, NOW(), 'Detalle')`,
+            invalidReferences
+          )
+        ).rejects.toMatchObject({ code: '23503' });
+      }
+
+      const foreignKeys = await pool.query(`
+        SELECT con.conname, con.confdeltype,
+               source_attribute.attname AS source_column,
+               target_relation.relname AS target_table,
+               target_attribute.attname AS target_column
+        FROM pg_constraint con
+        JOIN pg_class source_relation ON source_relation.oid = con.conrelid
+        JOIN pg_class target_relation ON target_relation.oid = con.confrelid
+        JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY
+          AS key_columns(source_attnum, target_attnum, position) ON TRUE
+        JOIN pg_attribute source_attribute
+          ON source_attribute.attrelid = source_relation.oid
+         AND source_attribute.attnum = key_columns.source_attnum
+        JOIN pg_attribute target_attribute
+          ON target_attribute.attrelid = target_relation.oid
+         AND target_attribute.attnum = key_columns.target_attnum
+        WHERE source_relation.relname = 'bitacora_registros' AND con.contype = 'f'
+        ORDER BY con.conname, key_columns.position
+      `);
+      expect(foreignKeys.rows).toEqual([
+        {
+          conname: 'bitacora_registros_anulado_por_usuario_id_fkey',
+          confdeltype: 'r',
+          source_column: 'anulado_por_usuario_id',
+          target_table: 'usuarios',
+          target_column: 'id',
+        },
+        {
+          conname: 'bitacora_registros_autor_colaborador_id_fkey',
+          confdeltype: 'r',
+          source_column: 'autor_colaborador_id',
+          target_table: 'colaboradores',
+          target_column: 'id',
+        },
+        {
+          conname: 'bitacora_registros_autor_usuario_id_fkey',
+          confdeltype: 'r',
+          source_column: 'autor_usuario_id',
+          target_table: 'usuarios',
+          target_column: 'id',
+        },
+        {
+          conname: 'bitacora_registros_ubicacion_id_fkey',
+          confdeltype: 'r',
+          source_column: 'ubicacion_id',
+          target_table: 'ubicaciones',
+          target_column: 'id',
+        },
+      ]);
+      await expect(pool.query('DELETE FROM ubicaciones WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM usuarios WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM usuarios WHERE id = 2')).rejects.toMatchObject({
+        code: '23503',
+      });
+      await expect(pool.query('DELETE FROM colaboradores WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+
+      const indexes = await pool.query(`
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = 'bitacora_registros'
+      `);
+      const indexMap = new Map(indexes.rows.map((index) => [index.indexname, index.indexdef]));
+      expect(indexMap.get('idx_bitacora_registros_ubicacion_ocurrido')).toMatch(
+        /\(ubicacion_id, ocurrido_at DESC, id DESC\)/
+      );
+      expect(indexMap.get('idx_bitacora_registros_autor_ocurrido')).toMatch(
+        /\(autor_usuario_id, ocurrido_at DESC, id DESC\)/
+      );
+      expect(indexMap.get('idx_bitacora_registros_ocurrido')).toMatch(
+        /\(ocurrido_at DESC, id DESC\)/
+      );
+      expect(indexMap.get('idx_bitacora_registros_estado_ocurrido')).toMatch(
+        /\(estado, ocurrido_at DESC, id DESC\)/
+      );
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 27');
+      expect(version.rowCount).toBe(1);
+      const schema = await fs.readFile(schemaPath, 'utf8');
+      expect(schema).toContain('CREATE TABLE bitacora_registros');
+      expect(schema).toContain('bitacora_registros_anulacion_coherente_check');
+    });
+  });
+
+  test('migration 027 rolls back without partial version registration on failure', async () => {
+    await withTempDatabase('wesapp_migration_bitacora_registros_027_rollback', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (id SERIAL PRIMARY KEY);
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY);
+        CREATE TABLE bitacora_registros (legacy_id INTEGER PRIMARY KEY);
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+      `);
+
+      await expect(applyMigrationInTransaction(pool, 27)).rejects.toMatchObject({ code: '42P07' });
+      const columns = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'bitacora_registros'
+      `);
+      expect(columns.rows).toEqual([{ column_name: 'legacy_id' }]);
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 27');
+      expect(version.rowCount).toBe(0);
+    });
+  });
+
+  test('migration 028 adds optional relationally coherent urban context to logbook records', async () => {
+    await withTempDatabase('wesapp_migration_bitacora_contexto_urbano_028', async (pool) => {
+      await pool.query(`
+        CREATE TABLE colaboradores (id SERIAL PRIMARY KEY);
+        CREATE TABLE usuarios (id SERIAL PRIMARY KEY);
+        CREATE TABLE ubicaciones (
+          id SERIAL PRIMARY KEY,
+          tipo_punto VARCHAR(20) NOT NULL CHECK (tipo_punto IN ('GENERAL', 'URBANIZACION'))
+        );
+        CREATE TABLE manzanas (
+          id SERIAL PRIMARY KEY,
+          ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+          nombre VARCHAR(100) NOT NULL,
+          estado VARCHAR(10) NOT NULL DEFAULT 'activo'
+        );
+        CREATE TABLE villas (
+          id SERIAL PRIMARY KEY,
+          manzana_id INTEGER NOT NULL REFERENCES manzanas(id) ON DELETE RESTRICT,
+          identificador VARCHAR(100) NOT NULL,
+          estado VARCHAR(10) NOT NULL DEFAULT 'activo'
+        );
+        CREATE TABLE bitacora_registros (
+          id SERIAL PRIMARY KEY,
+          ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON DELETE RESTRICT,
+          autor_usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+          autor_colaborador_id INTEGER NOT NULL REFERENCES colaboradores(id) ON DELETE RESTRICT,
+          ocurrido_at TIMESTAMP NOT NULL,
+          detalle TEXT NOT NULL,
+          estado VARCHAR(12) NOT NULL DEFAULT 'REGISTRADA',
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          anulado_at TIMESTAMP NULL,
+          anulado_por_usuario_id INTEGER NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
+          motivo_anulacion TEXT NULL
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+
+        INSERT INTO colaboradores DEFAULT VALUES;
+        INSERT INTO usuarios DEFAULT VALUES;
+        INSERT INTO ubicaciones (tipo_punto) VALUES ('GENERAL'), ('URBANIZACION'), ('URBANIZACION');
+        INSERT INTO manzanas (ubicacion_id, nombre) VALUES (2, 'A'), (3, 'B');
+        INSERT INTO villas (manzana_id, identificador) VALUES (1, '1'), (2, '2');
+        INSERT INTO bitacora_registros
+          (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle)
+        VALUES (1, 1, 1, '2026-08-25 09:00:00', 'Registro histórico');
+      `);
+
+      await applyMigrationInTransaction(pool, 28);
+
+      const columns = await pool.query(`
+        SELECT column_name, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'bitacora_registros'
+          AND column_name IN ('manzana_id', 'villa_id')
+        ORDER BY column_name
+      `);
+      expect(columns.rows).toEqual([
+        { column_name: 'manzana_id', is_nullable: 'YES' },
+        { column_name: 'villa_id', is_nullable: 'YES' },
+      ]);
+
+      const historical = await pool.query(
+        'SELECT manzana_id, villa_id FROM bitacora_registros WHERE detalle = $1',
+        ['Registro histórico']
+      );
+      expect(historical.rows[0]).toEqual({ manzana_id: null, villa_id: null });
+
+      const insertRegistro = (ubicacionId, detalle, manzanaId = null, villaId = null) =>
+        pool.query(
+          `INSERT INTO bitacora_registros
+             (ubicacion_id, autor_usuario_id, autor_colaborador_id, ocurrido_at, detalle,
+              manzana_id, villa_id)
+           VALUES ($1, 1, 1, '2026-08-25 10:00:00', $2, $3, $4)`,
+          [ubicacionId, detalle, manzanaId, villaId]
+        );
+
+      await expect(insertRegistro(1, 'GENERAL sin contexto')).resolves.toBeDefined();
+      await expect(insertRegistro(2, 'Urbanización sin contexto')).resolves.toBeDefined();
+      await expect(insertRegistro(2, 'Urbanización con Manzana', 1)).resolves.toBeDefined();
+      await expect(insertRegistro(2, 'Urbanización con Villa', 1, 1)).resolves.toBeDefined();
+
+      await expect(insertRegistro(2, 'Villa sin Manzana', null, 1)).rejects.toMatchObject({
+        code: '23514',
+        constraint: 'bitacora_registros_villa_requiere_manzana_check',
+      });
+      await expect(insertRegistro(2, 'Manzana inexistente', 999)).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_manzana_ubicacion_fkey',
+      });
+      await expect(insertRegistro(1, 'GENERAL con contexto', 1)).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_manzana_ubicacion_fkey',
+      });
+      await expect(insertRegistro(3, 'Manzana de otra Urbanización', 1)).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_manzana_ubicacion_fkey',
+      });
+      await expect(insertRegistro(2, 'Villa de otra Manzana', 1, 2)).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_villa_manzana_fkey',
+      });
+
+      await pool.query('UPDATE manzanas SET estado = $1 WHERE id = 1', ['inactivo']);
+      await pool.query('UPDATE villas SET estado = $1 WHERE id = 1', ['inactivo']);
+      const preserved = await pool.query(
+        `SELECT br.manzana_id, br.villa_id, m.estado AS manzana_estado, v.estado AS villa_estado
+         FROM bitacora_registros br
+         JOIN manzanas m ON m.id = br.manzana_id
+         JOIN villas v ON v.id = br.villa_id
+         WHERE br.detalle = 'Urbanización con Villa'`
+      );
+      expect(preserved.rows[0]).toEqual({
+        manzana_id: 1,
+        villa_id: 1,
+        manzana_estado: 'inactivo',
+        villa_estado: 'inactivo',
+      });
+
+      await expect(pool.query('DELETE FROM villas WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+        constraint: 'bitacora_registros_villa_manzana_fkey',
+      });
+      await expect(pool.query('DELETE FROM manzanas WHERE id = 1')).rejects.toMatchObject({
+        code: '23503',
+      });
+
+      const indexes = await pool.query(`
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE schemaname = 'public' AND tablename = 'bitacora_registros'
+      `);
+      const indexMap = new Map(indexes.rows.map((index) => [index.indexname, index.indexdef]));
+      expect(indexMap.get('idx_bitacora_registros_manzana_ubicacion')).toMatch(
+        /\(manzana_id, ubicacion_id\).*WHERE \(manzana_id IS NOT NULL\)/
+      );
+      expect(indexMap.get('idx_bitacora_registros_villa_manzana')).toMatch(
+        /\(villa_id, manzana_id\).*WHERE \(villa_id IS NOT NULL\)/
+      );
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 28');
+      expect(version.rowCount).toBe(1);
+      const schema = await fs.readFile(schemaPath, 'utf8');
+      expect(schema).toContain('bitacora_registros_manzana_ubicacion_fkey');
+      expect(schema).toContain('bitacora_registros_villa_manzana_fkey');
+      expect(schema).toContain('bitacora_registros_villa_requiere_manzana_check');
+    });
+  });
+
+  test('migration 028 rolls back every schema change and version registration on failure', async () => {
+    await withTempDatabase(
+      'wesapp_migration_bitacora_contexto_urbano_028_rollback',
+      async (pool) => {
+        await pool.query(`
+        CREATE TABLE ubicaciones (id SERIAL PRIMARY KEY);
+        CREATE TABLE manzanas (id SERIAL PRIMARY KEY, ubicacion_id INTEGER NOT NULL);
+        CREATE TABLE villas (id SERIAL PRIMARY KEY, manzana_id INTEGER NOT NULL);
+        CREATE TABLE bitacora_registros (
+          id SERIAL PRIMARY KEY,
+          ubicacion_id INTEGER NOT NULL,
+          villa_id INTEGER NULL
+        );
+        CREATE TABLE schema_version (version INTEGER PRIMARY KEY, description TEXT NOT NULL);
+      `);
+
+        await expect(applyMigrationInTransaction(pool, 28)).rejects.toMatchObject({
+          code: '42701',
+        });
+
+        const urbanColumns = await pool.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'bitacora_registros'
+          AND column_name IN ('manzana_id', 'villa_id')
+        ORDER BY column_name
+      `);
+        expect(urbanColumns.rows).toEqual([{ column_name: 'villa_id' }]);
+
+        const masterConstraints = await pool.query(`
+        SELECT constraint_name
+        FROM information_schema.table_constraints
+        WHERE table_schema = 'public'
+          AND constraint_name IN ('manzanas_id_ubicacion_id_key', 'villas_id_manzana_id_key')
+      `);
+        expect(masterConstraints.rowCount).toBe(0);
+
+        const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 28');
+        expect(version.rowCount).toBe(0);
+      }
+    );
   });
 });

@@ -6,11 +6,14 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login/Login';
 import ChangePassword from './pages/Login/ChangePassword';
 import Dashboard from './pages/Dashboard/Dashboard';
+import Configuracion from './pages/Configuracion/Configuracion';
 import Cuentas from './pages/Cuentas/Cuentas';
 import Inventario from './pages/Inventario/Inventario';
 import Personal from './pages/Personal/Personal';
 import Usuarios from './pages/Usuarios/Usuarios';
+import Bitacoras from './pages/Bitacoras/Bitacoras';
 import { resetViewportScroll } from './hooks/useScrollToTopOnMount';
+import { MODULE_ACCESS_PERMISSIONS } from './auth/modulePermissions';
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -47,17 +50,33 @@ function App() {
               }
             />
             <Route
+              path="/bitacoras"
+              element={
+                <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.bitacoras}>
+                  <Bitacoras />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/cuentas"
               element={
-                <ProtectedRoute requiredPermission="cuentas">
+                <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.cuentas}>
                   <Cuentas />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/configuracion"
+              element={
+                <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.configuracion}>
+                  <Configuracion />
                 </ProtectedRoute>
               }
             />
             <Route
               path="/inventario"
               element={
-                <ProtectedRoute requiredPermission="inventario">
+                <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.inventario}>
                   <Inventario />
                 </ProtectedRoute>
               }
@@ -65,7 +84,7 @@ function App() {
             <Route
               path="/personal"
               element={
-                <ProtectedRoute requiredPermission="personal">
+                <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.personal}>
                   <Personal />
                 </ProtectedRoute>
               }
@@ -73,7 +92,7 @@ function App() {
             <Route
               path="/usuarios"
               element={
-                <ProtectedRoute requiredPermission="usuarios">
+                <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.usuarios}>
                   <Usuarios />
                 </ProtectedRoute>
               }

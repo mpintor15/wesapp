@@ -10,7 +10,7 @@
  *  - getArticulos     : Lista artículos con filtros de tipo, ubicación, estado y búsqueda.
  *  - createArticulo   : Crea un artículo (equipo, placa_balistica, arma, radio, otro).
  *                       Si se proporciona ubicacion_nombre en lugar de ID, crea
- *                       la ubicación automáticamente si no existe.
+ *                       la ubicación automáticamente para un cliente activo.
  *  - updateArticulo   : Actualiza campos permitidos de un artículo existente.
  *  - deleteArticulo   : Para equipos con stock > 1 descuenta cantidad; si el
  *                       stock queda en 0 hace un soft-delete (activo=FALSE).
@@ -45,13 +45,28 @@ const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const movementPdfStorage = require('../utils/movementPdfStorage');
 const { validateOptionalDateBounds } = require('../utils/inputValidation');
-const ALERTA_ESTADOS = new Set(['vencida', 'proxima_a_vencer', 'vigente']);
+const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
+const { sanitizeError } = require('../utils/logSanitizer');
+const { assertClienteActivoForOperation } = require('../services/clientesStateService');
+const { PERMISSIONS } = require('../config/permissions');
+const { assertAnyPermission } = require('../middleware/permissions');
+const {
+  ALERTA_ESTADOS,
+  ARTICULOS_SORT_COLUMNS,
+  MOVIMIENTOS_SORT_COLUMNS,
+} = require('../services/inventario/inventarioDomain');
+const inventarioReadRepository = require('../repositories/inventario/inventarioReadRepository');
+
+// Contrato permanente: crear un articulo puede crear su ubicacion contextual.
+const ARTICULO_CONTEXTUAL_LOCATION_CREATE_PERMISSIONS = [
+  PERMISSIONS.INVENTARIO_UBICACIONES_CREAR,
+  PERMISSIONS.INVENTARIO_ARTICULOS_CREAR,
+];
+const MOVIMIENTO_LOCATION_CREATE_PERMISSIONS = [PERMISSIONS.INVENTARIO_UBICACIONES_CREAR];
 
 const logControllerError = (message, error) => {
   logger.error(message, {
-    message: error.message,
-    stack: error.stack,
-    code: error.code,
+    error: sanitizeError(error),
     status: error.status,
   });
 };
@@ -66,49 +81,7 @@ const validateInventoryDateBounds = (from, to) => {
   }
 };
 
-const buildInventarioAlertasQuery = ({ tipo, ubicacion_id, estado, search }) => {
-  let query = 'SELECT * FROM vista_inventario_alertas';
-  const params = [];
-  const conditions = [];
-
-  if (tipo) {
-    params.push(tipo);
-    conditions.push(`tipo_articulo = $${params.length}`);
-  }
-
-  if (ubicacion_id) {
-    params.push(parsePositiveInteger(ubicacion_id, 'El filtro ubicación es inválido'));
-    conditions.push(`ubicacion_id = $${params.length}`);
-  }
-
-  if (estado) {
-    params.push(estado);
-    conditions.push(`estado_caducidad = $${params.length}`);
-  }
-
-  if (search) {
-    params.push(`%${search}%`);
-    conditions.push(`(
-      nombre_articulo ILIKE $${params.length} OR
-      numero_serie ILIKE $${params.length} OR
-      marca ILIKE $${params.length} OR
-      modelo ILIKE $${params.length} OR
-      calibre ILIKE $${params.length} OR
-      codigo_pantalla ILIKE $${params.length} OR
-      codigo_radio ILIKE $${params.length} OR
-      version ILIKE $${params.length}
-    )`);
-  }
-
-  if (conditions.length > 0) {
-    query += ' WHERE ' + conditions.join(' AND ');
-  }
-
-  query += ' ORDER BY created_at DESC';
-  return { query, params };
-};
-
-const buildBajasArticulosQuery = ({ search, from, to }) => {
+const buildBajasArticulosQuery = ({ search, from, to, pagination }) => {
   const params = [];
   const conditions = [];
   let query = `SELECT
@@ -133,7 +106,7 @@ const buildBajasArticulosQuery = ({ search, from, to }) => {
       b.anulado_por,
       b.anulado_en,
       b.motivo_anulacion,
-      u.usuario
+      u.usuario${pagination ? ', COUNT(*) OVER()::int AS total_count' : ''}
     FROM articulos_bajas b
     LEFT JOIN usuarios u ON u.id = b.usuario_id`;
 
@@ -169,6 +142,10 @@ const buildBajasArticulosQuery = ({ search, from, to }) => {
   query += ` WHERE ${conditions.join(' AND ')}`;
 
   query += ' ORDER BY b.fecha_baja DESC, b.id DESC';
+  if (pagination) {
+    params.push(pagination.pageSize, pagination.offset);
+    query += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+  }
   return { query, params };
 };
 
@@ -207,21 +184,48 @@ const getArticulos = async (req, res) => {
     if (estado && !ALERTA_ESTADOS.has(normalizedEstado)) {
       throw createHttpError(400, 'El filtro estado no es válido');
     }
-    const { query, params } = buildInventarioAlertasQuery({
-      tipo,
-      ubicacion_id,
-      estado: estado ? normalizedEstado : undefined,
-      search,
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: 'created_at',
+      allowedSorts: ARTICULOS_SORT_COLUMNS,
+    });
+    const { countResult, result } = await inventarioReadRepository.findArticulos({
+      filters: {
+        tipo,
+        ubicacion_id,
+        estado: estado ? normalizedEstado : undefined,
+        search,
+      },
+      pagination,
     });
 
-    const result = await db.query(query, params);
+    res.json({
+      success: true,
+      data: result.rows,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: countResult.rows[0]?.total,
+      }),
+    });
+  } catch (error) {
+    logControllerError('Error al obtener articulos:', error);
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : 'Error en el servidor',
+    });
+  }
+};
+
+const getArticulosCatalogo = async (req, res) => {
+  try {
+    const result = await inventarioReadRepository.findArticulosCatalogo();
 
     res.json({
       success: true,
       data: result.rows,
     });
   } catch (error) {
-    logControllerError('Error al obtener articulos:', error);
+    logControllerError('Error al obtener catálogo de articulos:', error);
     res.status(error.status || 500).json({
       success: false,
       message: error.status ? error.message : 'Error en el servidor',
@@ -248,6 +252,137 @@ const createAppError = (status, code, message) => {
   const error = createHttpError(status, message);
   error.appCode = code;
   return error;
+};
+
+const normalizeLocationName = (value) =>
+  typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+
+const findUbicacionByClienteAndName = async (client, clienteId, nombre) =>
+  client.query(
+    `SELECT id
+     FROM ubicaciones
+     WHERE cliente_id = $1
+       AND LOWER(TRIM(nombre)) = LOWER(TRIM($2))
+     LIMIT 1`,
+    [clienteId, nombre]
+  );
+
+const getOrCreateUbicacionForActiveCliente = async ({
+  client,
+  clienteId,
+  nombre,
+  requiredMessage,
+  user,
+  createPermissions = [],
+}) => {
+  if (!clienteId) {
+    throw createHttpError(400, requiredMessage);
+  }
+
+  const existente = await findUbicacionByClienteAndName(client, clienteId, nombre);
+  if (existente.rowCount > 0) {
+    await assertClienteActivoForOperation({
+      executor: client,
+      clienteId,
+      lockClause: 'FOR SHARE',
+    });
+    return existente.rows[0].id;
+  }
+
+  try {
+    assertAnyPermission(user, ...createPermissions);
+  } catch (permissionError) {
+    const afterPermissionRace = await findUbicacionByClienteAndName(client, clienteId, nombre);
+    if (afterPermissionRace.rowCount > 0) {
+      await assertClienteActivoForOperation({
+        executor: client,
+        clienteId,
+        lockClause: 'FOR SHARE',
+      });
+      return afterPermissionRace.rows[0].id;
+    }
+    throw permissionError;
+  }
+
+  await assertClienteActivoForOperation({
+    executor: client,
+    clienteId,
+    lockClause: 'FOR SHARE',
+  });
+
+  try {
+    const creado = await client.query(
+      'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2) RETURNING id',
+      [nombre, clienteId]
+    );
+    return creado.rows[0].id;
+  } catch (error) {
+    if (error.code !== '23505') {
+      throw error;
+    }
+    const afterRace = await findUbicacionByClienteAndName(client, clienteId, nombre);
+    if (afterRace.rowCount === 0) {
+      throw error;
+    }
+    return afterRace.rows[0].id;
+  }
+};
+
+const resolveMovimientoDestino = async ({
+  client,
+  ubicacionId,
+  ubicacionNombre,
+  clienteDestinoId,
+  user,
+}) => {
+  if (ubicacionId) {
+    const destinoId = Number(ubicacionId);
+    if (!Number.isInteger(destinoId) || destinoId <= 0) {
+      throw createHttpError(400, 'La ubicación destino es inválida');
+    }
+
+    const existente = await client.query(
+      `SELECT id, nombre, cliente_id
+       FROM ubicaciones
+       WHERE id = $1
+       FOR SHARE`,
+      [destinoId]
+    );
+    if (existente.rowCount === 0) {
+      throw createAppError(404, 'LOCATION_NOT_FOUND', 'Ubicación destino no encontrada');
+    }
+
+    const destino = existente.rows[0];
+    const persistedClienteId = destino.cliente_id === null ? null : Number(destino.cliente_id);
+    if (clienteDestinoId && persistedClienteId !== clienteDestinoId) {
+      throw createAppError(
+        409,
+        'LOCATION_CLIENT_MISMATCH',
+        'La ubicación destino no pertenece al cliente destino indicado'
+      );
+    }
+    if (ubicacionNombre && normalizeLocationName(destino.nombre) !== ubicacionNombre) {
+      throw createAppError(
+        409,
+        'LOCATION_PAYLOAD_CONFLICT',
+        'La ubicación destino no coincide con el nombre enviado'
+      );
+    }
+    return destinoId;
+  }
+
+  if (ubicacionNombre) {
+    return getOrCreateUbicacionForActiveCliente({
+      client,
+      clienteId: clienteDestinoId,
+      nombre: ubicacionNombre,
+      requiredMessage: 'El cliente destino es obligatorio para crear una ubicación nueva',
+      user,
+      createPermissions: MOVIMIENTO_LOCATION_CREATE_PERMISSIONS,
+    });
+  }
+
+  throw createHttpError(400, 'La ubicación destino es requerida para traslados');
 };
 
 const validateDetailedReason = (value, fieldName = 'motivo') => {
@@ -397,6 +532,7 @@ const createArticulo = async (req, res) => {
       calibre,
       fecha_caducidad,
       ubicacion_id,
+      cliente_id,
       ubicacion_nombre,
       codigo_pantalla,
       codigo_radio,
@@ -428,26 +564,42 @@ const createArticulo = async (req, res) => {
     }
 
     let ubicacionId = ubicacion_id;
-    const ubicacionNombre = ubicacion_nombre ? String(ubicacion_nombre).trim() : '';
+    const clienteId = cliente_id
+      ? parsePositiveInteger(cliente_id, 'El cliente es inválido')
+      : null;
+    const ubicacionNombre = normalizeLocationName(ubicacion_nombre);
 
     client = await db.getClient();
     await client.query('BEGIN');
     transactionStarted = true;
 
-    if (!ubicacionId && ubicacionNombre) {
-      const existente = await client.query(
-        'SELECT id FROM ubicaciones WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
-        [ubicacionNombre]
+    if (clienteId && (ubicacionId || !ubicacionNombre)) {
+      await assertClienteActivoForOperation({
+        executor: client,
+        clienteId,
+        lockClause: 'FOR SHARE',
+      });
+    }
+
+    if (ubicacionId && clienteId) {
+      const ubicacionClienteRes = await client.query(
+        'SELECT id FROM ubicaciones WHERE id = $1 AND cliente_id = $2',
+        [ubicacionId, clienteId]
       );
-      if (existente.rowCount > 0) {
-        ubicacionId = existente.rows[0].id;
-      } else {
-        const creado = await client.query(
-          'INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING id',
-          [ubicacionNombre]
-        );
-        ubicacionId = creado.rows[0].id;
+      if (ubicacionClienteRes.rowCount === 0) {
+        throw createHttpError(400, 'La ubicación no pertenece al cliente seleccionado');
       }
+    }
+
+    if (!ubicacionId && ubicacionNombre) {
+      ubicacionId = await getOrCreateUbicacionForActiveCliente({
+        client,
+        clienteId,
+        nombre: ubicacionNombre,
+        requiredMessage: 'El cliente es obligatorio para crear una ubicación nueva',
+        user: req.user,
+        createPermissions: ARTICULO_CONTEXTUAL_LOCATION_CREATE_PERMISSIONS,
+      });
     }
 
     if (!ubicacionId) {
@@ -741,13 +893,21 @@ const deleteArticulo = async (req, res) => {
 const getBajasArticulos = async (req, res) => {
   try {
     const { search, from, to } = req.query;
+    const pagination = normalizePaginationQuery(req.query);
     validateInventoryDateBounds(from, to);
-    const { query, params } = buildBajasArticulosQuery({ search, from, to });
+    const { query, params } = buildBajasArticulosQuery({ search, from, to, pagination });
     const result = await db.query(query, params);
+    const totalItems = Number(result.rows[0]?.total_count || 0);
+    const data = result.rows.map(({ total_count: _totalCount, ...baja }) => baja);
 
     res.json({
       success: true,
-      data: result.rows,
+      data,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems,
+      }),
     });
   } catch (error) {
     sendInventoryError(res, error, 'Error al obtener bajas de artículos:');
@@ -916,70 +1076,28 @@ const darBajaArticulo = async (req, res) => {
 
 const getMovimientos = async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT 
-        m.id,
-        m.fecha_movimiento,
-        m.pdf_path,
-        m.estado,
-        m.anulado_por,
-        m.anulado_en,
-        m.motivo_anulacion,
-        (
-          COALESCE(m.estado, 'ACTIVO') = 'ACTIVO'
-          AND COALESCE(m.reversion_datos_completos, FALSE) = TRUE
-          AND EXISTS (
-            SELECT 1
-            FROM inventario_stock_efectos e
-            WHERE e.movimiento_id = m.id
-          )
-        ) AS reversible,
-        CASE
-          WHEN COALESCE(m.estado, 'ACTIVO') = 'ANULADO' THEN 'ALREADY_VOIDED'
-          WHEN COALESCE(m.estado, 'ACTIVO') = 'ELIMINADO' THEN 'ADMINISTRATIVELY_DELETED'
-          WHEN COALESCE(m.reversion_datos_completos, FALSE) = TRUE
-            AND EXISTS (
-              SELECT 1
-              FROM inventario_stock_efectos e
-              WHERE e.movimiento_id = m.id
-            ) THEN 'COMPLETE'
-          ELSE 'INCOMPLETE'
-        END AS reversal_status,
-        u.usuario,
-        COALESCE(SUM(d.cantidad), 0)::INT AS items,
-        STRING_AGG(
-          DISTINCT COALESCE(NULLIF(a.nombre_articulo, ''), NULLIF(a.numero_serie, ''), 'Artículo')
-          , ', '
-          ORDER BY COALESCE(NULLIF(a.nombre_articulo, ''), NULLIF(a.numero_serie, ''), 'Artículo')
-        ) AS articulos_movidos,
-        CASE
-          WHEN BOOL_AND(d.ubicacion_origen_id IS NULL) THEN 'entrada'
-          WHEN BOOL_AND(d.ubicacion_destino_id IS NULL) THEN 'salida'
-          ELSE 'traslado'
-        END AS tipo_movimiento,
-        STRING_AGG(DISTINCT ao.nombre, ', ' ORDER BY ao.nombre) AS ubicacion_origen,
-        CASE
-          WHEN COUNT(DISTINCT d.ubicacion_destino_id) = 1 THEN MAX(ad.nombre)
-          ELSE NULL
-        END AS ubicacion_destino,
-        CASE
-          WHEN COUNT(DISTINCT d.ubicacion_destino_id) = 1 THEN MAX(d.ubicacion_destino_id)
-          ELSE NULL
-        END AS ubicacion_destino_id
-      FROM movimientos m
-      LEFT JOIN detalle_movimientos d ON d.movimiento_id = m.id
-      LEFT JOIN articulos a ON d.articulo_id = a.id
-      LEFT JOIN usuarios u ON m.usuario_id = u.id
-      LEFT JOIN ubicaciones ao ON d.ubicacion_origen_id = ao.id
-      LEFT JOIN ubicaciones ad ON d.ubicacion_destino_id = ad.id
-      WHERE COALESCE(m.estado, 'ACTIVO') <> 'ELIMINADO'
-      GROUP BY m.id, u.usuario
-      ORDER BY m.fecha_movimiento DESC`
-    );
+    const { from, to, destino_id, search } = req.query;
+    validateInventoryDateBounds(from, to);
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: 'fecha_movimiento',
+      allowedSorts: MOVIMIENTOS_SORT_COLUMNS,
+    });
+    const { countResult, result } = await inventarioReadRepository.findMovimientos({
+      search,
+      destino_id,
+      from,
+      to,
+      pagination,
+    });
 
     res.json({
       success: true,
       data: result.rows,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: countResult.rows[0]?.total,
+      }),
     });
   } catch (error) {
     sendInventoryError(res, error, 'Error al obtener movimientos:');
@@ -1099,14 +1217,12 @@ const exportArticulosExcel = async (req, res) => {
     if (estado && !ALERTA_ESTADOS.has(normalizedEstado)) {
       throw createHttpError(400, 'El filtro estado no es válido');
     }
-    const { query, params } = buildInventarioAlertasQuery({
+    const result = await inventarioReadRepository.findArticulosForExport({
       tipo,
       ubicacion_id,
       search,
       estado: estado ? normalizedEstado : undefined,
     });
-
-    const result = await db.query(query, params);
 
     const { workbook, worksheet } = createWorkbook('Inventario', [
       { header: 'Tipo', key: 'tipo', width: 16 },
@@ -1354,7 +1470,13 @@ const createMovimiento = async (req, res) => {
   let movimientoId;
 
   try {
-    const { ubicacion_destino_id, ubicacion_destino_nombre, items, fecha_movimiento } = req.body;
+    const {
+      ubicacion_destino_id,
+      ubicacion_destino_nombre,
+      cliente_destino_id,
+      items,
+      fecha_movimiento,
+    } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       throw createHttpError(400, 'Debes agregar al menos un artículo');
@@ -1378,36 +1500,22 @@ const createMovimiento = async (req, res) => {
     }
 
     let destinoId = ubicacion_destino_id;
-    const destinoNombre = ubicacion_destino_nombre ? String(ubicacion_destino_nombre).trim() : '';
+    const destinoNombre = normalizeLocationName(ubicacion_destino_nombre);
+    const clienteDestinoId = cliente_destino_id
+      ? parsePositiveInteger(cliente_destino_id, 'El cliente destino es inválido')
+      : null;
 
     client = await db.getClient();
     await client.query('BEGIN');
     transactionStarted = true;
 
-    if (!destinoId && destinoNombre) {
-      const existente = await client.query(
-        'SELECT id FROM ubicaciones WHERE LOWER(nombre) = LOWER($1) LIMIT 1',
-        [destinoNombre]
-      );
-      if (existente.rowCount > 0) {
-        destinoId = existente.rows[0].id;
-      } else {
-        const creado = await client.query(
-          'INSERT INTO ubicaciones (nombre) VALUES ($1) RETURNING id',
-          [destinoNombre]
-        );
-        destinoId = creado.rows[0].id;
-      }
-    }
-
-    if (!destinoId) {
-      throw createHttpError(400, 'La ubicación destino es requerida para traslados');
-    }
-
-    destinoId = Number(destinoId);
-    if (!Number.isInteger(destinoId) || destinoId <= 0) {
-      throw createHttpError(400, 'La ubicación destino es inválida');
-    }
+    destinoId = await resolveMovimientoDestino({
+      client,
+      ubicacionId: destinoId,
+      ubicacionNombre: destinoNombre,
+      clienteDestinoId,
+      user: req.user,
+    });
 
     const lockedArticulos = await lockArticulosByIds(
       client,
@@ -2068,6 +2176,7 @@ const regenerateMovimientoPdf = async (req, res) => {
 module.exports = {
   getUbicaciones,
   getArticulos,
+  getArticulosCatalogo,
   createArticulo,
   updateArticulo,
   deleteArticulo,

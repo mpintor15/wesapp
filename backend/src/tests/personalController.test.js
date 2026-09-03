@@ -50,6 +50,60 @@ describe('personalController.getColaboradores', () => {
     expect(body.message).toMatch(/estado/i);
     expect(db.query).not.toHaveBeenCalled();
   });
+
+  test('pagina server-side, retorna metadata estándar y no filtra total_count en cada fila', async () => {
+    db.query.mockResolvedValue({
+      rows: [
+        { id: 1, nombres_completos: 'Ana Torres', total_count: 2 },
+        { id: 2, nombres_completos: 'Beto Ruiz', total_count: 2 },
+      ],
+      rowCount: 2,
+    });
+    const res = mockRes();
+
+    await getColaboradores(mockReq({ query: { page: '2', pageSize: '10' } }), res);
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('COUNT(*) OVER()::int AS total_count');
+    expect(sql).toContain('LIMIT $1 OFFSET $2');
+    expect(params).toEqual([10, 10]);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [
+        { id: 1, nombres_completos: 'Ana Torres' },
+        { id: 2, nombres_completos: 'Beto Ruiz' },
+      ],
+      pagination: {
+        page: 2,
+        pageSize: 10,
+        totalItems: 2,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: true,
+      },
+    });
+  });
+
+  test('lista vacía retorna totalItems 0 sin romper metadata', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await getColaboradores(mockReq({ query: {} }), res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [],
+      pagination: {
+        page: 1,
+        pageSize: 25,
+        totalItems: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
+  });
 });
 
 describe('personalController.createColaborador', () => {
@@ -178,6 +232,41 @@ describe('personalController.updateColaborador', () => {
 });
 
 describe('personalController.deleteColaborador', () => {
+  test('rechaza eliminar un colaborador vinculado a un usuario', async () => {
+    db.query.mockRejectedValue({
+      code: '23503',
+      constraint: 'usuarios_colaborador_id_fkey',
+    });
+    const res = mockRes();
+
+    await deleteColaborador(mockReq({ params: { id: '7' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringMatching(/vinculado a un usuario/i) })
+    );
+  });
+
+  test('rechaza eliminar un colaborador con autoría histórica de Bitácora', async () => {
+    db.query.mockRejectedValue({
+      code: '23503',
+      constraint: 'bitacora_registros_autor_colaborador_id_fkey',
+      detail: 'Key (id)=(7) is still referenced from table bitacora_registros.',
+    });
+    const res = mockRes();
+
+    await deleteColaborador(mockReq({ params: { id: '7' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'El colaborador tiene registros históricos de Bitácora y no puede eliminarse',
+    });
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(
+      /bitacora_registros_autor_colaborador_id_fkey|Key \(id\)/
+    );
+  });
+
   test('retorna 404 si el colaborador no existe', async () => {
     db.query.mockResolvedValue({ rows: [], rowCount: 0 });
     const res = mockRes();

@@ -8,15 +8,15 @@ const SortButton = ({ field, label, onSort, tableSort }) => (
 );
 
 const PersonalTable = ({
+  canDelete,
+  canEdit,
   colaboradores,
-  currentPage,
+  emptyMessage = 'No hay colaboradores registrados',
   onDelete,
   onEdit,
-  onPageChange,
   onSort,
   paginatedColaboradores,
   tableSort,
-  totalPages,
 }) => (
   <div className="table-responsive app-table-shell personal-table-shell">
     <table className="app-table personal-table">
@@ -69,66 +69,47 @@ const PersonalTable = ({
               </td>
               <td className="center col-actions app-col-actions app-col-actions--double">
                 <div className="action-buttons app-table-actions">
-                  <button
-                    className="action-btn action-btn-neutral"
-                    onClick={() => onEdit(c)}
-                    title="Editar"
-                    aria-label={`Editar ${c.nombres_completos}`}
-                    type="button"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z" />
-                      <path d="M14.5 5.5l3.5 3.5" />
-                    </svg>
-                  </button>
-                  <button
-                    className="action-btn action-btn-destructive"
-                    onClick={() => onDelete(c)}
-                    title="Eliminar"
-                    aria-label={`Eliminar ${c.nombres_completos}`}
-                    type="button"
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                      <path d="M10 11v6M14 11v6" />
-                      <path d="M9 6V4h6v2" />
-                    </svg>
-                  </button>
+                  {canEdit ? (
+                    <button
+                      className="action-btn action-btn-neutral"
+                      onClick={() => onEdit(c)}
+                      title="Editar"
+                      aria-label={`Editar ${c.nombres_completos}`}
+                      type="button"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 16.5V20h3.5L19 8.5l-3.5-3.5L4 16.5z" />
+                        <path d="M14.5 5.5l3.5 3.5" />
+                      </svg>
+                    </button>
+                  ) : null}
+                  {canDelete ? (
+                    <button
+                      className="action-btn action-btn-destructive"
+                      onClick={() => onDelete(c)}
+                      title="Eliminar"
+                      aria-label={`Eliminar ${c.nombres_completos}`}
+                      type="button"
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4h6v2" />
+                      </svg>
+                    </button>
+                  ) : null}
                 </div>
               </td>
             </tr>
           ))
         ) : (
           <tr className="empty-row">
-            <td colSpan="8">No hay colaboradores registrados</td>
+            <td colSpan="8">{emptyMessage}</td>
           </tr>
         )}
       </tbody>
     </table>
-    {totalPages > 1 && (
-      <div className="pagination personal-pagination">
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => onPageChange((page) => Math.max(1, page - 1))}
-          disabled={currentPage === 1}
-          type="button"
-        >
-          ‹ Anterior
-        </button>
-        <span className="pagination-info">
-          Página <span className="pagination-count">{currentPage}</span> de {totalPages}
-        </span>
-        <button
-          className="btn btn-ghost btn-sm"
-          onClick={() => onPageChange((page) => Math.min(totalPages, page + 1))}
-          disabled={currentPage === totalPages}
-          type="button"
-        >
-          Siguiente ›
-        </button>
-      </div>
-    )}
   </div>
 );
 

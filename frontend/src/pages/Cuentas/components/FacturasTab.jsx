@@ -1,6 +1,6 @@
+import PaginationControls from '../../../components/PaginationControls';
 import FacturaFilters from './FacturaFilters';
 import FacturasTable from './FacturasTable';
-import PaginationControls from './PaginationControls';
 
 const FacturasTab = ({
   filtersDraft,
@@ -23,7 +23,7 @@ const FacturasTab = ({
   onDelete,
   onPageChange,
 }) => (
-  <div className="tab-content">
+  <div className="tab-content tabular-workspace">
     <FacturaFilters
       filters={filtersDraft}
       onFilterChange={onFilterChange}
@@ -52,9 +52,7 @@ const FacturasTab = ({
       onDelete={onDelete}
     />
 
-    {filteredCount > 0 ? (
-      <PaginationControls page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
-    ) : null}
+    <PaginationControls page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
   </div>
 );
 

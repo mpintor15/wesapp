@@ -1,7 +1,6 @@
 const TABS = [
   { key: 'facturas', label: 'Facturas' },
   { key: 'pagos', label: 'Pagos' },
-  { key: 'clientes', label: 'Clientes' },
 ];
 
 const CuentasTabs = ({ activeTab, counts, onChange }) => (

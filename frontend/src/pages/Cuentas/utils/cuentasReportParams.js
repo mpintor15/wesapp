@@ -1,8 +1,8 @@
 export const getInitialFacturasReportFilters = () => ({
   fechaInicio: '',
   fechaFin: '',
-  soloDeudores: false,
-  agruparCliente: false,
+  soloDeudores: true,
+  agruparCliente: true,
 });
 
 export const getInitialPagosReportFilters = () => ({

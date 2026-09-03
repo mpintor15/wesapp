@@ -1,7 +1,10 @@
+import PageHeader from '../../../components/PageHeader';
+
 const CuentasPageHeader = ({
   activeTab,
   canCreateFactura,
-  showClienteForm,
+  canCreatePago,
+  canExportReportes,
   onBack,
   onCreateFactura,
   onShowFacturasReport,
@@ -9,89 +12,48 @@ const CuentasPageHeader = ({
   onOpenBatchPayment,
   onShowPagosReport,
   onRefreshPagos,
-  onToggleClienteForm,
-  onShowClientesReport,
-  onRefreshClientes,
-}) => (
-  <header className="page-header">
-    <div className="page-header-left">
-      <button className="btn-back" onClick={onBack} title="Volver al Dashboard" type="button">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          width="14"
-          height="14"
-        >
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-        Volver
-      </button>
-      <h1>Cuentas</h1>
-    </div>
+}) => {
+  const isFacturas = activeTab === 'facturas';
+  const isPagos = activeTab === 'pagos';
+  const onRefresh = isFacturas ? onRefreshFacturas : isPagos ? onRefreshPagos : null;
 
-    {activeTab === 'facturas' ? (
-      <div className="page-header-actions">
-        {canCreateFactura ? (
-          <button className="btn btn-ghost btn-sm" onClick={onCreateFactura} type="button">
-            Crear nueva factura
-          </button>
-        ) : null}
-        <button className="btn btn-ghost btn-sm" onClick={onShowFacturasReport} type="button">
-          Generar reporte de Facturas
-        </button>
-        <button
-          className="btn btn-ghost btn-sm btn-icon-only"
-          onClick={onRefreshFacturas}
-          title="Actualizar datos"
-          type="button"
-        >
-          ↻
-        </button>
-      </div>
-    ) : null}
-
-    {activeTab === 'pagos' ? (
-      <div className="page-header-actions">
-        <button className="btn btn-ghost btn-sm" onClick={onOpenBatchPayment} type="button">
-          Registrar pago
-        </button>
-        <button className="btn btn-ghost btn-sm" onClick={onShowPagosReport} type="button">
-          Generar reporte de Pagos
-        </button>
-        <button
-          className="btn btn-ghost btn-sm btn-icon-only"
-          onClick={onRefreshPagos}
-          title="Actualizar datos"
-          type="button"
-        >
-          ↻
-        </button>
-      </div>
-    ) : null}
-
-    {activeTab === 'clientes' ? (
-      <div className="page-header-actions">
-        <button className="btn btn-ghost btn-sm" onClick={onToggleClienteForm} type="button">
-          {showClienteForm ? 'Cancelar' : 'Crear cliente'}
-        </button>
-        <button className="btn btn-ghost btn-sm" onClick={onShowClientesReport} type="button">
-          Generar reporte de Clientes
-        </button>
-        <button
-          className="btn btn-ghost btn-sm btn-icon-only"
-          onClick={onRefreshClientes}
-          title="Actualizar datos"
-          type="button"
-        >
-          ↻
-        </button>
-      </div>
-    ) : null}
-  </header>
-);
+  return (
+    <PageHeader
+      title="Cuentas"
+      onBack={onBack}
+      backTitle="Volver al Dashboard"
+      onRefresh={onRefresh}
+      actions={
+        isFacturas ? (
+          <>
+            {canCreateFactura ? (
+              <button className="btn btn-ghost btn-sm" onClick={onCreateFactura} type="button">
+                Crear nueva factura
+              </button>
+            ) : null}
+            {canExportReportes ? (
+              <button className="btn btn-ghost btn-sm" onClick={onShowFacturasReport} type="button">
+                Generar reporte de Facturas
+              </button>
+            ) : null}
+          </>
+        ) : isPagos ? (
+          <>
+            {canCreatePago ? (
+              <button className="btn btn-ghost btn-sm" onClick={onOpenBatchPayment} type="button">
+                Registrar pago
+              </button>
+            ) : null}
+            {canExportReportes ? (
+              <button className="btn btn-ghost btn-sm" onClick={onShowPagosReport} type="button">
+                Generar reporte de Pagos
+              </button>
+            ) : null}
+          </>
+        ) : null
+      }
+    />
+  );
+};
 
 export default CuentasPageHeader;

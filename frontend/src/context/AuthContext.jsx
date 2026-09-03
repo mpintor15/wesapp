@@ -10,40 +10,9 @@ import React, {
 import PropTypes from 'prop-types';
 import authService from '../services/authService';
 import { AUTH_EXPIRED_EVENT, AUTH_PERMISSIONS_CHANGED_EVENT } from '../services/api';
+import { canAny } from '../auth/authorization';
 
 const AuthContext = createContext(null);
-
-const ROLE_PERMISSIONS = {
-  gerente: [
-    'cuentas',
-    'inventario',
-    'personal',
-    'usuarios',
-    'crear_articulo',
-    'eliminar_articulo',
-    'dar_baja_articulo',
-    'crear_movimiento',
-    'exportar',
-  ],
-  secretario: [
-    'cuentas',
-    'inventario',
-    'personal',
-    'crear_articulo',
-    'dar_baja_articulo',
-    'crear_movimiento',
-    'exportar',
-  ],
-  supervisor: [
-    'inventario',
-    'personal',
-    'crear_articulo',
-    'dar_baja_articulo',
-    'crear_movimiento',
-    'exportar',
-  ],
-  contador: ['cuentas', 'exportar'],
-};
 
 const parseStoredUser = () => {
   try {
@@ -171,13 +140,7 @@ export const AuthProvider = ({ children }) => {
     return result;
   }, []);
 
-  const hasPermission = useCallback(
-    (modulo) => {
-      if (!user) return false;
-      return ROLE_PERMISSIONS[user.tipo_usuario]?.includes(modulo) || false;
-    },
-    [user]
-  );
+  const hasPermission = useCallback((permission) => canAny(user, permission), [user]);
 
   const value = useMemo(
     () => ({

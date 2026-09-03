@@ -1,37 +1,18 @@
-const UsuariosPageHeader = ({ onBack, onCreate, onRefresh }) => (
-  <header className="page-header">
-    <div className="page-header-left">
-      <button className="btn-back" onClick={onBack} type="button">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          width="14"
-          height="14"
-        >
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-        Volver
-      </button>
-      <h1>Usuarios</h1>
-    </div>
-    <div className="page-header-actions">
-      <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
-        Crear nuevo usuario
-      </button>
-      <button
-        className="btn btn-ghost btn-sm btn-icon-only"
-        onClick={onRefresh}
-        title="Actualizar datos"
-        type="button"
-      >
-        ↻
-      </button>
-    </div>
-  </header>
+import PageHeader from '../../../components/PageHeader';
+
+const UsuariosPageHeader = ({ canCreate, onBack, onCreate, onRefresh }) => (
+  <PageHeader
+    title="Usuarios"
+    onBack={onBack}
+    onRefresh={onRefresh}
+    actions={
+      canCreate ? (
+        <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
+          Crear nuevo usuario
+        </button>
+      ) : null
+    }
+  />
 );
 
 export default UsuariosPageHeader;

@@ -140,18 +140,6 @@ describe('cuentasPagosRepository', () => {
     ]);
   });
 
-  test('deletePagoById conserva DELETE y parámetros', async () => {
-    const expected = { rows: [], rowCount: 1 };
-    db.query.mockResolvedValueOnce(expected);
-
-    const result = await cuentasPagosRepository.deletePagoById(10);
-
-    expect(result).toBe(expected);
-    expect(db.query).toHaveBeenCalledTimes(1);
-    expect(normalizeSql(db.query.mock.calls[0][0])).toBe('DELETE FROM pagos WHERE id = $1');
-    expect(db.query.mock.calls[0][1]).toEqual([10]);
-  });
-
   test('updatePagoTotalFromAbonos conserva UPDATE, subquery y parámetros', async () => {
     const expected = { rows: [], rowCount: 1 };
     db.query.mockResolvedValueOnce(expected);
@@ -180,10 +168,11 @@ describe('cuentasPagosRepository', () => {
       },
       executor
     );
-    await cuentasPagosRepository.deletePagoById(20, executor);
+    await cuentasPagosRepository.updatePagoTotalFromAbonos(20, executor);
 
     expect(executor.query).toHaveBeenCalledTimes(2);
     expect(executor.query.mock.calls[0][1]).toEqual([7, '2024-01-01', null, null, null, 500]);
+    expect(executor.query.mock.calls[1][0]).not.toMatch(/DELETE FROM/i);
     expect(executor.query.mock.calls[1][1]).toEqual([20]);
     expect(db.query).not.toHaveBeenCalled();
   });
@@ -192,6 +181,6 @@ describe('cuentasPagosRepository', () => {
     const error = new Error('delete failed');
     db.query.mockRejectedValueOnce(error);
 
-    await expect(cuentasPagosRepository.deletePagoById(10)).rejects.toBe(error);
+    await expect(cuentasPagosRepository.updatePagoTotalFromAbonos(10)).rejects.toBe(error);
   });
 });

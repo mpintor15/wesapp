@@ -36,14 +36,24 @@ module.exports = defineConfig({
     {
       name: 'chromium',
       dependencies: ['setup'],
-      testIgnore: [/auth\.setup\.js/, /responsive-webkit\.spec\.js/],
+      testIgnore: [/auth\.setup\.js/, /responsive-webkit\.spec\.js/, /critical-.*\.spec\.js/],
       use: { ...devices['Desktop Chrome'], storageState: authFile },
     },
     {
       name: 'webkit',
       dependencies: ['setup'],
-      testIgnore: [/auth\.setup\.js/, /responsive-chromium\.spec\.js/, /smoke\.spec\.js/],
+      testIgnore: [
+        /auth\.setup\.js/,
+        /responsive-chromium\.spec\.js/,
+        /smoke\.spec\.js/,
+        /critical-.*\.spec\.js/,
+      ],
       use: { ...devices['Desktop Safari'], storageState: authFile },
+    },
+    {
+      name: 'critical-chromium',
+      testMatch: /critical-.*\.spec\.js/,
+      use: { ...devices['Desktop Chrome'], storageState: { cookies: [], origins: [] } },
     },
   ],
 });

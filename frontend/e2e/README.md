@@ -36,6 +36,10 @@ export E2E_WORKERS=1
 ## Comandos
 
 ```sh
+npm --prefix ../backend run e2e:prepare-db
+npm run test:e2e:critical
+npm run test:e2e:visual
+npm run test:e2e:visual:update
 npm run test:e2e:auth
 npm run test:e2e:smoke
 npm run test:responsive
@@ -46,6 +50,55 @@ npm run test:visual:chromium
 npm run test:visual:webkit
 npm run test:visual:update
 ```
+
+`test:e2e:critical` cubre login válido, login inválido, protección de rutas,
+navegación principal por permisos, lectura básica de Inventario y lectura básica
+de Cuentas. No reutiliza `e2e/.auth/user.json`: cada test crea su sesión con las
+fixtures locales `e2e_gerente` o `e2e_contador`.
+
+`test:e2e:visual` es una línea base separada y pequeña en Chromium. Cubre Login,
+Dashboard de gerente, Inventario de gerente y Cuentas de contador en los viewports
+390x844, 768x1024 y 1440x900. Además de nueve snapshots, verifica overflow global,
+contención horizontal de cabeceras y controles, y scroll interno de tablas cuando
+el contenido excede su contenedor.
+
+Los baselines oficiales viven en
+`e2e/visual-responsive-baseline.spec.js-snapshots` y se generan únicamente en
+Ubuntu con Chromium. CI es la validación visual canónica. Los reportes, traces,
+videos, screenshots de fallo y diffs quedan en `playwright-report` o
+`test-results` y no se versionan.
+
+`test:e2e:visual` puede ejecutarse en macOS para validar las assertions responsive
+y generar artefactos de diagnóstico; las diferencias de rasterización de las
+fuentes del sistema frente a Ubuntu son esperables. `test:e2e:visual:update`
+rechaza actualizaciones fuera de Linux para impedir que baselines macOS reemplacen
+silenciosamente los oficiales.
+
+La actualización en Linux solo debe ejecutarse después de confirmar que el cambio
+visual es intencional. Antes de aceptar snapshots nuevos, revisar cada imagen,
+sus dimensiones, datos fixture, loaders y overlays. Ante una diferencia, revisar
+primero el artefacto `actual`/`diff`, corregir la regresión o justificar el cambio,
+y ejecutar nuevamente el comando normal sin actualizar snapshots.
+
+La base crítica debe ser local, aislada y reseteable:
+
+```sh
+cd backend
+DB_NAME=wesapp_e2e npm run e2e:prepare-db
+E2E_MODE=true DB_NAME=wesapp_e2e PORT=3201 JWT_SECRET=e2e_test_secret npm start
+```
+
+En otra terminal:
+
+```sh
+cd frontend
+PORT=3200 REACT_APP_API_URL=http://localhost:3201/api BROWSER=none npm start
+E2E_BASE_URL=http://localhost:3200 E2E_API_URL=http://localhost:3201/api npm run test:e2e:critical
+```
+
+`e2e:prepare-db` rechaza bases que no terminan en `_e2e` y nunca debe apuntar a
+`wesapp`, `wesapp_test` ni producción. La contraseña fixture por defecto
+`E2E_Local_Password_123!` es local y no representa una credencial real.
 
 `test:e2e:auth` valida frontend, backend y credenciales antes de guardar `e2e/.auth/user.json`.
 Las suites protegidas reutilizan ese `storageState`; no hacen login por test.

@@ -6,6 +6,10 @@
  *
  *  UBICACIONES
  *  - getUbicaciones()                   : GET /inventario/ubicaciones
+ *  - getUbicacionesAgrupadas()          : GET /inventario/ubicaciones/agrupadas
+ *  - createUbicacion(data)              : POST /inventario/ubicaciones
+ *  - updateUbicacion(id, data)          : PUT  /inventario/ubicaciones/:id
+ *  - deleteUbicacion(id)                : DEL  /inventario/ubicaciones/:id
  *
  *  ARTÍCULOS
  *  - getArticulos(params)               : GET /inventario/articulos (filtros: tipo, ubicacion_id, estado, search)
@@ -28,8 +32,10 @@ import api from './api';
 import {
   extractError,
   getFilenameFromDisposition,
+  normalizeServiceError,
   saveBlobWithPickerOrDownload,
 } from './serviceUtils';
+import { normalizePagination } from '../utils/pagination';
 
 export const INVENTARIO_ERROR_MESSAGES = {
   INSUFFICIENT_STOCK: 'No existe stock suficiente para completar la operación.',
@@ -56,10 +62,12 @@ const getInventoryErrorCode = (error) => error?.response?.data?.code;
 export const extractInventoryError = (error, fallback) => {
   const code = getInventoryErrorCode(error);
   const message = code ? INVENTARIO_ERROR_MESSAGES[code] : '';
+  const normalized = normalizeServiceError(error, fallback);
+  const backendMessage = error?.response?.data?.message;
   return {
+    ...normalized,
     code,
-    message: message || extractError(error, fallback),
-    status: error?.response?.status,
+    message: message || backendMessage || extractError(error, fallback),
   };
 };
 
@@ -89,9 +97,9 @@ const failure = (error, fallback) => ({
 });
 
 const inventarioService = {
-  getUbicaciones: async () => {
+  getUbicaciones: async (params = {}) => {
     try {
-      const response = await api.get('/inventario/ubicaciones');
+      const response = await api.get('/inventario/ubicaciones', { params });
       return {
         success: response.data.success,
         data: response.data.data || [],
@@ -101,15 +109,201 @@ const inventarioService = {
     }
   },
 
+  getUbicacionesAgrupadas: async (params = {}) => {
+    try {
+      const response = await api.get('/inventario/ubicaciones/agrupadas', { params });
+      return {
+        success: response.data.success,
+        data: response.data.data || [],
+        meta: response.data.meta || {
+          page: 1,
+          pageSize: 25,
+          totalGroups: 0,
+          filteredGroups: 0,
+          totalLocations: 0,
+          filteredLocations: 0,
+          totalPages: 0,
+        },
+      };
+    } catch (error) {
+      return failure(error, 'Error al obtener ubicaciones agrupadas');
+    }
+  },
+
+  createUbicacion: async (data) => {
+    try {
+      const response = await api.post('/inventario/ubicaciones', data);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al crear ubicación');
+    }
+  },
+
+  updateUbicacion: async (id, data) => {
+    try {
+      const response = await api.put(`/inventario/ubicaciones/${id}`, data);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al actualizar ubicación');
+    }
+  },
+
+  deleteUbicacion: async (id) => {
+    try {
+      const response = await api.delete(`/inventario/ubicaciones/${id}`);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al eliminar ubicación');
+    }
+  },
+
+  getManzanas: async (ubicacionId) => {
+    try {
+      const response = await api.get(`/inventario/ubicaciones/${ubicacionId}/manzanas`);
+      return { success: response.data.success, data: response.data.data || [] };
+    } catch (error) {
+      return failure(error, 'Error al obtener Manzanas');
+    }
+  },
+
+  createManzana: async (ubicacionId, data) => {
+    try {
+      const response = await api.post(`/inventario/ubicaciones/${ubicacionId}/manzanas`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al crear Manzana');
+    }
+  },
+
+  updateManzana: async (manzanaId, data) => {
+    try {
+      const response = await api.put(`/inventario/ubicaciones/manzanas/${manzanaId}`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al actualizar Manzana');
+    }
+  },
+
+  deleteManzana: async (manzanaId) => {
+    try {
+      const response = await api.delete(`/inventario/ubicaciones/manzanas/${manzanaId}`);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al eliminar Manzana');
+    }
+  },
+
+  getVillas: async (manzanaId) => {
+    try {
+      const response = await api.get(`/inventario/ubicaciones/manzanas/${manzanaId}/villas`);
+      return { success: response.data.success, data: response.data.data || [] };
+    } catch (error) {
+      return failure(error, 'Error al obtener Villas');
+    }
+  },
+
+  createVilla: async (manzanaId, data) => {
+    try {
+      const response = await api.post(`/inventario/ubicaciones/manzanas/${manzanaId}/villas`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al crear Villa');
+    }
+  },
+
+  updateVilla: async (villaId, data) => {
+    try {
+      const response = await api.put(`/inventario/ubicaciones/villas/${villaId}`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al actualizar Villa');
+    }
+  },
+
+  deleteVilla: async (villaId) => {
+    try {
+      const response = await api.delete(`/inventario/ubicaciones/villas/${villaId}`);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return failure(error, 'Error al eliminar Villa');
+    }
+  },
+
+  getResidentePrincipal: async (villaId) => {
+    try {
+      const response = await api.get(
+        `/inventario/ubicaciones/villas/${villaId}/residente-principal`
+      );
+      return { success: response.data.success, data: response.data.data || null };
+    } catch (error) {
+      return failure(error, 'Error al obtener Residente principal');
+    }
+  },
+
+  createResidentePrincipal: async (villaId, data) => {
+    try {
+      const response = await api.post(
+        `/inventario/ubicaciones/villas/${villaId}/residente-principal`,
+        data
+      );
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al crear Residente principal');
+    }
+  },
+
+  updateResidentePrincipal: async (residenteId, data) => {
+    try {
+      const response = await api.put(`/inventario/ubicaciones/residentes/${residenteId}`, data);
+      return { success: response.data.success, data: response.data.data };
+    } catch (error) {
+      return failure(error, 'Error al actualizar Residente principal');
+    }
+  },
+
   getArticulos: async (params = {}) => {
     try {
       const response = await api.get('/inventario/articulos', { params });
+      const data = response.data.data || [];
+      return {
+        success: response.data.success,
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
+      };
+    } catch (error) {
+      return failure(error, 'Error al obtener articulos');
+    }
+  },
+
+  getArticulosCatalogo: async () => {
+    try {
+      const response = await api.get('/inventario/articulos/catalogo');
       return {
         success: response.data.success,
         data: response.data.data || [],
       };
     } catch (error) {
-      return failure(error, 'Error al obtener articulos');
+      return failure(error, 'Error al obtener catálogo de artículos');
     }
   },
 
@@ -132,6 +326,7 @@ const inventarioService = {
       return {
         success: response.data.success,
         data: response.data.data || [],
+        pagination: normalizePagination(response.data.pagination, response.data.data?.length || 0),
       };
     } catch (error) {
       return failure(error, 'Error al obtener artículos dados de baja');
@@ -177,12 +372,14 @@ const inventarioService = {
     }
   },
 
-  getMovimientos: async () => {
+  getMovimientos: async (params = {}) => {
     try {
-      const response = await api.get('/inventario/movimientos');
+      const response = await api.get('/inventario/movimientos', { params });
+      const data = response.data.data || [];
       return {
         success: response.data.success,
-        data: response.data.data || [],
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
       };
     } catch (error) {
       return failure(error, 'Error al obtener movimientos');

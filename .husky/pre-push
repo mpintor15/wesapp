@@ -2,7 +2,7 @@
 
 echo "Running pre-push checks..."
 
-npm test || exit 1
-npm run build || exit 1
+NODE_ENV=test DB_NAME=wesapp_test npm test || exit 1
+npm --prefix frontend run build || exit 1
 
 echo "Pre-push checks passed."

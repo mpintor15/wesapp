@@ -14,10 +14,9 @@ const FacturasTable = ({
   onShowAnulacion,
   onEdit,
   onCancel,
-  onDelete,
 }) => (
-  <div className="table-responsive app-table-shell">
-    <table className="app-table cuentas-table">
+  <div className="table-responsive app-table-shell app-table-scroll facturas-table-shell">
+    <table className="app-table cuentas-table facturas-table">
       <thead>
         <tr>
           <SortHeader field="num_factura" label="N° Fact" sort={sort} onSort={onSort} />
@@ -39,7 +38,8 @@ const FacturasTable = ({
             Abon.
           </th>
           <th className="col-money">Saldo</th>
-          <th className="col-actions app-col-actions app-col-actions--triple"></th>
+          <th>Estado</th>
+          <th className="col-actions app-col-actions"></th>
         </tr>
       </thead>
       <tbody>
@@ -70,7 +70,12 @@ const FacturasTable = ({
               >
                 {formatMoney(row.saldo_pendiente)}
               </td>
-              <td className="col-actions app-col-actions app-col-actions--triple">
+              <td>
+                <span className={`badge ${row.cancelada ? 'badge-inactive' : 'badge-active'}`}>
+                  {row.cancelada ? 'Anulada' : 'Activa'}
+                </span>
+              </td>
+              <td className="col-actions app-col-actions">
                 <div className="action-buttons app-table-actions">
                   {row.cancelada ? (
                     <button
@@ -138,7 +143,7 @@ const FacturasTable = ({
                       <button
                         className="action-btn action-btn-cancel"
                         onClick={() => onCancel(row)}
-                        title="Anular Factura"
+                        title="Anular factura"
                         type="button"
                       >
                         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -154,32 +159,13 @@ const FacturasTable = ({
                       </button>
                     </>
                   ) : null}
-                  {canManageFacturas ? (
-                    <button
-                      className="action-btn action-btn-del"
-                      onClick={() => onDelete(row)}
-                      title="Eliminar Factura"
-                      type="button"
-                    >
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M6 7h12M9 7v10m6-10v10M9 7h6M10 4h4l1 2H9l1-2M7 7l1 12h8l1-12"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2.2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    </button>
-                  ) : null}
                 </div>
               </td>
             </tr>
           ))
         ) : (
           <tr>
-            <td colSpan="12" className="text-center">
+            <td colSpan="13" className="text-center">
               {filteredCount === 0
                 ? filters.search ||
                   filters.fechaInicio ||
@@ -212,6 +198,7 @@ const FacturasTable = ({
             >
               {formatMoney(totals.saldo_pendiente)}
             </td>
+            <td></td>
             <td className="col-actions"></td>
           </tr>
         </tfoot>

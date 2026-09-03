@@ -7,12 +7,12 @@
  *  - getClientes    : Lista todos los clientes ordenados por nombre.
  *  - exportClientesExcel : Genera y descarga la lista de clientes en .xlsx.
  *  - createCliente  : Crea un cliente con nombre e identificación únicos.
- *  - deleteCliente  : Elimina un cliente solo si no tiene facturas asociadas.
+ *  - deleteCliente  : Elimina un cliente solo si no tiene relaciones históricas.
  *
  *  FACTURAS
  *  - createFactura  : Registra una factura con opciones de IVA y retenciones.
  *                     Calcula los montos en la vista vista_reporte_cuentas.
- *  - deleteFactura  : Elimina una factura (incluye sus abonos por CASCADE).
+ *  - deleteFactura  : Rechaza la eliminación física para preservar historial.
  *  - cancelFactura  : Marca una factura como cancelada (cancelada = TRUE)
  *                     sin eliminarla del historial.
  *
@@ -33,10 +33,23 @@ const cuentasAbonosRepository = require('../repositories/cuentasAbonosRepository
 const cuentasClientesRepository = require('../repositories/cuentasClientesRepository');
 const cuentasFacturasRepository = require('../repositories/cuentasFacturasRepository');
 const cuentasPagosRepository = require('../repositories/cuentasPagosRepository');
+const cuentasReadRepository = require('../repositories/cuentasReadRepository');
+const {
+  CLIENT_HAS_RELATIONS_MESSAGE,
+  deleteClienteWithoutRelations,
+} = require('../services/clientesDeletionService');
+const { assertClienteActivoForOperation } = require('../services/clientesStateService');
+const {
+  PAYMENT_CANNOT_BE_VOIDED_MESSAGE,
+  rejectPaymentVoidingWithoutModel,
+  rejectPhysicalInvoiceDeletion,
+  voidInvoice,
+} = require('../services/cuentasVoidingService');
 const { createHttpError, handleControllerError } = require('../utils/http');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { validateOptionalDateRange } = require('../utils/inputValidation');
+const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const {
   parsePositiveIntegerId,
   validateBatchPaymentPayload,
@@ -45,39 +58,11 @@ const {
   validateFacturaCreatePayload,
   validateFacturaUpdatePayload,
 } = require('../modules/cuentas/cuentas.validators');
-const { PAYMENT_METHODS } = require('../modules/cuentas/cuentas.constants');
-
-// Cache de introspección de esquema — se llena en el primer request y se reutiliza.
-// El servidor se reinicia con cada deploy, así que no hay riesgo de valores obsoletos.
-const _schemaCache = {};
-
-const tableColumnExists = async (tableName, columnName) => {
-  const key = `${tableName}.${columnName}`;
-  if (key in _schemaCache) {
-    return _schemaCache[key];
-  }
-  const result = await db.query(
-    `SELECT 1
-     FROM information_schema.columns
-     WHERE table_schema = 'public'
-       AND table_name = $1
-       AND column_name = $2
-     LIMIT 1`,
-    [tableName, columnName]
-  );
-  _schemaCache[key] = result.rowCount > 0;
-  return _schemaCache[key];
-};
-
-const tableExists = async (tableName) => {
-  const key = `table::${tableName}`;
-  if (key in _schemaCache) {
-    return _schemaCache[key];
-  }
-  const result = await db.query('SELECT to_regclass($1) AS table_name', [`public.${tableName}`]);
-  _schemaCache[key] = Boolean(result.rows[0]?.table_name);
-  return _schemaCache[key];
-};
+const {
+  FACTURAS_SORT_COLUMNS,
+  PAGOS_SORT_COLUMNS,
+  PAYMENT_METHODS,
+} = require('../modules/cuentas/cuentas.constants');
 
 const validateBooleanFilter = (value, message) => {
   if (value === undefined || value === null || value === '') {
@@ -183,30 +168,19 @@ const deleteCliente = async (req, res) => {
     }
     const id = idValidation.value;
 
-    const hasFacturas = await cuentasClientesRepository.findClienteFacturasDependency(id);
-
-    if (hasFacturas.rowCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'No se puede eliminar el cliente porque tiene facturas asociadas',
+    await db.transaction(async (client) => {
+      await deleteClienteWithoutRelations({
+        executor: client,
+        clienteId: id,
+        audit: (deletedCliente) =>
+          logAudit(client, {
+            tabla: 'clientes',
+            operacion: 'DELETE',
+            registro_id: String(id),
+            datos_anteriores: deletedCliente,
+            ...auditFromReq(req),
+          }),
       });
-    }
-
-    const result = await cuentasClientesRepository.deleteClienteById(id);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Cliente no encontrado',
-      });
-    }
-
-    await logAudit(db, {
-      tabla: 'clientes',
-      operacion: 'DELETE',
-      registro_id: String(id),
-      datos_anteriores: result.rows[0],
-      ...auditFromReq(req),
     });
 
     res.json({
@@ -215,9 +189,11 @@ const deleteCliente = async (req, res) => {
     });
   } catch (error) {
     if (error.code === '23503') {
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
-        message: 'No se puede eliminar el cliente porque tiene facturas asociadas',
+        code: 'CLIENT_HAS_RELATIONS',
+        message: CLIENT_HAS_RELATIONS_MESSAGE,
+        details: { ubicaciones: 0, facturas: 0, pagos: 0 },
       });
     }
     return handleControllerError(res, error, 'Error al eliminar cliente:');
@@ -247,25 +223,25 @@ const createFactura = async (req, res) => {
       incluye_retencion_iva,
     } = validation.value;
 
-    const clienteExists = await db.query('SELECT id FROM clientes WHERE id = $1 LIMIT 1', [
-      parsedClienteId,
-    ]);
-
-    if (clienteExists.rowCount === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'El cliente especificado no existe',
+    const result = await db.transaction(async (client) => {
+      await assertClienteActivoForOperation({
+        executor: client,
+        clienteId: parsedClienteId,
+        lockClause: 'FOR SHARE',
       });
-    }
 
-    const result = await cuentasFacturasRepository.createFactura({
-      numFactura: parsedNumFactura,
-      clienteId: parsedClienteId,
-      fechaFactura: fecha_factura,
-      valorFactura: parsedValorFactura,
-      incluyeIva: !!incluye_iva,
-      incluyeRetencionFuente: !!incluye_retencion_fuente,
-      incluyeRetencionIva: !!incluye_retencion_iva,
+      return cuentasFacturasRepository.createFactura(
+        {
+          numFactura: parsedNumFactura,
+          clienteId: parsedClienteId,
+          fechaFactura: fecha_factura,
+          valorFactura: parsedValorFactura,
+          incluyeIva: !!incluye_iva,
+          incluyeRetencionFuente: !!incluye_retencion_fuente,
+          incluyeRetencionIva: !!incluye_retencion_iva,
+        },
+        client
+      );
     });
 
     await logAudit(db, {
@@ -289,9 +265,10 @@ const createFactura = async (req, res) => {
       });
     }
     if (error.code === '23503') {
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
-        message: 'El cliente especificado no existe',
+        code: 'CLIENT_NOT_FOUND',
+        message: 'Cliente no encontrado',
       });
     }
     return handleControllerError(res, error, 'Error al crear factura:');
@@ -309,27 +286,7 @@ const deleteFactura = async (req, res) => {
     }
     const parsedNumFactura = numFacturaValidation.value;
 
-    const result = await cuentasFacturasRepository.deleteFacturaByNumero(parsedNumFactura);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Factura no encontrada',
-      });
-    }
-
-    await logAudit(db, {
-      tabla: 'cuentas',
-      operacion: 'DELETE',
-      registro_id: String(parsedNumFactura),
-      datos_anteriores: result.rows[0],
-      ...auditFromReq(req),
-    });
-
-    res.json({
-      success: true,
-      message: 'Factura eliminada exitosamente',
-    });
+    await rejectPhysicalInvoiceDeletion({ executor: db, numFactura: parsedNumFactura });
   } catch (error) {
     return handleControllerError(res, error, 'Error al eliminar factura:');
   }
@@ -353,23 +310,20 @@ const cancelFactura = async (req, res) => {
       });
     }
 
-    const result = await cuentasFacturasRepository.cancelFacturaByNumero(
-      parsedNumFactura,
-      detailValidation.value
+    const voided = await db.transaction(async (client) =>
+      voidInvoice({
+        executor: client,
+        numFactura: parsedNumFactura,
+        detalleAnulacion: detailValidation.value,
+      })
     );
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Factura no encontrada',
-      });
-    }
 
     await logAudit(db, {
       tabla: 'cuentas',
       operacion: 'UPDATE',
       registro_id: String(parsedNumFactura),
-      datos_nuevos: result.rows[0],
+      datos_anteriores: voided.previous,
+      datos_nuevos: voided.invoice,
       ...auditFromReq(req),
     });
 
@@ -377,9 +331,9 @@ const cancelFactura = async (req, res) => {
       success: true,
       message: 'Factura anulada exitosamente',
       data: {
-        num_factura: result.rows[0].num_factura,
-        detalle_anulacion: result.rows[0].detalle_anulacion,
-        fecha_anulacion: result.rows[0].fecha_anulacion,
+        num_factura: voided.invoice.num_factura,
+        detalle_anulacion: voided.invoice.detalle_anulacion,
+        fecha_anulacion: voided.invoice.fecha_anulacion,
       },
     });
   } catch (error) {
@@ -390,6 +344,19 @@ const cancelFactura = async (req, res) => {
       });
     }
     return handleControllerError(res, error, 'Error al cancelar factura:');
+  }
+};
+
+const handleDeprecatedPaymentVoid = async (req, res) => {
+  try {
+    const idValidation = parsePositiveIntegerId(req.params.id, 'El id del pago es inválido');
+    if (!idValidation.valid) {
+      throw createHttpError(idValidation.status, idValidation.message);
+    }
+
+    await rejectPaymentVoidingWithoutModel({ executor: db, pagoId: idValidation.value });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al anular pago:');
   }
 };
 
@@ -421,159 +388,36 @@ const getAbonosByFactura = async (req, res) => {
 
 const getPagos = async (req, res) => {
   try {
-    const pagosTableExists = await tableExists('pagos');
-    const [
-      abonosHasPagoId,
-      pagosHasClienteId,
-      pagosHasFecha,
-      pagosHasMetodoPago,
-      pagosHasReferencia,
-      pagosHasNotas,
-      pagosHasTotal,
-      pagosHasCreatedAt,
-      cuentasHasCancelada,
-      cuentasHasIncluyeIva,
-      cuentasHasIncluyeRetencionFuente,
-      cuentasHasIncluyeRetencionIva,
-    ] = await Promise.all([
-      tableColumnExists('abonos', 'pago_id'),
-      pagosTableExists ? tableColumnExists('pagos', 'cliente_id') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'fecha') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'metodo_pago') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'referencia') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'notas') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'total') : Promise.resolve(false),
-      pagosTableExists ? tableColumnExists('pagos', 'created_at') : Promise.resolve(false),
-      tableColumnExists('cuentas', 'cancelada'),
-      tableColumnExists('cuentas', 'incluye_iva'),
-      tableColumnExists('cuentas', 'incluye_retencion_fuente'),
-      tableColumnExists('cuentas', 'incluye_retencion_iva'),
-    ]);
-
-    if (!pagosTableExists || !abonosHasPagoId) {
-      const legacyResult = await db.query(
-        `WITH totales_abonos AS (
-           SELECT num_factura, SUM(valor_abono) AS total_abonos
-           FROM abonos
-           GROUP BY num_factura
-         )
-         SELECT
-           a.id,
-           a.fecha_abono AS fecha,
-           NULL::varchar AS metodo_pago,
-           NULL::varchar AS referencia,
-           NULL::text AS notas,
-           a.valor_abono AS total,
-           a.created_at,
-           cl.id AS cliente_id,
-           cl.nombre AS cliente,
-           cl.identificacion,
-           1::int AS facturas_count,
-           JSON_BUILD_ARRAY(
-             JSON_BUILD_OBJECT(
-               'abono_id', a.id,
-               'num_factura', a.num_factura,
-               'fecha_factura', c.fecha_factura,
-               'valor_factura', c.valor_factura,
-               'valor_abono', a.valor_abono,
-               'cancelada', ${cuentasHasCancelada ? 'c.cancelada' : 'FALSE'},
-               'saldo_pendiente',
-                 (
-                   c.valor_factura
-                   + CASE WHEN ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
-                   - CASE WHEN ${cuentasHasIncluyeRetencionFuente ? 'COALESCE(c.incluye_retencion_fuente, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
-                   - CASE WHEN ${cuentasHasIncluyeRetencionIva ? 'COALESCE(c.incluye_retencion_iva, FALSE)' : 'FALSE'} AND ${cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE'} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
-                   - COALESCE(ta.total_abonos, 0)
-                 )
-             )
-           ) AS facturas
-         FROM abonos a
-         JOIN cuentas c ON c.num_factura = a.num_factura
-         JOIN clientes cl ON cl.id = c.cliente_id
-         LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura
-         ORDER BY a.created_at DESC, a.fecha_abono DESC, a.id DESC`
-      );
-
-      return res.json({
-        success: true,
-        data: legacyResult.rows,
-      });
+    const { fecha_inicio, fecha_fin, metodo_pago, search } = req.query;
+    validateFechaInicioFin(fecha_inicio, fecha_fin);
+    const metodoPagoNormalizado = metodo_pago
+      ? String(metodo_pago).trim().toLowerCase()
+      : undefined;
+    if (metodoPagoNormalizado && !PAYMENT_METHODS.includes(metodoPagoNormalizado)) {
+      throw createHttpError(400, 'El método de pago no es válido');
     }
-
-    const pagoFechaSelect = pagosHasFecha ? 'p.fecha' : 'MIN(a.fecha_abono)';
-    const pagoCreatedAtSelect = pagosHasCreatedAt ? 'p.created_at' : pagoFechaSelect;
-    const pagoMetodoSelect = pagosHasMetodoPago ? 'p.metodo_pago' : 'NULL::varchar';
-    const pagoReferenciaSelect = pagosHasReferencia ? 'p.referencia' : 'NULL::varchar';
-    const pagoNotasSelect = pagosHasNotas ? 'p.notas' : 'NULL::text';
-    const pagoTotalSelect = pagosHasTotal ? 'p.total' : 'COALESCE(SUM(a.valor_abono), 0)';
-    const pagoClienteIdSelect = pagosHasClienteId ? 'COALESCE(p.cliente_id, cl.id)' : 'cl.id';
-    const clienteJoinKey = pagosHasClienteId
-      ? 'COALESCE(p.cliente_id, c.cliente_id)'
-      : 'c.cliente_id';
-    const canceladaSelect = cuentasHasCancelada ? 'c.cancelada' : 'FALSE';
-    const incluyeIvaSelect = cuentasHasIncluyeIva ? 'COALESCE(c.incluye_iva, FALSE)' : 'FALSE';
-    const incluyeRetFuenteSelect = cuentasHasIncluyeRetencionFuente
-      ? 'COALESCE(c.incluye_retencion_fuente, FALSE)'
-      : 'FALSE';
-    const incluyeRetIvaSelect = cuentasHasIncluyeRetencionIva
-      ? 'COALESCE(c.incluye_retencion_iva, FALSE)'
-      : 'FALSE';
-
-    const result = await db.query(
-      `WITH totales_abonos AS (
-         SELECT num_factura, SUM(valor_abono) AS total_abonos
-         FROM abonos
-         GROUP BY num_factura
-       )
-       SELECT
-         p.id,
-         ${pagoFechaSelect} AS fecha,
-         ${pagoMetodoSelect} AS metodo_pago,
-         ${pagoReferenciaSelect} AS referencia,
-         ${pagoNotasSelect} AS notas,
-         ${pagoTotalSelect} AS total,
-         ${pagoCreatedAtSelect} AS created_at,
-         ${pagoClienteIdSelect} AS cliente_id,
-         cl.nombre AS cliente,
-         cl.identificacion,
-         COUNT(a.id)::int AS facturas_count,
-         COALESCE(
-           JSON_AGG(
-             JSON_BUILD_OBJECT(
-               'abono_id', a.id,
-               'num_factura', a.num_factura,
-               'fecha_factura', c.fecha_factura,
-               'valor_factura', c.valor_factura,
-               'valor_abono', a.valor_abono,
-               'cancelada', ${canceladaSelect},
-               'saldo_pendiente',
-                 CASE
-                   WHEN c.num_factura IS NULL THEN NULL
-                   ELSE (
-                     c.valor_factura
-                     + CASE WHEN ${incluyeIvaSelect} THEN ROUND(c.valor_factura * 0.15, 2) ELSE 0 END
-                     - CASE WHEN ${incluyeRetFuenteSelect} THEN ROUND(c.valor_factura * 0.03, 2) ELSE 0 END
-                     - CASE WHEN ${incluyeRetIvaSelect} AND ${incluyeIvaSelect} THEN ROUND(c.valor_factura * 0.15 * 0.70, 2) ELSE 0 END
-                     - COALESCE(ta.total_abonos, 0)
-                   )
-                 END
-             )
-             ORDER BY a.num_factura
-           ) FILTER (WHERE a.id IS NOT NULL),
-           '[]'::json
-         ) AS facturas
-       FROM pagos p
-       LEFT JOIN abonos a ON a.pago_id = p.id
-       LEFT JOIN cuentas c ON c.num_factura = a.num_factura
-       LEFT JOIN totales_abonos ta ON ta.num_factura = c.num_factura
-       LEFT JOIN clientes cl ON cl.id = ${clienteJoinKey}
-       GROUP BY p.id, cl.id, cl.nombre, cl.identificacion
-       ORDER BY created_at DESC, fecha DESC, p.id DESC`
-    );
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: 'created_at',
+      allowedSorts: PAGOS_SORT_COLUMNS,
+    });
+    const { countResult, result } = await cuentasReadRepository.findPagos({
+      filters: {
+        fecha_inicio,
+        fecha_fin,
+        metodo_pago: metodoPagoNormalizado,
+        search,
+      },
+      pagination,
+    });
 
     res.json({
       success: true,
       data: result.rows,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: countResult.rows[0]?.total,
+      }),
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener pagos:');
@@ -632,54 +476,55 @@ const exportPagosExcel = async (req, res) => {
 
 const getReporte = async (req, res) => {
   try {
-    const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente } = req.query;
+    const { fecha_inicio, fecha_fin, solo_deudores, agrupar_cliente, estado, search } = req.query;
     validateFechaInicioFin(fecha_inicio, fecha_fin);
     validateBooleanFilter(solo_deudores, 'El filtro solo_deudores debe ser true o false');
     validateBooleanFilter(agrupar_cliente, 'El filtro agrupar_cliente debe ser true o false');
-    const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
-    const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
-
-    let query = `SELECT
-      v.*,
-      c.cliente_id,
-      ${cuentasHasDetalleAnulacion ? 'c.detalle_anulacion' : 'NULL::text'} AS detalle_anulacion,
-      ${cuentasHasFechaAnulacion ? 'c.fecha_anulacion' : 'NULL::timestamp'} AS fecha_anulacion
-    FROM vista_reporte_cuentas v
-    JOIN cuentas c ON c.num_factura = v.num_factura`;
-    const params = [];
-    const conditions = [];
-
-    if (fecha_inicio && fecha_fin) {
-      conditions.push(`v.fecha_factura BETWEEN $${params.length + 1} AND $${params.length + 2}`);
-      params.push(fecha_inicio, fecha_fin);
+    if (estado && !['activa', 'anulada'].includes(String(estado))) {
+      throw createHttpError(400, 'El filtro estado no es válido');
     }
-
-    if (solo_deudores === 'true') {
-      conditions.push('v.saldo_pendiente > 0');
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    if (agrupar_cliente === 'true') {
-      query += ` ORDER BY
-        MIN(v.num_factura) OVER (PARTITION BY COALESCE(v.identificacion, v.cliente)),
-        v.cliente ASC,
-        v.num_factura ASC`;
-    } else {
-      query += ' ORDER BY v.num_factura ASC';
-    }
-
-    const result = await db.query(query, params);
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: agrupar_cliente === 'true' ? 'cliente' : 'num_factura',
+      allowedSorts: FACTURAS_SORT_COLUMNS,
+    });
+    const { countResult, result } = await cuentasReadRepository.findReporte({
+      filters: {
+        fecha_inicio,
+        fecha_fin,
+        solo_deudores,
+        agrupar_cliente,
+        estado,
+        search,
+        sortBy: req.query.sortBy,
+      },
+      pagination,
+    });
     const data = result.rows;
 
     res.json({
       success: true,
       data,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: countResult.rows[0]?.total,
+      }),
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al generar reporte:');
+  }
+};
+
+const getFacturasCatalogo = async (req, res) => {
+  try {
+    const result = await cuentasReadRepository.findFacturasCatalogo();
+
+    res.json({
+      success: true,
+      data: result.rows,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al obtener catálogo de facturas:');
   }
 };
 
@@ -689,42 +534,12 @@ const exportReporteExcel = async (req, res) => {
     validateFechaInicioFin(fecha_inicio, fecha_fin);
     validateBooleanFilter(solo_deudores, 'El filtro solo_deudores debe ser true o false');
     validateBooleanFilter(agrupar_cliente, 'El filtro agrupar_cliente debe ser true o false');
-    const cuentasHasDetalleAnulacion = await tableColumnExists('cuentas', 'detalle_anulacion');
-    const cuentasHasFechaAnulacion = await tableColumnExists('cuentas', 'fecha_anulacion');
-
-    let query = `SELECT
-      v.*,
-      c.cliente_id,
-      ${cuentasHasDetalleAnulacion ? 'c.detalle_anulacion' : 'NULL::text'} AS detalle_anulacion,
-      ${cuentasHasFechaAnulacion ? 'c.fecha_anulacion' : 'NULL::timestamp'} AS fecha_anulacion
-    FROM vista_reporte_cuentas v
-    JOIN cuentas c ON c.num_factura = v.num_factura`;
-    const params = [];
-    const conditions = [];
-
-    if (fecha_inicio && fecha_fin) {
-      conditions.push(`v.fecha_factura BETWEEN $${params.length + 1} AND $${params.length + 2}`);
-      params.push(fecha_inicio, fecha_fin);
-    }
-
-    if (solo_deudores === 'true') {
-      conditions.push('v.saldo_pendiente > 0');
-    }
-
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-
-    if (agrupar_cliente === 'true') {
-      query += ` ORDER BY
-        MIN(v.num_factura) OVER (PARTITION BY COALESCE(v.identificacion, v.cliente)),
-        v.cliente ASC,
-        v.num_factura ASC`;
-    } else {
-      query += ' ORDER BY v.num_factura ASC';
-    }
-
-    const result = await db.query(query, params);
+    const result = await cuentasReadRepository.findReporteForExport({
+      fecha_inicio,
+      fecha_fin,
+      solo_deudores,
+      agrupar_cliente,
+    });
     const data = result.rows;
 
     const MONEY = '$#,##0.00';
@@ -800,16 +615,11 @@ const createBatchAbono = async (req, res) => {
   let createdPago = null;
   try {
     await db.transaction(async (client) => {
-      const clienteResult = await cuentasClientesRepository.findClienteIdById(
-        parsedClienteId,
-        client
-      );
-
-      if (clienteResult.rowCount === 0) {
-        const err = new Error('CLIENTE_NO_EXISTE');
-        err.code = 'CLIENTE_NO_EXISTE';
-        throw err;
-      }
+      await assertClienteActivoForOperation({
+        executor: client,
+        clienteId: parsedClienteId,
+        lockClause: 'FOR SHARE',
+      });
 
       const facturaIds = abonosNormalizados.map((a) => a.num_factura);
       await cuentasFacturasRepository.lockFacturasByNumeros(facturaIds, client);
@@ -903,9 +713,10 @@ const createBatchAbono = async (req, res) => {
     });
   } catch (error) {
     if (error.code === 'CLIENTE_NO_EXISTE') {
-      return res.status(400).json({
+      return res.status(404).json({
         success: false,
-        message: 'El cliente seleccionado no existe',
+        code: 'CLIENT_NOT_FOUND',
+        message: 'Cliente no encontrado',
       });
     }
     if (error.code === 'FACTURA_NO_EXISTE') {
@@ -977,26 +788,42 @@ const updateFactura = async (req, res) => {
       incluye_retencion_iva: retencionIvaFinal,
     } = validation.value;
 
-    const current = await cuentasFacturasRepository.findFacturaForUpdate(parsedNumFactura);
+    const { current, result } = await db.transaction(async (client) => {
+      const currentResult = await cuentasFacturasRepository.findFacturaForUpdate(
+        parsedNumFactura,
+        client
+      );
 
-    if (current.rowCount === 0) {
-      return res.status(404).json({ success: false, message: 'Factura no encontrada' });
-    }
+      if (currentResult.rowCount === 0) {
+        throw createHttpError(404, 'Factura no encontrada');
+      }
 
-    if (current.rows[0].cancelada) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'No se puede editar una factura anulada' });
-    }
+      if (currentResult.rows[0].cancelada) {
+        const error = createHttpError(409, 'No se puede editar una factura anulada');
+        error.appCode = 'INVOICE_ALREADY_VOIDED';
+        throw error;
+      }
 
-    const result = await cuentasFacturasRepository.updateFacturaByNumero({
-      numFactura: parsedNumFactura,
-      clienteId: parsedClienteId,
-      fechaFactura: fecha_factura,
-      valorFactura: parsedValorFactura,
-      incluyeIva: ivaFinal,
-      incluyeRetencionFuente: incluye_retencion_fuente,
-      incluyeRetencionIva: retencionIvaFinal,
+      await assertClienteActivoForOperation({
+        executor: client,
+        clienteId: parsedClienteId,
+        lockClause: 'FOR SHARE',
+      });
+
+      const updateResult = await cuentasFacturasRepository.updateFacturaByNumero(
+        {
+          numFactura: parsedNumFactura,
+          clienteId: parsedClienteId,
+          fechaFactura: fecha_factura,
+          valorFactura: parsedValorFactura,
+          incluyeIva: ivaFinal,
+          incluyeRetencionFuente: incluye_retencion_fuente,
+          incluyeRetencionIva: retencionIvaFinal,
+        },
+        client
+      );
+
+      return { current: currentResult, result: updateResult };
     });
 
     await logAudit(db, {
@@ -1019,34 +846,10 @@ const updateFactura = async (req, res) => {
 };
 
 const deletePago = async (req, res) => {
-  try {
-    const idValidation = parsePositiveIntegerId(req.params.id, 'El id del pago es inválido');
-    if (!idValidation.valid) {
-      throw createHttpError(idValidation.status, idValidation.message);
-    }
-    const id = idValidation.value;
-
-    const current = await cuentasPagosRepository.findPagoForDeletion(id);
-
-    if (current.rowCount === 0) {
-      return res.status(404).json({ success: false, message: 'Pago no encontrado' });
-    }
-
-    await cuentasPagosRepository.deletePagoById(id);
-
-    await logAudit(db, {
-      tabla: 'pagos',
-      operacion: 'DELETE',
-      registro_id: String(id),
-      datos_anteriores: current.rows[0],
-      ...auditFromReq(req),
-    });
-
-    res.json({ success: true, message: 'Pago eliminado exitosamente' });
-  } catch (error) {
-    return handleControllerError(res, error, 'Error al eliminar pago:');
-  }
+  return handleDeprecatedPaymentVoid(req, res);
 };
+
+const voidPago = async (req, res) => handleDeprecatedPaymentVoid(req, res);
 
 const deleteAbono = async (req, res) => {
   try {
@@ -1062,30 +865,11 @@ const deleteAbono = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Abono no encontrado' });
     }
 
-    const abono = current.rows[0];
-
-    await db.transaction(async (client) => {
-      await cuentasAbonosRepository.deleteAbonoById(id, client);
-
-      if (abono.pago_id) {
-        const remaining = await cuentasAbonosRepository.countAbonosByPagoId(abono.pago_id, client);
-        if (Number(remaining.rows[0].cnt) === 0) {
-          await cuentasPagosRepository.deletePagoById(abono.pago_id, client);
-        } else {
-          await cuentasPagosRepository.updatePagoTotalFromAbonos(abono.pago_id, client);
-        }
-      }
+    res.status(409).json({
+      success: false,
+      code: 'PAYMENT_CANNOT_BE_VOIDED',
+      message: PAYMENT_CANNOT_BE_VOIDED_MESSAGE,
     });
-
-    await logAudit(db, {
-      tabla: 'abonos',
-      operacion: 'DELETE',
-      registro_id: String(id),
-      datos_anteriores: abono,
-      ...auditFromReq(req),
-    });
-
-    res.json({ success: true, message: 'Abono eliminado exitosamente' });
   } catch (error) {
     return handleControllerError(res, error, 'Error al eliminar abono:');
   }
@@ -1104,9 +888,11 @@ module.exports = {
   exportPagosExcel,
   createBatchAbono,
   getReporte,
+  getFacturasCatalogo,
   exportReporteExcel,
   getNextNumFactura,
   updateFactura,
   deletePago,
+  voidPago,
   deleteAbono,
 };

@@ -72,9 +72,6 @@ const createPago = ({ clienteId, fecha, metodoPago, referencia, notas, total }, 
     [clienteId, fecha, metodoPago, referencia, notas, total]
   );
 
-const deletePagoById = (id, executor = db) =>
-  executor.query('DELETE FROM pagos WHERE id = $1', [id]);
-
 const updatePagoTotalFromAbonos = (id, executor = db) =>
   executor.query(
     'UPDATE pagos SET total = (SELECT COALESCE(SUM(valor_abono), 0) FROM abonos WHERE pago_id = $1) WHERE id = $1',
@@ -83,7 +80,6 @@ const updatePagoTotalFromAbonos = (id, executor = db) =>
 
 module.exports = {
   createPago,
-  deletePagoById,
   findPagoForDeletion,
   findPagosForExport,
   updatePagoTotalFromAbonos,

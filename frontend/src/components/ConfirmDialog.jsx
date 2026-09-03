@@ -11,9 +11,11 @@ import './ConfirmDialog.css';
  *   message      {string|ReactNode}
  *   confirmText  {string}   default "Confirmar"
  *   cancelText   {string}   default "Cancelar"
+ *   processingText {string}
  *   variant      {string}   "danger" | "primary"  — styles the confirm button
  *   onConfirm    {function}
  *   onCancel     {function}
+ *   isSubmitting {boolean}
  */
 const ConfirmDialog = ({
   isOpen,
@@ -21,26 +23,39 @@ const ConfirmDialog = ({
   message,
   confirmText = 'Confirmar',
   cancelText = 'Cancelar',
+  processingText,
   variant = 'danger',
   onConfirm,
   onCancel,
+  isSubmitting = false,
 }) => {
   const confirmButtonRef = useRef(null);
+  const visibleConfirmText = isSubmitting ? processingText || confirmText : confirmText;
+  const handleConfirm = () => {
+    if (isSubmitting) return;
+    onConfirm?.();
+  };
+  const handleCancel = () => {
+    if (isSubmitting) return;
+    onCancel?.();
+  };
 
   return (
     <AppModal
       isOpen={isOpen}
-      onClose={onCancel}
+      onClose={handleCancel}
       title={title}
       size="sm"
       variant="alertdialog"
       ariaDescribedby="confirm-message"
-      closeOnBackdrop
+      closeOnBackdrop={!isSubmitting}
+      closeOnEscape={!isSubmitting}
+      closeButtonDisabled={isSubmitting}
       initialFocusRef={confirmButtonRef}
       className="confirm-dialog"
     >
       <AppModal.Header />
-      <AppModal.Body id="confirm-message" className="confirm-body">
+      <AppModal.Body id="confirm-message" className="confirm-body" aria-busy={isSubmitting}>
         {message &&
           (typeof message === 'string' ? (
             <p className="confirm-message">{message}</p>
@@ -49,16 +64,25 @@ const ConfirmDialog = ({
           ))}
       </AppModal.Body>
       <AppModal.Footer className="confirm-actions">
-        <button className="btn btn-secondary" onClick={onCancel} type="button">
+        <button
+          className="btn btn-secondary"
+          onClick={handleCancel}
+          type="button"
+          disabled={isSubmitting}
+        >
           {cancelText}
         </button>
         <button
           ref={confirmButtonRef}
           className={`btn btn-${variant}`}
-          onClick={onConfirm}
+          onClick={handleConfirm}
           type="button"
+          disabled={isSubmitting}
+          aria-busy={isSubmitting}
+          aria-label={visibleConfirmText}
         >
-          {confirmText}
+          {isSubmitting && <span className="spinner spinner--sm" />}
+          {visibleConfirmText}
         </button>
       </AppModal.Footer>
     </AppModal>

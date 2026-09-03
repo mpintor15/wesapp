@@ -96,20 +96,55 @@ describe('inventarioHelpers', () => {
       validateMovimientoForm({
         tipo_movimiento: 'traslado',
         fecha_movimiento: '2026-07-09',
+        cliente_destino_id: '',
+        ubicacion_destino_id: '',
         ubicacion_destino_nombre: '',
         items: [{ articulo_id: '1', cantidad: '2' }],
       })
-    ).toEqual(expect.objectContaining({ ubicacion_destino_nombre: expect.any(String) }));
+    ).toEqual(
+      expect.objectContaining({
+        cliente_destino_id: expect.any(String),
+        ubicacion_destino_nombre: expect.any(String),
+      })
+    );
+    expect(
+      validateMovimientoForm({
+        tipo_movimiento: 'traslado',
+        fecha_movimiento: '2026-07-09',
+        cliente_destino_id: '4',
+        ubicacion_destino_id: '8',
+        ubicacion_destino_nombre: '',
+        items: [{ articulo_id: '1', cantidad: '2' }],
+      }).ubicacion_destino_nombre
+    ).toBeUndefined();
 
     expect(
       buildMovimientoPayload({
         fecha_movimiento: '2026-07-09',
+        cliente_destino_id: '4',
+        ubicacion_destino_id: '',
         ubicacion_destino_nombre: 'Bodega',
         items: [{ articulo_id: '1', cantidad: '2', talla: 'M' }],
       })
     ).toEqual({
       fecha_movimiento: '2026-07-09',
+      cliente_destino_id: 4,
       ubicacion_destino_nombre: 'Bodega',
+      items: [{ articulo_id: 1, cantidad: 2, talla: 'M' }],
+    });
+
+    expect(
+      buildMovimientoPayload({
+        fecha_movimiento: '2026-07-09',
+        cliente_destino_id: '4',
+        ubicacion_destino_id: '8',
+        ubicacion_destino_nombre: '',
+        items: [{ articulo_id: '1', cantidad: '2', talla: 'M' }],
+      })
+    ).toEqual({
+      fecha_movimiento: '2026-07-09',
+      cliente_destino_id: 4,
+      ubicacion_destino_id: 8,
       items: [{ articulo_id: 1, cantidad: 2, talla: 'M' }],
     });
   });

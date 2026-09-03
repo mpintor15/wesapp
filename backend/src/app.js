@@ -27,7 +27,9 @@ const httpLogger = require('./middleware/httpLogger');
 
 // Importar rutas
 const authRoutes = require('./routes/auth.routes');
+const bitacorasRoutes = require('./routes/bitacoras.routes');
 const cuentasRoutes = require('./routes/cuentas.routes');
+const clientesRoutes = require('./routes/clientes.routes');
 const inventarioRoutes = require('./routes/inventario.routes');
 const personalRoutes = require('./routes/personal.routes');
 const usuariosRoutes = require('./routes/usuarios.routes');
@@ -147,8 +149,14 @@ app.get('/health/ready', async (req, res) => {
 // Rutas de autenticación
 app.use('/api/auth', authRoutes);
 
+// Rutas de Bitácoras
+app.use('/api/bitacoras', bitacorasRoutes);
+
 // Rutas de cuentas
 app.use('/api/cuentas', cuentasRoutes);
+
+// Rutas de catálogo de clientes
+app.use('/api/clientes', clientesRoutes);
 
 // Rutas de inventario
 app.use('/api/inventario', inventarioRoutes);

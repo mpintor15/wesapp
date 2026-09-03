@@ -3,6 +3,8 @@ export const TIPOS_USUARIO = [
   { value: 'secretario', label: 'Secretario' },
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'contador', label: 'Contador' },
+  { value: 'guardia', label: 'Guardia' },
+  { value: 'monitorista', label: 'Monitorista' },
 ];
 
 export const EMPTY_USUARIOS_FILTERS = { search: '', tipo_usuario: '', activo: '' };
@@ -11,14 +13,18 @@ export const EMPTY_CREATE_USER_FORM = {
   nombre: '',
   apellido: '',
   usuario: '',
-  tipo_usuario: 'secretario',
+  tipo_usuario: '',
+  colaborador_id: '',
+  ubicacion_ids: [],
 };
 
 export const EMPTY_EDIT_USER_FORM = {
   nombre: '',
   apellido: '',
-  tipo_usuario: 'secretario',
+  tipo_usuario: '',
   activo: true,
+  colaborador_id: '',
+  ubicacion_ids: [],
 };
 
 export const getStatusLabel = (usuario) => {
@@ -42,6 +48,7 @@ export const validateCreateForm = (data) => {
   if (!data.apellido.trim()) errors.apellido = 'Ingresa el apellido';
   if (!data.usuario.trim()) errors.usuario = 'Ingresa el usuario';
   if (!data.tipo_usuario) errors.tipo_usuario = 'Selecciona el tipo de usuario';
+  if (!data.colaborador_id) errors.colaborador_id = 'Selecciona un colaborador';
   return errors;
 };
 
@@ -73,7 +80,31 @@ export const getEditUserFormData = (usuario) => ({
   apellido: usuario.apellido || '',
   tipo_usuario: usuario.tipo_usuario,
   activo: usuario.activo,
+  colaborador_id: usuario.colaborador_id ? String(usuario.colaborador_id) : '',
+  ubicacion_ids: (usuario.ubicacion_ids || []).map(String),
 });
+
+export const buildUsuarioPayload = (data, canManageAssignments) => {
+  const { ubicacion_ids: ubicacionIds, ...payload } = data;
+  if (canManageAssignments && data.tipo_usuario === 'guardia') {
+    payload.ubicacion_ids = ubicacionIds;
+  }
+  return payload;
+};
+
+export const getColaboradorLabel = (colaborador) =>
+  `${colaborador.nombres_completos} — ${colaborador.cedula}${
+    colaborador.estado === 'inactivo' ? ' (Inactivo)' : ''
+  }`;
+
+export const getColaboradorSearchText = (colaborador) =>
+  `${colaborador.nombres_completos} ${colaborador.cedula}`;
+
+export const getUbicacionLabel = (ubicacion) =>
+  `${ubicacion.nombre}${ubicacion.direccion ? ` · ${ubicacion.direccion}` : ''}`;
+
+export const getUbicacionSearchText = (ubicacion) =>
+  `${ubicacion.cliente_nombre || 'Sin cliente'} ${ubicacion.nombre} ${ubicacion.direccion || ''}`;
 
 export const getTipoUsuarioLabel = (tipoUsuario) =>
   TIPOS_USUARIO.find((tipo) => tipo.value === tipoUsuario)?.label ?? tipoUsuario;

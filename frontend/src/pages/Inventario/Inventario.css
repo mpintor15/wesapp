@@ -371,7 +371,13 @@
 
 .inventory-card-action {
   width: 100%;
+  min-width: 0;
   min-height: 38px;
+  white-space: normal;
+}
+
+.inventory-card-action:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
 }
 
 .inventario-container .app-table {
@@ -413,6 +419,10 @@
   flex-shrink: 0;
   min-width: 10px;
   text-align: center;
+}
+
+.inventario-container .movimientos-table {
+  min-width: 1480px;
 }
 
 .inventario-container .app-table td {
@@ -559,20 +569,36 @@
   padding-right: 8px !important;
 }
 
-/* Movimientos: columna de acciones perfectamente centrada */
-.inventario-container .movimientos-table th.app-col-actions,
-.inventario-container .movimientos-table td.app-col-actions {
-  width: 52px !important;
-  min-width: 52px !important;
-  max-width: 52px !important;
-  text-align: center !important;
+.inventario-container .movimientos-table th:nth-last-child(2),
+.inventario-container .movimientos-table td:nth-last-child(2),
+.inventario-container .bajas-table th:nth-last-child(2),
+.inventario-container .bajas-table td:nth-last-child(2) {
+  width: 168px;
+  min-width: 168px;
+  max-width: 168px;
+  text-align: center;
+  vertical-align: middle;
+  word-break: normal;
 }
 
-.inventario-container .movimientos-table td.app-col-actions .app-table-actions {
-  width: 100% !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
+.inventario-container .movimientos-table td:nth-last-child(2) .status-badge,
+.inventario-container .bajas-table td:nth-last-child(2) .status-badge {
+  display: flex;
+  width: 132px;
+  min-height: 36px;
+  margin-inline: auto;
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+.inventario-container .movimientos-table .app-table-actions,
+.inventario-container .bajas-table .app-table-actions {
+  gap: 6px !important;
+}
+
+.inventario-container .bajas-table td.app-col-actions .app-table-actions {
+  width: 100%;
 }
 
 /* Artículos: mismo centrado exacto de acciones */
@@ -771,6 +797,47 @@
   border-color: var(--color-warning);
   background: var(--color-warning-bg);
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.14);
+}
+
+.inventory-location-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 18px;
+}
+
+.inventory-location-label-row label {
+  min-height: 0;
+}
+
+.inventory-location-create {
+  border: 0;
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 0;
+  white-space: nowrap;
+}
+
+.inventory-location-create:hover,
+.inventory-location-create:focus-visible {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+  outline: none;
+}
+
+.inventory-location-field-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 5px;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
 }
 
 .inventory-field-warning {
@@ -1580,6 +1647,12 @@
   .inventario-articulos-filter-card .ff-state select {
     min-width: 0;
     max-width: 100%;
+  }
+
+  .inventory-location-label-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
   }
 
   .inventario-bajas-filter-row {

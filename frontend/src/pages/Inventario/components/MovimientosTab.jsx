@@ -6,7 +6,7 @@ import {
   getReversalStatus,
   REVERSAL_STATUS_LABELS,
 } from '../utils/inventarioHelpers';
-import PaginationControls from './PaginationControls';
+import PaginationControls from '../../../components/PaginationControls';
 import SortHeader from './SortHeader';
 import FilterDateInput from '../../../components/FilterDateInput';
 
@@ -31,7 +31,7 @@ const MovimientosTab = ({
   sortedMovimientos,
   ubicaciones,
 }) => (
-  <div className="tab-content">
+  <div className="tab-content tabular-workspace">
     {movimientosLoading ? (
       <div className="loading">
         <div className="loading-spinner"></div>
@@ -335,13 +335,11 @@ const MovimientosTab = ({
             </tbody>
           </table>
         </div>
-        {movimientosTotalPages > 1 && (
-          <PaginationControls
-            page={movimientosPage}
-            totalPages={movimientosTotalPages}
-            onPageChange={onPageChange}
-          />
-        )}
+        <PaginationControls
+          page={movimientosPage}
+          totalPages={movimientosTotalPages}
+          onPageChange={onPageChange}
+        />
       </>
     )}
   </div>

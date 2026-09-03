@@ -9,15 +9,20 @@ import {
   REVERSAL_STATUS_LABELS,
 } from '../utils/inventarioHelpers';
 import FilterDateInput from '../../../components/FilterDateInput';
+import PaginationControls from '../../../components/PaginationControls';
 
 const BajasTab = ({
   bajas,
+  bajasPage,
+  bajasTotalItems,
+  bajasTotalPages,
   bajasFiltersDraft,
   bajasLoading,
   onDeleteBaja,
   onApplyFilters,
   onClearFilters,
   onDraftChange,
+  onPageChange,
   onVoidBaja,
   permissions,
 }) => (
@@ -92,7 +97,9 @@ const BajasTab = ({
       </div>
     ) : (
       <>
-        <div className="table-result-count">Mostrando {bajas.length} baja(s)</div>
+        <div className="table-result-count">
+          Mostrando {bajas.length} de {bajasTotalItems} baja(s)
+        </div>
 
         <div className="table-responsive app-table-shell bajas-table-shell">
           <table className="app-table bajas-table">
@@ -110,7 +117,7 @@ const BajasTab = ({
                 <th className="cell-motivo-heading">Motivo</th>
                 <th>Estado</th>
                 <th>Reversión</th>
-                <th className="col-actions app-col-actions app-col-actions--double"></th>
+                <th className="col-actions app-col-actions app-col-actions--comfortable"></th>
               </tr>
             </thead>
             <tbody>
@@ -147,7 +154,7 @@ const BajasTab = ({
                           {REVERSAL_STATUS_LABELS[reversalStatus] || reversalStatus}
                         </span>
                       </td>
-                      <td className="col-actions app-col-actions app-col-actions--double">
+                      <td className="col-actions app-col-actions app-col-actions--comfortable">
                         {actions.hasAnyAction ? (
                           <div className="action-buttons app-table-actions">
                             {actions.canVoid && (
@@ -240,6 +247,11 @@ const BajasTab = ({
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          page={bajasPage}
+          totalPages={bajasTotalPages}
+          onPageChange={onPageChange}
+        />
       </>
     )}
   </div>

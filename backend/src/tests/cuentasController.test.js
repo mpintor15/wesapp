@@ -7,7 +7,7 @@
  * - getNextNumFactura: retorna el siguiente número correcto
  * - cancelFactura: validaciones de estado
  * - updateFactura: gerente edita factura activa
- * - deleteAbono: gerente elimina abono
+ * - deleteAbono: rechaza eliminación física de abonos
  */
 
 jest.mock('../config/database', () => ({
@@ -29,12 +29,16 @@ const db = require('../config/database');
 const { logAudit } = require('../utils/audit');
 const {
   createBatchAbono,
+  createCliente,
   createFactura,
   deleteCliente,
   deleteFactura,
   deletePago,
+  voidPago,
   exportPagosExcel,
+  getPagos,
   getAbonosByFactura,
+  getClientes,
   getReporte,
   getNextNumFactura,
   cancelFactura,
@@ -61,6 +65,66 @@ const mockRes = () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+describe('clientes de Cuentas', () => {
+  test('getClientes expone solo clientes activos para operaciones de Cuentas', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 1, nombre: 'Cliente Cuentas', identificacion: '099001', estado: 'activo' }],
+      rowCount: 1,
+    });
+    const req = mockReq();
+    const res = mockRes();
+
+    await getClientes(req, res);
+
+    expect(db.query).toHaveBeenCalledWith(
+      'SELECT id, nombre, identificacion, estado FROM clientes WHERE estado = $1 ORDER BY nombre ASC',
+      ['activo']
+    );
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [{ id: 1, nombre: 'Cliente Cuentas', identificacion: '099001', estado: 'activo' }],
+    });
+  });
+
+  test('createCliente de Cuentas sigue requiriendo identificación', async () => {
+    const req = mockReq({ body: { nombre: 'Cliente sin identificación' } });
+    const res = mockRes();
+
+    await createCliente(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'La identificación del cliente es requerida',
+    });
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  test('createCliente de Cuentas mantiene request y response históricos', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 7, nombre: 'Cliente Cuentas', identificacion: '099001' }],
+      rowCount: 1,
+    });
+    const req = mockReq({
+      body: { nombre: '  Cliente Cuentas  ', identificacion: ' 099001 ' },
+    });
+    const res = mockRes();
+
+    await createCliente(req, res);
+
+    expect(db.query).toHaveBeenCalledWith(
+      'INSERT INTO clientes (nombre, identificacion) VALUES ($1, $2) RETURNING id, nombre, identificacion',
+      ['Cliente Cuentas', '099001']
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'Cliente creado exitosamente',
+      data: { id: 7, nombre: 'Cliente Cuentas', identificacion: '099001' },
+    });
+  });
 });
 
 // ============================================
@@ -91,7 +155,7 @@ describe('createBatchAbono', () => {
       const fakeClient = {
         query: jest
           .fn()
-          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
+          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1, estado: 'activo' }] }) // cliente activo
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ num_factura: 1001 }] }) // bloqueo
           .mockResolvedValueOnce({
             rows: [
@@ -123,7 +187,7 @@ describe('createBatchAbono', () => {
       const fakeClient = {
         query: jest
           .fn()
-          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
+          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1, estado: 'activo' }] }) // cliente activo
           .mockResolvedValueOnce({ rowCount: 1, rows: [{ num_factura: 1001 }] }) // bloqueo
           .mockResolvedValueOnce({
             rows: [
@@ -156,7 +220,7 @@ describe('createBatchAbono', () => {
       const fakeClient = {
         query: jest
           .fn()
-          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
+          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1, estado: 'activo' }] }) // cliente activo
           .mockResolvedValueOnce({
             rowCount: 2,
             rows: [{ num_factura: 1001 }, { num_factura: 1002 }],
@@ -194,9 +258,8 @@ describe('createBatchAbono', () => {
     );
     expect(db.query).not.toHaveBeenCalled();
     expect(transactionClient.query).toHaveBeenCalledTimes(6);
-    expect(transactionClient.query.mock.calls[0][0]).toBe(
-      'SELECT id FROM clientes WHERE id = $1 LIMIT 1'
-    );
+    expect(transactionClient.query.mock.calls[0][0]).toMatch(/FROM clientes/);
+    expect(transactionClient.query.mock.calls[0][0]).toMatch(/estado/);
     expect(transactionClient.query.mock.calls[1][0]).toMatch(/FOR UPDATE/);
     expect(transactionClient.query.mock.calls[1][1]).toEqual([[1001, 1002]]);
     expect(transactionClient.query.mock.calls[2][0]).toMatch(/vista_reporte_cuentas/);
@@ -210,6 +273,31 @@ describe('createBatchAbono', () => {
     expect(transactionClient.query.mock.calls[5][0]).toBe(
       'INSERT INTO abonos (pago_id, num_factura, fecha_abono, valor_abono) VALUES ($1, $2, $3, $4)'
     );
+  });
+
+  test('rechaza pago por lote con cliente inactivo', async () => {
+    db.transaction.mockImplementation(async (callback) => {
+      const fakeClient = {
+        query: jest.fn().mockResolvedValueOnce({
+          rowCount: 1,
+          rows: [{ id: 1, nombre: 'Cliente Inactivo', estado: 'inactivo' }],
+        }),
+      };
+      await callback(fakeClient);
+    });
+
+    const req = mockReq({
+      body: {
+        cliente_id: 1,
+        fecha: '2024-01-01',
+        abonos: [{ num_factura: 1001, valor_abono: 100 }],
+      },
+    });
+    const res = mockRes();
+    await createBatchAbono(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'CLIENT_INACTIVE' }));
   });
 });
 
@@ -251,22 +339,27 @@ describe('createFactura', () => {
   });
 
   test('crea la factura con datos válidos', async () => {
-    db.query
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1 }] }) // cliente existe
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            num_factura: 1001,
-            cliente_id: 1,
-            fecha_factura: '2024-01-01',
-            valor_factura: 5000,
-            incluye_iva: true,
-            incluye_retencion_fuente: true,
-            incluye_retencion_iva: true,
-            cancelada: false,
-          },
-        ],
-      });
+    db.transaction.mockImplementationOnce(async (callback) =>
+      callback({
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1, estado: 'activo' }] })
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                num_factura: 1001,
+                cliente_id: 1,
+                fecha_factura: '2024-01-01',
+                valor_factura: 5000,
+                incluye_iva: true,
+                incluye_retencion_fuente: true,
+                incluye_retencion_iva: true,
+                cancelada: false,
+              },
+            ],
+          }),
+      })
+    );
 
     const req = mockReq({
       body: {
@@ -283,6 +376,31 @@ describe('createFactura', () => {
     await createFactura(req, res);
 
     expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  test('rechaza factura con cliente inactivo', async () => {
+    db.transaction.mockImplementationOnce(async (callback) =>
+      callback({
+        query: jest.fn().mockResolvedValueOnce({
+          rowCount: 1,
+          rows: [{ id: 1, estado: 'inactivo' }],
+        }),
+      })
+    );
+
+    const req = mockReq({
+      body: {
+        num_factura: 1001,
+        cliente_id: 1,
+        fecha_factura: '2024-01-01',
+        valor_factura: 5000,
+      },
+    });
+    const res = mockRes();
+    await createFactura(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'CLIENT_INACTIVE' }));
   });
 });
 
@@ -358,6 +476,26 @@ describe('getAbonosByFactura', () => {
   });
 });
 
+describe('getPagos', () => {
+  test('detalle histórico de pago marca anuladas y no muestra saldo cobrable', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    db.query.mockResolvedValueOnce({ rows: [{ table_name: 'pagos' }], rowCount: 1 });
+    Array.from({ length: 12 }).forEach(() => {
+      db.query.mockResolvedValueOnce({ rows: [{ exists: true }], rowCount: 1 });
+    });
+    db.query.mockResolvedValueOnce({ rows: [] });
+
+    const req = mockReq();
+    const res = mockRes();
+    await getPagos(req, res);
+
+    const query = db.query.mock.calls.find((call) => call[0].includes('FROM pagos p'))[0];
+    expect(query).toMatch(/'cancelada', c\.cancelada/);
+    expect(query).toContain('WHEN c.cancelada THEN 0');
+    expect(query).not.toMatch(/DELETE FROM/i);
+  });
+});
+
 // ============================================
 // getNextNumFactura
 // ============================================
@@ -407,7 +545,9 @@ describe('getNextNumFactura', () => {
 
 describe('cancelFactura', () => {
   test('retorna 404 si la factura no existe', async () => {
-    db.query.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+    db.transaction.mockImplementationOnce(async (callback) =>
+      callback({ query: jest.fn().mockResolvedValueOnce({ rowCount: 0, rows: [] }) })
+    );
 
     const req = mockReq({
       params: { num_factura: '9999' },
@@ -429,6 +569,94 @@ describe('cancelFactura', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
   });
+
+  test('anula factura sin borrar abonos y registra auditoría', async () => {
+    let transactionClient;
+    db.transaction.mockImplementationOnce(async (callback) => {
+      transactionClient = {
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({
+            rowCount: 1,
+            rows: [
+              {
+                num_factura: 1001,
+                cancelada: false,
+                cliente_id: 1,
+                fecha_factura: '2024-01-01',
+                valor_factura: 500,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({
+            rowCount: 1,
+            rows: [
+              {
+                num_factura: 1001,
+                cancelada: true,
+                detalle_anulacion: 'Error de emisión',
+                fecha_anulacion: '2024-01-02T00:00:00.000Z',
+              },
+            ],
+          }),
+      };
+      return callback(transactionClient);
+    });
+
+    const req = mockReq({
+      params: { num_factura: '1001' },
+      body: { detalle_anulacion: 'Error de emisión' },
+    });
+    const res = mockRes();
+    await cancelFactura(req, res);
+
+    const sql = transactionClient.query.mock.calls.map((call) => call[0]).join('\n');
+    expect(sql).toMatch(/FOR UPDATE/i);
+    expect(sql).toMatch(/UPDATE cuentas/i);
+    expect(sql).not.toMatch(/DELETE FROM (cuentas|abonos|pagos)/i);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        message: 'Factura anulada exitosamente',
+      })
+    );
+    expect(logAudit).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        tabla: 'cuentas',
+        operacion: 'UPDATE',
+        datos_anteriores: expect.objectContaining({ cancelada: false }),
+        datos_nuevos: expect.objectContaining({ cancelada: true }),
+      })
+    );
+  });
+
+  test('anulación repetida devuelve 409 y no modifica factura', async () => {
+    let transactionClient;
+    db.transaction.mockImplementationOnce(async (callback) => {
+      transactionClient = {
+        query: jest.fn().mockResolvedValueOnce({
+          rowCount: 1,
+          rows: [{ num_factura: 1001, cancelada: true }],
+        }),
+      };
+      return callback(transactionClient);
+    });
+
+    const req = mockReq({
+      params: { num_factura: '1001' },
+      body: { detalle_anulacion: 'Otro motivo' },
+    });
+    const res = mockRes();
+    await cancelFactura(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'INVOICE_ALREADY_VOIDED' })
+    );
+    expect(transactionClient.query).toHaveBeenCalledTimes(1);
+    expect(logAudit).not.toHaveBeenCalled();
+  });
 });
 
 // ============================================
@@ -447,42 +675,19 @@ describe('deleteFactura', () => {
     expect(logAudit).not.toHaveBeenCalled();
   });
 
-  test('elimina factura existente y conserva auditoría', async () => {
-    db.query.mockResolvedValueOnce({
-      rowCount: 1,
-      rows: [
-        {
-          num_factura: 1001,
-          cliente_id: 1,
-          fecha_factura: '2024-01-01',
-          valor_factura: 500,
-          incluye_iva: false,
-          incluye_retencion_fuente: false,
-          incluye_retencion_iva: false,
-          cancelada: false,
-          detalle_anulacion: null,
-          fecha_anulacion: null,
-        },
-      ],
-    });
+  test('rechaza eliminación física sin borrar cuentas', async () => {
+    db.query.mockResolvedValueOnce({ rowCount: 1, rows: [{ num_factura: 1001 }] });
 
     const req = mockReq({ params: { num_factura: '1001' } });
     const res = mockRes();
     await deleteFactura(req, res);
 
-    expect(res.json).toHaveBeenCalledWith({
-      success: true,
-      message: 'Factura eliminada exitosamente',
-    });
-    expect(logAudit).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({
-        tabla: 'cuentas',
-        operacion: 'DELETE',
-        registro_id: '1001',
-        datos_anteriores: expect.objectContaining({ num_factura: 1001 }),
-      })
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'INVOICE_CANNOT_BE_VOIDED' })
     );
+    expect(db.query.mock.calls.map((call) => call[0]).join('\n')).not.toMatch(/DELETE FROM/i);
+    expect(logAudit).not.toHaveBeenCalled();
   });
 });
 
@@ -492,10 +697,14 @@ describe('deleteFactura', () => {
 
 describe('updateFactura', () => {
   test('rechaza editar una factura anulada', async () => {
-    db.query.mockResolvedValueOnce({
-      rowCount: 1,
-      rows: [{ num_factura: 1001, cancelada: true, cliente_id: 1, valor_factura: 5000 }],
-    });
+    db.transaction.mockImplementationOnce(async (callback) =>
+      callback({
+        query: jest.fn().mockResolvedValueOnce({
+          rowCount: 1,
+          rows: [{ num_factura: 1001, cancelada: true, cliente_id: 1, valor_factura: 5000 }],
+        }),
+      })
+    );
 
     const req = mockReq({
       params: { num_factura: '1001' },
@@ -504,14 +713,19 @@ describe('updateFactura', () => {
     const res = mockRes();
     await updateFactura(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('anulada') })
+      expect.objectContaining({
+        code: 'INVOICE_ALREADY_VOIDED',
+        message: expect.stringContaining('anulada'),
+      })
     );
   });
 
   test('retorna 404 si la factura no existe', async () => {
-    db.query.mockResolvedValueOnce({ rowCount: 0, rows: [] });
+    db.transaction.mockImplementationOnce(async (callback) =>
+      callback({ query: jest.fn().mockResolvedValueOnce({ rowCount: 0, rows: [] }) })
+    );
 
     const req = mockReq({
       params: { num_factura: '9999' },
@@ -524,35 +738,41 @@ describe('updateFactura', () => {
   });
 
   test('actualiza factura activa correctamente', async () => {
-    db.query
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [
-          {
-            num_factura: 1001,
-            cancelada: false,
-            cliente_id: 1,
-            fecha_factura: '2024-01-01',
-            valor_factura: 5000,
-            incluye_iva: false,
-            incluye_retencion_fuente: false,
-            incluye_retencion_iva: false,
-          },
-        ],
+    db.transaction.mockImplementationOnce(async (callback) =>
+      callback({
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({
+            rowCount: 1,
+            rows: [
+              {
+                num_factura: 1001,
+                cancelada: false,
+                cliente_id: 1,
+                fecha_factura: '2024-01-01',
+                valor_factura: 5000,
+                incluye_iva: false,
+                incluye_retencion_fuente: false,
+                incluye_retencion_iva: false,
+              },
+            ],
+          })
+          .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 1, estado: 'activo' }] })
+          .mockResolvedValueOnce({
+            rows: [
+              {
+                num_factura: 1001,
+                cliente_id: 1,
+                fecha_factura: '2024-06-01',
+                valor_factura: 6000,
+                incluye_iva: false,
+                incluye_retencion_fuente: false,
+                incluye_retencion_iva: false,
+              },
+            ],
+          }),
       })
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            num_factura: 1001,
-            cliente_id: 1,
-            fecha_factura: '2024-06-01',
-            valor_factura: 6000,
-            incluye_iva: false,
-            incluye_retencion_fuente: false,
-            incluye_retencion_iva: false,
-          },
-        ],
-      });
+    );
 
     const req = mockReq({
       params: { num_factura: '1001' },
@@ -562,6 +782,33 @@ describe('updateFactura', () => {
     await updateFactura(req, res);
 
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
+
+  test('rechaza cambio de factura hacia cliente inactivo', async () => {
+    db.transaction.mockImplementationOnce(async (callback) =>
+      callback({
+        query: jest
+          .fn()
+          .mockResolvedValueOnce({
+            rowCount: 1,
+            rows: [{ num_factura: 1001, cancelada: false, cliente_id: 1 }],
+          })
+          .mockResolvedValueOnce({
+            rowCount: 1,
+            rows: [{ id: 2, estado: 'inactivo' }],
+          }),
+      })
+    );
+
+    const req = mockReq({
+      params: { num_factura: '1001' },
+      body: { cliente_id: 2, fecha_factura: '2024-06-01', valor_factura: 6000 },
+    });
+    const res = mockRes();
+    await updateFactura(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code: 'CLIENT_INACTIVE' }));
   });
 });
 
@@ -580,90 +827,21 @@ describe('deleteAbono', () => {
     expect(res.status).toHaveBeenCalledWith(404);
   });
 
-  test('elimina el abono y el pago si no quedan más abonos', async () => {
-    let transactionClient;
+  test('rechaza eliminación física y conserva abono/pago', async () => {
     db.query.mockResolvedValueOnce({
       rowCount: 1,
       rows: [{ id: 5, pago_id: 10, num_factura: 1001, valor_abono: 200 }],
-    });
-
-    db.transaction.mockImplementation(async (callback) => {
-      const fakeClient = {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({ rows: [] }) // DELETE abono
-          .mockResolvedValueOnce({ rows: [{ cnt: '0' }] }) // COUNT remaining
-          .mockResolvedValueOnce({ rows: [] }), // DELETE pago
-      };
-      transactionClient = fakeClient;
-      await callback(fakeClient);
     });
 
     const req = mockReq({ params: { id: '5' } });
     const res = mockRes();
     await deleteAbono(req, res);
 
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
-    expect(transactionClient.query).toHaveBeenNthCalledWith(
-      1,
-      'DELETE FROM abonos WHERE id = $1',
-      [5]
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'PAYMENT_CANNOT_BE_VOIDED' })
     );
-    expect(transactionClient.query).toHaveBeenNthCalledWith(
-      2,
-      'SELECT COUNT(*) AS cnt FROM abonos WHERE pago_id = $1',
-      [10]
-    );
-    expect(transactionClient.query).toHaveBeenNthCalledWith(
-      3,
-      'DELETE FROM pagos WHERE id = $1',
-      [10]
-    );
-  });
-
-  test('actualiza el total del pago si quedan otros abonos', async () => {
-    let transactionClient;
-    db.query.mockResolvedValueOnce({
-      rowCount: 1,
-      rows: [{ id: 5, pago_id: 10, num_factura: 1001, valor_abono: 200 }],
-    });
-
-    db.transaction.mockImplementation(async (callback) => {
-      const fakeClient = {
-        query: jest
-          .fn()
-          .mockResolvedValueOnce({ rows: [] }) // DELETE abono
-          .mockResolvedValueOnce({ rows: [{ cnt: '2' }] }) // COUNT remaining
-          .mockResolvedValueOnce({ rows: [] }), // UPDATE pago total
-      };
-      transactionClient = fakeClient;
-      await callback(fakeClient);
-    });
-
-    const req = mockReq({ params: { id: '5' } });
-    const res = mockRes();
-    await deleteAbono(req, res);
-
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
-    expect(transactionClient.query).toHaveBeenNthCalledWith(
-      3,
-      'UPDATE pagos SET total = (SELECT COALESCE(SUM(valor_abono), 0) FROM abonos WHERE pago_id = $1) WHERE id = $1',
-      [10]
-    );
-  });
-
-  test('retorna error controlado si falla la transacción', async () => {
-    db.query.mockResolvedValueOnce({
-      rowCount: 1,
-      rows: [{ id: 5, pago_id: 10, num_factura: 1001, valor_abono: 200 }],
-    });
-    db.transaction.mockRejectedValueOnce(new Error('tx down'));
-
-    const req = mockReq({ params: { id: '5' } });
-    const res = mockRes();
-    await deleteAbono(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(500);
+    expect(db.query.mock.calls.map((call) => call[0]).join('\n')).not.toMatch(/DELETE FROM/i);
     expect(logAudit).not.toHaveBeenCalled();
   });
 });
@@ -684,42 +862,19 @@ describe('deletePago', () => {
     expect(logAudit).not.toHaveBeenCalled();
   });
 
-  test('elimina pago existente y conserva auditoría', async () => {
-    db.query
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [
-          {
-            id: 10,
-            cliente_id: 1,
-            fecha: '2024-01-01',
-            metodo_pago: 'efectivo',
-            referencia: null,
-            notas: null,
-            total: 200,
-            abonos: [{ id: 5, num_factura: 1001, valor_abono: 200 }],
-          },
-        ],
-      })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [] });
+  test('rechaza eliminación física y conserva pago/abonos', async () => {
+    db.query.mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 10 }] });
 
     const req = mockReq({ params: { id: '10' } });
     const res = mockRes();
     await deletePago(req, res);
 
-    expect(res.json).toHaveBeenCalledWith({
-      success: true,
-      message: 'Pago eliminado exitosamente',
-    });
-    expect(logAudit).toHaveBeenCalledWith(
-      db,
-      expect.objectContaining({
-        tabla: 'pagos',
-        operacion: 'DELETE',
-        registro_id: '10',
-        datos_anteriores: expect.objectContaining({ id: 10 }),
-      })
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'PAYMENT_CANNOT_BE_VOIDED' })
     );
+    expect(db.query.mock.calls.map((call) => call[0]).join('\n')).not.toMatch(/DELETE FROM/i);
+    expect(logAudit).not.toHaveBeenCalled();
   });
 
   test('retorna error controlado si falla la base de datos', async () => {
@@ -731,6 +886,94 @@ describe('deletePago', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(logAudit).not.toHaveBeenCalled();
+  });
+
+  test('voidPago comparte la misma política no destructiva', async () => {
+    db.query.mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 10 }] });
+
+    const req = mockReq({ params: { id: '10' } });
+    const res = mockRes();
+    await voidPago(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'PAYMENT_CANNOT_BE_VOIDED' })
+    );
+    expect(db.query.mock.calls.map((call) => call[0]).join('\n')).not.toMatch(/DELETE FROM/i);
+  });
+});
+
+describe('reportes de Cuentas', () => {
+  test('reporte histórico conserva anuladas pero no las expone como deuda cobrable', async () => {
+    db.query.mockImplementation(async (sql) => {
+      if (sql.includes('information_schema.columns')) {
+        return { rowCount: 1, rows: [{ '?column?': 1 }] };
+      }
+      return {
+        rows: [
+          {
+            num_factura: 1001,
+            cancelada: true,
+            por_cobrar: '0',
+            total_abonos: '25.00',
+            saldo_pendiente: '0',
+          },
+        ],
+      };
+    });
+
+    const req = mockReq();
+    const res = mockRes();
+    await getReporte(req, res);
+
+    const reportSql = db.query.mock.calls
+      .map((call) => call[0])
+      .find((sql) => sql.includes('vista_reporte_cuentas'));
+    expect(reportSql).toContain(
+      'CASE WHEN COALESCE(v.cancelada, FALSE) THEN 0 ELSE v.por_cobrar END AS por_cobrar'
+    );
+    expect(reportSql).toContain(
+      'CASE WHEN COALESCE(v.cancelada, FALSE) THEN 0 ELSE v.saldo_pendiente END AS saldo_pendiente'
+    );
+    expect(reportSql).toContain('v.total_abonos');
+    expect(reportSql).not.toContain('WHERE COALESCE(v.cancelada, FALSE) = FALSE');
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        success: true,
+        data: [
+          {
+            num_factura: 1001,
+            cancelada: true,
+            por_cobrar: '0',
+            total_abonos: '25.00',
+            saldo_pendiente: '0',
+          },
+        ],
+        pagination: expect.objectContaining({
+          page: 1,
+          pageSize: 25,
+        }),
+      })
+    );
+  });
+
+  test('solo_deudores excluye anuladas de cuentas pendientes', async () => {
+    db.query.mockImplementation(async (sql) => {
+      if (sql.includes('information_schema.columns')) {
+        return { rowCount: 1, rows: [{ '?column?': 1 }] };
+      }
+      return { rows: [] };
+    });
+
+    const req = mockReq({ query: { solo_deudores: 'true' } });
+    const res = mockRes();
+    await getReporte(req, res);
+
+    const reportSql = db.query.mock.calls
+      .map((call) => call[0])
+      .find((sql) => sql.includes('vista_reporte_cuentas'));
+    expect(reportSql).toContain('COALESCE(cancelada, FALSE) = FALSE');
+    expect(reportSql).toContain('saldo_pendiente > 0');
   });
 });
 

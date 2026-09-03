@@ -1,27 +1,67 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Boxes, Building2, ClipboardList, Receipt, ShieldCheck, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import './Dashboard.css';
 import logo from '../../assets/branding/logo_horizontal_header.png';
-import iconCuentas from '../../assets/icons/invoice.png';
-import iconInventario from '../../assets/icons/inventory.png';
-import iconPersonal from '../../assets/icons/audience.png';
-import iconUsuarios from '../../assets/icons/user.png';
+import { MODULE_ACCESS_PERMISSIONS } from '../../auth/modulePermissions';
 
 const MODULE_META = {
+  bitacoras: { description: 'Registro y consulta de novedades operativas' },
   cuentas: { description: 'Control de facturas, pagos y clientes' },
+  configuracion: {
+    description: 'Clientes, ubicaciones y organización del inventario',
+  },
   inventario: { description: 'Artículos, equipos y movimientos de bodega' },
   personal: { description: 'Colaboradores, cargos y nómina' },
   usuarios: { description: 'Cuentas de acceso y permisos del sistema' },
 };
 
 const DASHBOARD_MODULES = [
-  { key: 'cuentas', label: 'Cuentas', icon: iconCuentas, path: '/cuentas' },
-  { key: 'inventario', label: 'Inventario', icon: iconInventario, path: '/inventario' },
-  { key: 'personal', label: 'Personal', icon: iconPersonal, path: '/personal' },
-  { key: 'usuarios', label: 'Usuarios', icon: iconUsuarios, path: '/usuarios' },
+  {
+    key: 'cuentas',
+    permission: MODULE_ACCESS_PERMISSIONS.cuentas,
+    label: 'Cuentas',
+    Icon: Receipt,
+    path: '/cuentas',
+  },
+  {
+    key: 'configuracion',
+    permission: MODULE_ACCESS_PERMISSIONS.configuracion,
+    label: 'Clientes',
+    Icon: Building2,
+    path: '/configuracion',
+  },
+  {
+    key: 'bitacoras',
+    permission: MODULE_ACCESS_PERMISSIONS.bitacoras,
+    label: 'Bitácoras',
+    Icon: ClipboardList,
+    path: '/bitacoras',
+  },
+  {
+    key: 'inventario',
+    permission: MODULE_ACCESS_PERMISSIONS.inventario,
+    label: 'Inventario',
+    Icon: Boxes,
+    path: '/inventario',
+  },
+  {
+    key: 'personal',
+    permission: MODULE_ACCESS_PERMISSIONS.personal,
+    label: 'Personal',
+    Icon: UserRound,
+    path: '/personal',
+  },
+  {
+    key: 'usuarios',
+    permission: MODULE_ACCESS_PERMISSIONS.usuarios,
+    label: 'Usuarios',
+    Icon: ShieldCheck,
+    path: '/usuarios',
+  },
 ];
 
 const Dashboard = () => {
@@ -45,7 +85,7 @@ const Dashboard = () => {
     navigate(module.path);
   };
 
-  const modules = DASHBOARD_MODULES.filter((m) => hasPermission(m.key));
+  const modules = DASHBOARD_MODULES.filter((m) => hasPermission(m.permission));
 
   const roleLabel =
     {
@@ -53,6 +93,8 @@ const Dashboard = () => {
       secretario: 'Secretario',
       supervisor: 'Supervisor',
       contador: 'Contador',
+      guardia: 'Guardia',
+      monitorista: 'Monitorista',
     }[user?.tipo_usuario] ??
     user?.tipo_usuario ??
     '';
@@ -62,7 +104,7 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard-container">
-      <header className="dashboard-header">
+      <header className="brand-header dashboard-header">
         <div className="header-logo">
           <img src={logo} alt="WES Security Cía. Ltda." width="1725" height="1000" />
         </div>
@@ -103,6 +145,7 @@ const Dashboard = () => {
         <div className="modules-grid">
           {modules.map((module) => {
             const meta = MODULE_META[module.key] ?? {};
+            const ModuleIcon = module.Icon;
             return (
               <button
                 key={module.key}
@@ -115,7 +158,7 @@ const Dashboard = () => {
                   {loadingModule === module.key ? (
                     <span className="spinner" />
                   ) : (
-                    <img src={module.icon} alt="" className="module-icon" />
+                    <ModuleIcon className="module-icon" aria-hidden="true" strokeWidth={2} />
                   )}
                 </div>
                 <div className="module-card-body">

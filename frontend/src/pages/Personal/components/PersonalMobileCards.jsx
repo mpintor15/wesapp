@@ -1,4 +1,4 @@
-const PersonalMobileCards = ({ colaboradores, onDelete, onEdit }) => (
+const PersonalMobileCards = ({ canDelete, canEdit, colaboradores, onDelete, onEdit }) => (
   <div className="records-mobile">
     {colaboradores.map((colaborador) => (
       <article key={colaborador.id} className="record-card">
@@ -31,20 +31,24 @@ const PersonalMobileCards = ({ colaboradores, onDelete, onEdit }) => (
           </div>
         </dl>
         <div className="record-card-actions">
-          <button
-            className="btn btn-neutral btn-sm"
-            onClick={() => onEdit(colaborador)}
-            type="button"
-          >
-            Editar
-          </button>
-          <button
-            className="btn btn-destructive btn-sm"
-            onClick={() => onDelete(colaborador)}
-            type="button"
-          >
-            Eliminar
-          </button>
+          {canEdit ? (
+            <button
+              className="btn btn-neutral btn-sm"
+              onClick={() => onEdit(colaborador)}
+              type="button"
+            >
+              Editar
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              className="btn btn-destructive btn-sm"
+              onClick={() => onDelete(colaborador)}
+              type="button"
+            >
+              Eliminar
+            </button>
+          ) : null}
         </div>
       </article>
     ))}

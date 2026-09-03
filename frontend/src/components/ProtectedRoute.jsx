@@ -38,7 +38,7 @@ const ProtectedRoute = ({ children, requiredPermission = undefined }) => {
     return <Navigate to="/change-password" replace />;
   }
 
-  // Si requiere un permiso específico y no lo tiene, mostrar error
+  // Si requiere permiso específico o lista any y no lo tiene, mostrar error
   if (requiredPermission && !hasPermission(requiredPermission)) {
     return (
       <div className="protected-route-denied">
@@ -54,7 +54,7 @@ const ProtectedRoute = ({ children, requiredPermission = undefined }) => {
 
 ProtectedRoute.propTypes = {
   children: PropTypes.node.isRequired,
-  requiredPermission: PropTypes.string,
+  requiredPermission: PropTypes.oneOfType([PropTypes.string, PropTypes.arrayOf(PropTypes.string)]),
 };
 
 export default ProtectedRoute;

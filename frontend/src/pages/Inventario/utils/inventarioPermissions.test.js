@@ -1,8 +1,22 @@
-import { getInventoryPermissions, INVENTORY_ACTIONS } from './inventarioPermissions';
+import {
+  canCreateLocationFromArticle,
+  canCreateLocationFromMovement,
+  getInventoryPermissions,
+  INVENTORY_ACTIONS,
+  INVENTORY_RAW_PERMISSIONS,
+} from './inventarioPermissions';
+
+const user = (tipo_usuario, extra = {}) => ({
+  id: 1,
+  usuario: tipo_usuario,
+  tipo_usuario,
+  activo: true,
+  ...extra,
+});
 
 describe('inventarioPermissions', () => {
   test('gerente tiene acciones administrativas de inventario', () => {
-    const permissions = getInventoryPermissions({ tipo_usuario: 'gerente' });
+    const permissions = getInventoryPermissions(user('gerente'));
 
     expect(permissions.canAccessInventory).toBe(true);
     expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_DELETE_ADMIN)).toBe(true);
@@ -11,7 +25,7 @@ describe('inventarioPermissions', () => {
   });
 
   test('supervisor no puede eliminar administrativamente ni regenerar PDF', () => {
-    const permissions = getInventoryPermissions({ tipo_usuario: 'supervisor' });
+    const permissions = getInventoryPermissions(user('supervisor'));
 
     expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_BAJA)).toBe(true);
     expect(permissions.can(INVENTORY_ACTIONS.MOVIMIENTOS_VOID)).toBe(true);
@@ -21,7 +35,7 @@ describe('inventarioPermissions', () => {
   });
 
   test('secretario solo tiene lectura, creación de movimientos, PDF y reportes', () => {
-    const permissions = getInventoryPermissions({ tipo_usuario: 'secretario' });
+    const permissions = getInventoryPermissions(user('secretario'));
 
     expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_VIEW)).toBe(true);
     expect(permissions.can(INVENTORY_ACTIONS.MOVIMIENTOS_CREATE)).toBe(true);
@@ -32,9 +46,77 @@ describe('inventarioPermissions', () => {
   });
 
   test('contador no accede al módulo de inventario', () => {
-    const permissions = getInventoryPermissions({ tipo_usuario: 'contador' });
+    const permissions = getInventoryPermissions(user('contador'));
 
     expect(permissions.canAccessInventory).toBe(false);
     expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_VIEW)).toBe(false);
+  });
+
+  test('permisos de ubicaciones no conceden acciones de artículos por accidente', () => {
+    const permissions = getInventoryPermissions({
+      id: 1,
+      usuario: 'custom',
+      tipo_usuario: 'custom',
+      activo: true,
+      permisos: ['inventario.ubicaciones.ver', 'inventario.ubicaciones.crear'],
+    });
+
+    expect(permissions.canAccessInventory).toBe(false);
+    expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_VIEW)).toBe(false);
+    expect(permissions.can(INVENTORY_ACTIONS.ARTICULOS_CREATE)).toBe(false);
+  });
+
+  test('crear ubicación desde artículo acepta permiso de ubicación o crear artículo', () => {
+    expect(
+      canCreateLocationFromArticle({
+        id: 1,
+        usuario: 'custom',
+        tipo_usuario: 'custom',
+        activo: true,
+        permisos: [INVENTORY_RAW_PERMISSIONS.UBICACIONES_CREATE],
+      })
+    ).toBe(true);
+    expect(
+      canCreateLocationFromArticle({
+        id: 1,
+        usuario: 'custom',
+        tipo_usuario: 'custom',
+        activo: true,
+        permisos: [INVENTORY_RAW_PERMISSIONS.ARTICULOS_CREATE],
+      })
+    ).toBe(true);
+  });
+
+  test('crear o editar artículos no habilita nueva ubicación si no está en la política OR', () => {
+    expect(
+      canCreateLocationFromArticle({
+        id: 1,
+        usuario: 'custom',
+        tipo_usuario: 'custom',
+        activo: true,
+        permisos: [INVENTORY_ACTIONS.ARTICULOS_CREATE, INVENTORY_RAW_PERMISSIONS.ARTICULOS_EDIT],
+      })
+    ).toBe(false);
+  });
+
+  test('crear ubicación desde movimiento exige permiso de ubicación', () => {
+    expect(
+      canCreateLocationFromMovement({
+        id: 1,
+        usuario: 'custom',
+        tipo_usuario: 'custom',
+        activo: true,
+        permisos: [INVENTORY_RAW_PERMISSIONS.UBICACIONES_CREATE],
+      })
+    ).toBe(true);
+    expect(
+      canCreateLocationFromMovement({
+        id: 1,
+        usuario: 'custom',
+        tipo_usuario: 'custom',
+        activo: true,
+        permisos: [INVENTORY_RAW_PERMISSIONS.MOVIMIENTOS_CREATE],
+      })
+    ).toBe(false);
   });
 });

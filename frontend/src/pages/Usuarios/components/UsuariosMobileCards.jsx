@@ -6,7 +6,15 @@ import {
   isPendingUser,
 } from '../utils/usuariosHelpers';
 
-const UsuariosMobileCards = ({ onDelete, onEdit, onInvite, usuarios }) => (
+const UsuariosMobileCards = ({
+  canDelete,
+  canEdit,
+  canInvite,
+  onDelete,
+  onEdit,
+  onInvite,
+  usuarios,
+}) => (
   <div className="records-mobile">
     {usuarios.map((usuario) => (
       <article key={usuario.id} className="record-card">
@@ -28,7 +36,7 @@ const UsuariosMobileCards = ({ onDelete, onEdit, onInvite, usuarios }) => (
           </div>
         </dl>
         <div className="record-card-actions usuarios-card-actions">
-          {isPendingUser(usuario) && (
+          {canInvite && isPendingUser(usuario) && (
             <button
               className="btn btn-invite btn-sm usuarios-invite-action"
               onClick={() => onInvite(usuario)}
@@ -37,16 +45,24 @@ const UsuariosMobileCards = ({ onDelete, onEdit, onInvite, usuarios }) => (
               Reenviar invitación
             </button>
           )}
-          <button className="btn btn-neutral btn-sm" onClick={() => onEdit(usuario)} type="button">
-            Editar
-          </button>
-          <button
-            className="btn btn-destructive btn-sm"
-            onClick={() => onDelete(usuario)}
-            type="button"
-          >
-            Eliminar
-          </button>
+          {canEdit ? (
+            <button
+              className="btn btn-neutral btn-sm"
+              onClick={() => onEdit(usuario)}
+              type="button"
+            >
+              Editar
+            </button>
+          ) : null}
+          {canDelete ? (
+            <button
+              className="btn btn-destructive btn-sm"
+              onClick={() => onDelete(usuario)}
+              type="button"
+            >
+              Eliminar
+            </button>
+          ) : null}
         </div>
       </article>
     ))}

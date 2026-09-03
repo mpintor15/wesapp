@@ -76,6 +76,7 @@ const login = async (req, res) => {
           apellido: user.apellido,
           tipo_usuario: user.tipo_usuario,
           primer_login: user.primer_login,
+          colaborador_id: user.colaborador_id,
         },
       },
     });
@@ -187,6 +188,7 @@ const verifyToken = async (req, res) => {
           apellido: user.apellido,
           tipo_usuario: user.tipo_usuario,
           primer_login: user.primer_login,
+          colaborador_id: user.colaborador_id,
         },
       },
     });

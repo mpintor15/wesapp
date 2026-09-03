@@ -2,6 +2,7 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import inventarioService from '../../services/inventarioService';
+import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -15,6 +16,7 @@ import InventarioTabs from './components/InventarioTabs';
 import InventoryReasonModal from './components/InventoryReasonModal';
 import MovimientoModal from './components/MovimientoModal';
 import MovimientosTab from './components/MovimientosTab';
+import UbicacionQuickCreateModal from './components/UbicacionQuickCreateModal';
 import useInventarioData from './hooks/useInventarioData';
 import useMovimientoForm from './hooks/useMovimientoForm';
 import {
@@ -31,19 +33,20 @@ import {
   EMPTY_BAJAS_FILTERS,
   EMPTY_MOVIMIENTOS_EXPORT_FILTERS,
   EMPTY_MOVIMIENTOS_FILTERS,
-  filterMovimientos,
   getArticuloTypeFormData,
   getNextSortState,
-  getTotalPages,
   isStockTipo,
-  paginateRows,
-  sortArticulos,
-  sortMovimientos,
   validateArticuloForm,
   validateBajaForm,
   validateMotivoAdministrativo,
 } from './utils/inventarioHelpers';
-import { getInventoryPermissions, INVENTORY_ACTIONS } from './utils/inventarioPermissions';
+import {
+  canCreateLocationFromArticle,
+  canCreateLocationFromMovement,
+  getInventoryPermissions,
+  INVENTORY_ACTIONS,
+} from './utils/inventarioPermissions';
+import { DEFAULT_PAGINATION, withPaginationParams } from '../../utils/pagination';
 import './Inventario.css';
 
 const Inventario = () => {
@@ -57,6 +60,7 @@ const Inventario = () => {
   const { isSubmitting: isSavingArticulo, withSubmit: withArticuloSubmit } = useSubmitState();
   const { isSubmitting: isSavingMovimiento, withSubmit: withMovimientoSubmit } = useSubmitState();
   const { isSubmitting: isSavingBaja, withSubmit: withBajaSubmit } = useSubmitState();
+  const { isSubmitting: isCreatingUbicacion, withSubmit: withUbicacionSubmit } = useSubmitState();
   const { isSubmitting: isSubmittingReason, withSubmit: withReasonSubmit } = useSubmitState();
   const { isSubmitting: isExportingArticulos, withSubmit: withArticulosExportSubmit } =
     useSubmitState();
@@ -70,6 +74,7 @@ const Inventario = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showMovimientosExportModal, setShowMovimientosExportModal] = useState(false);
   const [showBajasExportModal, setShowBajasExportModal] = useState(false);
+  const [showUbicacionModal, setShowUbicacionModal] = useState(false);
   const [reasonAction, setReasonAction] = useState(null);
   const [reasonMotivo, setReasonMotivo] = useState('');
   const [regeneratingPdfId, setRegeneratingPdfId] = useState(null);
@@ -81,6 +86,8 @@ const Inventario = () => {
   // Forms
   const [formData, setFormData] = useState(EMPTY_ARTICULO_FORM);
   const [articuloErrors, setArticuloErrors] = useState({});
+  const [ubicacionForm, setUbicacionForm] = useState({ nombre: '' });
+  const [ubicacionError, setUbicacionError] = useState('');
   const [filters, setFilters] = useState(EMPTY_ARTICULOS_FILTERS);
   const [movimientosFilters, setMovimientosFilters] = useState(EMPTY_MOVIMIENTOS_FILTERS);
   const [movimientosFiltersDraft, setMovimientosFiltersDraft] = useState(EMPTY_MOVIMIENTOS_FILTERS);
@@ -93,7 +100,11 @@ const Inventario = () => {
   const [bajasExportFilters, setBajasExportFilters] = useState(EMPTY_BAJAS_EXPORT_FILTERS);
   const [articulosSort, setArticulosSort] = useState({ field: 'tipo_articulo', direction: 'asc' });
   const [articulosPage, setArticulosPage] = useState(1);
+  const articulosPageSize = DEFAULT_PAGINATION.pageSize;
   const [movimientosPage, setMovimientosPage] = useState(1);
+  const movimientosPageSize = DEFAULT_PAGINATION.pageSize;
+  const [bajasPage, setBajasPage] = useState(1);
+  const bajasPageSize = DEFAULT_PAGINATION.pageSize;
   const [movimientosSort, setMovimientosSort] = useState({
     field: 'fecha_movimiento',
     direction: 'desc',
@@ -112,14 +123,19 @@ const Inventario = () => {
     ubicaciones,
     movimientos,
     bajas,
+    clientes,
     loading,
     movimientosLoading,
     bajasLoading,
     movimientosLoaded,
     bajasLoaded,
+    articulosPagination,
+    movimientosPagination,
+    bajasPagination,
     fetchArticulos,
     loadMovimientos,
     loadBajas,
+    upsertUbicacion,
   } = useInventarioData({ showMessage });
 
   const canCreateArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_CREATE);
@@ -128,6 +144,8 @@ const Inventario = () => {
   const canDeleteArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_DELETE_ADMIN);
   const canDarBajaArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_BAJA);
   const canEditArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_EDIT);
+  const canCreateUbicacionFromArticle = canCreateLocationFromArticle(user);
+  const canCreateUbicacionFromMovement = canCreateLocationFromMovement(user);
   const showArticuloActions = canEditArticulo || canDeleteArticulo || canDarBajaArticulo;
   const articuloActionCount = [canEditArticulo, canDarBajaArticulo, canDeleteArticulo].filter(
     Boolean
@@ -140,16 +158,47 @@ const Inventario = () => {
         : 'app-col-actions--single';
 
   const getActiveBajasFilterParams = useCallback(
-    (source = bajasFilters) => buildBajasFilterParams(source),
-    [bajasFilters]
+    (source = bajasFilters, page = bajasPage) =>
+      withPaginationParams({
+        page,
+        pageSize: bajasPageSize,
+        filters: buildBajasFilterParams(source),
+      }),
+    [bajasFilters, bajasPage, bajasPageSize]
   );
 
   const getActiveFilterParams = useCallback(() => buildArticuloFilterParams(filters), [filters]);
 
+  const getArticulosListParams = useCallback(
+    (overrides = {}) =>
+      withPaginationParams({
+        page: articulosPage,
+        pageSize: articulosPageSize,
+        sortBy: articulosSort.field,
+        sortOrder: articulosSort.direction,
+        filters: getActiveFilterParams(),
+        ...overrides,
+      }),
+    [articulosPage, articulosPageSize, articulosSort, getActiveFilterParams]
+  );
+
+  const getMovimientosListParams = useCallback(
+    (overrides = {}) =>
+      withPaginationParams({
+        page: movimientosPage,
+        pageSize: movimientosPageSize,
+        sortBy: movimientosSort.field,
+        sortOrder: movimientosSort.direction,
+        filters: buildMovimientosExportParams(movimientosFilters),
+        ...overrides,
+      }),
+    [movimientosFilters, movimientosPage, movimientosPageSize, movimientosSort]
+  );
+
   const handleMovimientoCreated = useCallback(async () => {
-    await fetchArticulos(getActiveFilterParams(), true);
-    await loadMovimientos();
-  }, [fetchArticulos, getActiveFilterParams, loadMovimientos]);
+    await fetchArticulos(getArticulosListParams(), true);
+    await loadMovimientos(getMovimientosListParams());
+  }, [fetchArticulos, getArticulosListParams, getMovimientosListParams, loadMovimientos]);
 
   const movimientoFormState = useMovimientoForm({
     catalogArticulos,
@@ -166,13 +215,15 @@ const Inventario = () => {
 
   const handleApplyFilters = async () => {
     setArticulosPage(1);
-    await fetchArticulos(getActiveFilterParams(), false, { showLoading: true });
+    await fetchArticulos(getArticulosListParams({ page: 1 }), false, { showLoading: true });
   };
 
   const handleClearFilters = async () => {
     setFilters(EMPTY_ARTICULOS_FILTERS);
     setArticulosPage(1);
-    await fetchArticulos({}, true, { showLoading: true });
+    await fetchArticulos(getArticulosListParams({ page: 1, filters: {} }), true, {
+      showLoading: true,
+    });
   };
 
   const handleMovimientosDraftChange = (e) => {
@@ -180,15 +231,28 @@ const Inventario = () => {
     setMovimientosFiltersDraft((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleApplyMovimientosFilters = () => {
-    setMovimientosFilters({ ...movimientosFiltersDraft });
+  const handleApplyMovimientosFilters = async () => {
+    const nextFilters = { ...movimientosFiltersDraft };
+    setMovimientosFilters(nextFilters);
     setMovimientosPage(1);
+    await loadMovimientos(
+      getMovimientosListParams({
+        page: 1,
+        filters: buildMovimientosExportParams(nextFilters),
+      })
+    );
   };
 
-  const handleClearMovimientosFilters = () => {
+  const handleClearMovimientosFilters = async () => {
     setMovimientosFiltersDraft(EMPTY_MOVIMIENTOS_FILTERS);
     setMovimientosFilters(EMPTY_MOVIMIENTOS_FILTERS);
     setMovimientosPage(1);
+    await loadMovimientos(
+      getMovimientosListParams({
+        page: 1,
+        filters: {},
+      })
+    );
   };
 
   const handleBajasDraftChange = (e) => {
@@ -199,13 +263,15 @@ const Inventario = () => {
   const handleApplyBajasFilters = async () => {
     const nextFilters = { ...bajasFiltersDraft };
     setBajasFilters(nextFilters);
-    await loadBajas(getActiveBajasFilterParams(nextFilters));
+    setBajasPage(1);
+    await loadBajas(getActiveBajasFilterParams(nextFilters, 1));
   };
 
   const handleClearBajasFilters = async () => {
     setBajasFiltersDraft(EMPTY_BAJAS_FILTERS);
     setBajasFilters(EMPTY_BAJAS_FILTERS);
-    await loadBajas({});
+    setBajasPage(1);
+    await loadBajas(withPaginationParams({ page: 1, pageSize: bajasPageSize, filters: {} }));
   };
 
   // ── Artículo CRUD ────────────────────────────────
@@ -236,6 +302,8 @@ const Inventario = () => {
       numero_serie: articulo.numero_serie || '',
       calibre: articulo.calibre || '',
       fecha_caducidad: articulo.fecha_caducidad ? articulo.fecha_caducidad.slice(0, 10) : '',
+      cliente_id: articulo.cliente_id ? String(articulo.cliente_id) : '',
+      ubicacion_id: articulo.ubicacion_id ? String(articulo.ubicacion_id) : '',
       ubicacion_nombre: articulo.ubicacion_nombre || '',
       codigo_pantalla: articulo.codigo_pantalla || '',
       codigo_radio: articulo.codigo_radio || '',
@@ -248,6 +316,8 @@ const Inventario = () => {
   const handleCancelArticulo = () => {
     setShowArticuloModal(false);
     setEditingArticulo(null);
+    setShowUbicacionModal(false);
+    setUbicacionError('');
   };
 
   const handleTipoChange = (e) => {
@@ -258,9 +328,98 @@ const Inventario = () => {
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    setArticuloErrors((prev) => ({ ...prev, [name]: '' }));
+    setFormData((prev) => {
+      if (name === 'cliente_id') {
+        return {
+          ...prev,
+          cliente_id: value,
+          ubicacion_id: '',
+          ubicacion_nombre: '',
+        };
+      }
+
+      if (name === 'ubicacion_id') {
+        const ubicacion = ubicaciones.find((item) => String(item.id) === String(value));
+        return {
+          ...prev,
+          ubicacion_id: value,
+          ubicacion_nombre: ubicacion?.nombre || '',
+        };
+      }
+
+      return { ...prev, [name]: value };
+    });
+    setArticuloErrors((prev) => ({
+      ...prev,
+      [name]: '',
+      ...(name === 'cliente_id' ? { ubicacion_nombre: '' } : {}),
+    }));
   };
+
+  const handleOpenUbicacionModal = () => {
+    if (!formData.cliente_id) {
+      setArticuloErrors((prev) => ({ ...prev, cliente_id: 'Selecciona un cliente' }));
+      return;
+    }
+
+    setUbicacionForm({ nombre: '' });
+    setUbicacionError('');
+    setShowUbicacionModal(true);
+  };
+
+  const handleCloseUbicacionModal = () => {
+    if (isCreatingUbicacion) return;
+    setShowUbicacionModal(false);
+    setUbicacionError('');
+  };
+
+  const handleCreateUbicacion = withUbicacionSubmit(async (e) => {
+    e.preventDefault();
+    const nombre = ubicacionForm.nombre.trim();
+
+    if (!nombre) {
+      setUbicacionError('El nombre de la ubicación es obligatorio.');
+      return;
+    }
+
+    if (nombre.length > 100) {
+      setUbicacionError('El nombre no puede exceder 100 caracteres.');
+      return;
+    }
+
+    setUbicacionError('');
+    const result = await inventarioService.createUbicacion({
+      nombre,
+      cliente_id: Number(formData.cliente_id),
+    });
+
+    if (!result.success) {
+      setUbicacionError(result.message || 'Error al crear ubicación');
+      return;
+    }
+
+    const nuevaUbicacion = {
+      articulos_activos: 0,
+      articulos_totales: 0,
+      cliente_id: Number(formData.cliente_id),
+      cliente_nombre:
+        clientes.find((cliente) => String(cliente.id) === String(formData.cliente_id))?.nombre ||
+        null,
+      nombre,
+      ...result.data,
+    };
+
+    upsertUbicacion(nuevaUbicacion);
+    setFormData((prev) => ({
+      ...prev,
+      ubicacion_id: nuevaUbicacion.id ? String(nuevaUbicacion.id) : prev.ubicacion_id,
+      ubicacion_nombre: nuevaUbicacion.nombre,
+    }));
+    setArticuloErrors((prev) => ({ ...prev, ubicacion_nombre: '' }));
+    setShowUbicacionModal(false);
+    setUbicacionForm({ nombre: '' });
+    showMessage('success', 'Ubicación creada exitosamente');
+  });
 
   const handleSaveArticulo = withArticuloSubmit(async (e) => {
     e.preventDefault();
@@ -284,7 +443,7 @@ const Inventario = () => {
       );
       setShowArticuloModal(false);
       setEditingArticulo(null);
-      await fetchArticulos(getActiveFilterParams(), true);
+      await fetchArticulos(getArticulosListParams(), true);
     } else {
       showMessage('error', result.message);
     }
@@ -319,6 +478,11 @@ const Inventario = () => {
     setShowBajaModal(true);
   };
 
+  const closeBajaModal = () => {
+    if (isSavingBaja) return;
+    setShowBajaModal(false);
+  };
+
   const handleConfirmBaja = withBajaSubmit(async () => {
     if (!bajaTarget) return;
     const bajaError = validateBajaForm(bajaTarget, bajaForm);
@@ -336,11 +500,11 @@ const Inventario = () => {
       showMessage('success', result.message || 'Artículo dado de baja');
       setShowBajaModal(false);
       setBajaTarget(null);
-      const requests = [fetchArticulos(getActiveFilterParams(), true)];
+      const requests = [fetchArticulos(getArticulosListParams(), true)];
       if (bajasLoaded) requests.push(loadBajas(getActiveBajasFilterParams()));
       await Promise.all(requests);
     } else {
-      showMessage('error', result.message);
+      showMessage('error', getVisibleErrorMessage(result, 'Error al dar de baja artículo'));
     }
   });
 
@@ -360,7 +524,7 @@ const Inventario = () => {
 
     if (result.success) {
       showMessage('success', result.message || 'PDF regenerado correctamente');
-      await loadMovimientos();
+      await loadMovimientos(getMovimientosListParams());
       return;
     }
 
@@ -473,10 +637,7 @@ const Inventario = () => {
     if (!result) return;
 
     if (!result.success) {
-      showMessage(
-        'error',
-        result.status === 403 ? 'No tienes permisos suficientes para esta acción.' : result.message
-      );
+      showMessage('error', getVisibleErrorMessage(result, 'Error al completar la acción'));
       return;
     }
 
@@ -485,24 +646,27 @@ const Inventario = () => {
     setReasonMotivo('');
 
     if (reasonAction.type === 'deleteArticulo') {
-      await fetchArticulos(getActiveFilterParams(), true);
+      await fetchArticulos(getArticulosListParams(), true);
       return;
     }
 
     if (reasonAction.type === 'voidMovimiento') {
-      await Promise.all([loadMovimientos(), fetchArticulos(getActiveFilterParams(), true)]);
+      await Promise.all([
+        loadMovimientos(getMovimientosListParams()),
+        fetchArticulos(getArticulosListParams(), true),
+      ]);
       return;
     }
 
     if (reasonAction.type === 'deleteMovimiento') {
-      await loadMovimientos();
+      await loadMovimientos(getMovimientosListParams());
       return;
     }
 
     if (reasonAction.type === 'voidBaja') {
       await Promise.all([
         loadBajas(getActiveBajasFilterParams()),
-        fetchArticulos(getActiveFilterParams(), true),
+        fetchArticulos(getArticulosListParams(), true),
       ]);
       return;
     }
@@ -576,40 +740,62 @@ const Inventario = () => {
     return 'No hay artículos registrados en inventario.';
   }, [filters]);
 
-  const sortedArticulos = useMemo(
-    () => sortArticulos(articulos, articulosSort),
-    [articulos, articulosSort]
-  );
-
-  const articulosTotalPages = getTotalPages(sortedArticulos);
-  const paginatedArticulos = paginateRows(sortedArticulos, articulosPage);
-
-  const handleArticulosSort = (field) => {
-    setArticulosSort((prev) => getNextSortState(prev, field));
+  const articulosMeta = articulosPagination || DEFAULT_PAGINATION;
+  const articulosTotalPages = articulosMeta.totalPages;
+  const handleArticulosSort = async (field) => {
+    const nextSort = getNextSortState(articulosSort, field);
+    setArticulosSort(nextSort);
     setArticulosPage(1);
+    await fetchArticulos(
+      getArticulosListParams({
+        page: 1,
+        sortBy: nextSort.field,
+        sortOrder: nextSort.direction,
+      }),
+      false,
+      { showLoading: true }
+    );
   };
 
-  const filteredMovimientos = useMemo(
-    () => filterMovimientos(movimientos, movimientosFilters),
-    [movimientos, movimientosFilters]
-  );
-
-  const sortedMovimientos = useMemo(
-    () => sortMovimientos(filteredMovimientos, movimientosSort),
-    [filteredMovimientos, movimientosSort]
-  );
-
-  const movimientosTotalPages = getTotalPages(sortedMovimientos);
-  const paginatedMovimientos = paginateRows(sortedMovimientos, movimientosPage);
-  const handleMovimientosSort = (field) => {
-    setMovimientosSort((prev) => getNextSortState(prev, field));
+  const movimientosMeta = movimientosPagination || DEFAULT_PAGINATION;
+  const movimientosTotalPages = movimientosMeta.totalPages;
+  const bajasMeta = bajasPagination || DEFAULT_PAGINATION;
+  const bajasTotalPages = bajasMeta.totalPages;
+  const handleMovimientosSort = async (field) => {
+    const nextSort = getNextSortState(movimientosSort, field);
+    setMovimientosSort(nextSort);
     setMovimientosPage(1);
+    await loadMovimientos(
+      getMovimientosListParams({
+        page: 1,
+        sortBy: nextSort.field,
+        sortOrder: nextSort.direction,
+      })
+    );
+  };
+
+  const handleArticulosPageChange = async (updater) => {
+    const nextPage = typeof updater === 'function' ? updater(articulosPage) : updater;
+    setArticulosPage(nextPage);
+    await fetchArticulos(getArticulosListParams({ page: nextPage }), false, { showLoading: true });
+  };
+
+  const handleMovimientosPageChange = async (updater) => {
+    const nextPage = typeof updater === 'function' ? updater(movimientosPage) : updater;
+    setMovimientosPage(nextPage);
+    await loadMovimientos(getMovimientosListParams({ page: nextPage }));
+  };
+
+  const handleBajasPageChange = async (updater) => {
+    const nextPage = typeof updater === 'function' ? updater(bajasPage) : updater;
+    setBajasPage(nextPage);
+    await loadBajas(getActiveBajasFilterParams(bajasFilters, nextPage));
   };
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     if (tab === 'movimientos' && !movimientosLoaded && !movimientosLoading) {
-      loadMovimientos();
+      loadMovimientos(getMovimientosListParams());
     }
     if (tab === 'bajas' && !bajasLoaded && !bajasLoading) {
       loadBajas(getActiveBajasFilterParams());
@@ -626,7 +812,7 @@ const Inventario = () => {
   }
 
   return (
-    <div className="inventario-container">
+    <div className="inventario-container tabular-page">
       <InventarioPageHeader
         activeTab={activeTab}
         canCreateArticulo={canCreateArticulo}
@@ -640,8 +826,8 @@ const Inventario = () => {
         onExportBajas={openBajasExportModal}
         onExportMovimientos={openMovimientosExportModal}
         onRefresh={() => {
-          if (activeTab === 'articulos') return fetchArticulos(getActiveFilterParams(), true);
-          if (activeTab === 'movimientos') return loadMovimientos();
+          if (activeTab === 'articulos') return fetchArticulos(getArticulosListParams(), true);
+          if (activeTab === 'movimientos') return loadMovimientos(getMovimientosListParams());
           return loadBajas(getActiveBajasFilterParams());
         }}
       />
@@ -672,11 +858,11 @@ const Inventario = () => {
           onDelete={handleDeleteArticulo}
           onEdit={handleOpenEdit}
           onFilterChange={handleFilterChange}
-          onPageChange={setArticulosPage}
+          onPageChange={handleArticulosPageChange}
           onSort={handleArticulosSort}
-          paginatedArticulos={paginatedArticulos}
+          paginatedArticulos={articulos}
           showArticuloActions={showArticuloActions}
-          sortedArticulos={sortedArticulos}
+          sortedArticulos={articulos}
           ubicaciones={ubicaciones}
         />
       )}
@@ -684,12 +870,16 @@ const Inventario = () => {
       {activeTab === 'bajas' && (
         <BajasTab
           bajas={bajas}
+          bajasPage={bajasPage}
+          bajasTotalItems={bajasMeta.totalItems}
+          bajasTotalPages={bajasTotalPages}
           bajasFiltersDraft={bajasFiltersDraft}
           bajasLoading={bajasLoading}
           onDeleteBaja={handleDeleteBaja}
           onApplyFilters={handleApplyBajasFilters}
           onClearFilters={handleClearBajasFilters}
           onDraftChange={handleBajasDraftChange}
+          onPageChange={handleBajasPageChange}
           onVoidBaja={handleVoidBaja}
           permissions={inventoryPermissions}
         />
@@ -707,14 +897,14 @@ const Inventario = () => {
           onDeleteMovimiento={handleDeleteMovimiento}
           onDownloadPdf={handleDownloadPdf}
           onDraftChange={handleMovimientosDraftChange}
-          onPageChange={setMovimientosPage}
+          onPageChange={handleMovimientosPageChange}
           onRegeneratePdf={handleRegeneratePdf}
           onSort={handleMovimientosSort}
           onVoidMovimiento={handleVoidMovimiento}
-          paginatedMovimientos={paginatedMovimientos}
+          paginatedMovimientos={movimientos}
           permissions={inventoryPermissions}
           regeneratingPdfId={regeneratingPdfId}
-          sortedMovimientos={sortedMovimientos}
+          sortedMovimientos={movimientos}
           ubicaciones={ubicaciones}
         />
       )}
@@ -722,19 +912,39 @@ const Inventario = () => {
       {showArticuloModal && (
         <ArticuloModal
           articuloErrors={articuloErrors}
+          canCreateUbicacion={canCreateUbicacionFromArticle}
+          canCreateArticulo={canCreateArticulo}
+          clientes={clientes}
           formData={formData}
           isEditing={Boolean(editingArticulo)}
           isSavingArticulo={isSavingArticulo}
           onCancel={handleCancelArticulo}
+          onCreateUbicacion={handleOpenUbicacionModal}
           onFormChange={handleFormChange}
           onSubmit={handleSaveArticulo}
           onTipoChange={handleTipoChange}
+          ubicaciones={ubicaciones}
         />
       )}
+
+      <UbicacionQuickCreateModal
+        error={ubicacionError}
+        form={ubicacionForm}
+        isOpen={showArticuloModal && showUbicacionModal}
+        isSubmitting={isCreatingUbicacion}
+        onChange={(nextForm) => {
+          setUbicacionForm(nextForm);
+          setUbicacionError('');
+        }}
+        onClose={handleCloseUbicacionModal}
+        onSubmit={handleCreateUbicacion}
+      />
 
       {movimientoFormState.isOpen && (
         <MovimientoModal
           catalogArticulos={catalogArticulos}
+          canCreateDestinoUbicacion={canCreateUbicacionFromMovement}
+          clientes={clientes}
           filterArticulos={movimientoFormState.filterArticulos}
           isSavingMovimiento={isSavingMovimiento}
           itemDropdownOpen={movimientoFormState.itemDropdownOpen}
@@ -751,6 +961,7 @@ const Inventario = () => {
           onSubmit={withMovimientoSubmit(movimientoFormState.handleCreateMovimiento)}
           setItemDropdownOpen={movimientoFormState.setItemDropdownOpen}
           setItemSearchTerms={movimientoFormState.setItemSearchTerms}
+          ubicaciones={ubicaciones}
         />
       )}
 
@@ -781,7 +992,7 @@ const Inventario = () => {
           bajaForm={bajaForm}
           bajaTarget={bajaTarget}
           isSavingBaja={isSavingBaja}
-          onCancel={() => setShowBajaModal(false)}
+          onCancel={closeBajaModal}
           onConfirm={handleConfirmBaja}
           onFormChange={setBajaForm}
         />

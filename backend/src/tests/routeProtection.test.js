@@ -9,6 +9,7 @@ jest.mock('../config/database', () => ({
 const db = require('../config/database');
 const app = require('../app');
 const config = require('../config/config');
+const { PERMISSIONS, rolePermissions } = require('../config/permissions');
 
 const tokenFor = (tipo_usuario, id = 50) =>
   jwt.sign({ id, usuario: `token-${tipo_usuario}-${id}`, tipo_usuario }, config.jwt.secret, {
@@ -49,6 +50,7 @@ const expectAllowedPastAuthorization = (res) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  delete rolePermissions.custom_ubicaciones;
   mockCurrentUser(userFromDb('gerente'));
 });
 
@@ -154,6 +156,21 @@ describe('cuentas permissions', () => {
     expectAllowedPastAuthorization(createAbono);
   });
 
+  test('contador no puede anular facturas ni pagos', async () => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const cancelFactura = await request(app)
+      .patch('/api/cuentas/facturas/1001/cancelar')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({ detalle_anulacion: 'Error contable documentado' });
+    const voidPago = await request(app)
+      .patch('/api/cuentas/pagos/10/anular')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`);
+
+    expect(cancelFactura.status).toBe(403);
+    expect(voidPago.status).toBe(403);
+  });
+
   test('supervisor recibe 403 en Cuentas', async () => {
     mockCurrentUser(userFromDb('supervisor'));
 
@@ -165,7 +182,221 @@ describe('cuentas permissions', () => {
   });
 });
 
+describe('clientes permissions', () => {
+  test('opciones de clientes para ubicaciones acepta permiso mínimo de ubicaciones', async () => {
+    rolePermissions.custom_ubicaciones = [PERMISSIONS.INVENTARIO_UBICACIONES_VER];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const res = await request(app)
+      .get('/api/clientes/opciones-ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expectAllowedPastAuthorization(res);
+  });
+
+  test('permiso de ubicaciones no concede administración de clientes', async () => {
+    rolePermissions.custom_ubicaciones = [PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const create = await request(app)
+      .post('/api/clientes')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+      .send({});
+    const update = await request(app)
+      .put('/api/clientes/1')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+      .send({});
+    const remove = await request(app)
+      .delete('/api/clientes/1')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expect(create.status).toBe(403);
+    expect(update.status).toBe(403);
+    expect(remove.status).toBe(403);
+  });
+
+  test('contador conserva acceso al catálogo administrativo de clientes sin ubicaciones', async () => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const clientes = await request(app)
+      .get('/api/clientes')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`);
+    const ubicaciones = await request(app)
+      .post('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({});
+
+    expectAllowedPastAuthorization(clientes);
+    expect(ubicaciones.status).toBe(403);
+  });
+});
+
 describe('inventario permissions', () => {
+  test.each([
+    ['GET', 'get', '/api/inventario/ubicaciones', PERMISSIONS.INVENTARIO_UBICACIONES_VER],
+    ['POST', 'post', '/api/inventario/ubicaciones', PERMISSIONS.INVENTARIO_UBICACIONES_CREAR],
+    ['PUT', 'put', '/api/inventario/ubicaciones/10', PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR],
+    [
+      'DELETE',
+      'delete',
+      '/api/inventario/ubicaciones/10',
+      PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR,
+    ],
+  ])(
+    '%s ubicaciones acepta permiso administrativo específico',
+    async (_label, method, url, permission) => {
+      rolePermissions.custom_ubicaciones = [permission];
+      mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+      const res = await request(app)
+        [method](url)
+        .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+        .send({});
+
+      expectAllowedPastAuthorization(res);
+    }
+  );
+
+  test.each([
+    ['artículos ver', PERMISSIONS.INVENTARIO_ARTICULOS_VER],
+    ['artículos crear', PERMISSIONS.INVENTARIO_ARTICULOS_CREAR],
+    ['movimientos ver', PERMISSIONS.INVENTARIO_MOVIMIENTOS_VER],
+    ['movimientos crear', PERMISSIONS.INVENTARIO_MOVIMIENTOS_CREAR],
+  ])('GET ubicaciones conserva catálogo operativo para %s', async (_label, permission) => {
+    rolePermissions.custom_ubicaciones = [permission];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const res = await request(app)
+      .get('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expectAllowedPastAuthorization(res);
+  });
+
+  test('GET ubicaciones agrupadas acepta permiso mínimo de ubicaciones sin clientes.ver', async () => {
+    rolePermissions.custom_ubicaciones = [PERMISSIONS.INVENTARIO_UBICACIONES_VER];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const res = await request(app)
+      .get('/api/inventario/ubicaciones/agrupadas')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expectAllowedPastAuthorization(res);
+  });
+
+  test.each([
+    ['POST', 'post', '/api/inventario/ubicaciones', PERMISSIONS.INVENTARIO_ARTICULOS_CREAR],
+    ['PUT', 'put', '/api/inventario/ubicaciones/10', PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR],
+    [
+      'DELETE',
+      'delete',
+      '/api/inventario/ubicaciones/10',
+      PERMISSIONS.INVENTARIO_ARTICULOS_ELIMINAR,
+    ],
+  ])(
+    '%s ubicaciones rechaza permiso administrativo legacy de artículos',
+    async (_label, method, url, permission) => {
+      rolePermissions.custom_ubicaciones = [permission];
+      mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+      const res = await request(app)
+        [method](url)
+        .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+        .send({});
+
+      expect(res.status).toBe(403);
+      expect(res.body.code).toBe('INSUFFICIENT_PERMISSIONS');
+    }
+  );
+
+  test.each([
+    ['GET', 'get', '/api/inventario/ubicaciones'],
+    ['POST', 'post', '/api/inventario/ubicaciones'],
+    ['PUT', 'put', '/api/inventario/ubicaciones/10'],
+    ['DELETE', 'delete', '/api/inventario/ubicaciones/10'],
+  ])('%s ubicaciones rechaza usuario sin permiso nuevo ni antiguo', async (_label, method, url) => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const res = await request(app)
+      [method](url)
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test('GET ubicaciones sin usuario autenticado devuelve 401', async () => {
+    const res = await request(app).get('/api/inventario/ubicaciones');
+
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe('AUTHENTICATION_REQUIRED');
+  });
+
+  test('GET ubicaciones rechaza permiso desconocido aunque coincida el prefijo', async () => {
+    rolePermissions.custom_ubicaciones = ['inventario.ubicaciones'];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const res = await request(app)
+      .get('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('INSUFFICIENT_PERMISSIONS');
+  });
+
+  test('secretario conserva acceso de lectura a ubicaciones', async () => {
+    mockCurrentUser(userFromDb('secretario'));
+
+    const res = await request(app)
+      .get('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('secretario')}`);
+
+    expectAllowedPastAuthorization(res);
+  });
+
+  test('supervisor conserva ver, crear y editar ubicaciones sin eliminar', async () => {
+    mockCurrentUser(userFromDb('supervisor'));
+
+    const list = await request(app)
+      .get('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('supervisor')}`);
+    const create = await request(app)
+      .post('/api/inventario/ubicaciones')
+      .set('Authorization', `Bearer ${tokenFor('supervisor')}`)
+      .send({});
+    const update = await request(app)
+      .put('/api/inventario/ubicaciones/10')
+      .set('Authorization', `Bearer ${tokenFor('supervisor')}`)
+      .send({});
+    const remove = await request(app)
+      .delete('/api/inventario/ubicaciones/10')
+      .set('Authorization', `Bearer ${tokenFor('supervisor')}`);
+
+    expectAllowedPastAuthorization(list);
+    expectAllowedPastAuthorization(create);
+    expectAllowedPastAuthorization(update);
+    expect(remove.status).toBe(403);
+  });
+
+  test('permiso administrativo de ubicaciones no concede crear artículos ni movimientos', async () => {
+    rolePermissions.custom_ubicaciones = [PERMISSIONS.INVENTARIO_UBICACIONES_CREAR];
+    mockCurrentUser(userFromDb('custom_ubicaciones'));
+
+    const articulo = await request(app)
+      .post('/api/inventario/articulos')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+      .send({});
+    const movimiento = await request(app)
+      .post('/api/inventario/movimientos')
+      .set('Authorization', `Bearer ${tokenFor('custom_ubicaciones')}`)
+      .send({});
+
+    expect(articulo.status).toBe(403);
+    expect(articulo.body.code).toBe('INSUFFICIENT_PERMISSIONS');
+    expect(movimiento.status).toBe(403);
+    expect(movimiento.body.code).toBe('INSUFFICIENT_PERMISSIONS');
+  });
+
   test('secretario puede ver y reportar artículos', async () => {
     mockCurrentUser(userFromDb('secretario'));
 
@@ -482,5 +713,152 @@ describe('usuarios permissions', () => {
       .set('Authorization', `Bearer ${tokenFor(role)}`);
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe('guardia no tiene alcance sobre Cuentas ni Inventario', () => {
+  beforeEach(() => {
+    mockCurrentUser(userFromDb('guardia'));
+  });
+
+  test.each([
+    ['GET', 'get', '/api/cuentas/clientes'],
+    ['GET', 'get', '/api/cuentas/facturas/catalogo'],
+    ['GET', 'get', '/api/cuentas/pagos'],
+    ['GET', 'get', '/api/cuentas/reporte'],
+    ['POST', 'post', '/api/cuentas/clientes'],
+  ])('%s %s -> 403 para guardia (Cuentas)', async (_label, method, url) => {
+    const res = await request(app)
+      [method](url)
+      .set('Authorization', `Bearer ${tokenFor('guardia')}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test.each([
+    ['GET', 'get', '/api/inventario/articulos'],
+    ['GET', 'get', '/api/inventario/ubicaciones'],
+    ['GET', 'get', '/api/inventario/movimientos/10/pdf'],
+    ['POST', 'post', '/api/inventario/articulos'],
+    ['POST', 'post', '/api/inventario/movimientos'],
+  ])('%s %s -> 403 para guardia (Inventario)', async (_label, method, url) => {
+    const res = await request(app)
+      [method](url)
+      .set('Authorization', `Bearer ${tokenFor('guardia')}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('roles administrativos tienen alcance global (multi-cliente/multi-ubicación) en Cuentas e Inventario', () => {
+  test.each(['secretario', 'contador', 'gerente'])(
+    'GET /api/cuentas/clientes no filtra por usuario/ubicación para %s',
+    async (role) => {
+      mockCurrentUser(userFromDb(role));
+      db.query.mockImplementation(async (sql, params) => {
+        const query = String(sql);
+        if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+          return { rows: [userFromDb(role)], rowCount: 1 };
+        }
+        if (query.includes('FROM clientes') && query.includes('WHERE estado')) {
+          expect(params).not.toContain(50);
+          return {
+            rows: [
+              { id: 1, nombre: 'Cliente A', identificacion: 'A1', estado: 'activo' },
+              { id: 2, nombre: 'Cliente B', identificacion: 'B1', estado: 'activo' },
+            ],
+            rowCount: 2,
+          };
+        }
+        return { rows: [], rowCount: 0 };
+      });
+
+      const res = await request(app)
+        .get('/api/cuentas/clientes')
+        .set('Authorization', `Bearer ${tokenFor(role)}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.map((c) => c.id)).toEqual([1, 2]);
+    }
+  );
+
+  test.each(['secretario', 'supervisor', 'gerente'])(
+    'GET /api/inventario/articulos permite ver artículos de múltiples ubicaciones sin filtro obligatorio para %s',
+    async (role) => {
+      mockCurrentUser(userFromDb(role));
+
+      const res = await request(app)
+        .get('/api/inventario/articulos')
+        .set('Authorization', `Bearer ${tokenFor(role)}`);
+
+      expectAllowedPastAuthorization(res);
+      expect(res.status).not.toBe(400);
+    }
+  );
+});
+
+describe('límites de tamaño en payloads batch (Cuentas/Inventario)', () => {
+  test('POST /api/cuentas/abonos/batch rechaza más de 50 abonos', async () => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const abonos = Array.from({ length: 51 }, (_, index) => ({
+      num_factura: index + 1,
+      valor_abono: 10,
+    }));
+    const res = await request(app)
+      .post('/api/cuentas/abonos/batch')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({ cliente_id: 1, fecha: '2024-01-01', abonos });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('POST /api/cuentas/abonos/batch acepta 50 abonos (no rechaza por tamaño)', async () => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const abonos = Array.from({ length: 50 }, (_, index) => ({
+      num_factura: index + 1,
+      valor_abono: 10,
+    }));
+    const res = await request(app)
+      .post('/api/cuentas/abonos/batch')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({ cliente_id: 1, fecha: '2024-01-01', abonos });
+
+    expect(res.status).not.toBe(400);
+  });
+
+  test('POST /api/inventario/movimientos rechaza más de 50 artículos', async () => {
+    mockCurrentUser(userFromDb('secretario'));
+
+    const items = Array.from({ length: 51 }, (_, index) => ({
+      articulo_id: index + 1,
+      cantidad: 1,
+    }));
+    const res = await request(app)
+      .post('/api/inventario/movimientos')
+      .set('Authorization', `Bearer ${tokenFor('secretario')}`)
+      .send({ ubicacion_destino_id: 1, items });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('POST /api/inventario/movimientos acepta 50 artículos (no rechaza por tamaño)', async () => {
+    mockCurrentUser(userFromDb('secretario'));
+
+    const items = Array.from({ length: 50 }, (_, index) => ({
+      articulo_id: index + 1,
+      cantidad: 1,
+    }));
+    const res = await request(app)
+      .post('/api/inventario/movimientos')
+      .set('Authorization', `Bearer ${tokenFor('secretario')}`)
+      .send({ ubicacion_destino_id: 1, items });
+
+    expect(res.status).not.toBe(400);
   });
 });

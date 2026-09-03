@@ -25,7 +25,7 @@ const ArticulosTab = ({
   sortedArticulos,
   ubicaciones,
 }) => (
-  <div className="tab-content">
+  <div className="tab-content tabular-workspace">
     <ArticulosFilters
       filters={filters}
       ubicaciones={ubicaciones}

@@ -12,13 +12,11 @@
  *
  *  FACTURAS
  *  - createFactura(data)                : POST /cuentas/facturas
- *  - deleteFactura(num)                 : DEL  /cuentas/facturas/:num
  *  - cancelFactura(num)                 : PATCH /cuentas/facturas/:num/cancelar
  *
  *  PAGOS / ABONOS
  *  - getPagos()                         : GET  /cuentas/pagos
  *  - exportPagosExcel()                 : GET  /cuentas/pagos/excel → descarga .xlsx
- *  - deletePago(id)                     : DEL  /cuentas/pagos/:id
  *  - getAbonosByFactura(num)            : GET  /cuentas/abonos/:num
  *  - createBatchAbono(data)             : POST /cuentas/abonos/batch
  *                                         Crea un pago con detalle (pagos) y
@@ -30,10 +28,11 @@
  */
 import api from './api';
 import {
-  extractError,
+  buildServiceFailure,
   getFilenameFromDisposition,
   saveBlobWithPickerOrDownload,
 } from './serviceUtils';
+import { normalizePagination } from '../utils/pagination';
 
 const cuentasService = {
   // ============================================
@@ -45,7 +44,7 @@ const cuentasService = {
       const response = await api.get('/cuentas/clientes');
       return { success: response.data.success, data: response.data.data || [] };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al obtener clientes') };
+      return buildServiceFailure(error, 'Error al obtener clientes');
     }
   },
 
@@ -61,7 +60,7 @@ const cuentasService = {
         accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al exportar clientes') };
+      return buildServiceFailure(error, 'Error al exportar clientes');
     }
   },
 
@@ -74,7 +73,7 @@ const cuentasService = {
         data: response.data.data,
       };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al crear cliente') };
+      return buildServiceFailure(error, 'Error al crear cliente');
     }
   },
 
@@ -83,7 +82,7 @@ const cuentasService = {
       const response = await api.delete(`/cuentas/clientes/${id}`);
       return { success: response.data.success, message: response.data.message };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al eliminar cliente') };
+      return buildServiceFailure(error, 'Error al eliminar cliente');
     }
   },
 
@@ -100,16 +99,7 @@ const cuentasService = {
         data: response.data.data,
       };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al crear factura') };
-    }
-  },
-
-  deleteFactura: async (num_factura) => {
-    try {
-      const response = await api.delete(`/cuentas/facturas/${num_factura}`);
-      return { success: response.data.success, message: response.data.message };
-    } catch (error) {
-      return { success: false, message: extractError(error, 'Error al eliminar factura') };
+      return buildServiceFailure(error, 'Error al crear factura');
     }
   },
 
@@ -122,7 +112,7 @@ const cuentasService = {
         data: response.data.data,
       };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al cancelar factura') };
+      return buildServiceFailure(error, 'Error al cancelar factura');
     }
   },
 
@@ -131,7 +121,7 @@ const cuentasService = {
       const response = await api.get('/cuentas/facturas/next-number');
       return { success: response.data.success, data: response.data.data };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al obtener siguiente número') };
+      return buildServiceFailure(error, 'Error al obtener siguiente número');
     }
   },
 
@@ -144,16 +134,7 @@ const cuentasService = {
         data: response.data.data,
       };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al actualizar factura') };
-    }
-  },
-
-  deleteAbono: async (id) => {
-    try {
-      const response = await api.delete(`/cuentas/abonos/${id}`);
-      return { success: response.data.success, message: response.data.message };
-    } catch (error) {
-      return { success: false, message: extractError(error, 'Error al eliminar abono') };
+      return buildServiceFailure(error, 'Error al actualizar factura');
     }
   },
 
@@ -161,12 +142,17 @@ const cuentasService = {
   // ABONOS
   // ============================================
 
-  getPagos: async () => {
+  getPagos: async (params = {}) => {
     try {
-      const response = await api.get('/cuentas/pagos');
-      return { success: response.data.success, data: response.data.data || [] };
+      const response = await api.get('/cuentas/pagos', { params });
+      const data = response.data.data || [];
+      return {
+        success: response.data.success,
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
+      };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al obtener pagos') };
+      return buildServiceFailure(error, 'Error al obtener pagos');
     }
   },
 
@@ -182,16 +168,7 @@ const cuentasService = {
         accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al exportar pagos') };
-    }
-  },
-
-  deletePago: async (id) => {
-    try {
-      const response = await api.delete(`/cuentas/pagos/${id}`);
-      return { success: response.data.success, message: response.data.message };
-    } catch (error) {
-      return { success: false, message: extractError(error, 'Error al eliminar pago') };
+      return buildServiceFailure(error, 'Error al exportar pagos');
     }
   },
 
@@ -200,7 +177,7 @@ const cuentasService = {
       const response = await api.get(`/cuentas/abonos/${num_factura}`);
       return { success: response.data.success, data: response.data.data || [] };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al obtener abonos') };
+      return buildServiceFailure(error, 'Error al obtener abonos');
     }
   },
 
@@ -209,7 +186,7 @@ const cuentasService = {
       const response = await api.post('/cuentas/abonos/batch', data);
       return { success: response.data.success, message: response.data.message };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al registrar pagos') };
+      return buildServiceFailure(error, 'Error al registrar pagos');
     }
   },
 
@@ -220,9 +197,23 @@ const cuentasService = {
   getReporte: async (params = {}) => {
     try {
       const response = await api.get('/cuentas/reporte', { params });
+      const data = response.data.data || [];
+      return {
+        success: response.data.success,
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
+      };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener reporte');
+    }
+  },
+
+  getFacturasCatalogo: async () => {
+    try {
+      const response = await api.get('/cuentas/facturas/catalogo');
       return { success: response.data.success, data: response.data.data || [] };
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al obtener reporte') };
+      return buildServiceFailure(error, 'Error al obtener catálogo de facturas');
     }
   },
 
@@ -238,7 +229,7 @@ const cuentasService = {
         accept: { 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'] },
       });
     } catch (error) {
-      return { success: false, message: extractError(error, 'Error al exportar Excel') };
+      return buildServiceFailure(error, 'Error al exportar Excel');
     }
   },
 };

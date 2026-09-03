@@ -36,16 +36,12 @@ const createAbono = ({ pagoId, numFactura, fechaAbono, valorAbono }, executor = 
     [pagoId, numFactura, fechaAbono, valorAbono]
   );
 
-const deleteAbonoById = (id, executor = db) =>
-  executor.query('DELETE FROM abonos WHERE id = $1', [id]);
-
 const countAbonosByPagoId = (pagoId, executor = db) =>
   executor.query('SELECT COUNT(*) AS cnt FROM abonos WHERE pago_id = $1', [pagoId]);
 
 module.exports = {
   countAbonosByPagoId,
   createAbono,
-  deleteAbonoById,
   findAbonosByFactura,
   findAbonoForDeletion,
 };

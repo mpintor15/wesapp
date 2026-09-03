@@ -8,15 +8,12 @@ import {
   getInitialPagosReportFilters,
 } from '../utils/cuentasReportParams';
 
-const useCuentasReports = ({ showToast }) => {
+const useCuentasReports = ({ canExportReportes = true, showToast }) => {
   const { isSubmitting: isExportingFacturas, withSubmit: withFacturasExportSubmit } =
-    useSubmitState();
-  const { isSubmitting: isExportingClientes, withSubmit: withClientesExportSubmit } =
     useSubmitState();
   const { isSubmitting: isExportingPagos, withSubmit: withPagosExportSubmit } = useSubmitState();
 
   const [showFacturasReportModal, setShowFacturasReportModal] = useState(false);
-  const [showClientesReportModal, setShowClientesReportModal] = useState(false);
   const [showPagosReportModal, setShowPagosReportModal] = useState(false);
   const [facturasFilters, setFacturasFilters] = useState(getInitialFacturasReportFilters());
   const [pagosFilters, setPagosFilters] = useState(getInitialPagosReportFilters());
@@ -47,6 +44,8 @@ const useCuentasReports = ({ showToast }) => {
   }, []);
 
   const exportFacturas = withFacturasExportSubmit(async () => {
+    if (!canExportReportes) return;
+
     const result = await cuentasService.exportExcel(buildFacturasReportParams(facturasFilters));
     if (result.success) {
       showToast('Reporte exportado exitosamente', 'success');
@@ -55,19 +54,9 @@ const useCuentasReports = ({ showToast }) => {
     }
   });
 
-  const exportClientes = withClientesExportSubmit(async () => {
-    const result = await cuentasService.exportClientesExcel();
-    if (result.success) {
-      setShowClientesReportModal(false);
-      showToast('Reporte de clientes exportado exitosamente', 'success');
-      return;
-    }
-    if (!result.cancelled) {
-      showToast(result.message || 'Error al exportar clientes', 'error');
-    }
-  });
-
   const exportPagos = withPagosExportSubmit(async () => {
+    if (!canExportReportes) return;
+
     const result = await cuentasService.exportPagosExcel(buildPagosReportParams(pagosFilters));
     if (result.success) {
       showToast('Reporte de pagos exportado exitosamente', 'success');
@@ -84,7 +73,10 @@ const useCuentasReports = ({ showToast }) => {
       isOpen: showFacturasReportModal,
       filters: facturasFilters,
       isExporting: isExportingFacturas,
-      open: () => setShowFacturasReportModal(true),
+      open: () => {
+        if (!canExportReportes) return;
+        setShowFacturasReportModal(true);
+      },
       close: () => setShowFacturasReportModal(false),
       handleFilterChange: handleFacturasFilterChange,
       toggleSoloDeudores: () => toggleFacturasFilter('soloDeudores'),
@@ -92,18 +84,14 @@ const useCuentasReports = ({ showToast }) => {
       clear: clearFacturasFilters,
       export: exportFacturas,
     },
-    clientes: {
-      isOpen: showClientesReportModal,
-      isExporting: isExportingClientes,
-      open: () => setShowClientesReportModal(true),
-      close: () => setShowClientesReportModal(false),
-      export: exportClientes,
-    },
     pagos: {
       isOpen: showPagosReportModal,
       filters: pagosFilters,
       isExporting: isExportingPagos,
-      open: () => setShowPagosReportModal(true),
+      open: () => {
+        if (!canExportReportes) return;
+        setShowPagosReportModal(true);
+      },
       close: () => setShowPagosReportModal(false),
       handleFilterChange: handlePagosFilterChange,
       clear: clearPagosFilters,

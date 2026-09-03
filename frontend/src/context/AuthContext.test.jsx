@@ -8,6 +8,7 @@ import {
   getInventoryPermissions,
   INVENTORY_ACTIONS,
 } from '../pages/Inventario/utils/inventarioPermissions';
+import { MODULE_ACCESS_PERMISSIONS } from '../auth/modulePermissions';
 
 jest.mock('../services/authService', () => ({
   __esModule: true,
@@ -30,7 +31,7 @@ const renderAuth = () => {
   const root = createRoot(container);
 
   const Probe = () => {
-    const { user, isAuthenticated } = useAuth();
+    const { user, isAuthenticated, hasPermission } = useAuth();
     const permissions = getInventoryPermissions(user);
     return (
       <div>
@@ -49,6 +50,9 @@ const renderAuth = () => {
           {String(permissions.can(INVENTORY_ACTIONS.MOVIMIENTOS_PDF_DOWNLOAD))}
         </span>
         <span data-testid="can-access">{String(permissions.canAccessInventory)}</span>
+        <span data-testid="can-configuracion">
+          {String(hasPermission(MODULE_ACCESS_PERMISSIONS.configuracion))}
+        </span>
       </div>
     );
   };
@@ -207,6 +211,7 @@ describe('AuthProvider permission resync', () => {
     await flushPromises();
 
     expect(view.get('role')).toBe('secretario');
+    expect(view.get('can-configuracion')).toBe('true');
     expect(view.get('download-pdf')).toBe('true');
     expect(view.get('void-movement')).toBe('false');
     expect(view.get('delete-article')).toBe('false');
@@ -217,7 +222,26 @@ describe('AuthProvider permission resync', () => {
 
     expect(view.get('role')).toBe('contador');
     expect(view.get('can-access')).toBe('false');
+    expect(view.get('can-configuracion')).toBe('true');
     expect(view.get('download-pdf')).toBe('false');
+
+    view.unmount();
+  });
+
+  test('permiso explícito de clientes abre configuración sin inventario', async () => {
+    const clienteReader = {
+      id: 2,
+      usuario: 'cliente-reader',
+      tipo_usuario: 'custom',
+      permisos: ['clientes.ver'],
+    };
+    setStoredSession(clienteReader);
+    authService.verifyToken.mockResolvedValueOnce({ success: true, user: clienteReader });
+    const view = renderAuth();
+    await flushPromises();
+
+    expect(view.get('can-configuracion')).toBe('true');
+    expect(view.get('can-access')).toBe('false');
 
     view.unmount();
   });

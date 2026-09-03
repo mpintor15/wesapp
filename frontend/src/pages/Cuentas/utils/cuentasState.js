@@ -25,5 +25,5 @@ export const DEFAULT_PAGO_FILTERS = {
   agruparCliente: true,
 };
 
-export const ROWS_PER_PAGE = 50;
-export const PAGOS_ROWS_PER_PAGE = 50;
+export const ROWS_PER_PAGE = 25;
+export const PAGOS_ROWS_PER_PAGE = 25;

@@ -79,6 +79,12 @@ router.get(
   cuentasController.getNextNumFactura
 );
 
+router.get(
+  '/facturas/catalogo',
+  requirePermission(PERMISSIONS.CUENTAS_REPORTES_GENERAR),
+  cuentasController.getFacturasCatalogo
+);
+
 /**
  * @route   POST /api/cuentas/facturas
  * @desc    Crear una factura
@@ -105,7 +111,7 @@ router.patch(
 
 /**
  * @route   DELETE /api/cuentas/facturas/:num_factura
- * @desc    Eliminar una factura (cascada a abonos)
+ * @desc    Eliminación física de factura deshabilitada
  * @access  Private (gerente)
  */
 router.delete(
@@ -150,13 +156,24 @@ router.get(
 
 /**
  * @route   DELETE /api/cuentas/pagos/:id
- * @desc    Eliminar un pago completo con sus abonos
+ * @desc    Eliminación física de pago deshabilitada
  * @access  Private (gerente)
  */
 router.delete(
   '/pagos/:id',
   requirePermission(PERMISSIONS.CUENTAS_PAGOS_ELIMINAR),
   cuentasController.deletePago
+);
+
+/**
+ * @route   PATCH /api/cuentas/pagos/:id/anular
+ * @desc    Anular pago cuando exista soporte contable seguro
+ * @access  Private (gerente)
+ */
+router.patch(
+  '/pagos/:id/anular',
+  requirePermission(PERMISSIONS.CUENTAS_PAGOS_ANULAR),
+  cuentasController.voidPago
 );
 
 /**

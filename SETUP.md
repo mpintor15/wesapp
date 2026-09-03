@@ -7,9 +7,9 @@ Esta guía te ayudará a configurar WESApp en tu máquina para desarrollo.
 Verifica que tengas instalado:
 
 ```bash
-# Node.js (≥18.0.0)
+# Node.js (≥20.0.0)
 node --version
-# Output: v18.x.x or higher
+# Output: v20.x.x or higher
 
 # npm (≥9.0.0)
 npm --version

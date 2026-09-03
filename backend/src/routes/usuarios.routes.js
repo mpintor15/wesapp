@@ -11,6 +11,16 @@ router.use(verifyToken);
 
 // Listado
 router.get('/', requirePermission(PERMISSIONS.USUARIOS_VER), usuariosController.getUsuarios);
+router.get(
+  '/colaboradores-elegibles',
+  requirePermission(PERMISSIONS.USUARIOS_VER),
+  usuariosController.getColaboradoresElegibles
+);
+router.get(
+  '/ubicaciones-asignables',
+  requirePermission(PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR),
+  usuariosController.getUbicacionesAsignables
+);
 
 // Crear usuario
 router.post(

@@ -114,4 +114,14 @@ describe('cuentasFacturaForm', () => {
     expect(filterClientesBySearch(clientes, 'tor')).toEqual([clientes[0]]);
     expect(filterClientesBySearch(clientes, '0202')).toEqual([clientes[1]]);
   });
+
+  test('omite clientes inactivos en buscadores operativos', () => {
+    const clientes = [
+      { nombre: 'Cliente Activo', identificacion: '0101', estado: 'activo' },
+      { nombre: 'Cliente Inactivo', identificacion: '0202', estado: 'inactivo' },
+    ];
+
+    expect(filterClientesBySearch(clientes, 'cliente')).toEqual([clientes[0]]);
+    expect(filterClientesBySearch(clientes, '0202')).toEqual([]);
+  });
 });

@@ -25,6 +25,8 @@ const InventoryReasonModal = ({
       variant="alertdialog"
       ariaDescribedby={descriptionId}
       closeOnBackdrop={!isSubmitting}
+      closeOnEscape={!isSubmitting}
+      closeButtonDisabled={isSubmitting}
       className="inventory-reason-modal"
     >
       <AppModal.Header />

@@ -54,10 +54,24 @@ test('permite únicamente constantes internas conocidas sin puerto ni ruta', () 
   const axiosSourceMap =
     "const origin = (hasBrowserEnv && window.location.href) || 'http://localhost';";
   const routerSourceMap = 'return new URL(createHref(to), \\"http://localhost\\");';
+  const routerBundle =
+    'function M(e,t){let a="http://localhost";e&&(a="null"!==e.location.origin?e.location.origin:e.location.href),T(a,"No window.location.(origin|href) available to create URL");return new URL(t,a)}';
+  // Forma minificada real de react-router-dom@7.18.3 (createHref/createURL base URL),
+  // distinta a la de 7.18.1 que ya cubrían los casos de arriba.
+  const routerBundle7183 =
+    'var je=new URL("http://localhost");function Ne(e){if(e.createURL)return e.createURL("/");try{return new URL(e.createHref("/"),je)}catch(t){return je}}';
 
   assert.deepEqual(findLocalEndpoints(axiosBundle), []);
   assert.deepEqual(findLocalEndpoints(axiosSourceMap), []);
   assert.deepEqual(findLocalEndpoints(routerSourceMap), []);
+  assert.deepEqual(findLocalEndpoints(routerBundle), []);
+  assert.deepEqual(findLocalEndpoints(routerBundle7183), []);
+});
+
+test('rechaza new URL("http://localhost") cuando NO está junto a createHref (no es el caso conocido de React Router)', () => {
+  const source = 'var je=new URL("http://localhost");fetch(je.href+"/debug");';
+
+  assert.equal(findLocalEndpoints(source).length, 1);
 });
 
 test('rechaza localhost genérico fuera de los contextos documentados', () => {

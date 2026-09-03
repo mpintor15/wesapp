@@ -1,16 +1,12 @@
 import AnulacionDetailModal from './AnulacionDetailModal';
 import BatchPaymentModal from './BatchPaymentModal';
 import CancelFacturaModal from './CancelFacturaModal';
-import ClientesReportModal from './ClientesReportModal';
 import CreateFacturaModal from './CreateFacturaModal';
-import CuentasDeleteDialogs from './CuentasDeleteDialogs';
 import EditFacturaModal from './EditFacturaModal';
 import FacturasReportModal from './FacturasReportModal';
-import PagoDetailModal from './PagoDetailModal';
 import PagosReportModal from './PagosReportModal';
 
 const CuentasModals = ({
-  clientesCount,
   facturaForm,
   facturaEditing,
   batchPayment,
@@ -21,20 +17,6 @@ const CuentasModals = ({
   canEditFactura,
 }) => (
   <>
-    <PagoDetailModal
-      pago={administrativeActions.selectedPago}
-      onClose={administrativeActions.closePagoDetailModal}
-    />
-
-    <CuentasDeleteDialogs
-      pagoToDelete={administrativeActions.pagoToDelete}
-      facturaToDelete={administrativeActions.facturaToDelete}
-      onConfirmPago={administrativeActions.confirmDeletePago}
-      onCancelPago={administrativeActions.cancelDeletePago}
-      onConfirmFactura={administrativeActions.confirmDeleteFactura}
-      onCancelFactura={administrativeActions.cancelDeleteFactura}
-    />
-
     <CreateFacturaModal
       isOpen={facturaForm.isOpen}
       formData={facturaForm.formData}
@@ -114,14 +96,6 @@ const CuentasModals = ({
       onFormChange={facturaEditing.handleFormChange}
       onSubmit={facturaEditing.handleSubmit}
       onClose={facturaEditing.close}
-    />
-
-    <ClientesReportModal
-      isOpen={reports.clientes.isOpen}
-      clientesCount={clientesCount}
-      isExporting={reports.clientes.isExporting}
-      onExport={reports.clientes.export}
-      onClose={reports.clientes.close}
     />
 
     <PagosReportModal
