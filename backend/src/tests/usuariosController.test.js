@@ -111,6 +111,28 @@ describe('usuariosController.getUsuarios', () => {
       }),
     });
   });
+
+  test('filtra por colaborador_id — usado por Personal para resolver el usuario de un colaborador', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 9, usuario: 'bruiz', colaborador_id: 2, total_count: 1 }],
+    });
+    const res = mockRes();
+
+    await getUsuarios(mockReq({ query: { colaborador_id: '2' } }), res);
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('u.colaborador_id = $1');
+    expect(params).toEqual([2, 25, 0]);
+  });
+
+  test('rechaza colaborador_id inválido sin ejecutar query', async () => {
+    const res = mockRes();
+
+    await getUsuarios(mockReq({ query: { colaborador_id: 'abc' } }), res);
+
+    expectStatus(res, 400);
+    expect(db.query).not.toHaveBeenCalled();
+  });
 });
 
 describe('usuariosController.createUsuario', () => {

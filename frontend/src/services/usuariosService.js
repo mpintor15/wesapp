@@ -34,6 +34,16 @@ const usuariosService = {
     }
   },
 
+  getUsuarioByColaborador: async (colaboradorId) => {
+    try {
+      const response = await api.get('/usuarios', { params: { colaborador_id: colaboradorId } });
+      const usuario = (response.data.data || [])[0] || null;
+      return { success: response.data.success, data: usuario };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener el usuario del colaborador');
+    }
+  },
+
   getColaboradoresElegibles: async (usuarioId = null) => {
     try {
       const params = usuarioId ? { usuario_id: usuarioId } : {};

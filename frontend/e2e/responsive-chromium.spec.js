@@ -12,7 +12,8 @@ const routes = [
   { name: 'cuentas', path: '/cuentas' },
   { name: 'inventario', path: '/inventario' },
   { name: 'personal', path: '/personal' },
-  { name: 'usuarios', path: '/usuarios' },
+  { name: 'configuracion', path: '/configuracion' },
+  { name: 'bitacoras', path: '/bitacoras' },
 ];
 
 for (const viewport of responsiveViewports) {

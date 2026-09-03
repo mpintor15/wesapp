@@ -71,8 +71,8 @@ describe('personalController.getColaboradores', () => {
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: [
-        { id: 1, nombres_completos: 'Ana Torres' },
-        { id: 2, nombres_completos: 'Beto Ruiz' },
+        { id: 1, nombres_completos: 'Ana Torres', acceso: { tiene_usuario: false } },
+        { id: 2, nombres_completos: 'Beto Ruiz', acceso: { tiene_usuario: false } },
       ],
       pagination: {
         page: 2,

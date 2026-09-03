@@ -24,19 +24,30 @@ const modalCases = [
     open: async (page) => clickFirstVisible(page, [/generar reporte/i, /exportar/i, /reporte/i]),
   },
   {
-    name: 'usuarios-crear-usuario',
-    path: '/usuarios',
-    open: async (page) => clickFirstVisible(page, [/crear usuario/i, /nuevo usuario/i, /crear/i]),
-  },
-  {
-    name: 'usuarios-editar-usuario',
-    path: '/usuarios',
-    open: async (page) => clickFirstVisible(page, [/editar/i]),
-  },
-  {
-    name: 'usuarios-reenviar-invitacion',
-    path: '/usuarios',
-    open: async (page) => clickFirstVisible(page, [/reenviar invitaci[oó]n/i, /invitaci[oó]n/i]),
+    // La gestión de acceso (crear/editar usuario) ahora vive dentro de
+    // Personal, no en una página /usuarios independiente. Los fixtures de
+    // E2E ya tienen usuario asociado, así que este botón abre el modal de
+    // edición — comparte markup/CSS con el de creación (mismo grid de
+    // formulario, mismos selects), así que cubre la geometría responsive
+    // de ambos.
+    name: 'personal-gestionar-acceso',
+    path: '/personal',
+    open: async (page) => {
+      // El botón vive en una fila de la tabla, que solo existe tras
+      // resolver el fetch de colaboradores — a diferencia de los botones
+      // de cabecera, esperarlo explícitamente evita una carrera con
+      // waitForAppIdle (que no espera datos async).
+      // Desktop: aria-label "Gestionar acceso de X"; mobile card: texto
+      // visible corto "Acceso" (mismo botón, misma acción).
+      const trigger = page.getByRole('button', { name: /(gestionar )?acceso/i }).first();
+      const appeared = await trigger
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!appeared) return false;
+      await trigger.click();
+      return true;
+    },
   },
   {
     name: 'inventario-nuevo-articulo',
@@ -112,6 +123,53 @@ const modalCases = [
     open: async (page) => {
       await clickFirstVisible(page, [/clientes/i]);
       return clickFirstVisible(page, [/reporte clientes/i, /generar reporte/i, /exportar/i]);
+    },
+  },
+  {
+    name: 'configuracion-crear-cliente',
+    path: '/configuracion',
+    open: async (page) => clickFirstVisible(page, [/crear cliente/i]),
+  },
+  {
+    name: 'configuracion-crear-ubicacion',
+    path: '/configuracion',
+    open: async (page) => {
+      // El botón "Crear ubicación" solo se muestra con el tab Ubicaciones
+      // activo, y solo aparece tras el re-render post-cambio de tab —
+      // esperarlo explícitamente evita una carrera con el click.
+      await clickFirstVisible(page, [/ubicaciones/i]);
+      const trigger = page.getByRole('button', { name: /crear ubicaci[oó]n/i }).first();
+      const appeared = await trigger
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!appeared) return false;
+      await trigger.click();
+      return true;
+    },
+  },
+  {
+    name: 'bitacoras-registrar-bitacora',
+    path: '/bitacoras',
+    open: async (page) => clickFirstVisible(page, [/registrar bit[aá]cora/i]),
+  },
+  {
+    name: 'bitacoras-registrar-visita',
+    path: '/bitacoras',
+    open: async (page) => {
+      await clickFirstVisible(page, [/visitas/i]);
+      return clickFirstVisible(page, [/registrar visita/i]);
+    },
+  },
+  // "Generar reporte de Bitácoras/Visitas" dispara la descarga del Excel
+  // directamente (sin modal de filtros, a diferencia de Cuentas/Inventario/
+  // Personal), así que no hay geometría de modal que verificar aquí.
+  {
+    name: 'bitacoras-crear-formulario',
+    path: '/bitacoras',
+    open: async (page) => {
+      await clickFirstVisible(page, [/formularios/i]);
+      return clickFirstVisible(page, [/crear formulario/i]);
     },
   },
 ];

@@ -96,7 +96,7 @@ const getActiveGerentesCount = async () => {
 
 const getUsuarios = async (req, res) => {
   try {
-    const { search, tipo_usuario, activo } = req.query;
+    const { search, tipo_usuario, activo, colaborador_id: colaboradorIdRaw } = req.query;
     const pagination = normalizePaginationQuery(req.query);
     let query = `
       SELECT u.id, u.usuario, u.nombre, u.apellido, u.tipo_usuario, u.primer_login, u.activo,
@@ -124,6 +124,15 @@ const getUsuarios = async (req, res) => {
       }
       params.push(normalizedTipo);
       conditions.push(`u.tipo_usuario = $${params.length}`);
+    }
+
+    if (colaboradorIdRaw !== undefined) {
+      const colaboradorId = parsePositiveInteger(
+        colaboradorIdRaw,
+        'El filtro colaborador_id es inválido'
+      );
+      params.push(colaboradorId);
+      conditions.push(`u.colaborador_id = $${params.length}`);
     }
 
     if (activo === 'pendiente' || activo === 'pending') {

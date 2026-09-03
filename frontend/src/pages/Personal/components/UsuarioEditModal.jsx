@@ -17,6 +17,9 @@ const UsuarioEditModal = ({
   colaboradoresLoading,
   editData,
   isSaving,
+  lockColaborador = false,
+  onReenviarInvitacion,
+  onRevoke,
   ubicaciones,
   ubicacionesError,
   ubicacionesLoading,
@@ -73,6 +76,7 @@ const UsuarioEditModal = ({
             placeholder="Buscar por nombre, apellido o cédula"
             loading={colaboradoresLoading}
             emptyMessage="No hay colaboradores elegibles."
+            disabled={lockColaborador}
           />
           {colaboradoresError ? (
             <span id="e-colaborador-error" className="field-error" role="alert">
@@ -148,6 +152,26 @@ const UsuarioEditModal = ({
         >
           Cancelar
         </button>
+        {onReenviarInvitacion ? (
+          <button
+            className="btn btn-neutral"
+            type="button"
+            onClick={onReenviarInvitacion}
+            disabled={isSaving}
+          >
+            Reenviar invitación
+          </button>
+        ) : null}
+        {onRevoke ? (
+          <button
+            className="btn btn-destructive"
+            type="button"
+            onClick={onRevoke}
+            disabled={isSaving}
+          >
+            Revocar acceso
+          </button>
+        ) : null}
       </AppModal.Footer>
     </form>
   </AppModal>

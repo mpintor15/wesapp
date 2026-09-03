@@ -117,6 +117,8 @@ const waitForProtectedRoute = async (page, routePath, diagnostics = []) => {
         '.dashboard-container',
         '.cuentas-container',
         '.inventario-container',
+        '.bitacoras-container',
+        '.configuracion-container',
         '.page-container',
         '.protected-route-denied',
         '.login-container',
@@ -248,12 +250,24 @@ const captureVisual = async (page, testInfo, name, options = {}) => {
   });
 };
 
+// Algunos tabs (Bitácoras, Configuración) declaran role="tab" explícito en
+// un <button>, lo que sustituye el rol implícito "button" en el árbol de
+// accesibilidad; el resto del app usa botones planos. Probar ambos roles
+// evita duplicar esta lógica en cada caso que necesite clickear un tab.
+// "tab" va primero: es el rol más específico de los dos (solo lo usan un
+// puñado de tablists), así que probarlo antes evita que un candidato de
+// tab choque con un botón de acción no relacionado cuyo aria-label
+// contenga el mismo texto por coincidencia de datos de fixture (p. ej. un
+// cliente llamado "... Sin Ubicaciones" coincidiendo con el tab
+// "Ubicaciones").
 const clickFirstVisible = async (page, candidates) => {
   for (const candidate of candidates) {
-    const locator = page.getByRole('button', { name: candidate }).first();
-    if ((await locator.count()) > 0 && (await locator.isVisible().catch(() => false))) {
-      await locator.click();
-      return true;
+    for (const role of ['tab', 'button']) {
+      const locator = page.getByRole(role, { name: candidate }).first();
+      if ((await locator.count()) > 0 && (await locator.isVisible().catch(() => false))) {
+        await locator.click();
+        return true;
+      }
     }
   }
   return false;

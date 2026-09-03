@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import personalService from '../../services/personalService';
+import usuariosService from '../../services/usuariosService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
@@ -10,6 +11,7 @@ import PaginationControls from '../../components/PaginationControls';
 import TabularWorkspace from '../../components/TabularWorkspace';
 import { can } from '../../auth/authorization';
 import { PERMISSIONS } from '../../auth/permissions';
+import { ROLES } from '../../auth/rolePermissions';
 import { useAuth } from '../../context/AuthContext';
 import PersonalExportModal from './components/PersonalExportModal';
 import PersonalFilters from './components/PersonalFilters';
@@ -17,6 +19,9 @@ import PersonalFormModal from './components/PersonalFormModal';
 import PersonalMobileCards from './components/PersonalMobileCards';
 import PersonalPageHeader from './components/PersonalPageHeader';
 import PersonalTable from './components/PersonalTable';
+import UsuarioCreateModal from './components/UsuarioCreateModal';
+import UsuarioEditModal from './components/UsuarioEditModal';
+import UsuarioInvitationModal from './components/UsuarioInvitationModal';
 import { DEFAULT_PAGINATION, withPaginationParams } from '../../utils/pagination';
 import {
   buildColaboradorPayload,
@@ -31,6 +36,14 @@ import {
   sortColaboradores,
   validateColaboradorForm,
 } from './utils/personalHelpers';
+import {
+  buildUsuarioPayload,
+  buildInvitationMessage,
+  EMPTY_CREATE_USER_FORM,
+  EMPTY_EDIT_USER_FORM,
+  getEditUserFormData,
+  validateCreateForm,
+} from './utils/usuariosHelpers';
 import './Personal.css';
 
 const Personal = () => {
@@ -58,6 +71,27 @@ const Personal = () => {
   const [filtersDraft, setFiltersDraft] = useState(EMPTY_PERSONAL_FILTERS);
   const [tableSort, setTableSort] = useState({ field: 'nombres_completos', direction: 'asc' });
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Gestión de acceso (usuario asociado al colaborador)
+  const [accesoColaborador, setAccesoColaborador] = useState(null);
+  const [showAccesoCreateModal, setShowAccesoCreateModal] = useState(false);
+  const [showAccesoEditModal, setShowAccesoEditModal] = useState(false);
+  const [accesoColaboradores, setAccesoColaboradores] = useState([]);
+  const [accesoColaboradoresLoading, setAccesoColaboradoresLoading] = useState(false);
+  const [accesoColaboradoresError, setAccesoColaboradoresError] = useState('');
+  const [accesoUbicaciones, setAccesoUbicaciones] = useState([]);
+  const [accesoUbicacionesLoading, setAccesoUbicacionesLoading] = useState(false);
+  const [accesoUbicacionesError, setAccesoUbicacionesError] = useState('');
+  const [accesoCreateData, setAccesoCreateData] = useState(EMPTY_CREATE_USER_FORM);
+  const [accesoCreateErrors, setAccesoCreateErrors] = useState({});
+  const [accesoEditData, setAccesoEditData] = useState(EMPTY_EDIT_USER_FORM);
+  const [accesoUsuarioId, setAccesoUsuarioId] = useState(null);
+  const [invitationData, setInvitationData] = useState(null);
+  const [invitationCopied, setInvitationCopied] = useState(false);
+  const [revokeAccesoTarget, setRevokeAccesoTarget] = useState(null);
+  const [isRevokingAcceso, setIsRevokingAcceso] = useState(false);
+  const { isSubmitting: isCreatingAcceso, withSubmit: withCreateAccesoSubmit } = useSubmitState();
+  const { isSubmitting: isSavingAcceso, withSubmit: withSaveAccesoSubmit } = useSubmitState();
 
   const loadColaboradores = useCallback(
     async (params = {}) => {
@@ -150,9 +184,19 @@ const Personal = () => {
       canEdit: can(user, PERMISSIONS.PERSONAL_EDITAR),
       canDelete: can(user, PERMISSIONS.PERSONAL_ELIMINAR),
       canExport: can(user, PERMISSIONS.PERSONAL_REPORTES_EXPORTAR),
+      // Banco, número de cuenta y sueldo son datos sensibles de nómina:
+      // solo gerente y secretario pueden verlos o editarlos (regla de
+      // negocio de la integración Usuarios→Personal). El backend aplica la
+      // misma restricción de forma independiente; esto es solo UX.
+      canViewSensitive: [ROLES.GERENTE, ROLES.SECRETARIO].includes(user?.tipo_usuario),
+      canCreateAcceso: can(user, PERMISSIONS.USUARIOS_CREAR),
+      canEditAcceso: can(user, PERMISSIONS.USUARIOS_EDITAR),
+      canDeleteAcceso: can(user, PERMISSIONS.USUARIOS_ELIMINAR),
+      canManageAssignments: can(user, PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR),
     }),
     [user]
   );
+  const canManageAcceso = permissions.canCreateAcceso || permissions.canEditAcceso;
 
   const resetForm = () => setFormData(EMPTY_COLABORADOR_FORM);
 
@@ -247,6 +291,186 @@ const Personal = () => {
     setShowExportModal(false);
   });
 
+  // ============================================
+  // GESTIÓN DE ACCESO (usuario asociado al colaborador)
+  // ============================================
+
+  const loadAccesoColaboradores = useCallback(async (usuarioId = null) => {
+    setAccesoColaboradoresLoading(true);
+    setAccesoColaboradoresError('');
+    const result = await usuariosService.getColaboradoresElegibles(usuarioId);
+    if (result.success) {
+      setAccesoColaboradores(result.data);
+    } else {
+      setAccesoColaboradores([]);
+      setAccesoColaboradoresError(result.message || 'No se pudieron cargar los colaboradores');
+    }
+    setAccesoColaboradoresLoading(false);
+  }, []);
+
+  const loadAccesoUbicaciones = useCallback(async () => {
+    setAccesoUbicacionesLoading(true);
+    setAccesoUbicacionesError('');
+    const result = await usuariosService.getUbicacionesAsignables();
+    if (result.success) setAccesoUbicaciones(result.data);
+    else {
+      setAccesoUbicaciones([]);
+      setAccesoUbicacionesError(result.message || 'No se pudieron cargar las ubicaciones');
+    }
+    setAccesoUbicacionesLoading(false);
+  }, []);
+
+  const openManageAcceso = async (colaborador) => {
+    if (!canManageAcceso) {
+      showToast('No tienes permisos para gestionar el acceso al sistema', 'error');
+      return;
+    }
+    setAccesoColaborador(colaborador);
+
+    if (!colaborador.acceso?.tiene_usuario) {
+      if (!permissions.canCreateAcceso) {
+        showToast('No tienes permisos para crear accesos', 'error');
+        return;
+      }
+      setAccesoCreateData({
+        ...EMPTY_CREATE_USER_FORM,
+        colaborador_id: String(colaborador.id),
+      });
+      setAccesoCreateErrors({});
+      setShowAccesoCreateModal(true);
+      void loadAccesoColaboradores();
+      if (permissions.canManageAssignments) void loadAccesoUbicaciones();
+      return;
+    }
+
+    if (!permissions.canEditAcceso) {
+      showToast('No tienes permisos para editar el acceso', 'error');
+      return;
+    }
+    const result = await usuariosService.getUsuarioByColaborador(colaborador.id);
+    if (!result.success || !result.data) {
+      showToast(result.message || 'No se pudo cargar el usuario del colaborador', 'error');
+      return;
+    }
+    setAccesoEditData(getEditUserFormData(result.data));
+    setAccesoUsuarioId(result.data.id);
+    setShowAccesoEditModal(true);
+    void loadAccesoColaboradores(result.data.id);
+    if (permissions.canManageAssignments) void loadAccesoUbicaciones();
+  };
+
+  const handleAccesoCreateChange = (field, value) => {
+    setAccesoCreateData((prev) => ({ ...prev, [field]: value }));
+    setAccesoCreateErrors((prev) => ({ ...prev, [field]: '' }));
+  };
+
+  const handleAccesoEditChange = (field, value) => {
+    setAccesoEditData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAccesoCreate = withCreateAccesoSubmit(async (e) => {
+    e.preventDefault();
+    const errors = validateCreateForm(accesoCreateData);
+    if (Object.keys(errors).length > 0) {
+      setAccesoCreateErrors(errors);
+      showToast(Object.values(errors)[0], 'error');
+      return;
+    }
+    const result = await usuariosService.createUsuario(
+      buildUsuarioPayload(accesoCreateData, permissions.canManageAssignments)
+    );
+    if (result.success) {
+      setShowAccesoCreateModal(false);
+      setInvitationData({
+        nombre: result.data.nombre,
+        apellido: result.data.apellido,
+        usuario: result.data.usuario,
+        temp_password: result.data.temp_password,
+      });
+    } else {
+      showToast(result.message, 'error');
+    }
+  });
+
+  const handleAccesoEdit = withSaveAccesoSubmit(async (e) => {
+    e.preventDefault();
+    if (!accesoEditData.colaborador_id || !accesoUsuarioId) return;
+    const result = await usuariosService.updateUsuario(
+      accesoUsuarioId,
+      buildUsuarioPayload(accesoEditData, permissions.canManageAssignments)
+    );
+    if (result.success) {
+      showToast('Acceso actualizado', 'success');
+      setShowAccesoEditModal(false);
+      refreshColaboradores();
+    } else {
+      showToast(result.message, 'error');
+    }
+  });
+
+  const handleRevokeAccesoConfirmed = async () => {
+    if (!revokeAccesoTarget || isRevokingAcceso) return;
+    if (!permissions.canDeleteAcceso) {
+      showToast('No tienes permisos para revocar accesos', 'error');
+      setRevokeAccesoTarget(null);
+      return;
+    }
+    setIsRevokingAcceso(true);
+    try {
+      const result = await usuariosService.deleteUsuario(revokeAccesoTarget.usuarioId);
+      if (result.success) {
+        showToast('Acceso revocado', 'success');
+        setRevokeAccesoTarget(null);
+        setShowAccesoEditModal(false);
+        refreshColaboradores();
+      } else {
+        showToast(getVisibleErrorMessage(result, 'Error al revocar el acceso'), 'error');
+      }
+    } finally {
+      setIsRevokingAcceso(false);
+    }
+  };
+
+  const handleReenviarInvitacionAcceso = async () => {
+    if (!accesoUsuarioId) return;
+    const result = await usuariosService.reenviarInvitacion(accesoUsuarioId);
+    if (result.success) {
+      setShowAccesoEditModal(false);
+      setInvitationData({
+        nombre: accesoEditData.nombre,
+        apellido: accesoEditData.apellido,
+        usuario: result.data.usuario,
+        temp_password: result.data.temp_password,
+      });
+      showToast(result.message || 'Invitación regenerada', 'success');
+    } else {
+      showToast(result.message, 'error');
+    }
+  };
+
+  const handleCopyInvitation = async () => {
+    if (!invitationData) return;
+    const msg = buildInvitationMessage(
+      invitationData.nombre,
+      invitationData.apellido,
+      invitationData.usuario,
+      invitationData.temp_password
+    );
+    try {
+      await navigator.clipboard.writeText(msg);
+      setInvitationCopied(true);
+      setTimeout(() => setInvitationCopied(false), 2500);
+    } catch {
+      showToast('No se pudo copiar. Copia el mensaje manualmente.', 'error');
+    }
+  };
+
+  const closeInvitation = () => {
+    setInvitationData(null);
+    setInvitationCopied(false);
+    refreshColaboradores();
+  };
+
   return (
     <div className="page-container tabular-page">
       <PersonalPageHeader
@@ -296,10 +520,13 @@ const Personal = () => {
             <PersonalTable
               canDelete={permissions.canDelete}
               canEdit={permissions.canEdit}
+              canManageAcceso={canManageAcceso}
+              canViewSensitive={permissions.canViewSensitive}
               colaboradores={sortedColaboradores}
               emptyMessage={emptyMessage}
               onDelete={setConfirmTarget}
               onEdit={openEdit}
+              onManageAcceso={openManageAcceso}
               onSort={handleTableSort}
               paginatedColaboradores={sortedColaboradores}
               tableSort={tableSort}
@@ -308,9 +535,12 @@ const Personal = () => {
               <PersonalMobileCards
                 canDelete={permissions.canDelete}
                 canEdit={permissions.canEdit}
+                canManageAcceso={canManageAcceso}
+                canViewSensitive={permissions.canViewSensitive}
                 colaboradores={sortedColaboradores}
                 onDelete={setConfirmTarget}
                 onEdit={openEdit}
+                onManageAcceso={openManageAcceso}
               />
             )}
           </>
@@ -320,6 +550,7 @@ const Personal = () => {
       {/* Create / Edit modal */}
       {showModal && (
         <PersonalFormModal
+          canViewSensitive={permissions.canViewSensitive}
           editingColaborador={editingColaborador}
           formData={formData}
           formErrors={formErrors}
@@ -329,6 +560,88 @@ const Personal = () => {
           onSubmit={handleSave}
         />
       )}
+
+      {/* Crear acceso */}
+      {showAccesoCreateModal && (
+        <UsuarioCreateModal
+          createErrors={accesoCreateErrors}
+          colaboradores={accesoColaboradores}
+          colaboradoresError={accesoColaboradoresError}
+          colaboradoresLoading={accesoColaboradoresLoading}
+          formData={accesoCreateData}
+          isCreating={isCreatingAcceso}
+          canManageAssignments={permissions.canManageAssignments}
+          lockColaborador
+          ubicaciones={accesoUbicaciones}
+          ubicacionesError={accesoUbicacionesError}
+          ubicacionesLoading={accesoUbicacionesLoading}
+          onCancel={() => setShowAccesoCreateModal(false)}
+          onChange={handleAccesoCreateChange}
+          onSubmit={handleAccesoCreate}
+        />
+      )}
+
+      {/* Editar acceso */}
+      {showAccesoEditModal && accesoColaborador && (
+        <UsuarioEditModal
+          editData={accesoEditData}
+          colaboradores={accesoColaboradores}
+          colaboradoresError={accesoColaboradoresError}
+          colaboradoresLoading={accesoColaboradoresLoading}
+          isSaving={isSavingAcceso}
+          canManageAssignments={permissions.canManageAssignments}
+          lockColaborador
+          ubicaciones={accesoUbicaciones}
+          ubicacionesError={accesoUbicacionesError}
+          ubicacionesLoading={accesoUbicacionesLoading}
+          onCancel={() => setShowAccesoEditModal(false)}
+          onChange={handleAccesoEditChange}
+          onSubmit={handleAccesoEdit}
+          onReenviarInvitacion={
+            permissions.canEditAcceso && accesoColaborador?.acceso?.pendiente
+              ? handleReenviarInvitacionAcceso
+              : undefined
+          }
+          onRevoke={
+            permissions.canDeleteAcceso
+              ? () =>
+                  setRevokeAccesoTarget({
+                    usuarioId: accesoUsuarioId,
+                    nombreCompleto: accesoColaborador.nombres_completos,
+                  })
+              : undefined
+          }
+          selectedUsuario={{ nombre: accesoEditData.nombre, apellido: accesoEditData.apellido }}
+        />
+      )}
+
+      {/* Invitación con contraseña temporal */}
+      {invitationData && (
+        <UsuarioInvitationModal
+          copied={invitationCopied}
+          invitationData={invitationData}
+          onClose={closeInvitation}
+          onCopy={handleCopyInvitation}
+        />
+      )}
+
+      {/* Revocar acceso */}
+      <ConfirmDialog
+        isOpen={!!revokeAccesoTarget}
+        title="Revocar acceso"
+        message={
+          revokeAccesoTarget
+            ? `Se revocará el acceso al sistema de "${revokeAccesoTarget.nombreCompleto}". El colaborador se conserva; solo se elimina su usuario.`
+            : ''
+        }
+        confirmText="Revocar acceso"
+        processingText="Revocando..."
+        cancelText="Cancelar"
+        variant="danger"
+        isSubmitting={isRevokingAcceso}
+        onConfirm={handleRevokeAccesoConfirmed}
+        onCancel={() => setRevokeAccesoTarget(null)}
+      />
 
       {/* Export modal */}
       {showExportModal && (

@@ -16,7 +16,11 @@ const pages = [
   { name: 'inventario-movimientos', path: '/inventario', tab: [/movimientos/i] },
   { name: 'inventario-bajas', path: '/inventario', tab: [/dados de baja|bajas/i] },
   { name: 'personal', path: '/personal' },
-  { name: 'usuarios', path: '/usuarios' },
+  { name: 'configuracion-directorio', path: '/configuracion', tab: [/directorio/i] },
+  { name: 'configuracion-ubicaciones', path: '/configuracion', tab: [/ubicaciones/i] },
+  { name: 'bitacoras-registro', path: '/bitacoras', tab: [/registro/i] },
+  { name: 'bitacoras-visitas', path: '/bitacoras', tab: [/visitas/i] },
+  { name: 'bitacoras-formularios', path: '/bitacoras', tab: [/formularios/i] },
 ];
 
 for (const viewport of visualViewports) {

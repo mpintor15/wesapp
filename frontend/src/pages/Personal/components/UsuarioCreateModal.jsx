@@ -17,6 +17,7 @@ const UsuarioCreateModal = ({
   createErrors,
   formData,
   isCreating,
+  lockColaborador = false,
   ubicaciones,
   ubicacionesError,
   ubicacionesLoading,
@@ -76,6 +77,7 @@ const UsuarioCreateModal = ({
             placeholder="Buscar por nombre, apellido o cédula"
             loading={colaboradoresLoading}
             emptyMessage="No hay colaboradores elegibles."
+            disabled={lockColaborador}
           />
           {createErrors.colaborador_id ? (
             <span className="field-error">{createErrors.colaborador_id}</span>
