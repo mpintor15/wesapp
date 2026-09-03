@@ -125,6 +125,53 @@ const modalCases = [
       return clickFirstVisible(page, [/reporte clientes/i, /generar reporte/i, /exportar/i]);
     },
   },
+  {
+    name: 'configuracion-crear-cliente',
+    path: '/configuracion',
+    open: async (page) => clickFirstVisible(page, [/crear cliente/i]),
+  },
+  {
+    name: 'configuracion-crear-ubicacion',
+    path: '/configuracion',
+    open: async (page) => {
+      // El botón "Crear ubicación" solo se muestra con el tab Ubicaciones
+      // activo, y solo aparece tras el re-render post-cambio de tab —
+      // esperarlo explícitamente evita una carrera con el click.
+      await clickFirstVisible(page, [/ubicaciones/i]);
+      const trigger = page.getByRole('button', { name: /crear ubicaci[oó]n/i }).first();
+      const appeared = await trigger
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!appeared) return false;
+      await trigger.click();
+      return true;
+    },
+  },
+  {
+    name: 'bitacoras-registrar-bitacora',
+    path: '/bitacoras',
+    open: async (page) => clickFirstVisible(page, [/registrar bit[aá]cora/i]),
+  },
+  {
+    name: 'bitacoras-registrar-visita',
+    path: '/bitacoras',
+    open: async (page) => {
+      await clickFirstVisible(page, [/visitas/i]);
+      return clickFirstVisible(page, [/registrar visita/i]);
+    },
+  },
+  // "Generar reporte de Bitácoras/Visitas" dispara la descarga del Excel
+  // directamente (sin modal de filtros, a diferencia de Cuentas/Inventario/
+  // Personal), así que no hay geometría de modal que verificar aquí.
+  {
+    name: 'bitacoras-crear-formulario',
+    path: '/bitacoras',
+    open: async (page) => {
+      await clickFirstVisible(page, [/formularios/i]);
+      return clickFirstVisible(page, [/crear formulario/i]);
+    },
+  },
 ];
 
 for (const viewport of visualViewports) {
