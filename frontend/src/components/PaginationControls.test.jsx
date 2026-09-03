@@ -69,6 +69,16 @@ describe('PaginationControls', () => {
     view.unmount();
   });
 
+  test('normaliza colecciones vacías al patrón visual Página 1 de 1', () => {
+    const view = renderPagination({ page: 1, totalPages: 0 });
+    const [previous, next] = view.container.querySelectorAll('button');
+
+    expect(view.container.querySelector('.pagination-info').textContent).toContain('Página 1 de 1');
+    expect(previous.disabled).toBe(true);
+    expect(next.disabled).toBe(true);
+    view.unmount();
+  });
+
   test('no expone controles para cambiar el tamaño estándar de página', () => {
     const view = renderPagination();
 

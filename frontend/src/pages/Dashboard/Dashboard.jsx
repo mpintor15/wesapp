@@ -35,6 +35,13 @@ const DASHBOARD_MODULES = [
     path: '/configuracion',
   },
   {
+    key: 'bitacoras',
+    permission: MODULE_ACCESS_PERMISSIONS.bitacoras,
+    label: 'Bitácoras',
+    Icon: ClipboardList,
+    path: '/bitacoras',
+  },
+  {
     key: 'inventario',
     permission: MODULE_ACCESS_PERMISSIONS.inventario,
     label: 'Inventario',
@@ -47,13 +54,6 @@ const DASHBOARD_MODULES = [
     label: 'Personal',
     Icon: UserRound,
     path: '/personal',
-  },
-  {
-    key: 'bitacoras',
-    permission: MODULE_ACCESS_PERMISSIONS.bitacoras,
-    label: 'Bitácoras',
-    Icon: ClipboardList,
-    path: '/bitacoras',
   },
   {
     key: 'usuarios',

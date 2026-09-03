@@ -88,6 +88,26 @@
   min-width: 0;
 }
 
+.tabular-workspace__data-card {
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.tabular-workspace__data-card .app-table-shell {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.tabular-workspace__data-card .tabular-workspace__pagination {
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border-light, var(--color-border));
+}
+
 @media (min-width: 1024px) {
   .tabular-page {
     display: flex;
@@ -138,6 +158,13 @@
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
+  }
+
+  .tabular-workspace__data-card {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .tabular-workspace > .app-table-shell {

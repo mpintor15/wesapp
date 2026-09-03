@@ -68,7 +68,7 @@ const PagosTab = ({
         <PagoInvoicesPanel pago={selectedPago} />
       </div>
 
-      {!loading && totalPages > 1 ? (
+      {!loading ? (
         <PaginationControls
           page={currentPage}
           totalPages={totalPages}

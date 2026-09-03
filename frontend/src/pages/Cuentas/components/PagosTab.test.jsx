@@ -54,6 +54,12 @@ describe('PagosTab', () => {
     );
     expect(tab.text()).not.toContain('Anular pago');
     expect(tab.text()).not.toContain('Eliminar pago');
+    expect(tab.text()).toContain('Página 1 de 1');
+    expect(
+      Array.from(tab.container.querySelectorAll('.pagination button')).every(
+        (button) => button.disabled
+      )
+    ).toBe(true);
 
     tab.unmount();
   });

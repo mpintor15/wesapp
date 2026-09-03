@@ -17,12 +17,18 @@
  */
 import api from './api';
 import { buildServiceFailure } from './serviceUtils';
+import { normalizePagination } from '../utils/pagination';
 
 const usuariosService = {
   getUsuarios: async (params = {}) => {
     try {
       const response = await api.get('/usuarios', { params });
-      return { success: response.data.success, data: response.data.data || [] };
+      const data = response.data.data || [];
+      return {
+        success: response.data.success,
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
+      };
     } catch (error) {
       return buildServiceFailure(error, 'Error al obtener usuarios');
     }

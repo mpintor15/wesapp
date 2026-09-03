@@ -9,15 +9,20 @@ import {
   REVERSAL_STATUS_LABELS,
 } from '../utils/inventarioHelpers';
 import FilterDateInput from '../../../components/FilterDateInput';
+import PaginationControls from '../../../components/PaginationControls';
 
 const BajasTab = ({
   bajas,
+  bajasPage,
+  bajasTotalItems,
+  bajasTotalPages,
   bajasFiltersDraft,
   bajasLoading,
   onDeleteBaja,
   onApplyFilters,
   onClearFilters,
   onDraftChange,
+  onPageChange,
   onVoidBaja,
   permissions,
 }) => (
@@ -92,7 +97,9 @@ const BajasTab = ({
       </div>
     ) : (
       <>
-        <div className="table-result-count">Mostrando {bajas.length} baja(s)</div>
+        <div className="table-result-count">
+          Mostrando {bajas.length} de {bajasTotalItems} baja(s)
+        </div>
 
         <div className="table-responsive app-table-shell bajas-table-shell">
           <table className="app-table bajas-table">
@@ -240,6 +247,11 @@ const BajasTab = ({
             </tbody>
           </table>
         </div>
+        <PaginationControls
+          page={bajasPage}
+          totalPages={bajasTotalPages}
+          onPageChange={onPageChange}
+        />
       </>
     )}
   </div>

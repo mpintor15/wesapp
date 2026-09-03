@@ -335,13 +335,11 @@ const MovimientosTab = ({
             </tbody>
           </table>
         </div>
-        {movimientosTotalPages > 1 && (
-          <PaginationControls
-            page={movimientosPage}
-            totalPages={movimientosTotalPages}
-            onPageChange={onPageChange}
-          />
-        )}
+        <PaginationControls
+          page={movimientosPage}
+          totalPages={movimientosTotalPages}
+          onPageChange={onPageChange}
+        />
       </>
     )}
   </div>

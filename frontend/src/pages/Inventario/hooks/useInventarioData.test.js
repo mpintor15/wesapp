@@ -64,7 +64,7 @@ describe('useInventarioData', () => {
     hook.unmount();
   });
 
-  test('conserva metadata paginada de artículos y movimientos', async () => {
+  test('conserva metadata paginada de artículos, movimientos y bajas', async () => {
     inventarioService.getArticulos.mockResolvedValue(
       success([{ id: 10, nombre_articulo: 'Radio' }])
     );
@@ -92,6 +92,18 @@ describe('useInventarioData', () => {
         hasPreviousPage: true,
       },
     });
+    inventarioService.getBajasArticulos.mockResolvedValueOnce({
+      success: true,
+      data: [{ id: 30 }],
+      pagination: {
+        page: 1,
+        pageSize: 25,
+        totalItems: 1,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
 
     const hook = renderHook(() => useInventarioData({ showMessage }));
 
@@ -112,6 +124,14 @@ describe('useInventarioData', () => {
       totalPages: 2,
       hasNextPage: false,
       hasPreviousPage: true,
+    });
+    expect(hook.result.bajasPagination).toEqual({
+      page: 1,
+      pageSize: 25,
+      totalItems: 1,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
     });
 
     hook.unmount();

@@ -7,6 +7,8 @@ import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import TabularWorkspace from '../../components/TabularWorkspace';
+import PaginationControls from '../../components/PaginationControls';
+import { DEFAULT_PAGINATION, withPaginationParams } from '../../utils/pagination';
 import { can } from '../../auth/authorization';
 import { PERMISSIONS } from '../../auth/permissions';
 import { useAuth } from '../../context/AuthContext';
@@ -39,6 +41,8 @@ const Usuarios = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [usuarios, setUsuarios] = useState([]);
+  const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [colaboradores, setColaboradores] = useState([]);
   const [colaboradoresLoading, setColaboradoresLoading] = useState(false);
@@ -68,6 +72,7 @@ const Usuarios = () => {
       const res = await usuariosService.getUsuarios(params);
       if (res.success) {
         setUsuarios(res.data);
+        setPagination(res.pagination);
       } else {
         showToast(res.message, 'error');
       }
@@ -77,12 +82,24 @@ const Usuarios = () => {
   );
 
   useEffect(() => {
-    loadUsuarios(buildFilterParams(filters));
-  }, [filters, loadUsuarios]);
+    loadUsuarios(
+      withPaginationParams({
+        page: currentPage,
+        pageSize: DEFAULT_PAGINATION.pageSize,
+        filters: buildFilterParams(filters),
+      })
+    );
+  }, [currentPage, filters, loadUsuarios]);
 
   const refreshUsuarios = useCallback(() => {
-    loadUsuarios(buildFilterParams(filters));
-  }, [filters, loadUsuarios]);
+    loadUsuarios(
+      withPaginationParams({
+        page: currentPage,
+        pageSize: DEFAULT_PAGINATION.pageSize,
+        filters: buildFilterParams(filters),
+      })
+    );
+  }, [currentPage, filters, loadUsuarios]);
 
   const loadColaboradores = useCallback(async (usuarioId = null) => {
     setColaboradoresLoading(true);
@@ -114,10 +131,14 @@ const Usuarios = () => {
     setFiltersDraft((prev) => ({ ...prev, [name]: value }));
   };
 
-  const applyFilters = () => setFilters(filtersDraft);
+  const applyFilters = () => {
+    setCurrentPage(1);
+    setFilters(filtersDraft);
+  };
 
   const clearFilters = () => {
     setFiltersDraft(EMPTY_USUARIOS_FILTERS);
+    setCurrentPage(1);
     setFilters(EMPTY_USUARIOS_FILTERS);
   };
 
@@ -293,6 +314,7 @@ const Usuarios = () => {
       />
 
       <TabularWorkspace
+        dataCard
         controls={
           <UsuariosFilters
             filtersDraft={filtersDraft}
@@ -303,7 +325,18 @@ const Usuarios = () => {
         }
         summary={
           !loading ? (
-            <div className="table-result-count">Mostrando {sortedUsuarios.length} usuario(s)</div>
+            <div className="table-result-count">
+              Mostrando {sortedUsuarios.length} de {pagination.totalItems} usuario(s)
+            </div>
+          ) : null
+        }
+        pagination={
+          !loading ? (
+            <PaginationControls
+              page={currentPage}
+              totalPages={pagination.totalPages}
+              onPageChange={setCurrentPage}
+            />
           ) : null
         }
       >

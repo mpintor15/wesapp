@@ -326,6 +326,7 @@ const inventarioService = {
       return {
         success: response.data.success,
         data: response.data.data || [],
+        pagination: normalizePagination(response.data.pagination, response.data.data?.length || 0),
       };
     } catch (error) {
       return failure(error, 'Error al obtener artículos dados de baja');

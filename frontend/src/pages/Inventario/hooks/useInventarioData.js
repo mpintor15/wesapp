@@ -16,6 +16,7 @@ const useInventarioData = ({ showMessage }) => {
   const [bajas, setBajas] = useState([]);
   const [articulosPagination, setArticulosPagination] = useState(null);
   const [movimientosPagination, setMovimientosPagination] = useState(null);
+  const [bajasPagination, setBajasPagination] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [movimientosLoading, setMovimientosLoading] = useState(false);
@@ -108,6 +109,7 @@ const useInventarioData = ({ showMessage }) => {
       const res = await inventarioService.getBajasArticulos(params);
       if (res.success) {
         setBajas(res.data);
+        setBajasPagination(res.pagination);
         setBajasLoaded(true);
       } else {
         showMessage('error', res.message);
@@ -159,6 +161,7 @@ const useInventarioData = ({ showMessage }) => {
     bajas,
     articulosPagination,
     movimientosPagination,
+    bajasPagination,
     loading,
     movimientosLoading,
     bajasLoading,

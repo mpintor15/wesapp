@@ -103,6 +103,8 @@ const Inventario = () => {
   const articulosPageSize = DEFAULT_PAGINATION.pageSize;
   const [movimientosPage, setMovimientosPage] = useState(1);
   const movimientosPageSize = DEFAULT_PAGINATION.pageSize;
+  const [bajasPage, setBajasPage] = useState(1);
+  const bajasPageSize = DEFAULT_PAGINATION.pageSize;
   const [movimientosSort, setMovimientosSort] = useState({
     field: 'fecha_movimiento',
     direction: 'desc',
@@ -129,6 +131,7 @@ const Inventario = () => {
     bajasLoaded,
     articulosPagination,
     movimientosPagination,
+    bajasPagination,
     fetchArticulos,
     loadMovimientos,
     loadBajas,
@@ -155,8 +158,13 @@ const Inventario = () => {
         : 'app-col-actions--single';
 
   const getActiveBajasFilterParams = useCallback(
-    (source = bajasFilters) => buildBajasFilterParams(source),
-    [bajasFilters]
+    (source = bajasFilters, page = bajasPage) =>
+      withPaginationParams({
+        page,
+        pageSize: bajasPageSize,
+        filters: buildBajasFilterParams(source),
+      }),
+    [bajasFilters, bajasPage, bajasPageSize]
   );
 
   const getActiveFilterParams = useCallback(() => buildArticuloFilterParams(filters), [filters]);
@@ -255,13 +263,15 @@ const Inventario = () => {
   const handleApplyBajasFilters = async () => {
     const nextFilters = { ...bajasFiltersDraft };
     setBajasFilters(nextFilters);
-    await loadBajas(getActiveBajasFilterParams(nextFilters));
+    setBajasPage(1);
+    await loadBajas(getActiveBajasFilterParams(nextFilters, 1));
   };
 
   const handleClearBajasFilters = async () => {
     setBajasFiltersDraft(EMPTY_BAJAS_FILTERS);
     setBajasFilters(EMPTY_BAJAS_FILTERS);
-    await loadBajas({});
+    setBajasPage(1);
+    await loadBajas(withPaginationParams({ page: 1, pageSize: bajasPageSize, filters: {} }));
   };
 
   // ── Artículo CRUD ────────────────────────────────
@@ -749,6 +759,8 @@ const Inventario = () => {
 
   const movimientosMeta = movimientosPagination || DEFAULT_PAGINATION;
   const movimientosTotalPages = movimientosMeta.totalPages;
+  const bajasMeta = bajasPagination || DEFAULT_PAGINATION;
+  const bajasTotalPages = bajasMeta.totalPages;
   const handleMovimientosSort = async (field) => {
     const nextSort = getNextSortState(movimientosSort, field);
     setMovimientosSort(nextSort);
@@ -772,6 +784,12 @@ const Inventario = () => {
     const nextPage = typeof updater === 'function' ? updater(movimientosPage) : updater;
     setMovimientosPage(nextPage);
     await loadMovimientos(getMovimientosListParams({ page: nextPage }));
+  };
+
+  const handleBajasPageChange = async (updater) => {
+    const nextPage = typeof updater === 'function' ? updater(bajasPage) : updater;
+    setBajasPage(nextPage);
+    await loadBajas(getActiveBajasFilterParams(bajasFilters, nextPage));
   };
 
   const handleTabChange = (tab) => {
@@ -852,12 +870,16 @@ const Inventario = () => {
       {activeTab === 'bajas' && (
         <BajasTab
           bajas={bajas}
+          bajasPage={bajasPage}
+          bajasTotalItems={bajasMeta.totalItems}
+          bajasTotalPages={bajasTotalPages}
           bajasFiltersDraft={bajasFiltersDraft}
           bajasLoading={bajasLoading}
           onDeleteBaja={handleDeleteBaja}
           onApplyFilters={handleApplyBajasFilters}
           onClearFilters={handleClearBajasFilters}
           onDraftChange={handleBajasDraftChange}
+          onPageChange={handleBajasPageChange}
           onVoidBaja={handleVoidBaja}
           permissions={inventoryPermissions}
         />

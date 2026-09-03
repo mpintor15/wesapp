@@ -202,13 +202,11 @@ const ArticulosTable = ({
         showArticuloActions={showArticuloActions}
       />
     )}
-    {articulosTotalPages > 1 && (
-      <PaginationControls
-        page={articulosPage}
-        totalPages={articulosTotalPages}
-        onPageChange={onPageChange}
-      />
-    )}
+    <PaginationControls
+      page={articulosPage}
+      totalPages={articulosTotalPages}
+      onPageChange={onPageChange}
+    />
   </>
 );
 

@@ -81,7 +81,7 @@ const validateInventoryDateBounds = (from, to) => {
   }
 };
 
-const buildBajasArticulosQuery = ({ search, from, to }) => {
+const buildBajasArticulosQuery = ({ search, from, to, pagination }) => {
   const params = [];
   const conditions = [];
   let query = `SELECT
@@ -106,7 +106,7 @@ const buildBajasArticulosQuery = ({ search, from, to }) => {
       b.anulado_por,
       b.anulado_en,
       b.motivo_anulacion,
-      u.usuario
+      u.usuario${pagination ? ', COUNT(*) OVER()::int AS total_count' : ''}
     FROM articulos_bajas b
     LEFT JOIN usuarios u ON u.id = b.usuario_id`;
 
@@ -142,6 +142,10 @@ const buildBajasArticulosQuery = ({ search, from, to }) => {
   query += ` WHERE ${conditions.join(' AND ')}`;
 
   query += ' ORDER BY b.fecha_baja DESC, b.id DESC';
+  if (pagination) {
+    params.push(pagination.pageSize, pagination.offset);
+    query += ` LIMIT $${params.length - 1} OFFSET $${params.length}`;
+  }
   return { query, params };
 };
 
@@ -889,13 +893,21 @@ const deleteArticulo = async (req, res) => {
 const getBajasArticulos = async (req, res) => {
   try {
     const { search, from, to } = req.query;
+    const pagination = normalizePaginationQuery(req.query);
     validateInventoryDateBounds(from, to);
-    const { query, params } = buildBajasArticulosQuery({ search, from, to });
+    const { query, params } = buildBajasArticulosQuery({ search, from, to, pagination });
     const result = await db.query(query, params);
+    const totalItems = Number(result.rows[0]?.total_count || 0);
+    const data = result.rows.map(({ total_count: _totalCount, ...baja }) => baja);
 
     res.json({
       success: true,
-      data: result.rows,
+      data,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems,
+      }),
     });
   } catch (error) {
     sendInventoryError(res, error, 'Error al obtener bajas de artículos:');

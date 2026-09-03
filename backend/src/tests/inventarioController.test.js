@@ -20,6 +20,7 @@ const { logAuditStrict } = require('../utils/audit');
 const {
   getArticulos,
   getMovimientos,
+  getBajasArticulos,
   createArticulo,
   updateArticulo,
   deleteArticulo,
@@ -34,6 +35,36 @@ const {
   downloadMovimientoPdf,
   regenerateMovimientoPdf,
 } = require('../controllers/inventarioController');
+
+describe('inventarioController.getBajasArticulos', () => {
+  test('devuelve metadata estándar y pagina conservando filtros', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 9, nombre_articulo: 'Radio QA', total_count: 31 }],
+    });
+    const res = mockRes();
+
+    await getBajasArticulos(
+      mockReq({ query: { search: 'radio', page: '2', pageSize: '25' } }),
+      res
+    );
+
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('LIMIT $2 OFFSET $3'), [
+      '%radio%',
+      25,
+      25,
+    ]);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [{ id: 9, nombre_articulo: 'Radio QA' }],
+      pagination: expect.objectContaining({
+        page: 2,
+        pageSize: 25,
+        totalItems: 31,
+        totalPages: 2,
+      }),
+    });
+  });
+});
 
 const mockReq = ({ body = {}, params = {}, query = {}, user = { id: 1 } } = {}) => ({
   body,

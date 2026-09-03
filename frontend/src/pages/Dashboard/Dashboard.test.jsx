@@ -186,17 +186,17 @@ describe('Dashboard', () => {
     page.unmount();
   });
 
-  test('ubica Bitácoras inmediatamente antes de Usuarios', async () => {
+  test('ubica Bitácoras inmediatamente después de Clientes', async () => {
     const page = await renderDashboard();
     const moduleLabels = Array.from(page.container.querySelectorAll('.module-card')).map((card) =>
       card.textContent.trim()
     );
 
+    const clientesIndex = moduleLabels.findIndex((label) => label.startsWith('Clientes'));
     const bitacorasIndex = moduleLabels.findIndex((label) => label.startsWith('Bitácoras'));
-    const usuariosIndex = moduleLabels.findIndex((label) => label.startsWith('Usuarios'));
 
-    expect(bitacorasIndex).toBeGreaterThanOrEqual(0);
-    expect(usuariosIndex).toBe(bitacorasIndex + 1);
+    expect(clientesIndex).toBeGreaterThanOrEqual(0);
+    expect(bitacorasIndex).toBe(clientesIndex + 1);
 
     page.unmount();
   });

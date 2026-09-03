@@ -52,9 +52,7 @@ const FacturasTab = ({
       onDelete={onDelete}
     />
 
-    {filteredCount > 0 ? (
-      <PaginationControls page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
-    ) : null}
+    <PaginationControls page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
   </div>
 );
 

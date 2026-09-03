@@ -6,6 +6,7 @@ const { clearActiveCache } = require('../middleware/permissions');
 const { hasPermission, PERMISSIONS } = require('../config/permissions');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { assertUsuarioWithoutActivity } = require('../services/usuariosDeletionService');
+const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 
 const ALLOWED_TYPES = new Set([
   'gerente',
@@ -96,6 +97,7 @@ const getActiveGerentesCount = async () => {
 const getUsuarios = async (req, res) => {
   try {
     const { search, tipo_usuario, activo } = req.query;
+    const pagination = normalizePaginationQuery(req.query);
     let query = `
       SELECT u.id, u.usuario, u.nombre, u.apellido, u.tipo_usuario, u.primer_login, u.activo,
              u.created_at, u.colaborador_id, c.nombres_completos AS colaborador_nombre,
@@ -139,11 +141,26 @@ const getUsuarios = async (req, res) => {
     if (conditions.length > 0) {
       query += ' WHERE ' + conditions.join(' AND ');
     }
-    query +=
-      ' GROUP BY u.id, c.nombres_completos, c.estado ORDER BY u.apellido ASC, u.nombre ASC, u.usuario ASC';
+    query += ' GROUP BY u.id, c.nombres_completos, c.estado';
+
+    params.push(pagination.pageSize, pagination.offset);
+    query = `SELECT filtered.*, COUNT(*) OVER()::int AS total_count
+      FROM (${query}) filtered
+      ORDER BY filtered.apellido ASC, filtered.nombre ASC, filtered.usuario ASC
+      LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
     const result = await db.query(query, params);
-    res.json({ success: true, data: result.rows });
+    const totalItems = Number(result.rows[0]?.total_count || 0);
+    const data = result.rows.map(({ total_count: _totalCount, ...usuario }) => usuario);
+    res.json({
+      success: true,
+      data,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems,
+      }),
+    });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener usuarios:');
   }

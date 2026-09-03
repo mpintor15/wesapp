@@ -37,4 +37,30 @@ describe('TabularWorkspace', () => {
 
     act(() => root.unmount());
   });
+
+  test('dataCard envuelve datos y paginación en un mismo contenedor', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        <TabularWorkspace dataCard pagination={<button type="button">Siguiente</button>}>
+          <table>
+            <tbody>
+              <tr>
+                <td>Dato</td>
+              </tr>
+            </tbody>
+          </table>
+        </TabularWorkspace>
+      );
+    });
+
+    const card = container.querySelector('.tabular-workspace__data-card');
+    expect(card).not.toBeNull();
+    expect(card.querySelector('.tabular-workspace__data table')).not.toBeNull();
+    expect(card.querySelector('.tabular-workspace__pagination').textContent).toBe('Siguiente');
+
+    act(() => root.unmount());
+  });
 });

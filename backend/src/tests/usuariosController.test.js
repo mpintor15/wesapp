@@ -17,6 +17,7 @@ const { logAudit } = require('../utils/audit');
 const { usuarioCreateSchema, usuarioUpdateSchema } = require('../utils/validationSchemas');
 const {
   createUsuario,
+  getUsuarios,
   getColaboradoresElegibles,
   getUbicacionesAsignables,
   updateUsuario,
@@ -74,6 +75,41 @@ describe('usuarios validation schemas', () => {
         colaborador_id: 'abc',
       })
     ).toThrow();
+  });
+});
+
+describe('usuariosController.getUsuarios', () => {
+  test('devuelve metadata estándar y limita la consulta sin alterar filtros', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 7,
+          usuario: 'guardia.qa',
+          nombre: 'Guardia',
+          apellido: 'QA',
+          total_count: 26,
+        },
+      ],
+    });
+    const res = mockRes();
+
+    await getUsuarios(mockReq({ query: { search: 'guardia', page: '2', pageSize: '25' } }), res);
+
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('LIMIT $2 OFFSET $3'), [
+      '%guardia%',
+      25,
+      25,
+    ]);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [expect.not.objectContaining({ total_count: expect.anything() })],
+      pagination: expect.objectContaining({
+        page: 2,
+        pageSize: 25,
+        totalItems: 26,
+        totalPages: 2,
+      }),
+    });
   });
 });
 
