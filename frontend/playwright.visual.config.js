@@ -13,6 +13,10 @@ module.exports = defineConfig({
       animations: 'disabled',
       caret: 'hide',
       scale: 'css',
+      // Absorbe el jitter de sub-pixel/hinting de fuentes entre ejecuciones de
+      // CI (p. ej. el glifo del ícono "↻" de refrescar), sin ocultar
+      // regresiones reales de contenido, que mueven miles de píxeles.
+      maxDiffPixels: 300,
     },
   },
   fullyParallel: false,
