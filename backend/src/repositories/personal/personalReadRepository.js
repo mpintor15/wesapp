@@ -29,16 +29,24 @@ const buildColaboradoresQuery = ({ search, estado, cargo } = {}) => {
     query += ' WHERE ' + conditions.join(' AND ');
   }
 
-  query += ' ORDER BY nombres_completos ASC';
+  query += ' ORDER BY nombres_completos ASC, id ASC';
   return { query, params };
 };
 
-const findColaboradores = (filters, executor = db) => {
+const findColaboradores = (filters, pagination, executor = db) => {
+  const { query, params } = buildColaboradoresQuery(filters);
+  const paginatedQuery = query.replace('SELECT *', 'SELECT *, COUNT(*) OVER()::int AS total_count');
+  const paginatedParams = [...params, pagination.pageSize, pagination.offset];
+  return executor.query(
+    `${paginatedQuery} LIMIT $${paginatedParams.length - 1} OFFSET $${paginatedParams.length}`,
+    paginatedParams
+  );
+};
+
+const findColaboradoresForExport = (filters, executor = db) => {
   const { query, params } = buildColaboradoresQuery(filters);
   return executor.query(query, params);
 };
-
-const findColaboradoresForExport = (filters, executor = db) => findColaboradores(filters, executor);
 
 module.exports = {
   buildColaboradoresQuery,

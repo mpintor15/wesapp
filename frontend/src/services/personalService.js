@@ -17,14 +17,17 @@ import {
   getFilenameFromDisposition,
   saveBlobWithPickerOrDownload,
 } from './serviceUtils';
+import { normalizePagination } from '../utils/pagination';
 
 const personalService = {
   getColaboradores: async (params = {}) => {
     try {
       const response = await api.get('/personal/colaboradores', { params });
+      const data = response.data.data || [];
       return {
         success: response.data.success,
-        data: response.data.data || [],
+        data,
+        pagination: normalizePagination(response.data.pagination, data.length),
       };
     } catch (error) {
       return buildServiceFailure(error, 'Error al obtener colaboradores');

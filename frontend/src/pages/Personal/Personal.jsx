@@ -17,6 +17,7 @@ import PersonalFormModal from './components/PersonalFormModal';
 import PersonalMobileCards from './components/PersonalMobileCards';
 import PersonalPageHeader from './components/PersonalPageHeader';
 import PersonalTable from './components/PersonalTable';
+import { DEFAULT_PAGINATION, withPaginationParams } from '../../utils/pagination';
 import {
   buildColaboradorPayload,
   buildPersonalExportParams,
@@ -26,9 +27,7 @@ import {
   EMPTY_PERSONAL_FILTERS,
   getColaboradorFormData,
   getNextSortState,
-  getTotalPages,
   getUniqueCargos,
-  paginateRows,
   sortColaboradores,
   validateColaboradorForm,
 } from './utils/personalHelpers';
@@ -41,6 +40,7 @@ const Personal = () => {
   const { user } = useAuth();
   const { showToast } = useToast();
   const [colaboradores, setColaboradores] = useState([]);
+  const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
   const [cargos, setCargos] = useState([]);
   const [loading, setLoading] = useState(true);
   const { isSubmitting: isSaving, withSubmit: withSaveSubmit } = useSubmitState();
@@ -55,12 +55,17 @@ const Personal = () => {
   const [formErrors, setFormErrors] = useState({});
   const [formData, setFormData] = useState(EMPTY_COLABORADOR_FORM);
 
+  const [filtersDraft, setFiltersDraft] = useState(EMPTY_PERSONAL_FILTERS);
+  const [tableSort, setTableSort] = useState({ field: 'nombres_completos', direction: 'asc' });
+  const [currentPage, setCurrentPage] = useState(1);
+
   const loadColaboradores = useCallback(
     async (params = {}) => {
       setLoading(true);
       const res = await personalService.getColaboradores(params);
       if (res.success) {
         setColaboradores(res.data);
+        setPagination(res.pagination);
       } else {
         showToast(res.message, 'error');
       }
@@ -70,7 +75,11 @@ const Personal = () => {
   );
 
   const loadCargos = useCallback(async () => {
-    const res = await personalService.getColaboradores();
+    // Se pide el pageSize máximo permitido por el backend para poblar el
+    // dropdown de cargos con la mayor cobertura posible sin cargar el
+    // dataset completo: a la escala actual (decenas de colaboradores) cubre
+    // el universo real de cargos.
+    const res = await personalService.getColaboradores({ pageSize: 100 });
     if (res.success) {
       setCargos(getUniqueCargos(res.data));
     }
@@ -82,18 +91,26 @@ const Personal = () => {
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      loadColaboradores(buildPersonalFilterParams(filters));
+      loadColaboradores(
+        withPaginationParams({
+          page: currentPage,
+          pageSize: DEFAULT_PAGINATION.pageSize,
+          filters: buildPersonalFilterParams(filters),
+        })
+      );
     }, 300);
     return () => clearTimeout(handler);
-  }, [filters, loadColaboradores]);
+  }, [filters, currentPage, loadColaboradores]);
 
   const refreshColaboradores = useCallback(() => {
-    loadColaboradores(buildPersonalFilterParams(filters));
-  }, [filters, loadColaboradores]);
-
-  const [filtersDraft, setFiltersDraft] = useState(EMPTY_PERSONAL_FILTERS);
-  const [tableSort, setTableSort] = useState({ field: 'nombres_completos', direction: 'asc' });
-  const [currentPage, setCurrentPage] = useState(1);
+    loadColaboradores(
+      withPaginationParams({
+        page: currentPage,
+        pageSize: DEFAULT_PAGINATION.pageSize,
+        filters: buildPersonalFilterParams(filters),
+      })
+    );
+  }, [filters, currentPage, loadColaboradores]);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -113,15 +130,20 @@ const Personal = () => {
 
   const handleTableSort = (field) => {
     setTableSort((prev) => getNextSortState(prev, field));
-    setCurrentPage(1);
   };
 
+  // El sort ordena la página actual ya traída del servidor (mismo patrón
+  // que Usuarios: server-side pagination + sort client-side sobre la página
+  // visible), no el dataset completo.
   const sortedColaboradores = useMemo(() => {
     return sortColaboradores(colaboradores, tableSort);
   }, [colaboradores, tableSort]);
 
-  const totalPages = getTotalPages(sortedColaboradores);
-  const paginatedColaboradores = paginateRows(sortedColaboradores, currentPage);
+  const hasActiveFilters = Boolean(filters.search.trim() || filters.estado || filters.cargo);
+  const emptyMessage = hasActiveFilters
+    ? 'No hay colaboradores para los filtros aplicados'
+    : 'No hay colaboradores registrados';
+
   const permissions = useMemo(
     () => ({
       canCreate: can(user, PERMISSIONS.PERSONAL_CREAR),
@@ -131,10 +153,6 @@ const Personal = () => {
     }),
     [user]
   );
-
-  useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
 
   const resetForm = () => setFormData(EMPTY_COLABORADOR_FORM);
 
@@ -241,6 +259,7 @@ const Personal = () => {
       />
 
       <TabularWorkspace
+        dataCard
         controls={
           <PersonalFilters
             cargos={cargos}
@@ -253,16 +272,15 @@ const Personal = () => {
         summary={
           !loading ? (
             <div className="table-result-count">
-              Mostrando {paginatedColaboradores.length} de {sortedColaboradores.length}{' '}
-              colaborador(es)
+              Mostrando {sortedColaboradores.length} de {pagination.totalItems} colaborador(es)
             </div>
           ) : null
         }
         pagination={
-          !loading && totalPages > 1 ? (
+          !loading ? (
             <PaginationControls
               page={currentPage}
-              totalPages={totalPages}
+              totalPages={pagination.totalPages}
               onPageChange={setCurrentPage}
             />
           ) : null
@@ -279,17 +297,18 @@ const Personal = () => {
               canDelete={permissions.canDelete}
               canEdit={permissions.canEdit}
               colaboradores={sortedColaboradores}
+              emptyMessage={emptyMessage}
               onDelete={setConfirmTarget}
               onEdit={openEdit}
               onSort={handleTableSort}
-              paginatedColaboradores={paginatedColaboradores}
+              paginatedColaboradores={sortedColaboradores}
               tableSort={tableSort}
             />
             {sortedColaboradores.length > 0 && (
               <PersonalMobileCards
                 canDelete={permissions.canDelete}
                 canEdit={permissions.canEdit}
-                colaboradores={paginatedColaboradores}
+                colaboradores={sortedColaboradores}
                 onDelete={setConfirmTarget}
                 onEdit={openEdit}
               />

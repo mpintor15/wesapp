@@ -5,6 +5,7 @@ import PaginationControls from '../../components/PaginationControls';
 import { useToast } from '../../context/ToastContext';
 import clientesService from '../../services/clientesService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
+import { DEFAULT_PAGINATION } from '../../utils/pagination';
 
 const EMPTY_CLIENTE_FORM = {
   nombre: '',
@@ -18,6 +19,16 @@ const EMPTY_CLIENTE_FORM = {
 };
 const MAX_NOMBRE_LENGTH = 100;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_PATTERN = /^\d{10}$/;
+const TIPO_IDENTIFICACION_OPTIONS = [
+  { value: 'CEDULA', label: 'Cédula' },
+  { value: 'RUC', label: 'RUC' },
+  { value: 'PASAPORTE', label: 'Pasaporte' },
+];
+const IDENTIFICACION_RULES = {
+  CEDULA: { length: 10, message: 'La cédula debe tener exactamente 10 dígitos numéricos.' },
+  RUC: { length: 13, message: 'El RUC debe tener exactamente 13 dígitos numéricos.' },
+};
 
 const getBackendErrorMessage = (result, fallback) =>
   result?.status === 409
@@ -35,55 +46,6 @@ const trimClientePayload = (form) => ({
   estado: form.estado,
 });
 
-const normalizeSearchValue = (value) =>
-  String(value ?? '')
-    .trim()
-    .toLowerCase();
-
-const normalizeDigits = (value) => String(value ?? '').replace(/\D/g, '');
-
-const getPhoneSearchVariants = (digits) => {
-  const variants = new Set([digits]);
-  if (digits.startsWith('0')) variants.add(digits.replace(/^0+/, ''));
-  if (digits.startsWith('593')) {
-    variants.add(digits.replace(/^593/, ''));
-    variants.add(digits.replace(/^593/, '0'));
-  }
-  return Array.from(variants).filter(Boolean);
-};
-
-const phoneMatchesSearch = (phone, search) => {
-  const phoneDigits = normalizeDigits(phone);
-  const searchDigits = normalizeDigits(search);
-  if (searchDigits.length < 3 || !phoneDigits) return false;
-
-  const phoneVariants = getPhoneSearchVariants(phoneDigits);
-  const searchVariants = getPhoneSearchVariants(searchDigits);
-  return phoneVariants.some((phoneVariant) =>
-    searchVariants.some(
-      (searchVariant) =>
-        phoneVariant.includes(searchVariant) || searchVariant.includes(phoneVariant)
-    )
-  );
-};
-
-const clienteMatchesSearch = (cliente, search) => {
-  const searchTerm = normalizeSearchValue(search);
-  if (!searchTerm) return true;
-
-  const searchableFields = [
-    cliente.nombre,
-    cliente.identificacion,
-    cliente.correo,
-    cliente.telefono,
-  ];
-
-  return (
-    searchableFields.some((value) => normalizeSearchValue(value).includes(searchTerm)) ||
-    phoneMatchesSearch(cliente.telefono, search)
-  );
-};
-
 const validateClientePayload = (payload) => {
   const errors = {};
 
@@ -91,6 +53,17 @@ const validateClientePayload = (payload) => {
     errors.nombre = 'El nombre del cliente es obligatorio.';
   } else if (payload.nombre.length > MAX_NOMBRE_LENGTH) {
     errors.nombre = `El nombre no puede exceder ${MAX_NOMBRE_LENGTH} caracteres.`;
+  }
+
+  const idRule = IDENTIFICACION_RULES[payload.tipo_identificacion];
+  if (idRule && payload.identificacion) {
+    if (!/^\d+$/.test(payload.identificacion) || payload.identificacion.length !== idRule.length) {
+      errors.identificacion = idRule.message;
+    }
+  }
+
+  if (payload.telefono && !PHONE_PATTERN.test(payload.telefono)) {
+    errors.telefono = 'El teléfono debe tener exactamente 10 dígitos numéricos.';
   }
 
   if (payload.correo && !EMAIL_PATTERN.test(payload.correo)) {
@@ -114,6 +87,8 @@ const ClienteFormModal = ({
   onSubmit,
 }) => {
   const nombreRef = useRef(null);
+  const identificacionRef = useRef(null);
+  const telefonoRef = useRef(null);
   const correoRef = useRef(null);
   const trimmedName = form.nombre.trim();
   const isNameTooLong = trimmedName.length > MAX_NOMBRE_LENGTH;
@@ -121,12 +96,24 @@ const ClienteFormModal = ({
   const nombreDescribedBy = ['cliente-nombre-help', errors.nombre ? 'cliente-nombre-error' : '']
     .filter(Boolean)
     .join(' ');
+  const identificacionDescribedBy = errors.identificacion
+    ? 'cliente-identificacion-error'
+    : undefined;
+  const telefonoDescribedBy = errors.telefono ? 'cliente-telefono-error' : undefined;
   const correoDescribedBy = errors.correo ? 'cliente-correo-error' : undefined;
 
   useEffect(() => {
     if (!isOpen || !hasValidationErrors(errors)) return;
     if (errors.nombre) {
       nombreRef.current?.focus();
+      return;
+    }
+    if (errors.identificacion) {
+      identificacionRef.current?.focus();
+      return;
+    }
+    if (errors.telefono) {
+      telefonoRef.current?.focus();
       return;
     }
     if (errors.correo) correoRef.current?.focus();
@@ -175,34 +162,55 @@ const ClienteFormModal = ({
             </div>
             <div className="form-group">
               <label htmlFor="cliente-tipo-identificacion">Tipo identificación</label>
-              <input
+              <select
                 id="cliente-tipo-identificacion"
-                type="text"
                 value={form.tipo_identificacion}
                 onChange={(event) => onChange({ tipo_identificacion: event.target.value })}
-                placeholder="RUC, cédula..."
                 disabled={isSubmitting}
-              />
+              >
+                <option value="">Selecciona un tipo</option>
+                {TIPO_IDENTIFICACION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label htmlFor="cliente-identificacion">Identificación</label>
               <input
+                ref={identificacionRef}
                 id="cliente-identificacion"
                 type="text"
                 value={form.identificacion}
                 onChange={(event) => onChange({ identificacion: event.target.value })}
                 disabled={isSubmitting}
+                aria-invalid={Boolean(errors.identificacion)}
+                aria-describedby={identificacionDescribedBy}
               />
+              {errors.identificacion && (
+                <span id="cliente-identificacion-error" className="field-error">
+                  {errors.identificacion}
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label htmlFor="cliente-telefono">Teléfono</label>
               <input
+                ref={telefonoRef}
                 id="cliente-telefono"
                 type="text"
                 value={form.telefono}
                 onChange={(event) => onChange({ telefono: event.target.value })}
                 disabled={isSubmitting}
+                aria-invalid={Boolean(errors.telefono)}
+                aria-describedby={telefonoDescribedBy}
               />
+              {errors.telefono && (
+                <span id="cliente-telefono-error" className="field-error">
+                  {errors.telefono}
+                </span>
+              )}
             </div>
             <div className="form-group">
               <label htmlFor="cliente-correo">Correo</label>
@@ -291,19 +299,6 @@ const getDisplayValue = (value) => {
   return normalized || 'Sin registrar';
 };
 
-const CLIENTES_ROWS_PER_PAGE = 25;
-
-const getTotalPages = (rows) => Math.max(1, Math.ceil(rows.length / CLIENTES_ROWS_PER_PAGE));
-
-const paginateRows = (rows, page) =>
-  rows.slice((page - 1) * CLIENTES_ROWS_PER_PAGE, page * CLIENTES_ROWS_PER_PAGE);
-
-const compareClientesByName = (a, b) =>
-  String(a?.nombre || '').localeCompare(String(b?.nombre || ''), 'es', {
-    sensitivity: 'base',
-    numeric: true,
-  });
-
 const ClientesCatalog = ({
   ubicaciones = [],
   createRequestToken = 0,
@@ -322,7 +317,8 @@ const ClientesCatalog = ({
     canCreateUbicacion = false,
   } = permissions;
   const { showToast } = useToast();
-  const [allClientes, setAllClientes] = useState([]);
+  const [clientes, setClientes] = useState([]);
+  const [pagination, setPagination] = useState(DEFAULT_PAGINATION);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [filtersDraft, setFiltersDraft] = useState({
@@ -356,36 +352,6 @@ const ClientesCatalog = ({
     [ubicaciones]
   );
 
-  const filteredClientes = useMemo(() => {
-    const selectedUbicacion = sortedUbicaciones.find(
-      (ubicacion) => String(ubicacion.id) === String(filters.ubicacionId)
-    );
-    const hasUbicacionFilter = Boolean(filters.ubicacionId);
-    const selectedClienteId = selectedUbicacion?.cliente_id
-      ? String(selectedUbicacion.cliente_id)
-      : '';
-
-    return [...allClientes]
-      .filter((cliente) => {
-        const ubicacionesCount = Number(cliente.ubicaciones_totales) || 0;
-        if (hasUbicacionFilter && !selectedClienteId) return false;
-        if (hasUbicacionFilter && String(cliente.id) !== selectedClienteId) return false;
-        if (filters.estadoUbicaciones === 'con_ubicaciones' && ubicacionesCount === 0) {
-          return false;
-        }
-        if (filters.estadoUbicaciones === 'sin_ubicaciones' && ubicacionesCount > 0) {
-          return false;
-        }
-        return clienteMatchesSearch(cliente, filters.search);
-      })
-      .sort(compareClientesByName);
-  }, [allClientes, filters, sortedUbicaciones]);
-
-  const totalPages = useMemo(() => getTotalPages(filteredClientes), [filteredClientes]);
-  const paginatedClientes = useMemo(
-    () => paginateRows(filteredClientes, currentPage),
-    [filteredClientes, currentPage]
-  );
   const hasAppliedFilters = useMemo(
     () =>
       Boolean(
@@ -395,7 +361,7 @@ const ClientesCatalog = ({
   );
   const hasActionsColumn = canEditCliente || canDeleteCliente;
   const tableColSpan = 7 + (canViewUbicaciones ? 1 : 0) + (hasActionsColumn ? 1 : 0);
-  const isGlobalEmpty = allClientes.length === 0 && !hasAppliedFilters;
+  const isGlobalEmpty = pagination.totalItems === 0 && !hasAppliedFilters;
   const emptyMessage = useMemo(() => {
     if (isGlobalEmpty) return 'No hay clientes registrados.';
     if (filters.estadoUbicaciones === 'con_ubicaciones') {
@@ -408,8 +374,8 @@ const ClientesCatalog = ({
   }, [filters.estadoUbicaciones, isGlobalEmpty]);
 
   useEffect(() => {
-    setCurrentPage((page) => Math.min(page, totalPages));
-  }, [totalPages]);
+    setCurrentPage((page) => Math.min(page, pagination.totalPages || 1));
+  }, [pagination.totalPages]);
 
   useEffect(() => {
     if (
@@ -426,16 +392,25 @@ const ClientesCatalog = ({
   const loadClientes = useCallback(async () => {
     setLoading(true);
     setLoadError('');
-    const result = await clientesService.listClientes({});
+    const params = {
+      page: currentPage,
+      pageSize: DEFAULT_PAGINATION.pageSize,
+    };
+    if (filters.search.trim()) params.search = filters.search.trim();
+    if (filters.ubicacionId) params.ubicacionId = filters.ubicacionId;
+    if (filters.estadoUbicaciones !== 'todas') params.estadoUbicaciones = filters.estadoUbicaciones;
+
+    const result = await clientesService.listClientes(params);
     if (result.success) {
       const nextClientes = result.data || [];
-      setAllClientes(nextClientes);
-      onClientesLoaded?.(nextClientes);
+      setClientes(nextClientes);
+      setPagination(result.pagination);
+      onClientesLoaded?.(nextClientes, result.pagination.totalItems);
     } else {
       setLoadError(result.message || 'Error al cargar clientes');
     }
     setLoading(false);
-  }, [onClientesLoaded]);
+  }, [currentPage, filters, onClientesLoaded]);
 
   useEffect(() => {
     void loadClientes();
@@ -545,9 +520,9 @@ const ClientesCatalog = ({
         return;
       }
 
-      setAllClientes((prev) => prev.filter((cliente) => cliente.id !== deleteTarget.id));
       showToast('Cliente eliminado exitosamente', 'success');
       setDeleteTarget(null);
+      await loadClientes();
       if (onClientesChanged) await onClientesChanged();
     } finally {
       setIsDeleting(false);
@@ -583,7 +558,8 @@ const ClientesCatalog = ({
   };
 
   const handleCreateUbicacionFromEmptyFilter = () => {
-    const selectedCliente = filteredClientes.length === 1 ? filteredClientes[0] : null;
+    const selectedCliente =
+      pagination.totalItems === 1 && clientes.length === 1 ? clientes[0] : null;
     onCreateUbicacionForCliente?.(selectedCliente);
   };
 
@@ -695,7 +671,7 @@ const ClientesCatalog = ({
         ) : (
           <>
             <div className="table-result-count" role="status" aria-live="polite">
-              Mostrando {paginatedClientes.length} de {filteredClientes.length} cliente(s)
+              Mostrando {clientes.length} de {pagination.totalItems} cliente(s)
             </div>
             <div className="table-responsive app-table-shell configuracion-clientes-table-shell">
               <table className="app-table configuracion-clientes-table">
@@ -719,7 +695,7 @@ const ClientesCatalog = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredClientes.length === 0 ? (
+                  {clientes.length === 0 ? (
                     <tr className="empty-row">
                       <td colSpan={tableColSpan}>
                         <div className="configuracion-empty-state" role="status">
@@ -741,7 +717,7 @@ const ClientesCatalog = ({
                       </td>
                     </tr>
                   ) : (
-                    paginatedClientes.map((cliente, index) => (
+                    clientes.map((cliente, index) => (
                       <tr key={cliente.id} className={index % 2 === 0 ? 'row-even' : 'row-odd'}>
                         <td
                           className="configuracion-text-strong"
@@ -848,9 +824,9 @@ const ClientesCatalog = ({
                 </tbody>
               </table>
             </div>
-            {filteredClientes.length > 0 && (
+            {clientes.length > 0 && (
               <div className="records-mobile configuracion-clientes-mobile-list">
-                {paginatedClientes.map((cliente) => (
+                {clientes.map((cliente) => (
                   <article key={cliente.id} className="record-card configuracion-cliente-card">
                     <div className="record-card-header">
                       <div className="configuracion-cliente-card-title">
@@ -942,13 +918,11 @@ const ClientesCatalog = ({
                 ))}
               </div>
             )}
-            {totalPages > 1 && (
-              <PaginationControls
-                page={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-              />
-            )}
+            <PaginationControls
+              page={currentPage}
+              totalPages={pagination.totalPages}
+              onPageChange={setCurrentPage}
+            />
           </>
         )}
       </section>

@@ -1,11 +1,16 @@
 import api from './api';
 import { buildServiceFailure } from './serviceUtils';
+import { normalizePagination } from '../utils/pagination';
 
 const clientesService = {
   async listClientes(params = {}) {
     try {
       const response = await api.get('/clientes', { params });
-      return response.data;
+      const data = response.data.data || [];
+      return {
+        ...response.data,
+        pagination: normalizePagination(response.data.pagination, data.length),
+      };
     } catch (error) {
       return buildServiceFailure(error, 'Error al obtener clientes');
     }

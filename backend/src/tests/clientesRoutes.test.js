@@ -213,6 +213,150 @@ describe('clientes routes', () => {
     expect(res.body.meta).toEqual({ total: 2, activos: 1, inactivos: 1, filtrados: 1 });
     expect(res.body.data[0].ubicaciones_totales).toBe(2);
     expect(res.body.data[0]).not.toHaveProperty('total_filtrado');
+    expect(res.body.pagination).toEqual({
+      page: 1,
+      pageSize: 25,
+      totalItems: 1,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    });
+  });
+
+  test('lista clientes pagina server-side con page/pageSize y no carga todo el dataset', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [gerenteUser], rowCount: 1 };
+      }
+
+      if (query.includes('COUNT(*) OVER()::int')) {
+        expect(query).toContain('LIMIT $1 OFFSET $2');
+        expect(params).toEqual([10, 10]);
+        return {
+          rows: [{ id: 3, nombre: 'Cliente B', ubicaciones_totales: 0, total_filtrado: 12 }],
+          rowCount: 1,
+        };
+      }
+
+      if (query.includes('COUNT(*) FILTER')) {
+        return { rows: [{ total: 12, activos: 12, inactivos: 0 }], rowCount: 1 };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/clientes?page=2&pageSize=10');
+
+    expect(res.status).toBe(200);
+    expect(res.body.pagination).toEqual({
+      page: 2,
+      pageSize: 10,
+      totalItems: 12,
+      totalPages: 2,
+      hasNextPage: false,
+      hasPreviousPage: true,
+    });
+  });
+
+  test('filtra por ubicacionId (EXISTS) y estadoUbicaciones (con_ubicaciones)', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [gerenteUser], rowCount: 1 };
+      }
+
+      if (query.includes('COUNT(*) OVER()::int')) {
+        expect(query).toContain('EXISTS (');
+        expect(query).toContain('ubicaciones.id = $1');
+        expect(query).toContain('COALESCE(ubicaciones_cliente.ubicaciones_totales, 0) > 0');
+        expect(params).toEqual([7, 25, 0]);
+        return { rows: [], rowCount: 0 };
+      }
+
+      if (query.includes('COUNT(*) FILTER')) {
+        return { rows: [{ total: 0, activos: 0, inactivos: 0 }], rowCount: 1 };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth(
+      'get',
+      '/api/clientes?ubicacionId=7&estadoUbicaciones=con_ubicaciones'
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+    expect(res.body.pagination.totalItems).toBe(0);
+  });
+
+  test('busca por teléfono normalizando dígitos', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [gerenteUser], rowCount: 1 };
+      }
+
+      if (query.includes('COUNT(*) OVER()::int')) {
+        expect(query).toContain('regexp_replace(COALESCE(clientes.telefono');
+        // El núcleo del teléfono le quita el 0 inicial o el prefijo de país
+        // 593 (uno de los dos), así "0999999999" y "+593999999999" comparan
+        // igual.
+        expect(params).toEqual(['%0999999999%', '999999999', 25, 0]);
+        return { rows: [], rowCount: 0 };
+      }
+
+      if (query.includes('COUNT(*) FILTER')) {
+        return { rows: [{ total: 0, activos: 0, inactivos: 0 }], rowCount: 1 };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/clientes?search=0999999999');
+
+    expect(res.status).toBe(200);
+  });
+
+  test('busca por teléfono normalizando el prefijo internacional 593', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [gerenteUser], rowCount: 1 };
+      }
+
+      if (query.includes('COUNT(*) OVER()::int')) {
+        expect(params).toEqual(['%+593999999999%', '999999999', 25, 0]);
+        return { rows: [], rowCount: 0 };
+      }
+
+      if (query.includes('COUNT(*) FILTER')) {
+        return { rows: [{ total: 0, activos: 0, inactivos: 0 }], rowCount: 1 };
+      }
+
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/clientes?search=%2B593999999999');
+
+    expect(res.status).toBe(200);
+  });
+
+  test('rechaza estadoUbicaciones inválido sin ejecutar query', async () => {
+    const res = await requestWithAuth('get', '/api/clientes?estadoUbicaciones=otro');
+
+    expect(res.status).toBe(400);
+  });
+
+  test('rechaza ubicacionId inválido sin ejecutar query', async () => {
+    const res = await requestWithAuth('get', '/api/clientes?ubicacionId=abc');
+
+    expect(res.status).toBe(400);
   });
 
   test('crea un cliente válido normalizando texto', async () => {
@@ -222,7 +366,7 @@ describe('clientes routes', () => {
         {
           id: 2,
           nombre: 'Cliente Norte',
-          identificacion: '099002',
+          identificacion: '0999999999001',
           tipo_identificacion: 'RUC',
           telefono: '0999999999',
           correo: 'admin@cliente.com',
@@ -237,7 +381,7 @@ describe('clientes routes', () => {
 
     const res = await requestWithAuth('post', '/api/clientes').send({
       nombre: '  Cliente Norte  ',
-      identificacion: ' 099002 ',
+      identificacion: ' 0999999999001 ',
       tipo_identificacion: ' RUC ',
       telefono: ' 0999999999 ',
       correo: ' ADMIN@CLIENTE.COM ',
@@ -248,7 +392,7 @@ describe('clientes routes', () => {
     expect(res.status).toBe(201);
     expect(client.query.mock.calls[1][1]).toEqual([
       'Cliente Norte',
-      '099002',
+      '0999999999001',
       'RUC',
       '0999999999',
       'admin@cliente.com',
@@ -281,6 +425,76 @@ describe('clientes routes', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.message).toBe('El correo del cliente es inválido');
+  });
+
+  test('rechaza tipo de identificación inválido', async () => {
+    const res = await requestWithAuth('post', '/api/clientes').send({
+      nombre: 'Cliente',
+      tipo_identificacion: 'DNI',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('El tipo de identificación es inválido');
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('rechaza cédula con longitud o formato inválido', async () => {
+    const res = await requestWithAuth('post', '/api/clientes').send({
+      nombre: 'Cliente',
+      tipo_identificacion: 'CEDULA',
+      identificacion: '12345',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('La cédula debe tener exactamente 10 dígitos numéricos');
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('rechaza RUC con longitud o formato inválido', async () => {
+    const res = await requestWithAuth('post', '/api/clientes').send({
+      nombre: 'Cliente',
+      tipo_identificacion: 'RUC',
+      identificacion: 'ABC1234567890',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('El RUC debe tener exactamente 13 dígitos numéricos');
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('acepta pasaporte sin validar longitud ni formato numérico', async () => {
+    const client = { query: jest.fn() };
+    client.query.mockResolvedValueOnce({ rows: [], rowCount: 0 }).mockResolvedValueOnce({
+      rows: [
+        {
+          id: 4,
+          nombre: 'Cliente Extranjero',
+          identificacion: 'AB12345',
+          tipo_identificacion: 'PASAPORTE',
+        },
+      ],
+      rowCount: 1,
+    });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('post', '/api/clientes').send({
+      nombre: 'Cliente Extranjero',
+      tipo_identificacion: 'PASAPORTE',
+      identificacion: 'AB12345',
+    });
+
+    expect(res.status).toBe(201);
+  });
+
+  test('rechaza teléfono con longitud o formato inválido', async () => {
+    const res = await requestWithAuth('post', '/api/clientes').send({
+      nombre: 'Cliente',
+      telefono: '099123',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('El teléfono debe tener exactamente 10 dígitos numéricos');
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   test('rechaza identificación duplicada ignorando mayúsculas y espacios externos', async () => {

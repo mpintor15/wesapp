@@ -16,7 +16,7 @@ describe('personalReadRepository.buildColaboradoresQuery', () => {
     const { query, params } = personalReadRepository.buildColaboradoresQuery();
     const sql = normalizeSql(query);
 
-    expect(sql).toBe('SELECT * FROM colaboradores ORDER BY nombres_completos ASC');
+    expect(sql).toBe('SELECT * FROM colaboradores ORDER BY nombres_completos ASC, id ASC');
     expect(params).toEqual([]);
   });
 
@@ -35,11 +35,11 @@ describe('personalReadRepository.buildColaboradoresQuery', () => {
     expect(sql).toContain('numero_cuenta ILIKE $1');
     expect(sql).toContain('estado = $2');
     expect(sql).toContain('cargo ILIKE $3');
-    expect(sql).toContain('ORDER BY nombres_completos ASC');
+    expect(sql).toContain('ORDER BY nombres_completos ASC, id ASC');
     expect(params).toEqual(['%ana%', 'activo', 'supervisora']);
   });
 
-  test('no agrega filtros vacíos ni paginación a exportaciones', () => {
+  test('no agrega filtros vacíos a exportaciones', () => {
     const { query, params } = personalReadRepository.buildColaboradoresQuery({
       search: '',
       estado: undefined,
@@ -48,28 +48,33 @@ describe('personalReadRepository.buildColaboradoresQuery', () => {
     const sql = normalizeSql(query);
 
     expect(sql).not.toMatch(/WHERE/i);
-    expect(sql).not.toMatch(/LIMIT|OFFSET/i);
     expect(params).toEqual([]);
   });
 });
 
 describe('personalReadRepository.findColaboradores', () => {
-  test('usa executor inyectado', async () => {
+  test('usa executor inyectado, agrega COUNT(*) OVER() y pagina con LIMIT/OFFSET', async () => {
     const executor = {
-      query: jest.fn().mockResolvedValue({ rows: [{ id: 1 }], rowCount: 1 }),
+      query: jest.fn().mockResolvedValue({ rows: [{ id: 1, total_count: 1 }], rowCount: 1 }),
     };
 
     await expect(
-      personalReadRepository.findColaboradores({ estado: 'activo' }, executor)
-    ).resolves.toEqual({ rows: [{ id: 1 }], rowCount: 1 });
+      personalReadRepository.findColaboradores(
+        { estado: 'activo' },
+        { pageSize: 25, offset: 0 },
+        executor
+      )
+    ).resolves.toEqual({ rows: [{ id: 1, total_count: 1 }], rowCount: 1 });
 
-    expect(executor.query).toHaveBeenCalledWith(expect.stringContaining('FROM colaboradores'), [
-      'activo',
-    ]);
+    const [sql, params] = executor.query.mock.calls[0];
+    expect(sql).toContain('SELECT *, COUNT(*) OVER()::int AS total_count');
+    expect(sql).toContain('FROM colaboradores');
+    expect(sql).toContain('LIMIT $2 OFFSET $3');
+    expect(params).toEqual(['activo', 25, 0]);
     expect(db.query).not.toHaveBeenCalled();
   });
 
-  test('findColaboradoresForExport propaga errores del executor', async () => {
+  test('findColaboradoresForExport no pagina y propaga errores del executor', async () => {
     const error = new Error('db down');
     const executor = {
       query: jest.fn().mockRejectedValue(error),
@@ -78,5 +83,6 @@ describe('personalReadRepository.findColaboradores', () => {
     await expect(
       personalReadRepository.findColaboradoresForExport({ search: 'ana' }, executor)
     ).rejects.toThrow('db down');
+    expect(executor.query.mock.calls[0][0]).not.toMatch(/LIMIT|OFFSET/i);
   });
 });

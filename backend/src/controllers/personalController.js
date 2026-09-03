@@ -18,6 +18,7 @@ const db = require('../config/database');
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAudit, auditFromReq } = require('../utils/audit');
+const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const {
   parseStrictPositiveNumber,
   validateRequiredDateString,
@@ -47,9 +48,21 @@ const getColaboradores = async (req, res) => {
       estado,
       cargo,
     });
+    const pagination = normalizePaginationQuery(req.query);
 
-    const result = await personalReadRepository.findColaboradores(filters);
-    res.json({ success: true, data: result.rows });
+    const result = await personalReadRepository.findColaboradores(filters, pagination);
+    const totalItems = result.rows[0]?.total_count || 0;
+    const data = result.rows.map(({ total_count: _totalCount, ...row }) => row);
+
+    res.json({
+      success: true,
+      data,
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems,
+      }),
+    });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener colaboradores:');
   }

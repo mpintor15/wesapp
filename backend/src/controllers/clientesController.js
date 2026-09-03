@@ -1,14 +1,23 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
+const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const {
   CLIENT_HAS_RELATIONS_MESSAGE,
   deleteClienteWithoutRelations,
 } = require('../services/clientesDeletionService');
 
+const ESTADO_UBICACIONES_VALUES = new Set(['con_ubicaciones', 'sin_ubicaciones']);
+
 const MAX_NOMBRE_LENGTH = 100;
 const VALID_ESTADOS = new Set(['activo', 'inactivo']);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^\d{10}$/;
+const VALID_TIPOS_IDENTIFICACION = new Set(['CEDULA', 'RUC', 'PASAPORTE']);
+const IDENTIFICACION_RULES = {
+  CEDULA: { length: 10, message: 'La cédula debe tener exactamente 10 dígitos numéricos' },
+  RUC: { length: 13, message: 'El RUC debe tener exactamente 13 dígitos numéricos' },
+};
 
 const normalizeText = (value) => {
   if (value === undefined || value === null) {
@@ -41,13 +50,37 @@ const normalizeClientePayload = (payload = {}) => {
     return { valid: false, status: 400, message: 'El estado del cliente es inválido' };
   }
 
+  const tipoIdentificacion = normalizeText(payload.tipo_identificacion)?.toUpperCase() || null;
+  if (tipoIdentificacion && !VALID_TIPOS_IDENTIFICACION.has(tipoIdentificacion)) {
+    return { valid: false, status: 400, message: 'El tipo de identificación es inválido' };
+  }
+
+  const identificacion = normalizeText(payload.identificacion);
+  const idRule = tipoIdentificacion && IDENTIFICACION_RULES[tipoIdentificacion];
+  if (
+    idRule &&
+    identificacion &&
+    (!/^\d+$/.test(identificacion) || identificacion.length !== idRule.length)
+  ) {
+    return { valid: false, status: 400, message: idRule.message };
+  }
+
+  const telefono = normalizeText(payload.telefono);
+  if (telefono && !PHONE_REGEX.test(telefono)) {
+    return {
+      valid: false,
+      status: 400,
+      message: 'El teléfono debe tener exactamente 10 dígitos numéricos',
+    };
+  }
+
   return {
     valid: true,
     value: {
       nombre,
-      identificacion: normalizeText(payload.identificacion),
-      tipo_identificacion: normalizeText(payload.tipo_identificacion),
-      telefono: normalizeText(payload.telefono),
+      identificacion,
+      tipo_identificacion: tipoIdentificacion,
+      telefono,
       correo,
       direccion: normalizeText(payload.direccion),
       ciudad: normalizeText(payload.ciudad),
@@ -139,21 +172,47 @@ const getClientes = async (req, res) => {
   try {
     const search = normalizeText(req.query.search);
     const estado = normalizeText(req.query.estado)?.toLowerCase() || null;
+    const estadoUbicaciones = normalizeText(req.query.estadoUbicaciones)?.toLowerCase() || null;
+    const ubicacionIdRaw = normalizeText(req.query.ubicacionId);
+    const ubicacionId = ubicacionIdRaw ? Number(ubicacionIdRaw) : null;
 
     if (estado && !VALID_ESTADOS.has(estado)) {
       return sendError(res, 400, 'El estado del cliente es inválido');
     }
+    if (estadoUbicaciones && !ESTADO_UBICACIONES_VALUES.has(estadoUbicaciones)) {
+      return sendError(res, 400, 'El filtro de ubicaciones es inválido');
+    }
+    if (ubicacionIdRaw && (!Number.isInteger(ubicacionId) || ubicacionId <= 0)) {
+      return sendError(res, 400, 'La Ubicación es inválida');
+    }
+
+    const pagination = normalizePaginationQuery(req.query);
 
     const params = [];
     const filters = [];
 
     if (search) {
+      // El teléfono se compara por un "núcleo" de dígitos: se le quita el
+      // prefijo de país 593 o un 0 inicial (uno de los dos, nunca ambos),
+      // igual que Ecuador escribe el mismo número en formato local
+      // (0999999999) o internacional (+593999999999).
+      const searchDigits = search.replace(/\D/g, '');
+      const searchCore = searchDigits.replace(/^593/, '').replace(/^0/, '');
       params.push(`%${search.toLowerCase()}%`);
+      const searchIdx = params.length;
+      params.push(searchCore);
+      const coreIdx = params.length;
       filters.push(`(
-        LOWER(clientes.nombre) LIKE $${params.length}
-        OR LOWER(COALESCE(clientes.identificacion, '')) LIKE $${params.length}
-        OR LOWER(COALESCE(clientes.correo, '')) LIKE $${params.length}
-        OR LOWER(COALESCE(clientes.telefono, '')) LIKE $${params.length}
+        LOWER(clientes.nombre) LIKE $${searchIdx}
+        OR LOWER(COALESCE(clientes.identificacion, '')) LIKE $${searchIdx}
+        OR LOWER(COALESCE(clientes.correo, '')) LIKE $${searchIdx}
+        OR (
+          $${coreIdx} <> ''
+          AND regexp_replace(
+            regexp_replace(COALESCE(clientes.telefono, ''), '\\D', '', 'g'),
+            '^593|^0', ''
+          ) LIKE '%' || $${coreIdx} || '%'
+        )
       )`);
     }
 
@@ -162,7 +221,22 @@ const getClientes = async (req, res) => {
       filters.push(`clientes.estado = $${params.length}`);
     }
 
+    if (ubicacionId) {
+      params.push(ubicacionId);
+      filters.push(`EXISTS (
+        SELECT 1 FROM ubicaciones
+        WHERE ubicaciones.cliente_id = clientes.id AND ubicaciones.id = $${params.length}
+      )`);
+    }
+
+    if (estadoUbicaciones === 'con_ubicaciones') {
+      filters.push('COALESCE(ubicaciones_cliente.ubicaciones_totales, 0) > 0');
+    } else if (estadoUbicaciones === 'sin_ubicaciones') {
+      filters.push('COALESCE(ubicaciones_cliente.ubicaciones_totales, 0) = 0');
+    }
+
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    params.push(pagination.pageSize, pagination.offset);
     const result = await db.query(
       `SELECT clientes.id, clientes.nombre, clientes.identificacion, clientes.tipo_identificacion,
               clientes.telefono, clientes.correo, clientes.direccion, clientes.ciudad,
@@ -177,7 +251,8 @@ const getClientes = async (req, res) => {
          GROUP BY cliente_id
        ) ubicaciones_cliente ON ubicaciones_cliente.cliente_id = clientes.id
        ${where}
-       ORDER BY nombre ASC, id ASC`,
+       ORDER BY clientes.nombre ASC, clientes.id ASC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
     const totals = await db.query(
@@ -187,6 +262,7 @@ const getClientes = async (req, res) => {
          COUNT(*) FILTER (WHERE estado = 'inactivo')::int AS inactivos
        FROM clientes`
     );
+    const totalFiltrado = result.rows[0]?.total_filtrado || 0;
 
     res.json({
       success: true,
@@ -195,8 +271,13 @@ const getClientes = async (req, res) => {
         total: totals.rows[0]?.total || 0,
         activos: totals.rows[0]?.activos || 0,
         inactivos: totals.rows[0]?.inactivos || 0,
-        filtrados: result.rows[0]?.total_filtrado || 0,
+        filtrados: totalFiltrado,
       },
+      pagination: buildPaginationMetadata({
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+        totalItems: totalFiltrado,
+      }),
     });
   } catch (error) {
     return handleClienteError(res, error, 'Error al obtener clientes');

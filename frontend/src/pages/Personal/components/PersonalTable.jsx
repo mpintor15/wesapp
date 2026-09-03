@@ -11,6 +11,7 @@ const PersonalTable = ({
   canDelete,
   canEdit,
   colaboradores,
+  emptyMessage = 'No hay colaboradores registrados',
   onDelete,
   onEdit,
   onSort,
@@ -104,7 +105,7 @@ const PersonalTable = ({
           ))
         ) : (
           <tr className="empty-row">
-            <td colSpan="8">No hay colaboradores registrados</td>
+            <td colSpan="8">{emptyMessage}</td>
           </tr>
         )}
       </tbody>

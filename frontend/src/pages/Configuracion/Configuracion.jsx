@@ -740,8 +740,8 @@ const Configuracion = () => {
     setHasLoadedUbicaciones(false);
   };
 
-  const handleClientesLoaded = useCallback((nextClientes) => {
-    setDirectorioTotal(nextClientes.length);
+  const handleClientesLoaded = useCallback((nextClientes, totalCount) => {
+    setDirectorioTotal(totalCount ?? nextClientes.length);
   }, []);
 
   const refreshDirectorio = async () => {
@@ -1280,13 +1280,11 @@ const Configuracion = () => {
                             </tbody>
                           </table>
                         </div>
-                        {ubicacionesMeta.totalPages > 1 && (
-                          <PaginationControls
-                            page={ubicacionesPage}
-                            totalPages={ubicacionesMeta.totalPages}
-                            onPageChange={handleUbicacionesPageChange}
-                          />
-                        )}
+                        <PaginationControls
+                          page={ubicacionesPage}
+                          totalPages={ubicacionesMeta.totalPages}
+                          onPageChange={handleUbicacionesPageChange}
+                        />
                         {ubicacionGroups.length > 0 && (
                           <ul className="records-mobile configuracion-ubicaciones-mobile-list">
                             {ubicacionGroups.map((group) => {

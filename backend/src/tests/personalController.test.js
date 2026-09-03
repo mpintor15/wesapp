@@ -50,6 +50,60 @@ describe('personalController.getColaboradores', () => {
     expect(body.message).toMatch(/estado/i);
     expect(db.query).not.toHaveBeenCalled();
   });
+
+  test('pagina server-side, retorna metadata estándar y no filtra total_count en cada fila', async () => {
+    db.query.mockResolvedValue({
+      rows: [
+        { id: 1, nombres_completos: 'Ana Torres', total_count: 2 },
+        { id: 2, nombres_completos: 'Beto Ruiz', total_count: 2 },
+      ],
+      rowCount: 2,
+    });
+    const res = mockRes();
+
+    await getColaboradores(mockReq({ query: { page: '2', pageSize: '10' } }), res);
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('COUNT(*) OVER()::int AS total_count');
+    expect(sql).toContain('LIMIT $1 OFFSET $2');
+    expect(params).toEqual([10, 10]);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [
+        { id: 1, nombres_completos: 'Ana Torres' },
+        { id: 2, nombres_completos: 'Beto Ruiz' },
+      ],
+      pagination: {
+        page: 2,
+        pageSize: 10,
+        totalItems: 2,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: true,
+      },
+    });
+  });
+
+  test('lista vacía retorna totalItems 0 sin romper metadata', async () => {
+    db.query.mockResolvedValue({ rows: [], rowCount: 0 });
+    const res = mockRes();
+
+    await getColaboradores(mockReq({ query: {} }), res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [],
+      pagination: {
+        page: 1,
+        pageSize: 25,
+        totalItems: 0,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
+  });
 });
 
 describe('personalController.createColaborador', () => {

@@ -98,7 +98,7 @@ const clientes = [
   {
     id: 1,
     nombre: 'ACME Seguridad',
-    identificacion: '099001',
+    identificacion: '0999999999001',
     tipo_identificacion: 'RUC',
     telefono: '0999999999',
     correo: 'ops@acme.com',
@@ -144,11 +144,90 @@ const groupedSuccess = (data, meta = {}) => ({
     ...meta,
   },
 });
+const CLIENTES_PAGE_SIZE = 25;
+
+const paginationFor = (totalItems, page = 1, pageSize = CLIENTES_PAGE_SIZE) => {
+  const totalPages = totalItems > 0 ? Math.ceil(totalItems / pageSize) : 0;
+  return {
+    page,
+    pageSize,
+    totalItems,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPreviousPage: page > 1,
+  };
+};
+
 const clientesSuccess = (data = clientes) => ({
   success: true,
   data,
   meta: { total: data.length, activos: 2, inactivos: data.length - 2, filtrados: data.length },
+  pagination: paginationFor(data.length),
 });
+
+const phoneCore = (value) =>
+  String(value || '')
+    .replace(/\D/g, '')
+    .replace(/^593|^0/, '');
+
+// Simula el filtrado/orden/paginación server-side real (nombre ASC, LIKE en
+// nombre/identificación/correo, núcleo de teléfono sin 0/593 inicial,
+// con/sin_ubicaciones, ubicacionId resuelto contra `ubicacionesList` como
+// hace el EXISTS del backend) para las pruebas que ejercen navegación de
+// páginas y combinación de filtros contra el listado completo `allData`.
+const mockClientesServerSide = (allData, ubicacionesList = ubicaciones) => {
+  clientesService.listClientes.mockImplementation(async (params = {}) => {
+    const page = Number(params.page) || 1;
+    const pageSize = Number(params.pageSize) || CLIENTES_PAGE_SIZE;
+    const search = String(params.search || '')
+      .trim()
+      .toLowerCase();
+    const searchCore = phoneCore(search);
+
+    let filtered = [...allData];
+    if (search) {
+      filtered = filtered.filter(
+        (cliente) =>
+          [cliente.nombre, cliente.identificacion, cliente.correo].some((value) =>
+            String(value || '')
+              .toLowerCase()
+              .includes(search)
+          ) ||
+          (searchCore && phoneCore(cliente.telefono).includes(searchCore))
+      );
+    }
+    if (params.estadoUbicaciones === 'con_ubicaciones') {
+      filtered = filtered.filter((cliente) => Number(cliente.ubicaciones_totales) > 0);
+    }
+    if (params.estadoUbicaciones === 'sin_ubicaciones') {
+      filtered = filtered.filter((cliente) => !Number(cliente.ubicaciones_totales));
+    }
+    if (params.ubicacionId) {
+      const ubicacion = ubicacionesList.find(
+        (candidate) => String(candidate.id) === String(params.ubicacionId)
+      );
+      const clienteId = ubicacion?.cliente_id ?? null;
+      filtered = filtered.filter((cliente) => clienteId !== null && cliente.id === clienteId);
+    }
+    filtered.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre)));
+
+    const totalItems = filtered.length;
+    const start = (page - 1) * pageSize;
+    const data = filtered.slice(start, start + pageSize);
+
+    return {
+      success: true,
+      data,
+      meta: {
+        total: allData.length,
+        activos: 2,
+        inactivos: allData.length - 2,
+        filtrados: totalItems,
+      },
+      pagination: paginationFor(totalItems, page, pageSize),
+    };
+  });
+};
 
 const buildClientes = (count) =>
   Array.from({ length: count }, (_, index) => {
@@ -303,7 +382,7 @@ describe('Configuracion ubicaciones', () => {
     );
     inventarioService.getManzanas.mockResolvedValue(success([]));
     inventarioService.getVillas.mockResolvedValue(success([]));
-    clientesService.listClientes.mockResolvedValue(clientesSuccess());
+    mockClientesServerSide(clientes);
     clientesService.listOpcionesUbicaciones.mockResolvedValue(
       success(clientes.filter((cliente) => cliente.estado === 'activo'))
     );
@@ -381,7 +460,7 @@ describe('Configuracion ubicaciones', () => {
     expect(refreshButton.className).toContain('btn-icon-only');
     await page.click(refreshButton);
 
-    expect(clientesService.listClientes).toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     expect(inventarioService.getUbicaciones).not.toHaveBeenCalled();
 
     page.unmount();
@@ -392,7 +471,7 @@ describe('Configuracion ubicaciones', () => {
 
     expect(page.text()).toContain('Directorio');
     expect(clientesService.listClientes).toHaveBeenCalledTimes(1);
-    expect(clientesService.listClientes).toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     expect(clientesService.listOpcionesUbicaciones).not.toHaveBeenCalled();
     expect(inventarioService.getUbicaciones).not.toHaveBeenCalled();
 
@@ -415,7 +494,7 @@ describe('Configuracion ubicaciones', () => {
     );
     expect(page.button('Directorio')).toBeFalsy();
     expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(1);
-    expect(clientesService.listClientes).not.toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).not.toHaveBeenCalled();
 
     page.unmount();
   });
@@ -436,7 +515,7 @@ describe('Configuracion ubicaciones', () => {
     expect(
       page.container.querySelector('button[aria-label="Eliminar cliente ACME Seguridad"]')
     ).not.toBeNull();
-    expect(clientesService.listClientes).toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     expect(clientesService.listOpcionesUbicaciones).not.toHaveBeenCalled();
     expect(inventarioService.getUbicaciones).not.toHaveBeenCalled();
 
@@ -499,7 +578,7 @@ describe('Configuracion ubicaciones', () => {
       page.container.querySelector('button[aria-label="Editar cliente ACME Seguridad"]')
     ).toBeNull();
     expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(1);
-    expect(clientesService.listClientes).not.toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).not.toHaveBeenCalled();
     expect(page.field('#ubicaciones-cliente')).toBeNull();
     expect(page.field('#ubicaciones-search')).not.toBeNull();
 
@@ -633,7 +712,7 @@ describe('Configuracion ubicaciones', () => {
 
     expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(1);
     expect(clientesService.listClientes).toHaveBeenCalledTimes(1);
-    expect(clientesService.listClientes).toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     expect(inventarioService.getUbicaciones).toHaveBeenCalledTimes(1);
 
     page.unmount();
@@ -645,7 +724,7 @@ describe('Configuracion ubicaciones', () => {
     await page.click(page.container.querySelector('button[aria-label="Actualizar datos"]'));
 
     expect(clientesService.listClientes).toHaveBeenCalledTimes(2);
-    expect(clientesService.listClientes).toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     expect(clientesService.listOpcionesUbicaciones).not.toHaveBeenCalled();
 
     page.unmount();
@@ -666,7 +745,7 @@ describe('Configuracion ubicaciones', () => {
 
     expect(inventarioService.getUbicaciones).toHaveBeenCalledTimes(2);
     expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(2);
-    expect(clientesService.listClientes).not.toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).not.toHaveBeenCalled();
 
     page.unmount();
   });
@@ -1935,7 +2014,7 @@ describe('Configuracion ubicaciones', () => {
   test('renderiza lista de clientes y aplica búsqueda', async () => {
     const page = await renderPage();
 
-    expect(clientesService.listClientes).toHaveBeenCalledWith({});
+    expect(clientesService.listClientes).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
     expect(page.text()).toContain('ACME Seguridad');
     expect(page.text()).toContain('Cliente Inactivo');
     expect(page.text()).toContain('2 ubicaciones');
@@ -1952,7 +2031,12 @@ describe('Configuracion ubicaciones', () => {
       await flushPromises();
     });
 
-    expect(clientesService.listClientes).toHaveBeenCalledTimes(1);
+    expect(clientesService.listClientes).toHaveBeenCalledTimes(2);
+    expect(clientesService.listClientes).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 25,
+      search: 'acme',
+    });
     expect(page.text()).toContain('ACME Seguridad');
     expect(page.text()).not.toContain('Cliente Inactivo');
     page.unmount();
@@ -1962,17 +2046,15 @@ describe('Configuracion ubicaciones', () => {
     ['identificación', ' 099003 ', 'Beta Protección', 'ACME Seguridad'],
     ['correo sin distinguir mayúsculas', 'OPS@ACME.COM', 'ACME Seguridad', 'Beta Protección'],
     ['teléfono con formato', '099 999 9999', 'ACME Seguridad', 'Beta Protección'],
-  ])('busca clientes localmente por %s', async (_field, search, expected, hidden) => {
-    clientesService.listClientes.mockResolvedValue(
-      clientesSuccess([
-        {
-          ...clientes[0],
-          telefono: '+593 99 999 9999',
-        },
-        clientes[1],
-        clientes[2],
-      ])
-    );
+  ])('busca clientes por %s', async (_field, search, expected, hidden) => {
+    mockClientesServerSide([
+      {
+        ...clientes[0],
+        telefono: '+593 99 999 9999',
+      },
+      clientes[1],
+      clientes[2],
+    ]);
     const page = await renderPage();
 
     page.changeField('#clientes-search', search);
@@ -1980,11 +2062,11 @@ describe('Configuracion ubicaciones', () => {
 
     expect(page.text()).toContain(expected);
     expect(page.text()).not.toContain(hidden);
-    expect(clientesService.listClientes).toHaveBeenCalledTimes(1);
+    expect(clientesService.listClientes).toHaveBeenCalledTimes(2);
     page.unmount();
   });
 
-  test('combina búsqueda local con filtro de relación', async () => {
+  test('combina búsqueda con filtro de relación', async () => {
     const page = await renderPage();
 
     page.changeField('#clientes-search', 'beta@example.com');
@@ -1994,7 +2076,12 @@ describe('Configuracion ubicaciones', () => {
     expect(page.text()).toContain('Beta Protección');
     expect(page.text()).not.toContain('ACME Seguridad');
     expect(page.text()).not.toContain('Cliente Inactivo');
-    expect(clientesService.listClientes).toHaveBeenCalledTimes(1);
+    expect(clientesService.listClientes).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 25,
+      search: 'beta@example.com',
+      estadoUbicaciones: 'con_ubicaciones',
+    });
     page.unmount();
   });
 
@@ -2289,6 +2376,9 @@ describe('Configuracion ubicaciones', () => {
 
     expect(clientesService.deleteCliente).toHaveBeenCalledWith(1);
     expect(clientesService.deleteCliente).toHaveBeenCalledTimes(1);
+    clientesService.listClientes.mockResolvedValueOnce(
+      clientesSuccess(clientes.filter((cliente) => cliente.id !== 1))
+    );
     await act(async () => {
       resolveDelete({ success: true });
       await flushPromises();
@@ -2312,6 +2402,85 @@ describe('Configuracion ubicaciones', () => {
 
     expect(page.text()).toContain('Ya existe un cliente con esa identificación');
     expect(page.text()).toContain('Crear cliente');
+    page.unmount();
+  });
+
+  test('tipo de identificación es un dropdown con cédula, RUC y pasaporte', async () => {
+    const page = await renderPage();
+
+    await page.click(page.button('Crear cliente'));
+    const select = page.field('#cliente-tipo-identificacion');
+    const optionValues = Array.from(select.options).map((option) => option.value);
+
+    expect(select.tagName).toBe('SELECT');
+    expect(optionValues).toEqual(['', 'CEDULA', 'RUC', 'PASAPORTE']);
+    page.unmount();
+  });
+
+  test('valida longitud de cédula en el formulario de cliente', async () => {
+    const page = await renderPage();
+
+    await page.click(page.button('Crear cliente'));
+    page.changeField('#cliente-nombre', 'Cliente Cédula');
+    page.changeField('#cliente-tipo-identificacion', 'CEDULA');
+    page.changeField('#cliente-identificacion', '12345');
+    await page.submitForm();
+
+    expect(page.text()).toContain('La cédula debe tener exactamente 10 dígitos numéricos.');
+    expect(clientesService.createCliente).not.toHaveBeenCalled();
+
+    page.changeField('#cliente-identificacion', '1234567890');
+    expect(page.text()).not.toContain('La cédula debe tener exactamente 10 dígitos numéricos.');
+    page.unmount();
+  });
+
+  test('valida longitud de RUC en el formulario de cliente', async () => {
+    const page = await renderPage();
+
+    await page.click(page.button('Crear cliente'));
+    page.changeField('#cliente-nombre', 'Cliente RUC');
+    page.changeField('#cliente-tipo-identificacion', 'RUC');
+    page.changeField('#cliente-identificacion', 'ABC1234567890');
+    await page.submitForm();
+
+    expect(page.text()).toContain('El RUC debe tener exactamente 13 dígitos numéricos.');
+    expect(clientesService.createCliente).not.toHaveBeenCalled();
+    page.unmount();
+  });
+
+  test('pasaporte acepta identificación sin validar longitud ni formato numérico', async () => {
+    clientesService.createCliente.mockResolvedValue({
+      success: true,
+      data: { ...clientes[0], id: 5, nombre: 'Cliente Pasaporte' },
+    });
+    const page = await renderPage();
+
+    await page.click(page.button('Crear cliente'));
+    page.changeField('#cliente-nombre', 'Cliente Pasaporte');
+    page.changeField('#cliente-tipo-identificacion', 'PASAPORTE');
+    page.changeField('#cliente-identificacion', 'AB12345');
+    await page.submitForm();
+
+    expect(clientesService.createCliente).toHaveBeenCalledWith(
+      expect.objectContaining({ tipo_identificacion: 'PASAPORTE', identificacion: 'AB12345' })
+    );
+    page.unmount();
+  });
+
+  test('valida teléfono de exactamente 10 dígitos numéricos', async () => {
+    const page = await renderPage();
+
+    await page.click(page.button('Crear cliente'));
+    page.changeField('#cliente-nombre', 'Cliente Teléfono');
+    page.changeField('#cliente-telefono', '099123');
+    await page.submitForm();
+
+    expect(page.text()).toContain('El teléfono debe tener exactamente 10 dígitos numéricos.');
+    expect(page.field('#cliente-telefono').getAttribute('aria-invalid')).toBe('true');
+    expect(clientesService.createCliente).not.toHaveBeenCalled();
+
+    page.changeField('#cliente-telefono', '0991234567');
+    expect(page.text()).not.toContain('El teléfono debe tener exactamente 10 dígitos numéricos.');
     page.unmount();
   });
 
@@ -2376,7 +2545,7 @@ describe('Configuracion ubicaciones', () => {
   });
 
   test('pagina clientes en 25 registros fijos y deshabilita botones extremos', async () => {
-    clientesService.listClientes.mockResolvedValue(clientesSuccess(buildClientes(79)));
+    mockClientesServerSide(buildClientes(79));
     const page = await renderPage();
 
     const rows = page.container.querySelectorAll('.configuracion-clientes-table tbody tr');
@@ -2404,10 +2573,9 @@ describe('Configuracion ubicaciones', () => {
 
   test('filtra antes de paginar y reinicia a página 1 al cambiar filtro', async () => {
     const manyClientes = buildClientes(120);
-    clientesService.listClientes.mockResolvedValue(clientesSuccess(manyClientes));
-    inventarioService.getUbicaciones.mockResolvedValue(
-      success(buildUbicacionesForClientes(manyClientes))
-    );
+    const ubicacionesForClientes = buildUbicacionesForClientes(manyClientes);
+    mockClientesServerSide(manyClientes, ubicacionesForClientes);
+    inventarioService.getUbicaciones.mockResolvedValue(success(ubicacionesForClientes));
     const page = await renderPage();
 
     await page.click(page.button('Ubicaciones'));
@@ -2419,13 +2587,15 @@ describe('Configuracion ubicaciones', () => {
     expect(page.text()).toContain('Mostrando 1 de 1 cliente(s)');
     expect(page.text()).toContain('Cliente 02');
     expect(page.text()).not.toContain('Cliente 01');
-    expect(page.button('‹ Anterior')).toBeFalsy();
+    expect(page.text()).toContain('Página 1 de 1');
+    expect(page.button('‹ Anterior').disabled).toBe(true);
+    expect(page.button('Siguiente ›').disabled).toBe(true);
 
     page.unmount();
   });
 
   test('busca antes de paginar y reinicia a página 1 al cambiar búsqueda', async () => {
-    clientesService.listClientes.mockResolvedValue(clientesSuccess(buildClientes(79)));
+    mockClientesServerSide(buildClientes(79));
     const page = await renderPage();
 
     await page.click(page.button('Siguiente ›'));
@@ -2434,13 +2604,15 @@ describe('Configuracion ubicaciones', () => {
 
     expect(page.text()).toContain('Mostrando 1 de 1 cliente(s)');
     expect(page.text()).toContain('Cliente 70');
-    expect(page.button('Siguiente ›')).toBeFalsy();
+    expect(page.text()).toContain('Página 1 de 1');
+    expect(page.button('‹ Anterior').disabled).toBe(true);
+    expect(page.button('Siguiente ›').disabled).toBe(true);
 
     page.unmount();
   });
 
   test('ordena alfabéticamente antes de paginar', async () => {
-    clientesService.listClientes.mockResolvedValue(clientesSuccess(buildClientes(79)));
+    mockClientesServerSide(buildClientes(79));
     const page = await renderPage();
 
     expect(page.text()).toContain('Mostrando 25 de 79 cliente(s)');
@@ -2452,8 +2624,8 @@ describe('Configuracion ubicaciones', () => {
     page.unmount();
   });
 
-  test('no muestra controles de paginación cuando no hay resultados', async () => {
-    clientesService.listClientes.mockResolvedValue(clientesSuccess(buildClientes(79)));
+  test('mantiene paginación 1 de 1 deshabilitada cuando no hay resultados', async () => {
+    mockClientesServerSide(buildClientes(79));
     const page = await renderPage();
 
     page.changeField('#clientes-search', 'sin coincidencias');
@@ -2464,19 +2636,22 @@ describe('Configuracion ubicaciones', () => {
       'No encontramos clientes que coincidan con los filtros aplicados.'
     );
     expect(page.button('Limpiar filtros')).toBeTruthy();
-    expect(page.button('Siguiente ›')).toBeFalsy();
+    expect(page.text()).toContain('Página 1 de 1');
+    expect(page.button('‹ Anterior').disabled).toBe(true);
+    expect(page.button('Siguiente ›').disabled).toBe(true);
     expect(page.field('#clientes-page-size')).toBeNull();
 
     page.unmount();
   });
 
-  test('mantiene una sola página sin controles innecesarios', async () => {
+  test('mantiene una sola página con ambos controles deshabilitados', async () => {
     clientesService.listClientes.mockResolvedValue(clientesSuccess(buildClientes(10)));
     const page = await renderPage();
 
     expect(page.text()).toContain('Mostrando 10 de 10 cliente(s)');
-    expect(page.button('‹ Anterior')).toBeFalsy();
-    expect(page.button('Siguiente ›')).toBeFalsy();
+    expect(page.text()).toContain('Página 1 de 1');
+    expect(page.button('‹ Anterior').disabled).toBe(true);
+    expect(page.button('Siguiente ›').disabled).toBe(true);
     expect(page.field('#clientes-page-size')).toBeNull();
 
     page.unmount();
@@ -2496,9 +2671,7 @@ describe('Configuracion ubicaciones', () => {
   });
 
   test('muestra estado vacío contextual para filtro sin ubicaciones sin tratarlo como catálogo vacío', async () => {
-    clientesService.listClientes.mockResolvedValue(
-      clientesSuccess(clientes.map((cliente) => ({ ...cliente, ubicaciones_totales: 1 })))
-    );
+    mockClientesServerSide(clientes.map((cliente) => ({ ...cliente, ubicaciones_totales: 1 })));
     const page = await renderPage();
 
     page.changeField('#clientes-estado-ubicaciones', 'sin_ubicaciones');
