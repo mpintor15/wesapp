@@ -715,3 +715,150 @@ describe('usuarios permissions', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('guardia no tiene alcance sobre Cuentas ni Inventario', () => {
+  beforeEach(() => {
+    mockCurrentUser(userFromDb('guardia'));
+  });
+
+  test.each([
+    ['GET', 'get', '/api/cuentas/clientes'],
+    ['GET', 'get', '/api/cuentas/facturas/catalogo'],
+    ['GET', 'get', '/api/cuentas/pagos'],
+    ['GET', 'get', '/api/cuentas/reporte'],
+    ['POST', 'post', '/api/cuentas/clientes'],
+  ])('%s %s -> 403 para guardia (Cuentas)', async (_label, method, url) => {
+    const res = await request(app)
+      [method](url)
+      .set('Authorization', `Bearer ${tokenFor('guardia')}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+
+  test.each([
+    ['GET', 'get', '/api/inventario/articulos'],
+    ['GET', 'get', '/api/inventario/ubicaciones'],
+    ['GET', 'get', '/api/inventario/movimientos/10/pdf'],
+    ['POST', 'post', '/api/inventario/articulos'],
+    ['POST', 'post', '/api/inventario/movimientos'],
+  ])('%s %s -> 403 para guardia (Inventario)', async (_label, method, url) => {
+    const res = await request(app)
+      [method](url)
+      .set('Authorization', `Bearer ${tokenFor('guardia')}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('roles administrativos tienen alcance global (multi-cliente/multi-ubicación) en Cuentas e Inventario', () => {
+  test.each(['secretario', 'contador', 'gerente'])(
+    'GET /api/cuentas/clientes no filtra por usuario/ubicación para %s',
+    async (role) => {
+      mockCurrentUser(userFromDb(role));
+      db.query.mockImplementation(async (sql, params) => {
+        const query = String(sql);
+        if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+          return { rows: [userFromDb(role)], rowCount: 1 };
+        }
+        if (query.includes('FROM clientes') && query.includes('WHERE estado')) {
+          expect(params).not.toContain(50);
+          return {
+            rows: [
+              { id: 1, nombre: 'Cliente A', identificacion: 'A1', estado: 'activo' },
+              { id: 2, nombre: 'Cliente B', identificacion: 'B1', estado: 'activo' },
+            ],
+            rowCount: 2,
+          };
+        }
+        return { rows: [], rowCount: 0 };
+      });
+
+      const res = await request(app)
+        .get('/api/cuentas/clientes')
+        .set('Authorization', `Bearer ${tokenFor(role)}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.map((c) => c.id)).toEqual([1, 2]);
+    }
+  );
+
+  test.each(['secretario', 'supervisor', 'gerente'])(
+    'GET /api/inventario/articulos permite ver artículos de múltiples ubicaciones sin filtro obligatorio para %s',
+    async (role) => {
+      mockCurrentUser(userFromDb(role));
+
+      const res = await request(app)
+        .get('/api/inventario/articulos')
+        .set('Authorization', `Bearer ${tokenFor(role)}`);
+
+      expectAllowedPastAuthorization(res);
+      expect(res.status).not.toBe(400);
+    }
+  );
+});
+
+describe('límites de tamaño en payloads batch (Cuentas/Inventario)', () => {
+  test('POST /api/cuentas/abonos/batch rechaza más de 50 abonos', async () => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const abonos = Array.from({ length: 51 }, (_, index) => ({
+      num_factura: index + 1,
+      valor_abono: 10,
+    }));
+    const res = await request(app)
+      .post('/api/cuentas/abonos/batch')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({ cliente_id: 1, fecha: '2024-01-01', abonos });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('POST /api/cuentas/abonos/batch acepta 50 abonos (no rechaza por tamaño)', async () => {
+    mockCurrentUser(userFromDb('contador'));
+
+    const abonos = Array.from({ length: 50 }, (_, index) => ({
+      num_factura: index + 1,
+      valor_abono: 10,
+    }));
+    const res = await request(app)
+      .post('/api/cuentas/abonos/batch')
+      .set('Authorization', `Bearer ${tokenFor('contador')}`)
+      .send({ cliente_id: 1, fecha: '2024-01-01', abonos });
+
+    expect(res.status).not.toBe(400);
+  });
+
+  test('POST /api/inventario/movimientos rechaza más de 50 artículos', async () => {
+    mockCurrentUser(userFromDb('secretario'));
+
+    const items = Array.from({ length: 51 }, (_, index) => ({
+      articulo_id: index + 1,
+      cantidad: 1,
+    }));
+    const res = await request(app)
+      .post('/api/inventario/movimientos')
+      .set('Authorization', `Bearer ${tokenFor('secretario')}`)
+      .send({ ubicacion_destino_id: 1, items });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('VALIDATION_ERROR');
+  });
+
+  test('POST /api/inventario/movimientos acepta 50 artículos (no rechaza por tamaño)', async () => {
+    mockCurrentUser(userFromDb('secretario'));
+
+    const items = Array.from({ length: 50 }, (_, index) => ({
+      articulo_id: index + 1,
+      cantidad: 1,
+    }));
+    const res = await request(app)
+      .post('/api/inventario/movimientos')
+      .set('Authorization', `Bearer ${tokenFor('secretario')}`)
+      .send({ ubicacion_destino_id: 1, items });
+
+    expect(res.status).not.toBe(400);
+  });
+});

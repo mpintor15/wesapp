@@ -132,6 +132,13 @@ const bitacoraRegistroCreateSchema = z
 
 const visitFormTipoNameSchema = requiredTrimmedString(60, 'Nombre del tipo de visita');
 
+const visitFormTipoSchema = z
+  .object({
+    nombre: visitFormTipoNameSchema,
+    requiere_salida: z.boolean().optional().default(false),
+  })
+  .strict();
+
 const visitFormFieldAplicaASchema = z.union([
   z.literal('TODOS'),
   z.array(visitFormTipoNameSchema).min(1, 'Selecciona al menos un tipo de visita'),
@@ -173,15 +180,75 @@ const visitFormFieldSchema = z
     }
   });
 
+// "Visitantes" es la única estructura de grupo repetible soportada: predefinida,
+// no genérica. Sus dos campos internos (Nombre, Cédula) son fijos —el builder
+// solo puede configurar aplica_a, mínimo de registros y si cada uno es
+// requerido— por lo que el schema valida la forma exacta en vez de aceptar
+// campos arbitrarios.
+const VISITANTES_GROUP_KEY = 'visitantes';
+const VISITANTES_GROUP_LABEL = 'Visitantes';
+const VISITANTES_FIELD_KEYS = ['nombre', 'cedula'];
+const VISITANTES_FIELD_TYPES = { nombre: 'text', cedula: 'cedula' };
+const VISITANTES_FIELD_LABELS = { nombre: 'Nombre', cedula: 'Cédula' };
+
+const visitFormGroupFieldSchema = z
+  .object({
+    field_key: z.enum(['nombre', 'cedula']),
+    label: requiredTrimmedString(120, 'label'),
+    type: z.enum(['text', 'cedula']),
+    required: z.boolean().optional().default(false),
+  })
+  .strict();
+
+const visitFormGroupSchema = z
+  .object({
+    group_key: z.literal(VISITANTES_GROUP_KEY),
+    label: z.literal(VISITANTES_GROUP_LABEL),
+    min_count: z
+      .union([z.literal(0), z.literal(1)])
+      .optional()
+      .default(0),
+    aplica_a: visitFormFieldAplicaASchema.optional().default('TODOS'),
+    fields: z
+      .array(visitFormGroupFieldSchema)
+      .length(2, 'El grupo Visitantes requiere Nombre y Cédula'),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    const keys = data.fields.map((field) => field.field_key);
+    VISITANTES_FIELD_KEYS.forEach((expectedKey, index) => {
+      if (keys[index] !== expectedKey) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['fields', index, 'field_key'],
+          message: `El grupo Visitantes debe tener los campos ${VISITANTES_FIELD_KEYS.join(', ')} en ese orden`,
+        });
+      }
+    });
+    data.fields.forEach((field, index) => {
+      if (
+        VISITANTES_FIELD_TYPES[field.field_key] &&
+        field.type !== VISITANTES_FIELD_TYPES[field.field_key]
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['fields', index, 'type'],
+          message: `${field.label} debe ser de tipo ${VISITANTES_FIELD_TYPES[field.field_key]}`,
+        });
+      }
+    });
+  });
+
 const bitacoraVisitFormPublishSchema = z
   .object({
     titulo: z.string().trim().min(1).max(150).optional(),
     mostrar_fecha_hora: z.boolean().optional().default(true),
     tipos_visita: z
-      .array(visitFormTipoNameSchema)
+      .array(visitFormTipoSchema)
       .min(1, 'Se requiere al menos un tipo de visita')
       .max(20, 'No se pueden configurar más de 20 tipos de visita'),
     fields: z.array(visitFormFieldSchema).max(30).default([]),
+    grupos: z.array(visitFormGroupSchema).max(1, 'Solo se admite el grupo Visitantes').default([]),
   })
   .strict()
   .superRefine((data, ctx) => {
@@ -198,10 +265,25 @@ const bitacoraVisitFormPublishSchema = z
       keys.add(key);
     });
 
+    // Deduplicación: si el grupo Visitantes está presente, Nombre/Cédula del
+    // visitante ya quedan cubiertos por sus dos campos fijos y no pueden
+    // volver a pedirse como preguntas normales sueltas.
+    if (data.grupos.length > 0) {
+      data.fields.forEach((field, index) => {
+        if (VISITANTES_FIELD_KEYS.includes(field.field_key.toLowerCase())) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['fields', index, 'field_key'],
+            message: `"${field.label}" duplica un campo del grupo Visitantes (${VISITANTES_FIELD_LABELS[field.field_key.toLowerCase()]})`,
+          });
+        }
+      });
+    }
+
     const tipoNames = new Set();
     const normalizedTipos = new Set();
     data.tipos_visita.forEach((tipo, index) => {
-      const normalized = tipo.toLowerCase();
+      const normalized = tipo.nombre.toLowerCase();
       if (normalizedTipos.has(normalized)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -210,7 +292,7 @@ const bitacoraVisitFormPublishSchema = z
         });
       }
       normalizedTipos.add(normalized);
-      tipoNames.add(tipo);
+      tipoNames.add(tipo.nombre);
     });
 
     data.fields.forEach((field, index) => {
@@ -227,20 +309,44 @@ const bitacoraVisitFormPublishSchema = z
         }
       });
     });
+
+    data.grupos.forEach((group, index) => {
+      if (group.aplica_a === 'TODOS') {
+        return;
+      }
+      group.aplica_a.forEach((tipo, tipoIndex) => {
+        if (!tipoNames.has(tipo)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['grupos', index, 'aplica_a', tipoIndex],
+            message: `El tipo de visita "${tipo}" no está configurado en tipos_visita`,
+          });
+        }
+      });
+    });
   });
 
 const visitResponsesSchema = z.record(z.string(), z.unknown()).optional().default({});
+
+const visitGroupResponsesSchema = z
+  .record(z.string(), z.array(z.record(z.string(), z.unknown())))
+  .optional()
+  .default({});
 
 const bitacoraVisitCreateSchema = z
   .object({
     ubicacion_id: positiveInt('Ubicación ID'),
     manzana_id: positiveInt('Manzana ID'),
     villa_id: positiveInt('Villa ID'),
-    visitante_nombre: requiredTrimmedString(150, 'Nombre del visitante'),
-    visitante_documento: z
-      .string({ required_error: 'Cédula es requerida' })
-      .regex(/^\d{10}$/, 'Cédula debe tener exactamente 10 dígitos'),
-    visitante_telefono: requiredTrimmedString(80, 'Teléfono del visitante'),
+    visitante_nombre: optionalTrimmedString(150, 'Nombre del visitante'),
+    visitante_documento: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .regex(/^\d{10}$/, 'Cédula debe tener exactamente 10 dígitos')
+        .optional()
+    ),
+    visitante_telefono: optionalTrimmedString(80, 'Teléfono del visitante'),
     tipo_visita_id: positiveInt('Tipo de visita'),
     placa: z
       .string()
@@ -249,8 +355,27 @@ const bitacoraVisitCreateSchema = z
       .pipe(z.string().max(10, 'Placa no puede exceder 10 caracteres'))
       .optional(),
     respuestas: visitResponsesSchema,
+    grupos: visitGroupResponsesSchema,
+    autorizada: z.boolean().optional().default(true),
+    motivo_no_autorizacion: optionalTrimmedString(200, 'Motivo de no autorización'),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.autorizada === false && !data.motivo_no_autorizacion) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['motivo_no_autorizacion'],
+        message: 'Motivo de no autorización es requerido',
+      });
+    }
+    if (data.autorizada !== false && data.motivo_no_autorizacion) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['motivo_no_autorizacion'],
+        message: 'Motivo de no autorización solo aplica si la visita no fue autorizada',
+      });
+    }
+  });
 
 const bitacoraVisitCloseSchema = z.object({}).strict();
 
@@ -375,7 +500,8 @@ const pagoCreateSchema = z.object({
         valor_abono: positiveNumber('Valor de abono'),
       })
     )
-    .min(1, 'Debes seleccionar al menos una factura con monto'),
+    .min(1, 'Debes seleccionar al menos una factura con monto')
+    .max(50, 'No puedes aplicar un pago a más de 50 facturas a la vez'),
 });
 
 // ============================================
@@ -423,7 +549,8 @@ const movimientoCreateSchema = z.object({
         talla: optionalTrimmedString(100, 'Talla'),
       })
     )
-    .min(1, 'Debes agregar al menos un artículo'),
+    .min(1, 'Debes agregar al menos un artículo')
+    .max(50, 'No puedes incluir más de 50 artículos en un mismo movimiento'),
 });
 
 // ============================================
