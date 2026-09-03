@@ -151,6 +151,7 @@ const getUbicacionEmptyMessage = ({ hasFilters, activeClienteFilter }) => {
 };
 
 const UbicacionFormModal = ({
+  canReassignCliente,
   error,
   form,
   fieldErrors,
@@ -195,7 +196,13 @@ const UbicacionFormModal = ({
     isUnsupportedInactiveCliente ||
     isNameTooLong ||
     isSubmitting;
-  const isClienteLocked = mode === 'create' && Boolean(lockedCliente?.id);
+  const isClienteCreateLocked = mode === 'create' && Boolean(lockedCliente?.id);
+  // Reasignar el cliente de una ubicación existente requiere un permiso
+  // específico (solo gerente/supervisor) además de poder editar la
+  // ubicación en general — el backend aplica la misma regla de forma
+  // independiente; esto es solo UX para no ofrecer una vía editable.
+  const isClienteReassignLocked = mode === 'edit' && !canReassignCliente;
+  const isClienteLocked = isClienteCreateLocked || isClienteReassignLocked;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -245,10 +252,15 @@ const UbicacionFormModal = ({
               El cliente actual está inactivo y se conserva por historial.
             </div>
           )}
-          {isClienteLocked && (
+          {isClienteCreateLocked && (
             <div className="configuracion-form-context" role="status">
               Nueva ubicación para <strong>{lockedCliente.nombre}</strong>. El cliente queda
               bloqueado para esta creación.
+            </div>
+          )}
+          {isClienteReassignLocked && (
+            <div className="configuracion-form-context" role="status">
+              Solo Gerente y Supervisor pueden reasignar el cliente de una ubicación.
             </div>
           )}
           <div className="form-group">
@@ -281,11 +293,13 @@ const UbicacionFormModal = ({
             </select>
             <div className="configuracion-field-meta">
               <span id="ubicacion-cliente-help">
-                {isClienteLocked
+                {isClienteCreateLocked
                   ? 'Cliente preseleccionado desde el listado. Abre la creación global para elegir otro cliente.'
-                  : isPreservingHistoricalUnassigned
-                    ? 'Se conserva el cliente histórico actual.'
-                    : 'Obligatorio para crear o reasignar ubicaciones.'}
+                  : isClienteReassignLocked
+                    ? 'No tienes permiso para cambiar el cliente de esta ubicación.'
+                    : isPreservingHistoricalUnassigned
+                      ? 'Se conserva el cliente histórico actual.'
+                      : 'Obligatorio para crear o reasignar ubicaciones.'}
               </span>
             </div>
             {fieldErrors?.cliente_id && (
@@ -1518,8 +1532,9 @@ const Configuracion = () => {
         isSubmitting={isSubmitting}
         mode={modalMode}
         onChange={(nextForm) => {
-          if (lockedCreateCliente && Object.prototype.hasOwnProperty.call(nextForm, 'cliente_id')) {
-            return;
+          if (Object.prototype.hasOwnProperty.call(nextForm, 'cliente_id')) {
+            if (lockedCreateCliente) return;
+            if (modalMode === 'edit' && !permissions.canReassignUbicacionCliente) return;
           }
           setForm((prev) => ({ ...prev, ...nextForm }));
           setFormError('');
@@ -1536,6 +1551,7 @@ const Configuracion = () => {
         clientes={clientes}
         editingUbicacion={editingUbicacion}
         lockedCliente={lockedCreateCliente}
+        canReassignCliente={permissions.canReassignUbicacionCliente}
       />
 
       <ConfirmDialog

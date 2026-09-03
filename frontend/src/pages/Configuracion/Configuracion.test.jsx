@@ -645,6 +645,62 @@ describe('Configuracion ubicaciones', () => {
     page.unmount();
   });
 
+  test('editar ubicación sin permiso de reasignar cliente bloquea el selector Cliente', async () => {
+    useAuth.mockReturnValue({
+      user: {
+        id: 73,
+        usuario: 'ubicaciones-edit',
+        tipo_usuario: 'custom',
+        permisos: ['inventario.ubicaciones.ver', 'inventario.ubicaciones.editar'],
+      },
+    });
+    const page = await renderPage();
+
+    await page.click(page.button('Ubicaciones'));
+    await page.click(page.container.querySelector('button[aria-label="Editar ubicación Archivo"]'));
+
+    const clienteField = page.field('#ubicacion-cliente');
+    expect(clienteField.disabled).toBe(true);
+    expect(page.text()).toContain(
+      'Solo Gerente y Supervisor pueden reasignar el cliente de una ubicación.'
+    );
+
+    // Aunque el select esté deshabilitado, el guard en el handler onChange
+    // es la defensa real: un intento programático de cambiar cliente_id no
+    // debe mutar el estado del formulario.
+    page.changeField('#ubicacion-cliente', '3');
+    expect(page.field('#ubicacion-cliente').value).toBe('1');
+
+    page.unmount();
+  });
+
+  test('gerente y supervisor sí pueden reasignar cliente al editar una ubicación', async () => {
+    useAuth.mockReturnValue({
+      user: {
+        id: 80,
+        usuario: 'ubicaciones-supervisor',
+        tipo_usuario: 'custom',
+        permisos: [
+          'inventario.ubicaciones.ver',
+          'inventario.ubicaciones.editar',
+          'inventario.ubicaciones.reasignar_cliente',
+        ],
+      },
+    });
+    const page = await renderPage();
+
+    await page.click(page.button('Ubicaciones'));
+    await page.click(page.container.querySelector('button[aria-label="Editar ubicación Archivo"]'));
+
+    const clienteField = page.field('#ubicacion-cliente');
+    expect(clienteField.disabled).toBe(false);
+
+    page.changeField('#ubicacion-cliente', '3');
+    expect(page.field('#ubicacion-cliente').value).toBe('3');
+
+    page.unmount();
+  });
+
   test('permiso legacy de editar artículo no muestra editar ubicación administrativo', async () => {
     useAuth.mockReturnValue({
       user: {

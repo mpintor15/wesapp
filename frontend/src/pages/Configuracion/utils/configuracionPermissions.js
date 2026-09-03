@@ -10,6 +10,7 @@ export const CONFIGURACION_ACTIONS = {
   UBICACIONES_CREATE: PERMISSIONS.INVENTARIO_UBICACIONES_CREAR,
   UBICACIONES_EDIT: PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR,
   UBICACIONES_DELETE: PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR,
+  UBICACIONES_REASSIGN_CLIENT: PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE,
   URBANIZACION_MANAGE: PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR,
 };
 
@@ -20,6 +21,9 @@ export const canCreateLocations = (can) => can(CONFIGURACION_ACTIONS.UBICACIONES
 export const canEditLocations = (can) => can(CONFIGURACION_ACTIONS.UBICACIONES_EDIT);
 
 export const canDeleteLocations = (can) => can(CONFIGURACION_ACTIONS.UBICACIONES_DELETE);
+
+export const canReassignLocationCliente = (can) =>
+  can(CONFIGURACION_ACTIONS.UBICACIONES_REASSIGN_CLIENT);
 
 export const getConfiguracionPermissions = (user) => {
   const canAction = (action) => can(user, action);
@@ -34,6 +38,7 @@ export const getConfiguracionPermissions = (user) => {
     canCreateUbicacion: canCreateLocations(canAction),
     canEditUbicacion: canEditLocations(canAction),
     canDeleteUbicacion: canDeleteLocations(canAction),
+    canReassignUbicacionCliente: canReassignLocationCliente(canAction),
     canManageUrbanizacion: canAction(CONFIGURACION_ACTIONS.URBANIZACION_MANAGE),
   };
 };

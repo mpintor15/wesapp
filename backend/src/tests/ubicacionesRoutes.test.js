@@ -25,6 +25,7 @@ const db = require('../config/database');
 const app = require('../app');
 const config = require('../config/config');
 const audit = require('../utils/audit');
+const { rolePermissions, PERMISSIONS } = require('../config/permissions');
 const {
   findGroupedLocations,
   findGroupedLocationsSource,
@@ -994,6 +995,145 @@ describe('ubicaciones routes', () => {
         datos_nuevos: expect.objectContaining({ nombre: 'Bodega Sur', cliente_id: 11 }),
       })
     );
+  });
+
+  test('supervisor puede reasignar el cliente de una ubicación', async () => {
+    currentUser.tipo_usuario = 'supervisor';
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 3,
+            nombre: 'Bodega Norte',
+            cliente_id: 10,
+            cliente_nombre: 'ACME',
+            cliente_estado: 'activo',
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 11, nombre: 'Cliente Sur', estado: 'activo' }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 3, nombre: 'Bodega Sur', cliente_id: 11 }],
+        rowCount: 1,
+      });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('put', '/api/inventario/ubicaciones/3').send({
+      nombre: 'Bodega Sur',
+      cliente_id: 11,
+    });
+    currentUser.tipo_usuario = 'gerente';
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      data: { cliente_id: 11, cliente_nombre: 'Cliente Sur' },
+    });
+  });
+
+  test.each(['secretario', 'contador', 'guardia'])(
+    'rol %s no puede reasignar el cliente de una ubicación vía API directa',
+    async (tipoUsuario) => {
+      currentUser.tipo_usuario = tipoUsuario;
+      const client = { query: jest.fn() };
+      db.transaction.mockImplementation(async (callback) => callback(client));
+
+      const res = await requestWithAuth('put', '/api/inventario/ubicaciones/3').send({
+        nombre: 'Bodega Sur',
+        cliente_id: 11,
+      });
+      currentUser.tipo_usuario = 'gerente';
+
+      expect(res.status).toBe(403);
+      expect(client.query).not.toHaveBeenCalled();
+    }
+  );
+
+  test('el rechazo de reasignación aplica aunque el rol tenga permiso general de edición (defensa en profundidad)', async () => {
+    // Simula un rol futuro con INVENTARIO_UBICACIONES_EDITAR pero sin el
+    // permiso específico de reasignar cliente, para probar que el control
+    // vive en el propio controlador y no depende solo de la ruta.
+    const original = [...rolePermissions.supervisor];
+    rolePermissions.supervisor = original.filter(
+      (permission) => permission !== PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE
+    );
+    currentUser.tipo_usuario = 'supervisor';
+
+    const client = { query: jest.fn() };
+    client.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 3,
+          nombre: 'Bodega Norte',
+          cliente_id: 10,
+          cliente_nombre: 'ACME',
+          cliente_estado: 'activo',
+        },
+      ],
+      rowCount: 1,
+    });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('put', '/api/inventario/ubicaciones/3').send({
+      nombre: 'Bodega Sur',
+      cliente_id: 11,
+    });
+
+    rolePermissions.supervisor = original;
+    currentUser.tipo_usuario = 'gerente';
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      code: 'LOCATION_CLIENT_REASSIGN_FORBIDDEN',
+      message: 'No tiene permisos para reasignar el cliente de esta ubicación',
+    });
+    expect(client.query).toHaveBeenCalledTimes(1);
+  });
+
+  test('supervisor sin permiso de reasignar sigue pudiendo editar nombre/tipo sin tocar el cliente', async () => {
+    const original = [...rolePermissions.supervisor];
+    rolePermissions.supervisor = original.filter(
+      (permission) => permission !== PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE
+    );
+    currentUser.tipo_usuario = 'supervisor';
+
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 3,
+            nombre: 'Bodega Norte',
+            cliente_id: 10,
+            cliente_nombre: 'ACME',
+            cliente_estado: 'activo',
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({
+        rows: [{ id: 3, nombre: 'Bodega Norte Renombrada', cliente_id: 10 }],
+        rowCount: 1,
+      });
+    db.transaction.mockImplementation(async (callback) => callback(client));
+
+    const res = await requestWithAuth('put', '/api/inventario/ubicaciones/3').send({
+      nombre: 'Bodega Norte Renombrada',
+    });
+
+    rolePermissions.supervisor = original;
+    currentUser.tipo_usuario = 'gerente';
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      data: { id: 3, nombre: 'Bodega Norte Renombrada', cliente_id: 10 },
+    });
   });
 
   test.each([

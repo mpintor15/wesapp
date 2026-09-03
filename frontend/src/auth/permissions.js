@@ -32,6 +32,7 @@ export const PERMISSIONS = {
   INVENTARIO_UBICACIONES_CREAR: 'inventario.ubicaciones.crear',
   INVENTARIO_UBICACIONES_EDITAR: 'inventario.ubicaciones.editar',
   INVENTARIO_UBICACIONES_ELIMINAR: 'inventario.ubicaciones.eliminar',
+  INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE: 'inventario.ubicaciones.reasignar_cliente',
   INVENTARIO_MOVIMIENTOS_VER: 'inventario.movimientos.ver',
   INVENTARIO_MOVIMIENTOS_CREAR: 'inventario.movimientos.crear',
   INVENTARIO_MOVIMIENTOS_ANULAR: 'inventario.movimientos.anular',
