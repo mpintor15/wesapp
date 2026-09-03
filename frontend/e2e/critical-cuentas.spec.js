@@ -54,6 +54,10 @@ test('lee facturas y pagos de Cuentas desde fixtures locales', async ({ page, re
   await expect(
     page.locator('.pagos-table').getByRole('cell', { name: 'Transferencia' })
   ).toBeVisible();
-  await expect(page.locator('.pagos-table').getByText(/1 factura\(s\)/i)).toBeVisible();
+  // El chip por pago pluraliza sin paréntesis ("1 factura" / "N facturas"),
+  // a diferencia del resumen "Mostrando X de Y factura(s)" de arriba.
+  await expect(
+    page.locator('.pagos-table').getByText('1 factura', { exact: true })
+  ).toBeVisible();
   apiGuard.expectNoWrites();
 });

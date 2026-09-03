@@ -195,7 +195,11 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   const v3Payload = {
     titulo: 'Formulario E2E activo',
     mostrar_fecha_hora: true,
-    tipos_visita: ['Peatón', 'Vehículo', 'Delivery'],
+    tipos_visita: [
+      { nombre: 'Peatón' },
+      { nombre: 'Vehículo' },
+      { nombre: 'Delivery', requiere_salida: true },
+    ],
     fields: [
       {
         field_key: 'nombre_de_contacto',
@@ -263,13 +267,9 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   await expect(page.getByLabel('Nombre de contacto')).toBeVisible();
   await expect(page.getByLabel('Código de entrega')).toBeVisible();
 
-  const visitanteDocumento = '0912345678';
-  await page.locator('#visita-visitante_nombre').fill('Visitante E2E');
-  await page.locator('#visita-visitante_documento').fill(visitanteDocumento);
-  await page.locator('#visita-visitante_telefono').fill('0991112233');
   await page.getByLabel('Nombre de contacto').fill('Recepción E2E');
 
-  await page.getByRole('button', { name: 'Registrar ingreso' }).click();
+  await page.getByRole('button', { name: 'Visita autorizada' }).click();
   await expect(page.getByText('Código de entrega es requerido.')).toBeVisible();
   await page.getByLabel('Código de entrega').fill('42');
 
@@ -278,22 +278,23 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
       response.request().method() === 'POST' &&
       /\/api\/bitacoras\/visitas$/.test(new URL(response.url()).pathname)
   );
-  await page.getByRole('button', { name: 'Registrar ingreso' }).click();
+  await page.getByRole('button', { name: 'Visita autorizada' }).click();
   const createVisitApiResponse = await createVisitResponse;
   expect(createVisitApiResponse.status()).toBe(201);
   await expect(page.locator('.toast-text')).toContainText(/visita registrada/i);
 
   const visitRow = page
     .locator('.bitacoras-visits-table tbody tr')
-    .filter({ hasText: visitanteDocumento });
+    .filter({ hasText: 'Delivery' });
   await expect(visitRow).toBeVisible();
-  await expect(visitRow).toContainText('ABIERTA');
+  await expect(visitRow).toContainText('ADENTRO');
   await expect(visitRow.getByRole('button', { name: /anular/i })).toHaveCount(0);
 
   const closeVisitResponse = page.waitForResponse(
     (response) => response.request().method() === 'POST' && response.url().includes('/cerrar')
   );
   await visitRow.getByRole('button', { name: 'Registrar salida' }).click();
+  await page.getByRole('button', { name: 'Confirmar' }).click();
   const closeVisitApiResponse = await closeVisitResponse;
   expect(closeVisitApiResponse.status()).toBe(200);
 
@@ -307,7 +308,7 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   await closedListResponse;
 
   await expect(visitRow).toBeVisible();
-  await expect(visitRow).toContainText('CERRADA');
+  await expect(visitRow).toContainText('SALIÓ');
 
   const activeFormResponse = await request.get(
     `${getApiURL()}/bitacoras/ubicaciones/${urbanizacion.id}/formulario-visitas/activo`,
