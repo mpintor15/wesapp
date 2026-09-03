@@ -9,6 +9,7 @@ jest.mock('../utils/audit', () => ({
 }));
 
 jest.mock('../repositories/bitacorasRepository', () => ({
+  getBitacorasResumen: jest.fn(),
   findActiveBlocksForLocation: jest.fn(),
   findActivePrincipalResidentForVilla: jest.fn(),
   findActiveVisitFormForLocation: jest.fn(),
@@ -27,10 +28,14 @@ jest.mock('../repositories/bitacorasRepository', () => ({
   findVisibleLocations: jest.fn(),
   insertBitacoraRegistro: jest.fn(),
   insertVisitResponses: jest.fn(),
+  insertVisitGroupResponses: jest.fn(),
+  hasVisitFormHistory: jest.fn(),
+  findVisitFormVersionDetail: jest.fn(),
   publishVisitFormForLocation: jest.fn(),
   acquireVisitFormPublishLock: jest.fn(),
   findLockedVisitFormVersion: jest.fn(),
   archiveVisitFormVersion: jest.fn(),
+  softDeleteVisitFormVersion: jest.fn(),
   createVisit: jest.fn(),
   closeVisit: jest.fn(),
   cancelVisit: jest.fn(),
@@ -143,14 +148,15 @@ beforeEach(() => {
     contacto: '0991234567',
   });
   repository.findVisitFormCreators.mockResolvedValue([{ id: 7, usuario: 'guardia' }]);
+  repository.hasVisitFormHistory.mockResolvedValue(true);
   repository.findActiveVisitFormForLocation.mockResolvedValue({
     id: 51,
     ubicacion_id: 3,
     version: 1,
     titulo: 'Formulario',
     tipos: [
-      { id: 900, form_version_id: 51, nombre: 'Peatón', sort_order: 1 },
-      { id: 901, form_version_id: 51, nombre: 'Vehículo', sort_order: 2 },
+      { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+      { id: 901, form_version_id: 51, nombre: 'Vehículo', requiere_salida: true, sort_order: 2 },
     ],
     fields: [
       {
@@ -204,6 +210,7 @@ beforeEach(() => {
     visitante_nombre: 'Carlos Ruiz',
     tipo_visita_id: 901,
     tipo_visita_nombre: 'Vehículo',
+    requiere_salida: true,
     placa: 'ABC123',
   });
   repository.findVisits.mockResolvedValue({ items: [], total: 0 });
@@ -512,6 +519,70 @@ describe('bitacorasController.createRegistro', () => {
   });
 });
 
+describe('bitacorasController.getResumen', () => {
+  beforeEach(() => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
+    });
+  });
+
+  test('guardia recibe registros y visitas, pero no formularios', async () => {
+    repository.getBitacorasResumen.mockResolvedValue({
+      registros: 12,
+      visitas: 3,
+      formularios: null,
+    });
+    const req = makeRequest({
+      user: { id: 7, usuario: 'guardia', tipo_usuario: 'guardia', activo: true },
+    });
+    const res = makeResponse();
+
+    await controller.getResumen(req, res);
+
+    expect(repository.getBitacorasResumen).toHaveBeenCalledWith({
+      hasGlobalScope: false,
+      userId: 7,
+      includeHistorial: true,
+      includeFormularios: false,
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: { registros: 12, visitas: 3 },
+    });
+    expect(res.json.mock.calls[0][0].data).not.toHaveProperty('formularios');
+  });
+
+  test('supervisor recibe los tres contadores', async () => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 8, tipo_usuario: 'supervisor', activo: true }],
+    });
+    repository.getBitacorasResumen.mockResolvedValue({
+      registros: 20,
+      visitas: 5,
+      formularios: 4,
+    });
+    const req = makeRequest({
+      user: { id: 8, usuario: 'supervisor', tipo_usuario: 'supervisor', activo: true },
+    });
+    const res = makeResponse();
+
+    await controller.getResumen(req, res);
+
+    expect(repository.getBitacorasResumen).toHaveBeenCalledWith({
+      hasGlobalScope: true,
+      userId: 8,
+      includeHistorial: true,
+      includeFormularios: true,
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: { registros: 20, visitas: 5, formularios: 4 },
+    });
+  });
+});
+
 describe('bitacorasController.getRegistros', () => {
   beforeEach(() => {
     db.query.mockResolvedValue({
@@ -560,6 +631,42 @@ describe('bitacorasController.getRegistros', () => {
       data: [createdRow],
       meta: expect.objectContaining({ page: 2, pageSize: 10, totalItems: 26, totalPages: 3 }),
     });
+  });
+
+  test('regresión: Registro acepta sortBy=ocurrido_at (default del frontend) y rechaza SQL arbitrario', async () => {
+    repository.findHistory.mockResolvedValue({ items: [], total: 0 });
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 8, tipo_usuario: 'supervisor', activo: true }],
+    });
+    const okResponse = makeResponse();
+    const invalidResponse = makeResponse();
+
+    await controller.getRegistros(
+      makeRequest({
+        user: { id: 8, usuario: 'supervisor', tipo_usuario: 'supervisor', activo: true },
+        query: { sortBy: 'ocurrido_at', sortOrder: 'desc' },
+      }),
+      okResponse
+    );
+    await controller.getRegistros(
+      makeRequest({
+        user: { id: 8, usuario: 'supervisor', tipo_usuario: 'supervisor', activo: true },
+        query: { sortBy: 'br.anulado_at', sortOrder: 'desc' },
+      }),
+      invalidResponse
+    );
+
+    expect(repository.findHistory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pagination: expect.objectContaining({
+          sortBy: 'ocurrido_at',
+          sortOrder: 'desc',
+          sortExpression: 'br.ocurrido_at',
+        }),
+      })
+    );
+    expect(invalidResponse.status).toHaveBeenCalledWith(400);
   });
 
   test('aplica alcance asignado y no fuga historial global', async () => {
@@ -813,6 +920,37 @@ describe('bitacorasController visitas urbanas', () => {
     });
   });
 
+  test('formularios valida allowlist y propaga sort asc server-side', async () => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'monitorista', activo: true }],
+    });
+    repository.findVisitForms.mockResolvedValue({ items: [], total: 0 });
+    const ascResponse = makeResponse();
+    const invalidResponse = makeResponse();
+
+    await controller.getVisitForms(
+      makeRequest({ query: { sortBy: 'nombre', sortOrder: 'asc', estado: 'ARCHIVED' } }),
+      ascResponse
+    );
+    await controller.getVisitForms(
+      makeRequest({ query: { sortBy: 'bfv.deleted_at', sortOrder: 'asc' } }),
+      invalidResponse
+    );
+
+    expect(repository.findVisitForms).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ estado: 'ARCHIVED' }),
+        pagination: expect.objectContaining({
+          sortBy: 'nombre',
+          sortOrder: 'asc',
+          sortExpression: 'bfv.titulo',
+        }),
+      })
+    );
+    expect(invalidResponse.status).toHaveBeenCalledWith(400);
+  });
+
   test('publica una nueva versión inmutable con permiso y alcance existentes', async () => {
     const client = transactionForCreate({
       locationType: 'URBANIZACION',
@@ -842,6 +980,7 @@ describe('bitacorasController visitas urbanas', () => {
       title: 'Ingreso principal',
       showDateTime: false,
       fields: [{ field_key: 'motivo', label: 'Motivo', type: 'text', required: true }],
+      groups: [],
       userId: 7,
     });
     expect(res.status).toHaveBeenCalledWith(201);
@@ -876,6 +1015,7 @@ describe('bitacorasController visitas urbanas', () => {
   test('permite a Monitorista publicar el primer formulario cuando la Ubicación no tiene versión activa', async () => {
     transactionForCreate({ locationType: 'URBANIZACION', persistedRole: 'monitorista' });
     repository.findActiveVisitFormForLocation.mockResolvedValue(null);
+    repository.hasVisitFormHistory.mockResolvedValue(false);
     const res = makeResponse();
 
     await controller.publishVisitForm(
@@ -888,6 +1028,24 @@ describe('bitacorasController visitas urbanas', () => {
 
     expect(res.status).toHaveBeenCalledWith(201);
     expect(repository.publishVisitFormForLocation).toHaveBeenCalled();
+  });
+
+  test('bloquea a Monitorista publicar cuando la Ubicación tiene historial archivado sin versión activa', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION', persistedRole: 'monitorista' });
+    repository.findActiveVisitFormForLocation.mockResolvedValue(null);
+    repository.hasVisitFormHistory.mockResolvedValue(true);
+    const res = makeResponse();
+
+    await controller.publishVisitForm(
+      makeRequest({
+        params: { ubicacionId: '3' },
+        body: { titulo: 'Nuevo', mostrar_fecha_hora: true, fields: [] },
+      }),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
   });
 
   test('Gerente puede archivar un formulario activo y registra auditoría', async () => {
@@ -917,6 +1075,102 @@ describe('bitacorasController visitas urbanas', () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ success: true, message: 'Formulario archivado' })
     );
+  });
+
+  test('obtiene la vista previa inmutable de una versión archivada dentro del scope', async () => {
+    const client = transactionForCreate({ locationType: 'URBANIZACION', persistedRole: 'gerente' });
+    const detail = {
+      id: 9,
+      ubicacion_id: 3,
+      estado: 'ARCHIVED',
+      tipos: [{ id: 90, nombre: 'Vehículo', requiere_salida: true }],
+      groups: [{ label: 'Visitantes', fields: [] }],
+      fields: [{ label: 'Placa', required: true, aplica_a: 'TIPOS', tipos: [90] }],
+    };
+    repository.findVisitFormVersionDetail.mockResolvedValue(detail);
+    const res = makeResponse();
+
+    await controller.getVisitFormDetail(makeRequest({ params: { formId: '9' } }), res);
+
+    expect(repository.findVisitFormVersionDetail).toHaveBeenCalledWith({
+      formId: 9,
+      executor: client,
+    });
+    expect(res.json).toHaveBeenCalledWith({ success: true, data: detail });
+  });
+
+  test('Gerente elimina lógicamente una versión archivada y registra auditoría', async () => {
+    const client = transactionForCreate({ locationType: 'URBANIZACION', persistedRole: 'gerente' });
+    repository.findLockedVisitFormVersion.mockResolvedValue({
+      id: 9,
+      ubicacion_id: 3,
+      estado: 'ARCHIVED',
+      deleted_at: null,
+    });
+    repository.softDeleteVisitFormVersion.mockResolvedValue({
+      id: 9,
+      ubicacion_id: 3,
+      estado: 'ARCHIVED',
+      deleted_at: new Date('2026-09-02T12:00:00Z'),
+    });
+    const res = makeResponse();
+
+    await controller.deleteArchivedVisitForm(makeRequest({ params: { formId: '9' } }), res);
+
+    expect(repository.softDeleteVisitFormVersion).toHaveBeenCalledWith({ client, formId: 9 });
+    expect(audit.logAuditStrict).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ tabla: 'bitacora_visit_form_versions', operacion: 'UPDATE' })
+    );
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: true, message: 'Formulario eliminado' })
+    );
+  });
+
+  test.each(['supervisor', 'monitorista', 'guardia'])(
+    '%s no puede eliminar formularios archivados',
+    async (persistedRole) => {
+      transactionForCreate({ locationType: 'URBANIZACION', persistedRole });
+      const res = makeResponse();
+
+      await controller.deleteArchivedVisitForm(makeRequest({ params: { formId: '9' } }), res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(repository.softDeleteVisitFormVersion).not.toHaveBeenCalled();
+    }
+  );
+
+  test('Gerente nunca puede eliminar un formulario ACTIVE', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION', persistedRole: 'gerente' });
+    repository.findLockedVisitFormVersion.mockResolvedValue({
+      id: 9,
+      ubicacion_id: 3,
+      estado: 'ACTIVE',
+    });
+    const res = makeResponse();
+
+    await controller.deleteArchivedVisitForm(makeRequest({ params: { formId: '9' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(repository.softDeleteVisitFormVersion).not.toHaveBeenCalled();
+  });
+
+  test('una versión eliminada no se puede previsualizar ni activar', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION', persistedRole: 'gerente' });
+    repository.findVisitFormVersionDetail.mockResolvedValue(null);
+    repository.findLockedVisitFormVersion.mockResolvedValue(null);
+    const previewResponse = makeResponse();
+    const activationResponse = makeResponse();
+
+    await controller.getVisitFormDetail(makeRequest({ params: { formId: '9' } }), previewResponse);
+    await controller.reactivateVisitForm(
+      makeRequest({ params: { formId: '9' } }),
+      activationResponse
+    );
+
+    expect(previewResponse.status).toHaveBeenCalledWith(404);
+    expect(activationResponse.status).toHaveBeenCalledWith(404);
+    expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
   });
 
   test('rechaza archivar un formulario que no existe', async () => {
@@ -1004,6 +1258,97 @@ describe('bitacorasController visitas urbanas', () => {
       responses: { motivo: 'Entrega', autorizado: true },
     });
     expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  test('regresión: visita "No autorizada" persiste estado y motivo, sin abrir ni cerrar salida', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.createVisit.mockResolvedValueOnce({
+      id: 83,
+      estado: 'NO_AUTORIZADA',
+      motivo_no_autorizacion: 'No coincide con la lista de invitados',
+    });
+    const res = makeResponse();
+
+    await controller.createVisita(
+      makeRequest({
+        body: {
+          ubicacion_id: 3,
+          manzana_id: 8,
+          villa_id: 9,
+          visitante_nombre: 'Desconocido',
+          tipo_visita_id: 901,
+          autorizada: false,
+          motivo_no_autorizacion: 'No coincide con la lista de invitados',
+          respuestas: { motivo: 'Entrega' },
+        },
+      }),
+      res
+    );
+
+    expect(repository.createVisit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estado: 'NO_AUTORIZADA',
+        motivoNoAutorizacion: 'No coincide con la lista de invitados',
+      })
+    );
+    expect(repository.closeVisit).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  test('tipo sin requiere_salida cierra automáticamente el ingreso en la misma transacción', async () => {
+    const client = transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.findActiveVisitFormForLocation.mockResolvedValueOnce({
+      id: 51,
+      ubicacion_id: 3,
+      version: 1,
+      titulo: 'Formulario',
+      tipos: [
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: false, sort_order: 1 },
+        { id: 901, form_version_id: 51, nombre: 'Vehículo', requiere_salida: true, sort_order: 2 },
+      ],
+      fields: [],
+      groups: [],
+    });
+    repository.createVisit.mockResolvedValueOnce({
+      id: 82,
+      ubicacion_id: 3,
+      manzana_id: 8,
+      villa_id: 9,
+      estado: 'ABIERTA',
+      visitante_nombre: 'Delivery Rápido',
+    });
+    repository.closeVisit.mockResolvedValueOnce({ id: 82, estado: 'CERRADA' });
+    const res = makeResponse();
+
+    await controller.createVisita(
+      makeRequest({
+        body: {
+          ubicacion_id: 3,
+          manzana_id: 8,
+          villa_id: 9,
+          visitante_nombre: 'Delivery Rápido',
+          tipo_visita_id: 900,
+          respuestas: {},
+        },
+      }),
+      res
+    );
+
+    expect(repository.createVisit).toHaveBeenCalledWith(
+      expect.objectContaining({ visitor: expect.objectContaining({ tipoVisitaId: 900 }) })
+    );
+    expect(repository.closeVisit).toHaveBeenCalledWith(
+      expect.objectContaining({ client, visitId: 82 })
+    );
+    expect(repository.insertBitacoraRegistro).toHaveBeenCalledTimes(2);
+    expect(audit.logAuditStrict).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ tabla: 'bitacora_visitas', operacion: 'UPDATE', registro_id: 82 })
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ estado: 'CERRADA' }) })
+    );
   });
 
   test('conserva checkbox false como respuesta explícita válida', async () => {
@@ -1124,7 +1469,9 @@ describe('bitacorasController visitas urbanas', () => {
     transactionForCreate({ locationType: 'URBANIZACION' });
     repository.findActiveVisitFormForLocation.mockResolvedValue({
       id: 51,
-      tipos: [{ id: 900, form_version_id: 51, nombre: 'Peatón', sort_order: 1 }],
+      tipos: [
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+      ],
       fields: [
         { id: 91, field_key: 'cedula_extra', label: 'Cédula adicional', type: 'cedula' },
         { id: 92, field_key: 'placa_extra', label: 'Placa adicional', type: 'placa' },
@@ -1178,8 +1525,8 @@ describe('bitacorasController visitas urbanas', () => {
     repository.findActiveVisitFormForLocation.mockResolvedValue({
       id: 51,
       tipos: [
-        { id: 900, form_version_id: 51, nombre: 'Peatón', sort_order: 1 },
-        { id: 901, form_version_id: 51, nombre: 'Vehículo', sort_order: 2 },
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+        { id: 901, form_version_id: 51, nombre: 'Vehículo', requiere_salida: true, sort_order: 2 },
       ],
       fields: [
         {
@@ -1242,6 +1589,241 @@ describe('bitacorasController visitas urbanas', () => {
       expect.objectContaining({ code: 'VISIT_RESPONSE_NOT_APPLICABLE' })
     );
     expect(repository.createVisit).not.toHaveBeenCalled();
+  });
+
+  test('rechaza pregunta requerida y aplicable al tipo seleccionado que llega vacía', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.findActiveVisitFormForLocation.mockResolvedValue({
+      id: 51,
+      tipos: [
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+        { id: 901, form_version_id: 51, nombre: 'Vehículo', requiere_salida: true, sort_order: 2 },
+      ],
+      fields: [
+        {
+          id: 91,
+          field_key: 'peaton_detalle',
+          label: 'Detalle peatonal',
+          type: 'text',
+          required: true,
+          aplica_a: 'SELECCIONADOS',
+          tipos: [900],
+        },
+      ],
+    });
+    const res = makeResponse();
+    await controller.createVisita(
+      makeRequest({
+        body: {
+          ubicacion_id: 3,
+          manzana_id: 8,
+          villa_id: 9,
+          visitante_nombre: 'Carlos Ruiz',
+          visitante_documento: '0912345678',
+          visitante_telefono: '0991234567',
+          tipo_visita_id: 900,
+          respuestas: {},
+        },
+      }),
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'VISIT_RESPONSE_REQUIRED' })
+    );
+    expect(repository.createVisit).not.toHaveBeenCalled();
+  });
+
+  test('grupo repetible con mínimo 1 registro rechaza visita sin ninguna persona', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.findActiveVisitFormForLocation.mockResolvedValue({
+      id: 51,
+      tipos: [
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+      ],
+      fields: [],
+      groups: [
+        {
+          id: 60,
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          min_count: 1,
+          aplica_a: 'TODOS',
+          fields: [
+            { field_key: 'nombre', label: 'Nombre', type: 'text', required: true },
+            { field_key: 'cedula', label: 'Cédula', type: 'cedula', required: true },
+          ],
+        },
+      ],
+    });
+    const res = makeResponse();
+    await controller.createVisita(
+      makeRequest({
+        body: {
+          ubicacion_id: 3,
+          manzana_id: 8,
+          villa_id: 9,
+          tipo_visita_id: 900,
+          respuestas: {},
+          grupos: { visitantes: [] },
+        },
+      }),
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'VISIT_GROUP_MIN_COUNT' })
+    );
+    expect(repository.createVisit).not.toHaveBeenCalled();
+  });
+
+  test('grupo repetible rechaza campo requerido vacío en cualquier persona del registro', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.findActiveVisitFormForLocation.mockResolvedValue({
+      id: 51,
+      tipos: [
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+      ],
+      fields: [],
+      groups: [
+        {
+          id: 60,
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          min_count: 0,
+          aplica_a: 'TODOS',
+          fields: [
+            { field_key: 'nombre', label: 'Nombre', type: 'text', required: true },
+            { field_key: 'cedula', label: 'Cédula', type: 'cedula', required: true },
+            { field_key: 'telefono', label: 'Teléfono', type: 'text', required: false },
+          ],
+        },
+      ],
+    });
+    const res = makeResponse();
+    await controller.createVisita(
+      makeRequest({
+        body: {
+          ubicacion_id: 3,
+          manzana_id: 8,
+          villa_id: 9,
+          tipo_visita_id: 900,
+          respuestas: {},
+          grupos: {
+            visitantes: [{ nombre: 'Ana', cedula: '0912345678' }, { nombre: 'Luis' }],
+          },
+        },
+      }),
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 'VISIT_RESPONSE_REQUIRED',
+        details: expect.objectContaining({ 'grupos.visitantes.1.cedula': ['Cédula es requerido'] }),
+      })
+    );
+    expect(repository.createVisit).not.toHaveBeenCalled();
+  });
+
+  test('grupo repetible que no aplica al tipo seleccionado rechaza registros enviados', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.findActiveVisitFormForLocation.mockResolvedValue({
+      id: 51,
+      tipos: [
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+        { id: 901, form_version_id: 51, nombre: 'Vehículo', requiere_salida: true, sort_order: 2 },
+      ],
+      fields: [],
+      groups: [
+        {
+          id: 60,
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          min_count: 0,
+          aplica_a: 'SELECCIONADOS',
+          tipos: [901],
+          fields: [{ field_key: 'nombre', label: 'Nombre', type: 'text', required: true }],
+        },
+      ],
+    });
+    const res = makeResponse();
+    await controller.createVisita(
+      makeRequest({
+        body: {
+          ubicacion_id: 3,
+          manzana_id: 8,
+          villa_id: 9,
+          tipo_visita_id: 900,
+          respuestas: {},
+          grupos: { visitantes: [{ nombre: 'Ana' }] },
+        },
+      }),
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'VISIT_GROUP_NOT_APPLICABLE' })
+    );
+    expect(repository.createVisit).not.toHaveBeenCalled();
+  });
+
+  test('registra visita con personas del grupo repetible y persiste cada registro', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.findActiveVisitFormForLocation.mockResolvedValue({
+      id: 51,
+      tipos: [
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+      ],
+      fields: [],
+      groups: [
+        {
+          id: 60,
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          min_count: 1,
+          aplica_a: 'TODOS',
+          fields: [
+            { field_key: 'nombre', label: 'Nombre', type: 'text', required: true },
+            { field_key: 'cedula', label: 'Cédula', type: 'cedula', required: true },
+            { field_key: 'telefono', label: 'Teléfono', type: 'text', required: false },
+          ],
+        },
+      ],
+    });
+    repository.createVisit.mockResolvedValue({ id: 81 });
+    const res = makeResponse();
+    await controller.createVisita(
+      makeRequest({
+        body: {
+          ubicacion_id: 3,
+          manzana_id: 8,
+          villa_id: 9,
+          tipo_visita_id: 900,
+          respuestas: {},
+          grupos: {
+            visitantes: [
+              { nombre: 'Ana', cedula: '0912345678' },
+              { nombre: 'Luis', cedula: '0987654321', telefono: '0991112222' },
+            ],
+          },
+        },
+      }),
+      res
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(repository.insertVisitGroupResponses).toHaveBeenCalledWith(
+      expect.objectContaining({
+        visitId: 81,
+        formVersionId: 51,
+        entries: {
+          visitantes: [
+            { nombre: 'Ana', cedula: '0912345678' },
+            { nombre: 'Luis', cedula: '0987654321', telefono: '0991112222' },
+          ],
+        },
+      })
+    );
   });
 
   test('rechaza un tipo de visita que no pertenece al formulario activo', async () => {
@@ -1320,6 +1902,25 @@ describe('bitacorasController visitas urbanas', () => {
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({ code: 'VISIT_ALREADY_CLOSED' })
+    );
+    expect(repository.closeVisit).not.toHaveBeenCalled();
+  });
+
+  test('rechaza registrar salida cuando el tipo no la requiere', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.findLockedVisit.mockResolvedValue({
+      id: 81,
+      ubicacion_id: 3,
+      estado: 'ABIERTA',
+      requiere_salida: false,
+    });
+    const res = makeResponse();
+
+    await controller.closeVisita(makeRequest({ params: { visitaId: '81' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'VISIT_EXIT_NOT_REQUIRED' })
     );
     expect(repository.closeVisit).not.toHaveBeenCalled();
   });
@@ -1443,6 +2044,76 @@ describe('bitacorasController visitas urbanas', () => {
     );
   });
 
+  test('regresión: Visitas acepta sortBy=entrada_at (default del frontend) junto con filtros y paginación', async () => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
+    });
+    const res = makeResponse();
+
+    await controller.getVisitas(
+      makeRequest({
+        query: {
+          page: '1',
+          pageSize: '25',
+          estado: 'ABIERTA',
+          sortBy: 'entrada_at',
+          sortOrder: 'desc',
+        },
+      }),
+      res
+    );
+
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(repository.findVisits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ estado: 'ABIERTA' }),
+        pagination: expect.objectContaining({
+          page: 1,
+          pageSize: 25,
+          sortBy: 'entrada_at',
+          sortOrder: 'desc',
+          sortExpression: 'bv.entrada_at',
+        }),
+      })
+    );
+  });
+
+  test('regresión: Visitas valida cada columna sortable y rechaza SQL arbitrario', async () => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
+    });
+    const expectedExpressions = {
+      tipo_visita: 'tv.nombre',
+      placa: 'bv.placa',
+      titular: 'r.nombre',
+      registrado_por: 'u.usuario',
+      salida_at: 'bv.salida_at',
+      estado: 'bv.estado',
+      observacion: 'bv.motivo_no_autorizacion',
+      entrada_at: 'bv.entrada_at',
+    };
+    for (const [field, expression] of Object.entries(expectedExpressions)) {
+      const res = makeResponse();
+      // eslint-disable-next-line no-await-in-loop
+      await controller.getVisitas(makeRequest({ query: { sortBy: field } }), res);
+      expect(res.status).not.toHaveBeenCalledWith(400);
+      expect(repository.findVisits).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pagination: expect.objectContaining({ sortBy: field, sortExpression: expression }),
+        })
+      );
+    }
+
+    const invalidResponse = makeResponse();
+    await controller.getVisitas(
+      makeRequest({ query: { sortBy: 'bv.motivo_anulacion' } }),
+      invalidResponse
+    );
+    expect(invalidResponse.status).toHaveBeenCalledWith(400);
+  });
+
   test('rechaza filtros de visitas fuera del allowlist', async () => {
     db.query.mockResolvedValue({
       rowCount: 1,
@@ -1454,5 +2125,20 @@ describe('bitacorasController visitas urbanas', () => {
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(repository.findVisits).not.toHaveBeenCalled();
+  });
+
+  test('regresión: acepta NO_AUTORIZADA como filtro válido de estado de visitas', async () => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
+    });
+    const res = makeResponse();
+
+    await controller.getVisitas(makeRequest({ query: { estado: 'NO_AUTORIZADA' } }), res);
+
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(repository.findVisits).toHaveBeenCalledWith(
+      expect.objectContaining({ filters: expect.objectContaining({ estado: 'NO_AUTORIZADA' }) })
+    );
   });
 });

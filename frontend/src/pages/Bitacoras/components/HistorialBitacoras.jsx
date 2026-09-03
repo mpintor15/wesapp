@@ -4,6 +4,7 @@ import PaginationControls from '../../../components/PaginationControls';
 import TabularWorkspace from '../../../components/TabularWorkspace';
 import bitacorasService from '../../../services/bitacorasService';
 import { getVisibleErrorMessage } from '../../../services/serviceUtils';
+import SortHeader from '../../Cuentas/components/SortHeader';
 import { formatLocalTimestamp } from '../utils/bitacorasHelpers';
 
 const EMPTY_FILTERS = Object.freeze({
@@ -27,9 +28,11 @@ const PAGE_SIZE = 25;
 
 const hasAppliedFilters = (filters) => Object.values(filters).some(Boolean);
 
-const buildHistoryParams = (page, filters) => ({
-  page,
+const buildHistoryParams = (page, filters, sort) => ({
+  ...(page ? { page } : {}),
   pageSize: PAGE_SIZE,
+  sortBy: sort.field,
+  sortOrder: sort.direction,
   ...(filters.ubicacion_id ? { ubicacion_id: Number(filters.ubicacion_id) } : {}),
   ...(filters.fecha_desde ? { fecha_desde: filters.fecha_desde } : {}),
   ...(filters.fecha_hasta ? { fecha_hasta: filters.fecha_hasta } : {}),
@@ -103,6 +106,7 @@ const HistorialBitacoras = ({
   const [appliedFilters, setAppliedFilters] = useState({ ...EMPTY_FILTERS });
   const [dateError, setDateError] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState({ field: 'ocurrido_at', direction: 'desc' });
   const [records, setRecords] = useState([]);
   const [meta, setMeta] = useState(EMPTY_META);
   const [loading, setLoading] = useState(true);
@@ -125,7 +129,9 @@ const HistorialBitacoras = ({
     setLoading(true);
     setError('');
 
-    const result = await bitacorasService.getRegistros(buildHistoryParams(page, appliedFilters));
+    const result = await bitacorasService.getRegistros(
+      buildHistoryParams(page, appliedFilters, sort)
+    );
     if (requestId !== requestSequenceRef.current) return;
 
     if (!result.success) {
@@ -144,7 +150,15 @@ const HistorialBitacoras = ({
     setRecords(Array.isArray(result.data) ? result.data : []);
     setMeta(nextMeta);
     setLoading(false);
-  }, [appliedFilters, page]);
+  }, [appliedFilters, page, sort]);
+
+  const handleSort = (field) => {
+    setSort((current) => ({
+      field,
+      direction: current.field === field && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+    setPage(1);
+  };
 
   useEffect(() => {
     void loadHistory();
@@ -175,7 +189,7 @@ const HistorialBitacoras = ({
 
     setDateError('');
     setAppliedFilters({ ...draftFilters, autor: draftFilters.autor.trim() });
-    onFiltersChange?.(buildHistoryParams(undefined, draftFilters));
+    onFiltersChange?.(buildHistoryParams(undefined, draftFilters, sort));
     setPage(1);
   };
 
@@ -321,7 +335,7 @@ const HistorialBitacoras = ({
   );
 
   const pagination =
-    !loading && !error && meta.totalItems > 0 ? (
+    !loading && !error ? (
       <PaginationControls page={page} totalPages={meta.totalPages} onPageChange={setPage} />
     ) : null;
 
@@ -360,12 +374,16 @@ const HistorialBitacoras = ({
             <table className="app-table bitacoras-table">
               <thead>
                 <tr>
-                  <th scope="col">Fecha/hora</th>
-                  <th scope="col">Ubicación</th>
-                  <th scope="col">Casa</th>
-                  <th scope="col">Autor</th>
-                  <th scope="col">Detalle</th>
-                  <th scope="col">Estado</th>
+                  <SortHeader
+                    field="ocurrido_at"
+                    label="Fecha/hora"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortHeader field="ubicacion" label="Ubicación" sort={sort} onSort={handleSort} />
+                  <SortHeader field="casa" label="Casa" sort={sort} onSort={handleSort} />
+                  <SortHeader field="autor" label="Autor" sort={sort} onSort={handleSort} />
+                  <SortHeader field="detalle" label="Detalle" sort={sort} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody>
@@ -394,9 +412,6 @@ const HistorialBitacoras = ({
                       {registro.estado === 'ANULADA' && registro.motivo_anulacion ? (
                         <small>Motivo: {registro.motivo_anulacion}</small>
                       ) : null}
-                    </td>
-                    <td>
-                      <StatusBadge estado={registro.estado} />
                     </td>
                   </tr>
                 ))}

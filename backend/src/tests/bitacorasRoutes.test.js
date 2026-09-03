@@ -22,6 +22,7 @@ jest.mock('../utils/audit', () => ({
 }));
 
 jest.mock('../repositories/bitacorasRepository', () => ({
+  getBitacorasResumen: jest.fn(),
   findActiveBlocksForLocation: jest.fn(),
   findActivePrincipalResidentForVilla: jest.fn(),
   findActiveVisitFormForLocation: jest.fn(),
@@ -40,10 +41,14 @@ jest.mock('../repositories/bitacorasRepository', () => ({
   findVisibleLocations: jest.fn(),
   insertBitacoraRegistro: jest.fn(),
   insertVisitResponses: jest.fn(),
+  insertVisitGroupResponses: jest.fn(),
+  hasVisitFormHistory: jest.fn(),
+  findVisitFormVersionDetail: jest.fn(),
   publishVisitFormForLocation: jest.fn(),
   acquireVisitFormPublishLock: jest.fn(),
   findLockedVisitFormVersion: jest.fn(),
   archiveVisitFormVersion: jest.fn(),
+  softDeleteVisitFormVersion: jest.fn(),
   createVisit: jest.fn(),
   closeVisit: jest.fn(),
   cancelVisit: jest.fn(),
@@ -126,8 +131,8 @@ beforeEach(() => {
   repository.findActiveVisitFormForLocation.mockResolvedValue({
     id: 7,
     tipos: [
-      { id: 900, form_version_id: 7, nombre: 'Peatón', sort_order: 1 },
-      { id: 901, form_version_id: 7, nombre: 'Vehículo', sort_order: 2 },
+      { id: 900, form_version_id: 7, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+      { id: 901, form_version_id: 7, nombre: 'Vehículo', requiere_salida: true, sort_order: 2 },
     ],
     fields: [],
   });
@@ -146,12 +151,14 @@ beforeEach(() => {
     visitante_nombre: 'Ana',
     tipo_visita_id: 901,
     tipo_visita_nombre: 'Vehículo',
+    requiere_salida: true,
     placa: 'ABC123',
   });
   repository.closeVisit.mockResolvedValue({ id: 80, estado: 'CERRADA' });
   repository.cancelVisit.mockResolvedValue({ id: 80, estado: 'ANULADA' });
   repository.findVisits.mockResolvedValue({ items: [], total: 0 });
   repository.findVisitCreators.mockResolvedValue([{ id: 4, nombre: 'Guardia Uno' }]);
+  repository.hasVisitFormHistory.mockResolvedValue(true);
   repository.publishVisitFormForLocation.mockResolvedValue({ id: 90, version: 1, fields: [] });
 });
 
@@ -159,6 +166,29 @@ describe('bitacoras routes', () => {
   test('requiere autenticación', async () => {
     const response = await request(app).get('/api/bitacoras/registros');
     expect(response.status).toBe(401);
+  });
+
+  test('GET /resumen expone formularios solo con permiso de administrar formularios', async () => {
+    currentUser.tipo_usuario = 'guardia';
+    repository.getBitacorasResumen.mockResolvedValue({ registros: 9, visitas: 2, formularios: 7 });
+    const guardiaResponse = await authRequest('get', '/api/bitacoras/resumen');
+    expect(guardiaResponse.status).toBe(200);
+    expect(guardiaResponse.body.data).toEqual({ registros: 9, visitas: 2 });
+    expect(repository.getBitacorasResumen).toHaveBeenCalledWith(
+      expect.objectContaining({ includeHistorial: true, includeFormularios: false })
+    );
+
+    currentUser.tipo_usuario = 'monitorista';
+    const monitoristaResponse = await authRequest('get', '/api/bitacoras/resumen');
+    expect(monitoristaResponse.status).toBe(200);
+    expect(monitoristaResponse.body.data).toEqual({ registros: 9, visitas: 2, formularios: 7 });
+  });
+
+  test('GET /resumen exige al menos historial.ver o formularios.administrar', async () => {
+    currentUser.tipo_usuario = 'secretario';
+    const response = await authRequest('get', '/api/bitacoras/resumen');
+    expect(response.status).toBe(403);
+    expect(repository.getBitacorasResumen).not.toHaveBeenCalled();
   });
 
   test('GET /registros exige bitacoras.historial.ver', async () => {
@@ -317,16 +347,71 @@ describe('bitacoras routes', () => {
     expect(denied.status).toBe(403);
 
     currentUser.tipo_usuario = 'monitorista';
-    repository.findActiveVisitFormForLocation.mockResolvedValueOnce(null);
+    repository.hasVisitFormHistory.mockResolvedValueOnce(false);
     const allowed = await authRequest(
       'post',
       '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
     ).send({
       titulo: 'Formulario',
-      tipos_visita: ['Peatón'],
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
       fields: [{ field_key: 'motivo', label: 'Motivo', type: 'text', required: true }],
     });
     expect(allowed.status).toBe(201);
+  });
+
+  test('publica tipos de visita con requiere_salida por tipo', async () => {
+    currentUser.tipo_usuario = 'monitorista';
+    repository.hasVisitFormHistory.mockResolvedValueOnce(false);
+    const response = await authRequest(
+      'post',
+      '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
+    ).send({
+      titulo: 'Formulario',
+      tipos_visita: [
+        { nombre: 'Vehículo', requiere_salida: true },
+        { nombre: 'Delivery', requiere_salida: false },
+      ],
+      fields: [],
+    });
+    expect(response.status).toBe(201);
+    expect(repository.publishVisitFormForLocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tiposVisita: [
+          { nombre: 'Vehículo', requiere_salida: true },
+          { nombre: 'Delivery', requiere_salida: false },
+        ],
+      })
+    );
+  });
+
+  test('regresión: rechaza el formato legacy de tipos_visita (arreglo de strings) con un error claro', async () => {
+    currentUser.tipo_usuario = 'monitorista';
+    const response = await authRequest(
+      'post',
+      '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
+    ).send({
+      titulo: 'Formulario',
+      tipos_visita: ['Peatón'],
+      fields: [],
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('VALIDATION_ERROR');
+    expect(response.body.errors['tipos_visita.0']).toBeDefined();
+    expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
+  });
+
+  test('rechaza tipos_visita con requiere_salida no booleano', async () => {
+    currentUser.tipo_usuario = 'monitorista';
+    const response = await authRequest(
+      'post',
+      '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
+    ).send({
+      titulo: 'Formulario',
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: 'si' }],
+      fields: [],
+    });
+    expect(response.status).toBe(400);
+    expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
   });
 
   test('Monitorista no puede editar (reemplazar) un formulario ya publicado; Gerente/Supervisor sí', async () => {
@@ -334,7 +419,11 @@ describe('bitacoras routes', () => {
     const blocked = await authRequest(
       'post',
       '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
-    ).send({ titulo: 'Formulario', tipos_visita: ['Peatón'], fields: [] });
+    ).send({
+      titulo: 'Formulario',
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
+      fields: [],
+    });
     expect(blocked.status).toBe(403);
     expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
 
@@ -342,7 +431,11 @@ describe('bitacoras routes', () => {
     const allowed = await authRequest(
       'post',
       '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
-    ).send({ titulo: 'Formulario', tipos_visita: ['Peatón'], fields: [] });
+    ).send({
+      titulo: 'Formulario',
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
+      fields: [],
+    });
     expect(allowed.status).toBe(201);
   });
 
@@ -381,6 +474,117 @@ describe('bitacoras routes', () => {
       client: expect.anything(),
       formId: 7,
     });
+  });
+
+  test('regresión: activar un formulario ARCHIVED exige gestionar y republica como nueva versión', async () => {
+    repository.findLockedVisitFormVersion.mockResolvedValue({
+      id: 7,
+      ubicacion_id: 1,
+      estado: 'ARCHIVED',
+    });
+    repository.findVisitFormVersionDetail.mockResolvedValue({
+      id: 7,
+      ubicacion_id: 1,
+      titulo: 'Formulario viejo',
+      mostrar_fecha_hora: true,
+      estado: 'ARCHIVED',
+      tipos: [{ id: 900, nombre: 'Peatón', requiere_salida: true }],
+      fields: [],
+      groups: [],
+    });
+    repository.publishVisitFormForLocation.mockResolvedValue({
+      id: 20,
+      ubicacion_id: 1,
+      version: 3,
+      estado: 'ACTIVE',
+    });
+
+    const deniedGuardia = await authRequest(
+      'post',
+      '/api/bitacoras/formularios-visitas/7/activar'
+    ).send({});
+    expect(deniedGuardia.status).toBe(403);
+
+    currentUser.tipo_usuario = 'supervisor';
+    const allowed = await authRequest('post', '/api/bitacoras/formularios-visitas/7/activar').send(
+      {}
+    );
+    expect(allowed.status).toBe(201);
+    expect(allowed.body.data.estado).toBe('ACTIVE');
+    expect(repository.publishVisitFormForLocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locationId: 1,
+        title: 'Formulario viejo',
+        tiposVisita: [{ nombre: 'Peatón', requiere_salida: true }],
+      })
+    );
+  });
+
+  test('vista previa de formulario archivado exige gestionar y devuelve su detalle', async () => {
+    repository.findVisitFormVersionDetail.mockResolvedValue({
+      id: 7,
+      ubicacion_id: 1,
+      estado: 'ARCHIVED',
+      tipos: [{ id: 900, nombre: 'Vehículo', requiere_salida: true }],
+      groups: [{ label: 'Visitantes', fields: [] }],
+      fields: [{ label: 'Placa', required: true }],
+    });
+
+    const denied = await authRequest('get', '/api/bitacoras/formularios-visitas/7');
+    expect(denied.status).toBe(403);
+
+    currentUser.tipo_usuario = 'supervisor';
+    const allowed = await authRequest('get', '/api/bitacoras/formularios-visitas/7');
+    expect(allowed.status).toBe(200);
+    expect(allowed.body.data).toEqual(
+      expect.objectContaining({
+        id: 7,
+        estado: 'ARCHIVED',
+        groups: [{ label: 'Visitantes', fields: [] }],
+      })
+    );
+  });
+
+  test('DELETE de formulario exige Gerente y solo marca ARCHIVED', async () => {
+    repository.findLockedVisitFormVersion.mockResolvedValue({
+      id: 7,
+      ubicacion_id: 1,
+      estado: 'ARCHIVED',
+      deleted_at: null,
+    });
+    repository.softDeleteVisitFormVersion.mockResolvedValue({
+      id: 7,
+      ubicacion_id: 1,
+      estado: 'ARCHIVED',
+      deleted_at: '2026-09-02T12:00:00.000Z',
+    });
+
+    currentUser.tipo_usuario = 'supervisor';
+    const denied = await authRequest('delete', '/api/bitacoras/formularios-visitas/7');
+    expect(denied.status).toBe(403);
+    expect(repository.softDeleteVisitFormVersion).not.toHaveBeenCalled();
+
+    currentUser.tipo_usuario = 'gerente';
+    const allowed = await authRequest('delete', '/api/bitacoras/formularios-visitas/7');
+    expect(allowed.status).toBe(200);
+    expect(repository.softDeleteVisitFormVersion).toHaveBeenCalledWith({
+      client: expect.anything(),
+      formId: 7,
+    });
+  });
+
+  test('regresión: no permite activar un formulario que ya está ACTIVE', async () => {
+    currentUser.tipo_usuario = 'supervisor';
+    repository.findLockedVisitFormVersion.mockResolvedValue({
+      id: 7,
+      ubicacion_id: 1,
+      estado: 'ACTIVE',
+    });
+    const response = await authRequest('post', '/api/bitacoras/formularios-visitas/7/activar').send(
+      {}
+    );
+    expect(response.status).toBe(409);
+    expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
   });
 
   test('Guardia registra y cierra visitas, pero no anula', async () => {
@@ -441,10 +645,53 @@ describe('bitacoras routes', () => {
       'post',
       '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
     ).send({
-      tipos_visita: ['Peatón'],
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
       fields: [{ field_key: 'motivo', label: 'Motivo', type: 'select', options: [] }],
     });
     expect(form.status).toBe(400);
+  });
+
+  test('regresión: rechaza "No autorizada" sin motivo, aunque el frontend no valide', async () => {
+    const response = await authRequest('post', '/api/bitacoras/visitas').send({
+      ubicacion_id: 1,
+      manzana_id: 8,
+      villa_id: 9,
+      tipo_visita_id: 901,
+      autorizada: false,
+      respuestas: {},
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.errors['motivo_no_autorizacion']).toBeDefined();
+    expect(repository.createVisit).not.toHaveBeenCalled();
+  });
+
+  test('regresión: registra visita "No autorizada" con motivo y no permite cerrar salida', async () => {
+    repository.createVisit.mockResolvedValueOnce({
+      id: 85,
+      estado: 'NO_AUTORIZADA',
+      motivo_no_autorizacion: 'Documento vencido',
+    });
+    const response = await authRequest('post', '/api/bitacoras/visitas').send({
+      ubicacion_id: 1,
+      manzana_id: 8,
+      villa_id: 9,
+      tipo_visita_id: 901,
+      autorizada: false,
+      motivo_no_autorizacion: 'Documento vencido',
+      respuestas: {},
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.data.estado).toBe('NO_AUTORIZADA');
+
+    repository.findLockedVisit.mockResolvedValueOnce({
+      id: 85,
+      ubicacion_id: 1,
+      estado: 'NO_AUTORIZADA',
+      requiere_salida: true,
+    });
+    const close = await authRequest('post', '/api/bitacoras/visitas/85/cerrar').send({});
+    expect(close.status).toBe(409);
+    expect(repository.closeVisit).not.toHaveBeenCalled();
   });
 
   test('acepta visitas sin placa para cualquier tipo (placa ya no es exclusiva de un tipo)', async () => {
@@ -511,7 +758,7 @@ describe('bitacoras routes', () => {
       'post',
       '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
     ).send({
-      tipos_visita: ['Peatón'],
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
       fields: [
         {
           field_key: 'persona_a_visitar',
@@ -525,7 +772,7 @@ describe('bitacoras routes', () => {
     expect(response.status).toBe(201);
     expect(repository.publishVisitFormForLocation).toHaveBeenCalledWith(
       expect.objectContaining({
-        tiposVisita: ['Peatón'],
+        tiposVisita: [{ nombre: 'Peatón', requiere_salida: true }],
         fields: [
           {
             field_key: 'persona_a_visitar',
@@ -546,7 +793,7 @@ describe('bitacoras routes', () => {
       'post',
       '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
     ).send({
-      tipos_visita: ['Peatón'],
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
       fields: [
         { field_key: 'cedula_contacto', label: 'Cédula', type: 'cedula', options: [] },
         { field_key: 'placa_alterna', label: 'Placa', type: 'placa', options: [] },
@@ -558,11 +805,127 @@ describe('bitacoras routes', () => {
       'post',
       '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
     ).send({
-      tipos_visita: ['Peatón'],
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
       fields: [{ field_key: 'fecha', label: 'Fecha', type: 'date', options: [] }],
     });
     expect(denied.status).toBe(400);
     expect(denied.body.errors['fields.0.type']).toBeDefined();
+  });
+
+  test('publica formulario con el grupo predefinido Visitantes (Nombre + Cédula) y rechaza estructura inválida', async () => {
+    currentUser.tipo_usuario = 'supervisor';
+    const visitantesFields = [
+      { field_key: 'nombre', label: 'Nombre', type: 'text', required: true },
+      { field_key: 'cedula', label: 'Cédula', type: 'cedula', required: true },
+    ];
+    const valid = await authRequest(
+      'post',
+      '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
+    ).send({
+      tipos_visita: [
+        { nombre: 'Peatón', requiere_salida: true },
+        { nombre: 'Vehículo', requiere_salida: true },
+      ],
+      fields: [],
+      grupos: [
+        {
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          min_count: 1,
+          aplica_a: ['Peatón'],
+          fields: visitantesFields,
+        },
+      ],
+    });
+    expect(valid.status).toBe(201);
+    expect(repository.publishVisitFormForLocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groups: [
+          expect.objectContaining({
+            group_key: 'visitantes',
+            label: 'Visitantes',
+            min_count: 1,
+            aplica_a: ['Peatón'],
+          }),
+        ],
+      })
+    );
+
+    // Rechaza campos internos distintos a Nombre/Cédula (ej. Teléfono ya no aplica).
+    const extraField = await authRequest(
+      'post',
+      '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
+    ).send({
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
+      fields: [],
+      grupos: [
+        {
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          min_count: 0,
+          aplica_a: 'TODOS',
+          fields: [
+            ...visitantesFields,
+            { field_key: 'telefono', label: 'Teléfono', type: 'text', required: false },
+          ],
+        },
+      ],
+    });
+    expect(extraField.status).toBe(400);
+
+    // Rechaza un group_key/label distinto del predefinido "visitantes"/"Visitantes".
+    const badKey = await authRequest(
+      'post',
+      '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
+    ).send({
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
+      fields: [],
+      grupos: [{ group_key: 'otronombre', label: 'Otro', min_count: 0, fields: visitantesFields }],
+    });
+    expect(badKey.status).toBe(400);
+
+    const unknownTipo = await authRequest(
+      'post',
+      '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
+    ).send({
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
+      fields: [],
+      grupos: [
+        {
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          aplica_a: ['Fantasma'],
+          fields: visitantesFields,
+        },
+      ],
+    });
+    expect(unknownTipo.status).toBe(400);
+  });
+
+  test('rechaza publicar preguntas normales que duplican Nombre/Cédula del grupo Visitantes', async () => {
+    currentUser.tipo_usuario = 'supervisor';
+    const response = await authRequest(
+      'post',
+      '/api/bitacoras/ubicaciones/1/formulario-visitas/publicar'
+    ).send({
+      tipos_visita: [{ nombre: 'Peatón', requiere_salida: true }],
+      fields: [{ field_key: 'cedula', label: 'Cédula', type: 'cedula', options: [] }],
+      grupos: [
+        {
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          min_count: 0,
+          aplica_a: 'TODOS',
+          fields: [
+            { field_key: 'nombre', label: 'Nombre', type: 'text', required: true },
+            { field_key: 'cedula', label: 'Cédula', type: 'cedula', required: true },
+          ],
+        },
+      ],
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.errors['fields.0.field_key']).toBeDefined();
+    expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
   });
 
   test('Villas no distingue Manzana inexistente de Manzana fuera de scope', async () => {

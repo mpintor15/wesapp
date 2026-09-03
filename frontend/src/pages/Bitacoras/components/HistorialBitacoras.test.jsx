@@ -124,9 +124,14 @@ describe('HistorialBitacoras', () => {
     const view = renderHistory();
     await flush();
 
-    expect(bitacorasService.getRegistros).toHaveBeenCalledWith({ page: 1, pageSize: 25 });
+    expect(bitacorasService.getRegistros).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 25,
+      sortBy: 'ocurrido_at',
+      sortOrder: 'desc',
+    });
     expect(view.container.querySelector('table.app-table')).not.toBeNull();
-    expect(view.container.querySelector('thead th').getAttribute('scope')).toBe('col');
+    expect(view.container.querySelector('thead .th-sort-btn')).not.toBeNull();
     expect(view.container.querySelector('.records-mobile')).not.toBeNull();
     expect(view.container.textContent).toContain('21/08/2026 10:15');
     expect(view.container.textContent).toContain('Ana Guardia');
@@ -136,6 +141,10 @@ describe('HistorialBitacoras', () => {
     expect(view.container.textContent).toContain('REGISTRADA');
     expect(view.container.textContent).toContain('ANULADA');
     expect(view.container.textContent).toContain('Duplicado');
+    const headers = Array.from(view.container.querySelectorAll('thead th')).map(
+      (th) => th.textContent
+    );
+    expect(headers).not.toContain('Estado');
 
     view.unmount();
   });
@@ -228,6 +237,8 @@ describe('HistorialBitacoras', () => {
       fecha_hasta: '2026-08-21',
       estado: 'ANULADA',
       autor: 'Ana',
+      sortBy: 'ocurrido_at',
+      sortOrder: 'desc',
     });
     expect(bitacorasService.getRegistros.mock.calls.at(-1)[0]).not.toHaveProperty('search');
     view.unmount();
@@ -262,7 +273,12 @@ describe('HistorialBitacoras', () => {
 
     expect(view.field('#bitacoras-filter-estado').value).toBe('');
     expect(view.field('#bitacoras-filter-autor').value).toBe('');
-    expect(bitacorasService.getRegistros).toHaveBeenLastCalledWith({ page: 1, pageSize: 25 });
+    expect(bitacorasService.getRegistros).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 25,
+      sortBy: 'ocurrido_at',
+      sortOrder: 'desc',
+    });
     view.unmount();
   });
 
@@ -285,6 +301,8 @@ describe('HistorialBitacoras', () => {
       pageSize: 25,
       estado: 'REGISTRADA',
       autor: 'Ana',
+      sortBy: 'ocurrido_at',
+      sortOrder: 'desc',
     });
     expect(view.container.textContent).not.toContain('Registros por página');
     expect(view.field('#bitacoras-page-size')).toBeNull();
@@ -300,6 +318,41 @@ describe('HistorialBitacoras', () => {
     expect(view.container.querySelector('.pagination-info').textContent).toContain('Página 1 de 1');
     expect(view.button('‹ Anterior').disabled).toBe(true);
     expect(view.button('Siguiente ›').disabled).toBe(true);
+    view.unmount();
+  });
+
+  test('ordena server-side y conserva filtros al alternar asc/desc', async () => {
+    const view = renderHistory();
+    await flush();
+    act(() => {
+      setValue(view.field('#bitacoras-filter-autor'), 'Ana');
+      view.button('Aplicar').click();
+    });
+    await flush();
+
+    act(() =>
+      Array.from(view.container.querySelectorAll('.th-sort-btn'))
+        .find((button) => button.textContent.includes('Autor'))
+        .click()
+    );
+    await flush();
+    expect(bitacorasService.getRegistros).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        page: 1,
+        autor: 'Ana',
+        sortBy: 'autor',
+        sortOrder: 'asc',
+      })
+    );
+    act(() =>
+      Array.from(view.container.querySelectorAll('.th-sort-btn'))
+        .find((button) => button.textContent.includes('Autor'))
+        .click()
+    );
+    await flush();
+    expect(bitacorasService.getRegistros).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sortBy: 'autor', sortOrder: 'desc' })
+    );
     view.unmount();
   });
 
@@ -332,6 +385,8 @@ describe('HistorialBitacoras', () => {
       fecha_hasta: '2026-08-21',
       estado: 'REGISTRADA',
       autor: 'Guardia',
+      sortBy: 'ocurrido_at',
+      sortOrder: 'desc',
     });
     view.unmount();
   });
@@ -425,6 +480,8 @@ describe('HistorialBitacoras', () => {
       page: 1,
       pageSize: 25,
       estado: 'ANULADA',
+      sortBy: 'ocurrido_at',
+      sortOrder: 'desc',
     });
     view.unmount();
   });
@@ -443,7 +500,12 @@ describe('HistorialBitacoras', () => {
 
     act(() => view.button('Reintentar').click());
     await flush();
-    expect(bitacorasService.getRegistros).toHaveBeenLastCalledWith({ page: 1, pageSize: 25 });
+    expect(bitacorasService.getRegistros).toHaveBeenLastCalledWith({
+      page: 1,
+      pageSize: 25,
+      sortBy: 'ocurrido_at',
+      sortOrder: 'desc',
+    });
     expect(view.container.textContent).toContain('Novedad completa');
     view.unmount();
   });

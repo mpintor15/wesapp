@@ -13,6 +13,8 @@ const HISTORY_PARAM_KEYS = [
   'fecha_hasta',
   'estado',
   'autor',
+  'sortBy',
+  'sortOrder',
 ];
 const VISIT_PARAM_KEYS = [
   'page',
@@ -22,8 +24,19 @@ const VISIT_PARAM_KEYS = [
   'fecha_desde',
   'fecha_hasta',
   'search',
+  'sortBy',
+  'sortOrder',
 ];
-const VISIT_FORM_PARAM_KEYS = ['page', 'pageSize', 'nombre', 'ubicacion_id', 'creator', 'estado'];
+const VISIT_FORM_PARAM_KEYS = [
+  'page',
+  'pageSize',
+  'nombre',
+  'ubicacion_id',
+  'creator',
+  'estado',
+  'sortBy',
+  'sortOrder',
+];
 
 const pickDefined = (source, keys) =>
   keys.reduce((result, key) => {
@@ -46,6 +59,15 @@ const bitacorasService = {
       });
     } catch (error) {
       return buildServiceFailure(error, 'Error al exportar reporte');
+    }
+  },
+
+  async getResumen() {
+    try {
+      const response = await api.get('/bitacoras/resumen');
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener resumen de Bitácoras');
     }
   },
 
@@ -107,7 +129,13 @@ const bitacorasService = {
   },
 
   async publishFormularioVisitas(ubicacionId, data = {}) {
-    const payload = pickDefined(data, ['titulo', 'mostrar_fecha_hora', 'tipos_visita', 'fields']);
+    const payload = pickDefined(data, [
+      'titulo',
+      'mostrar_fecha_hora',
+      'tipos_visita',
+      'fields',
+      'grupos',
+    ]);
     try {
       const response = await api.post(
         `/bitacoras/ubicaciones/${ubicacionId}/formulario-visitas/publicar`,
@@ -128,6 +156,33 @@ const bitacorasService = {
     }
   },
 
+  async getFormularioVisitasDetalle(formId) {
+    try {
+      const response = await api.get(`/bitacoras/formularios-visitas/${formId}`);
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener el formulario');
+    }
+  },
+
+  async activateFormularioVisitas(formId) {
+    try {
+      const response = await api.post(`/bitacoras/formularios-visitas/${formId}/activar`, {});
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al activar el formulario');
+    }
+  },
+
+  async deleteFormularioVisitas(formId) {
+    try {
+      const response = await api.delete(`/bitacoras/formularios-visitas/${formId}`);
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al eliminar el formulario');
+    }
+  },
+
   async createVisita(data = {}) {
     const payload = pickDefined(data, [
       'ubicacion_id',
@@ -139,6 +194,9 @@ const bitacorasService = {
       'tipo_visita_id',
       'placa',
       'respuestas',
+      'grupos',
+      'autorizada',
+      'motivo_no_autorizacion',
     ]);
     try {
       const response = await api.post('/bitacoras/visitas', payload);

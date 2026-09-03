@@ -40,6 +40,7 @@ const Bitacoras = () => {
   const [locationsLoadAttempted, setLocationsLoadAttempted] = useState(false);
   const [locationsError, setLocationsError] = useState('');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [formsRefreshKey, setFormsRefreshKey] = useState(0);
   const [reportFilters, setReportFilters] = useState({
     historial: {},
     visitas: {},
@@ -164,7 +165,25 @@ const Bitacoras = () => {
     (total) => updateTabCount('formularios', total),
     [updateTabCount]
   );
+  const handleFormsChanged = useCallback(() => setFormsRefreshKey((current) => current + 1), []);
   const hasModuleAccess = hasCreatePermission || canViewHistorial || canManageVisitForms;
+
+  useEffect(() => {
+    if (!canViewHistorial && !canManageVisitForms) return undefined;
+    let cancelled = false;
+    bitacorasService.getResumen().then((result) => {
+      if (cancelled || !result.success) return;
+      setTabCounts((current) => ({
+        historial: result.data.registros ?? current.historial,
+        visitas: result.data.visitas ?? current.visitas,
+        formularios: result.data.formularios ?? current.formularios,
+      }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageVisitForms, canViewHistorial, historyRefreshKey, formsRefreshKey]);
+
   const visibleTabs = useMemo(
     () =>
       [
@@ -297,7 +316,9 @@ const Bitacoras = () => {
               onCloseBuilder={() => setIsFormBuilderOpen(false)}
               onFiltersChange={updateFormulariosReportFilters}
               canGestionar={canGestionarFormularios}
+              canDelete={user?.tipo_usuario === 'gerente'}
               onTotalChange={handleFormulariosTotalChange}
+              onFormsChanged={handleFormsChanged}
             />
           ) : (
             <section className="bitacoras-history-unavailable">

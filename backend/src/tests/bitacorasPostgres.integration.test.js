@@ -78,6 +78,7 @@ describe('bitacoras PostgreSQL API persistence', () => {
         ocurrido_at TIMESTAMP NOT NULL,
         detalle TEXT NOT NULL CHECK (detalle ~ '[^[:space:]]'),
         estado VARCHAR(12) NOT NULL DEFAULT 'REGISTRADA',
+        origen VARCHAR(12) NOT NULL DEFAULT 'MANUAL' CHECK (origen IN ('MANUAL', 'VISITA')),
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         anulado_at TIMESTAMP,
         anulado_por_usuario_id INTEGER REFERENCES ${schemaIdent}.usuarios(id) ON DELETE RESTRICT,
@@ -99,6 +100,7 @@ describe('bitacoras PostgreSQL API persistence', () => {
         published_by INTEGER REFERENCES ${schemaIdent}.usuarios(id) ON DELETE SET NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         published_at TIMESTAMP,
+        deleted_at TIMESTAMPTZ,
         UNIQUE (ubicacion_id, version),
         UNIQUE (id, ubicacion_id)
       );
@@ -195,6 +197,7 @@ describe('bitacoras PostgreSQL API persistence', () => {
         END IF;
 
         IF OLD.estado = 'ACTIVE' AND NEW.estado = 'ARCHIVED'
+           AND NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at
            AND NEW.id = OLD.id
            AND NEW.ubicacion_id = OLD.ubicacion_id
            AND NEW.version = OLD.version
@@ -209,6 +212,7 @@ describe('bitacoras PostgreSQL API persistence', () => {
 
         IF OLD.estado = 'ACTIVE' AND NEW.estado = 'ACTIVE'
            AND OLD.published_at IS NULL AND NEW.published_at IS NOT NULL
+           AND NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at
            AND NEW.id = OLD.id
            AND NEW.ubicacion_id = OLD.ubicacion_id
            AND NEW.version = OLD.version
@@ -217,6 +221,20 @@ describe('bitacoras PostgreSQL API persistence', () => {
            AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
            AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
            AND NEW.created_at = OLD.created_at THEN
+          RETURN NEW;
+        END IF;
+
+        IF OLD.estado = 'ARCHIVED' AND NEW.estado = 'ARCHIVED'
+           AND OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
+           AND NEW.id = OLD.id
+           AND NEW.ubicacion_id = OLD.ubicacion_id
+           AND NEW.version = OLD.version
+           AND NEW.titulo = OLD.titulo
+           AND NEW.mostrar_fecha_hora = OLD.mostrar_fecha_hora
+           AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+           AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+           AND NEW.created_at = OLD.created_at
+           AND NEW.published_at IS NOT DISTINCT FROM OLD.published_at THEN
           RETURN NEW;
         END IF;
 
@@ -657,11 +675,31 @@ describe('bitacoras PostgreSQL API persistence', () => {
       );
 
       await expect(
+        repository.softDeleteVisitFormVersion({ client, formId: version.rows[0].id })
+      ).resolves.toBeNull();
+
+      await expect(
         client.query(
           'UPDATE bitacora_visit_form_versions SET estado = $$ARCHIVED$$ WHERE id = $1',
           [version.rows[0].id]
         )
       ).resolves.toMatchObject({ rowCount: 1 });
+
+      const softDeleted = await repository.softDeleteVisitFormVersion({
+        client,
+        formId: version.rows[0].id,
+      });
+      expect(softDeleted).toEqual(
+        expect.objectContaining({ id: version.rows[0].id, estado: 'ARCHIVED' })
+      );
+      await expect(
+        repository.findVisitFormVersionDetail({ formId: version.rows[0].id, executor: client })
+      ).resolves.toBeNull();
+      const preservedChildren = await client.query(
+        'SELECT COUNT(*)::int AS total FROM bitacora_visit_form_fields WHERE form_version_id = $1',
+        [version.rows[0].id]
+      );
+      expect(preservedChildren.rows[0].total).toBe(1);
     } finally {
       await client.query('ROLLBACK').catch(() => undefined);
       client.release();

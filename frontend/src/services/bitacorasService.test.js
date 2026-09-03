@@ -6,11 +6,20 @@ jest.mock('./api', () => ({
   default: {
     get: jest.fn(),
     post: jest.fn(),
+    delete: jest.fn(),
   },
 }));
 
 describe('bitacorasService', () => {
   beforeEach(() => jest.clearAllMocks());
+
+  test('obtiene el resumen de contadores de Bitácoras', async () => {
+    const body = { success: true, data: { registros: 3, visitas: 1, formularios: 2 } };
+    api.get.mockResolvedValue({ data: body });
+
+    await expect(bitacorasService.getResumen()).resolves.toEqual(body);
+    expect(api.get).toHaveBeenCalledWith('/bitacoras/resumen');
+  });
 
   test('obtiene Ubicaciones visibles con el cliente HTTP central', async () => {
     const body = { success: true, data: [{ id: 1, nombre: 'Punto' }] };
@@ -122,6 +131,7 @@ describe('bitacorasService', () => {
         fecha_desde: '2026-08-01',
         estado: 'REGISTRADA',
         autor: 'Ana',
+        sortBy: 'ocurrido_at',
       },
     });
   });
@@ -193,6 +203,63 @@ describe('bitacorasService', () => {
     expect(api.post).toHaveBeenNthCalledWith(3, '/bitacoras/visitas/7/cerrar', {});
   });
 
+  test('consulta el detalle de una versión de formulario para vista previa', async () => {
+    api.get.mockResolvedValue({
+      data: { success: true, data: { id: 7, estado: 'ARCHIVED', fields: [] } },
+    });
+
+    await expect(bitacorasService.getFormularioVisitasDetalle(7)).resolves.toEqual({
+      success: true,
+      data: { id: 7, estado: 'ARCHIVED', fields: [] },
+    });
+    expect(api.get).toHaveBeenCalledWith('/bitacoras/formularios-visitas/7');
+  });
+
+  test('elimina lógicamente una versión archivada por su id', async () => {
+    api.delete.mockResolvedValue({ data: { success: true, message: 'Formulario eliminado' } });
+
+    await expect(bitacorasService.deleteFormularioVisitas(7)).resolves.toEqual({
+      success: true,
+      message: 'Formulario eliminado',
+    });
+    expect(api.delete).toHaveBeenCalledWith('/bitacoras/formularios-visitas/7');
+  });
+
+  test('reenvía grupos repetibles al publicar formulario y al registrar visita', async () => {
+    api.post.mockResolvedValueOnce({ data: { success: true } }).mockResolvedValueOnce({
+      data: { success: true },
+    });
+
+    await bitacorasService.publishFormularioVisitas(3, {
+      tipos_visita: ['Peatón'],
+      fields: [],
+      grupos: [{ group_key: 'visitantes', label: 'Visitantes', fields: [] }],
+    });
+    await bitacorasService.createVisita({
+      ubicacion_id: 3,
+      manzana_id: 4,
+      villa_id: 5,
+      tipo_visita_id: 901,
+      respuestas: {},
+      grupos: { visitantes: [{ nombre: 'Ana' }] },
+    });
+
+    expect(api.post).toHaveBeenNthCalledWith(
+      1,
+      '/bitacoras/ubicaciones/3/formulario-visitas/publicar',
+      expect.objectContaining({
+        grupos: [{ group_key: 'visitantes', label: 'Visitantes', fields: [] }],
+      })
+    );
+    expect(api.post).toHaveBeenNthCalledWith(
+      2,
+      '/bitacoras/visitas',
+      expect.objectContaining({
+        grupos: { visitantes: [{ nombre: 'Ana' }] },
+      })
+    );
+  });
+
   test('consulta visitas con filtros soportados y elimina desconocidos', async () => {
     api.get.mockResolvedValue({ data: { success: true, data: [], meta: {} } });
 
@@ -215,6 +282,7 @@ describe('bitacorasService', () => {
         creator: 'Ana',
         fecha_desde: '2026-08-01',
         search: 'Luis',
+        sortBy: 'entrada_at',
       },
     });
   });

@@ -23,6 +23,7 @@ jest.mock('../../context/ToastContext', () => ({
 jest.mock('../../services/bitacorasService', () => ({
   __esModule: true,
   default: {
+    getResumen: jest.fn(),
     getUbicaciones: jest.fn(),
     getManzanas: jest.fn(),
     getVillas: jest.fn(),
@@ -146,6 +147,7 @@ describe('Bitacoras', () => {
     jest.clearAllMocks();
     jest.useFakeTimers().setSystemTime(new Date(2026, 7, 21, 10, 0));
     useToast.mockReturnValue({ showToast: jest.fn() });
+    bitacorasService.getResumen.mockResolvedValue({ success: false, status: 404, message: 'n/a' });
     bitacorasService.getUbicaciones.mockResolvedValue({ success: true, data: LOCATIONS });
     bitacorasService.getFormulariosVisitas.mockResolvedValue({ success: true, data: [] });
     bitacorasService.getVisitas.mockResolvedValue({
@@ -251,6 +253,8 @@ describe('Bitacoras', () => {
     expect(bitacorasService.exportVisitas).toHaveBeenCalledWith({
       pageSize: 25,
       estado: 'ABIERTA',
+      sortBy: 'entrada_at',
+      sortOrder: 'desc',
     });
 
     view.unmount();
@@ -289,6 +293,56 @@ describe('Bitacoras', () => {
     expect(view.tabBadge('Formularios')).toBe('4');
     expect(view.tabBadge('Registro')).toBe('3');
 
+    view.unmount();
+  });
+
+  test('resumen llena Visitas y Formularios al montar sin visitar esos tabs', async () => {
+    bitacorasService.getResumen.mockResolvedValue({
+      success: true,
+      data: { registros: 7, visitas: 2, formularios: 5 },
+    });
+    const view = renderBitacoras([
+      PERMISSIONS.BITACORAS_HISTORIAL_VER,
+      PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR,
+    ]);
+    await act(async () => Promise.resolve());
+
+    // Visitas y Formularios no están montados (activeView sigue en 'historial'):
+    // su badge solo puede venir del resumen, no de su propio fetch.
+    expect(bitacorasService.getVisitas).not.toHaveBeenCalled();
+    expect(bitacorasService.getFormulariosVisitas).not.toHaveBeenCalled();
+    expect(bitacorasService.getResumen).toHaveBeenCalledTimes(1);
+    expect(view.tabBadge('Visitas')).toBe('2');
+    expect(view.tabBadge('Formularios')).toBe('5');
+    view.unmount();
+  });
+
+  test('resumen se vuelve a pedir tras registrar una Bitácora y refresca badges no visitados', async () => {
+    bitacorasService.createRegistro.mockResolvedValue({ success: true, message: 'Creada' });
+    bitacorasService.getResumen
+      .mockResolvedValueOnce({ success: true, data: { registros: 3, visitas: 1 } })
+      .mockResolvedValueOnce({ success: true, data: { registros: 4, visitas: 2 } });
+    const view = renderBitacoras([
+      PERMISSIONS.BITACORAS_REGISTRO_CREAR,
+      PERMISSIONS.BITACORAS_HISTORIAL_VER,
+    ]);
+    await act(async () => Promise.resolve());
+    expect(view.tabBadge('Visitas')).toBe('1');
+
+    act(() => view.button('Registrar Bitácora').click());
+    act(() => {
+      setValue(view.container.querySelector('#bitacora-ubicacion'), '7');
+      setValue(view.container.querySelector('#bitacora-detalle'), 'Novedad');
+    });
+    await act(async () => {
+      view.container
+        .querySelector('form')
+        .dispatchEvent(new globalThis.Event('submit', { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(bitacorasService.getResumen).toHaveBeenCalledTimes(2);
+    expect(view.tabBadge('Visitas')).toBe('2');
     view.unmount();
   });
 

@@ -24,6 +24,15 @@ router.get(
 );
 
 router.get(
+  '/resumen',
+  requireAnyPermission(
+    PERMISSIONS.BITACORAS_HISTORIAL_VER,
+    PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR
+  ),
+  bitacorasController.getResumen
+);
+
+router.get(
   '/registros',
   requirePermission(PERMISSIONS.BITACORAS_HISTORIAL_VER),
   bitacorasController.getRegistros
@@ -60,6 +69,12 @@ router.get(
 );
 
 router.get(
+  '/formularios-visitas/:formId',
+  requirePermission(PERMISSIONS.BITACORAS_FORMULARIOS_GESTIONAR),
+  bitacorasController.getVisitFormDetail
+);
+
+router.get(
   '/ubicaciones/:ubicacionId/formulario-visitas/activo',
   requireAnyPermission(
     PERMISSIONS.BITACORAS_REGISTRO_CREAR,
@@ -80,6 +95,19 @@ router.post(
   requirePermission(PERMISSIONS.BITACORAS_FORMULARIOS_GESTIONAR),
   validateRequest(bitacoraVisitFormArchiveSchema),
   bitacorasController.archiveVisitForm
+);
+
+router.post(
+  '/formularios-visitas/:formId/activar',
+  requirePermission(PERMISSIONS.BITACORAS_FORMULARIOS_GESTIONAR),
+  validateRequest(bitacoraVisitFormArchiveSchema),
+  bitacorasController.reactivateVisitForm
+);
+
+router.delete(
+  '/formularios-visitas/:formId',
+  requirePermission(PERMISSIONS.BITACORAS_FORMULARIOS_GESTIONAR),
+  bitacorasController.deleteArchivedVisitForm
 );
 
 router.get(

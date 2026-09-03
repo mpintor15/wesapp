@@ -5,9 +5,12 @@ const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { isValidDateString } = require('../utils/inputValidation');
 const {
+  getBitacorasResumen,
   findActiveBlocksForLocation,
   findActivePrincipalResidentForVilla,
   findActiveVisitFormForLocation,
+  findVisitFormVersionDetail,
+  hasVisitFormHistory,
   findVisitForms,
   findVisitFormCreators,
   findActiveVillasForBlock,
@@ -23,10 +26,12 @@ const {
   findVisibleLocations,
   insertBitacoraRegistro,
   insertVisitResponses,
+  insertVisitGroupResponses,
   publishVisitFormForLocation,
   acquireVisitFormPublishLock,
   findLockedVisitFormVersion,
   archiveVisitFormVersion,
+  softDeleteVisitFormVersion,
   createVisit,
   closeVisit,
   cancelVisit,
@@ -47,6 +52,8 @@ const HISTORY_QUERY_FIELDS = new Set([
   'fecha_hasta',
   'estado',
   'autor',
+  'sortBy',
+  'sortOrder',
 ]);
 const VISIT_QUERY_FIELDS = new Set([
   'page',
@@ -56,8 +63,10 @@ const VISIT_QUERY_FIELDS = new Set([
   'fecha_desde',
   'fecha_hasta',
   'search',
+  'sortBy',
+  'sortOrder',
 ]);
-const VISIT_STATES = new Set(['ABIERTA', 'CERRADA', 'ANULADA']);
+const VISIT_STATES = new Set(['ABIERTA', 'CERRADA', 'ANULADA', 'NO_AUTORIZADA']);
 const VISIT_FORM_STATES = new Set(['ACTIVE', 'ARCHIVED']);
 const VISIT_FORM_QUERY_FIELDS = new Set([
   'page',
@@ -66,8 +75,36 @@ const VISIT_FORM_QUERY_FIELDS = new Set([
   'ubicacion_id',
   'creator',
   'estado',
+  'sortBy',
+  'sortOrder',
 ]);
 const EXPORT_PAGE = { page: 1, pageSize: 100000, offset: 0 };
+const HISTORY_SORTS = {
+  ocurrido_at: 'br.ocurrido_at',
+  ubicacion: 'u.nombre',
+  casa: String.raw`COALESCE(m.nombre, '') || COALESCE(v.identificador, '')`,
+  autor: 'c.nombres_completos',
+  detalle: 'br.detalle',
+};
+const VISIT_SORTS = {
+  tipo_visita: 'tv.nombre',
+  placa: 'bv.placa',
+  casa: String.raw`COALESCE(m.nombre, '') || COALESCE(v.identificador, '')`,
+  titular: 'r.nombre',
+  registrado_por: 'u.usuario',
+  salida_at: 'bv.salida_at',
+  estado: 'bv.estado',
+  observacion: 'bv.motivo_no_autorizacion',
+  entrada_at: 'bv.entrada_at',
+};
+const VISIT_FORM_SORTS = {
+  nombre: 'bfv.titulo',
+  ubicacion: 'u.nombre',
+  version: 'bfv.version',
+  estado: 'bfv.estado',
+  creador: 'creator.usuario',
+  published_at: 'bfv.published_at',
+};
 
 const hasGlobalLocationScope = (tipoUsuario) =>
   hasPermission(tipoUsuario, PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS);
@@ -175,7 +212,7 @@ const normalizeVisitFilters = (query = {}) => {
   }
   const estado = query.estado || undefined;
   if (estado && !VISIT_STATES.has(estado)) {
-    throw createHttpError(400, 'estado debe ser ABIERTA, CERRADA o ANULADA');
+    throw createHttpError(400, 'estado debe ser ABIERTA, CERRADA, ANULADA o NO_AUTORIZADA');
   }
   const fechaDesde = query.fecha_desde || undefined;
   const fechaHasta = query.fecha_hasta || undefined;
@@ -323,6 +360,80 @@ const assertUrbanContext = async ({ client, location, blockId, villaId }) => {
   return { block, villa, principalResident };
 };
 
+const respondError = (code, message, detailKey) => {
+  const error = domainError(400, code, message);
+  error.details = { [detailKey]: [message] };
+  return error;
+};
+
+// Validates and normalizes a single field's raw answer against its type/required
+// rules. Returns `undefined` for an intentionally-empty optional answer, or the
+// normalized value to persist. Shared by scalar fields and group-member fields
+// (each person entry inside a repeatable group answers the same field shapes).
+const validateFieldAnswer = (field, rawValue, detailKey) => {
+  const missing = rawValue === undefined || rawValue === null || rawValue === '';
+  if (field.required && (missing || (field.type === 'checkbox' && rawValue !== true))) {
+    throw respondError('VISIT_RESPONSE_REQUIRED', `${field.label} es requerido`, detailKey);
+  }
+  if (missing) {
+    return undefined;
+  }
+
+  if (field.type === 'checkbox') {
+    if (typeof rawValue !== 'boolean') {
+      throw respondError('VISIT_RESPONSE_INVALID', `${field.label} debe ser sí/no`, detailKey);
+    }
+    return rawValue;
+  }
+  const stringValue = String(rawValue).trim();
+  if (!stringValue && field.required) {
+    throw respondError('VISIT_RESPONSE_REQUIRED', `${field.label} es requerido`, detailKey);
+  }
+  if (!stringValue) {
+    return undefined;
+  }
+  if (field.type === 'number' && !Number.isFinite(Number(stringValue))) {
+    throw respondError('VISIT_RESPONSE_INVALID', `${field.label} debe ser numérico`, detailKey);
+  }
+  if (field.type === 'cedula' && (typeof rawValue !== 'string' || !/^\d{10}$/.test(stringValue))) {
+    throw respondError('VISIT_RESPONSE_INVALID', `${field.label} debe tener 10 dígitos`, detailKey);
+  }
+  const normalizedPlate =
+    field.type === 'placa' && typeof rawValue === 'string'
+      ? stringValue.toUpperCase().replace(/[^A-Z0-9]/g, '')
+      : stringValue;
+  if (
+    field.type === 'placa' &&
+    (typeof rawValue !== 'string' || !/^[A-Z0-9]{5,10}$/.test(normalizedPlate))
+  ) {
+    throw respondError(
+      'VISIT_RESPONSE_INVALID',
+      `${field.label} debe tener entre 5 y 10 letras o números`,
+      detailKey
+    );
+  }
+  if (field.type === 'select') {
+    const options = Array.isArray(field.options) ? field.options : [];
+    if (!options.includes(stringValue)) {
+      throw respondError(
+        'VISIT_RESPONSE_INVALID',
+        `${field.label} no es una opción válida`,
+        detailKey
+      );
+    }
+  }
+  return field.type === 'number'
+    ? Number(stringValue)
+    : field.type === 'placa'
+      ? normalizedPlate
+      : stringValue;
+};
+
+const fieldAppliesToTipo = (field, tipoVisitaId) =>
+  !field.aplica_a ||
+  field.aplica_a === 'TODOS' ||
+  (Array.isArray(field.tipos) && field.tipos.includes(tipoVisitaId));
+
 const validateVisitResponses = (fields, responses = {}, tipoVisitaId) => {
   const allowedKeys = new Set(fields.map((field) => field.field_key));
   const unknownKey = Object.keys(responses).find((key) => !allowedKeys.has(key));
@@ -339,108 +450,99 @@ const validateVisitResponses = (fields, responses = {}, tipoVisitaId) => {
   const normalized = {};
   fields.forEach((field) => {
     const rawValue = responses[field.field_key];
-    const applies =
-      !field.aplica_a ||
-      field.aplica_a === 'TODOS' ||
-      (Array.isArray(field.tipos) && field.tipos.includes(tipoVisitaId));
-    if (!applies) {
+    const detailKey = `respuestas.${field.field_key}`;
+    if (!fieldAppliesToTipo(field, tipoVisitaId)) {
       if (rawValue !== undefined) {
-        const error = domainError(
-          400,
+        throw respondError(
           'VISIT_RESPONSE_NOT_APPLICABLE',
-          `${field.label} no aplica al tipo de ingreso`
+          `${field.label} no aplica al tipo de ingreso`,
+          detailKey
         );
-        error.details = { [`respuestas.${field.field_key}`]: [error.message] };
-        throw error;
       }
       return;
     }
-    const missing = rawValue === undefined || rawValue === null || rawValue === '';
-    if (field.required && (missing || (field.type === 'checkbox' && rawValue !== true))) {
-      const error = domainError(400, 'VISIT_RESPONSE_REQUIRED', `${field.label} es requerido`);
-      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
-      throw error;
+    const value = validateFieldAnswer(field, rawValue, detailKey);
+    if (value !== undefined) {
+      normalized[field.field_key] = value;
     }
-    if (missing) {
+  });
+  return normalized;
+};
+
+// Validates the repeatable-group entries submitted for a visit: applicability
+// per tipo, minimum entry count, and per-entry/per-field required+type rules
+// (via validateFieldAnswer). Returns a normalized { [group_key]: entry[] } map
+// ready to persist, mirroring validateVisitResponses's normalized output.
+const validateVisitGroupResponses = (groups, groupResponses = {}, tipoVisitaId) => {
+  const allowedKeys = new Set(groups.map((group) => group.group_key));
+  const unknownKey = Object.keys(groupResponses).find((key) => !allowedKeys.has(key));
+  if (unknownKey) {
+    const error = domainError(400, 'VISIT_GROUP_NOT_ALLOWED', 'Grupo de visita no permitido');
+    error.details = { grupos: [`Grupo no permitido: ${unknownKey}`] };
+    throw error;
+  }
+
+  const normalized = {};
+  groups.forEach((group) => {
+    const entries = Array.isArray(groupResponses[group.group_key])
+      ? groupResponses[group.group_key]
+      : [];
+    const applies = fieldAppliesToTipo(group, tipoVisitaId);
+    if (!applies) {
+      if (entries.length > 0) {
+        throw respondError(
+          'VISIT_GROUP_NOT_APPLICABLE',
+          `${group.label} no aplica al tipo de ingreso`,
+          `grupos.${group.group_key}`
+        );
+      }
       return;
+    }
+    if (group.min_count > 0 && entries.length < group.min_count) {
+      throw respondError(
+        'VISIT_GROUP_MIN_COUNT',
+        `${group.label} requiere al menos ${group.min_count} registro(s)`,
+        `grupos.${group.group_key}`
+      );
     }
 
-    if (field.type === 'checkbox') {
-      if (typeof rawValue !== 'boolean') {
-        const error = domainError(400, 'VISIT_RESPONSE_INVALID', `${field.label} debe ser sí/no`);
-        error.details = { [`respuestas.${field.field_key}`]: [error.message] };
-        throw error;
-      }
-      normalized[field.field_key] = rawValue;
-      return;
-    }
-    const stringValue = String(rawValue).trim();
-    if (!stringValue && field.required) {
-      const error = domainError(400, 'VISIT_RESPONSE_REQUIRED', `${field.label} es requerido`);
-      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
-      throw error;
-    }
-    if (!stringValue) {
-      return;
-    }
-    if (field.type === 'number' && !Number.isFinite(Number(stringValue))) {
-      const error = domainError(400, 'VISIT_RESPONSE_INVALID', `${field.label} debe ser numérico`);
-      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
-      throw error;
-    }
-    if (
-      field.type === 'cedula' &&
-      (typeof rawValue !== 'string' || !/^\d{10}$/.test(stringValue))
-    ) {
-      const error = domainError(
-        400,
-        'VISIT_RESPONSE_INVALID',
-        `${field.label} debe tener 10 dígitos`
-      );
-      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
-      throw error;
-    }
-    const normalizedPlate =
-      field.type === 'placa' && typeof rawValue === 'string'
-        ? stringValue.toUpperCase().replace(/[^A-Z0-9]/g, '')
-        : stringValue;
-    if (
-      field.type === 'placa' &&
-      (typeof rawValue !== 'string' || !/^[A-Z0-9]{5,10}$/.test(normalizedPlate))
-    ) {
-      const error = domainError(
-        400,
-        'VISIT_RESPONSE_INVALID',
-        `${field.label} debe tener entre 5 y 10 letras o números`
-      );
-      error.details = { [`respuestas.${field.field_key}`]: [error.message] };
-      throw error;
-    }
-    if (field.type === 'select') {
-      const options = Array.isArray(field.options) ? field.options : [];
-      if (!options.includes(stringValue)) {
-        const error = domainError(
-          400,
-          'VISIT_RESPONSE_INVALID',
-          `${field.label} no es una opción válida`
+    const allowedFieldKeys = new Set(group.fields.map((field) => field.field_key));
+    normalized[group.group_key] = entries.map((entry, entryIndex) => {
+      if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw respondError(
+          'VISIT_GROUP_INVALID',
+          `${group.label} #${entryIndex + 1} tiene un formato inválido`,
+          `grupos.${group.group_key}.${entryIndex}`
         );
-        error.details = { [`respuestas.${field.field_key}`]: [error.message] };
-        throw error;
       }
-    }
-    normalized[field.field_key] =
-      field.type === 'number'
-        ? Number(stringValue)
-        : field.type === 'placa'
-          ? normalizedPlate
-          : stringValue;
+      const unknownFieldKey = Object.keys(entry).find((key) => !allowedFieldKeys.has(key));
+      if (unknownFieldKey) {
+        throw respondError(
+          'VISIT_GROUP_FIELD_NOT_ALLOWED',
+          `Campo no permitido en ${group.label}: ${unknownFieldKey}`,
+          `grupos.${group.group_key}.${entryIndex}`
+        );
+      }
+      const normalizedEntry = {};
+      group.fields.forEach((field) => {
+        const value = validateFieldAnswer(
+          field,
+          entry[field.field_key],
+          `grupos.${group.group_key}.${entryIndex}.${field.field_key}`
+        );
+        if (value !== undefined) {
+          normalizedEntry[field.field_key] = value;
+        }
+      });
+      return normalizedEntry;
+    });
   });
   return normalized;
 };
 
 const visitDetail = ({ action, visitorName, tipoVisitaNombre, plate, house }) => {
   const access = plate ? `${tipoVisitaNombre} · Placa ${plate}` : tipoVisitaNombre;
-  return `${action} visita: ${visitorName} · ${access} · Casa ${house}`;
+  return `${action} visita: ${visitorName || 'Visitante'} · ${access} · Casa ${house}`;
 };
 
 const createRegistro = async (req, res) => {
@@ -589,9 +691,43 @@ const getVillasElegibles = async (req, res) => {
   }
 };
 
+const getResumen = async (req, res) => {
+  try {
+    const includeHistorial = hasPermission(
+      req.user.tipo_usuario,
+      PERMISSIONS.BITACORAS_HISTORIAL_VER
+    );
+    const includeFormularios = hasPermission(
+      req.user.tipo_usuario,
+      PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR
+    );
+    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
+    const counts = await getBitacorasResumen({
+      hasGlobalScope,
+      userId,
+      includeHistorial,
+      includeFormularios,
+    });
+    const data = {};
+    if (includeHistorial) {
+      data.registros = counts.registros;
+      data.visitas = counts.visitas;
+    }
+    if (includeFormularios) {
+      data.formularios = counts.formularios;
+    }
+    return res.json({ success: true, data });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al consultar resumen de Bitácoras');
+  }
+};
+
 const getRegistros = async (req, res) => {
   try {
-    const pagination = normalizePaginationQuery(req.query);
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: 'ocurrido_at',
+      allowedSorts: HISTORY_SORTS,
+    });
     const filters = normalizeHistoryFilters(req.query);
     const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
 
@@ -665,7 +801,10 @@ const getActiveVisitForm = async (req, res) => {
 
 const getVisitForms = async (req, res) => {
   try {
-    const pagination = normalizePaginationQuery(req.query);
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: 'published_at',
+      allowedSorts: VISIT_FORM_SORTS,
+    });
     const filters = normalizeVisitFormFilters(req.query);
     const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
     const [{ items, total }, creators] = await Promise.all([
@@ -823,12 +962,9 @@ const publishVisitForm = async (req, res) => {
         );
       }
       await acquireVisitFormPublishLock({ client, locationId });
-      const existingActive = await findActiveVisitFormForLocation({
-        locationId,
-        executor: client,
-      });
+      const hasHistory = await hasVisitFormHistory({ client, locationId });
       if (
-        existingActive &&
+        hasHistory &&
         !hasPermission(actor.tipo_usuario, PERMISSIONS.BITACORAS_FORMULARIOS_GESTIONAR)
       ) {
         throw createHttpError(
@@ -843,6 +979,7 @@ const publishVisitForm = async (req, res) => {
         showDateTime: req.body.mostrar_fecha_hora,
         tiposVisita: req.body.tipos_visita,
         fields: req.body.fields || [],
+        groups: req.body.grupos || [],
         userId: actor.id,
       });
       await logAuditStrict(client, {
@@ -861,6 +998,30 @@ const publishVisitForm = async (req, res) => {
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al publicar formulario de visitas');
+  }
+};
+
+const getVisitFormDetail = async (req, res) => {
+  try {
+    const formId = parsePositiveInteger(req.params.formId, 'El formulario es inválido');
+    const form = await db.transaction(async (client) => {
+      const actor = await getCurrentActor(req.user.id, client);
+      const detail = await findVisitFormVersionDetail({ formId, executor: client });
+      if (!detail) {
+        throw domainError(404, 'VISIT_FORM_NOT_FOUND', 'Formulario no encontrado');
+      }
+      await assertLocationScope({
+        client,
+        userId: actor.id,
+        locationId: detail.ubicacion_id,
+        hasGlobalScope: actor.hasGlobalScope,
+        concealUnauthorized: true,
+      });
+      return detail;
+    });
+    return res.json({ success: true, data: form });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al obtener formulario de visitas');
   }
 };
 
@@ -905,6 +1066,143 @@ const archiveVisitForm = async (req, res) => {
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al cambiar el estado del formulario');
+  }
+};
+
+const deleteArchivedVisitForm = async (req, res) => {
+  try {
+    const formId = parsePositiveInteger(req.params.formId, 'El formulario es inválido');
+    const deleted = await db.transaction(async (client) => {
+      const actor = await getCurrentActor(req.user.id, client);
+      if (actor.tipo_usuario !== 'gerente') {
+        throw createHttpError(403, 'Solo Gerente puede eliminar formularios archivados');
+      }
+      const form = await findLockedVisitFormVersion({ client, formId });
+      if (!form) {
+        throw domainError(404, 'VISIT_FORM_NOT_FOUND', 'Formulario no encontrado');
+      }
+      await assertLocationScope({
+        client,
+        userId: actor.id,
+        locationId: form.ubicacion_id,
+        hasGlobalScope: actor.hasGlobalScope,
+        concealUnauthorized: true,
+      });
+      if (form.estado !== 'ARCHIVED') {
+        throw domainError(
+          409,
+          'VISIT_FORM_NOT_ARCHIVED',
+          'Solo se puede eliminar un formulario archivado'
+        );
+      }
+      const updated = await softDeleteVisitFormVersion({ client, formId });
+      if (!updated) {
+        throw domainError(409, 'VISIT_FORM_DELETE_CONFLICT', 'El formulario ya no está disponible');
+      }
+      await logAuditStrict(client, {
+        tabla: 'bitacora_visit_form_versions',
+        operacion: 'UPDATE',
+        registro_id: updated.id,
+        datos_anteriores: form,
+        datos_nuevos: updated,
+        ...auditFromReq(req),
+      });
+      return updated;
+    });
+    return res.json({ success: true, message: 'Formulario eliminado', data: deleted });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al eliminar formulario de visitas');
+  }
+};
+
+// Los formularios publicados son inmutables (trigger en DB): un ARCHIVED no
+// puede volver a ACTIVE en la misma fila. "Activar" un archivado republica
+// su mismo contenido como una versión nueva, reutilizando el flujo normal
+// de publicación (que ya archiva el activo actual y garantiza <=1 activo).
+const buildRepublishPayload = (detail) => {
+  const tiposById = new Map(detail.tipos.map((tipo) => [tipo.id, tipo.nombre]));
+  const toNames = (ids) => (ids || []).map((id) => tiposById.get(id)).filter(Boolean);
+  return {
+    title: detail.titulo,
+    showDateTime: detail.mostrar_fecha_hora,
+    tiposVisita: detail.tipos.map((tipo) => ({
+      nombre: tipo.nombre,
+      requiere_salida: tipo.requiere_salida,
+    })),
+    fields: detail.fields.map((field) => ({
+      field_key: field.field_key,
+      label: field.label,
+      type: field.type,
+      required: field.required,
+      aplica_a: field.aplica_a === 'TODOS' ? 'TODOS' : toNames(field.tipos),
+      options: field.options || [],
+    })),
+    groups: detail.groups.map((group) => ({
+      group_key: group.group_key,
+      label: group.label,
+      min_count: group.min_count,
+      aplica_a: group.aplica_a === 'TODOS' ? 'TODOS' : toNames(group.tipos),
+      fields: group.fields.map((field) => ({
+        field_key: field.field_key,
+        label: field.label,
+        type: field.type,
+        required: field.required,
+      })),
+    })),
+  };
+};
+
+const reactivateVisitForm = async (req, res) => {
+  try {
+    const formId = parsePositiveInteger(req.params.formId, 'El formulario es inválido');
+    const reactivated = await db.transaction(async (client) => {
+      const actor = await getCurrentActor(req.user.id, client);
+      const form = await findLockedVisitFormVersion({ client, formId });
+      if (!form) {
+        throw domainError(404, 'VISIT_FORM_NOT_FOUND', 'Formulario no encontrado');
+      }
+      await assertLocationScope({
+        client,
+        userId: actor.id,
+        locationId: form.ubicacion_id,
+        hasGlobalScope: actor.hasGlobalScope,
+        concealUnauthorized: true,
+      });
+      if (form.estado !== 'ARCHIVED') {
+        throw domainError(
+          409,
+          'VISIT_FORM_NOT_ARCHIVED',
+          'Solo se puede activar un formulario archivado'
+        );
+      }
+      const detail = await findVisitFormVersionDetail({ formId, executor: client });
+      const payload = buildRepublishPayload(detail);
+      const published = await publishVisitFormForLocation({
+        client,
+        locationId: form.ubicacion_id,
+        title: payload.title,
+        showDateTime: payload.showDateTime,
+        tiposVisita: payload.tiposVisita,
+        fields: payload.fields,
+        groups: payload.groups,
+        userId: actor.id,
+      });
+      await logAuditStrict(client, {
+        tabla: 'bitacora_visit_form_versions',
+        operacion: 'INSERT',
+        registro_id: published.id,
+        datos_nuevos: published,
+        ...auditFromReq(req),
+      });
+      return published;
+    });
+    return res.status(201).json({
+      success: true,
+      message: 'Formulario activado como nueva versión',
+      data: reactivated,
+    });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al activar formulario de visitas');
   }
 };
 
@@ -957,9 +1255,15 @@ const createVisita = async (req, res) => {
         req.body.respuestas || {},
         req.body.tipo_visita_id
       );
+      const groupResponses = validateVisitGroupResponses(
+        form.groups || [],
+        req.body.grupos || {},
+        req.body.tipo_visita_id
+      );
       const house = `${urban.block.nombre} - ${urban.villa.identificador}`;
+      const autorizada = req.body.autorizada !== false;
       const detail = visitDetail({
-        action: 'Ingreso',
+        action: autorizada ? 'Ingreso' : 'No autorizada',
         visitorName: req.body.visitante_nombre,
         tipoVisitaNombre: tipoVisita.nombre,
         plate: req.body.placa,
@@ -983,22 +1287,31 @@ const createVisita = async (req, res) => {
         principalResidentId: urban.principalResident.id,
         formVersionId: form.id,
         visitor: {
-          nombre: req.body.visitante_nombre,
-          documento: req.body.visitante_documento,
-          telefono: req.body.visitante_telefono,
+          nombre: req.body.visitante_nombre || null,
+          documento: req.body.visitante_documento || null,
+          telefono: req.body.visitante_telefono || null,
           tipoVisitaId: req.body.tipo_visita_id,
           placa: req.body.placa || null,
         },
         actorUserId: actor.id,
         actorCollaboratorId: actor.colaborador_id,
         entryLogId: registro.id,
+        estado: autorizada ? 'ABIERTA' : 'NO_AUTORIZADA',
+        motivoNoAutorizacion: autorizada ? null : req.body.motivo_no_autorizacion,
       });
       await insertVisitResponses({ client, visitId: visita.id, fields: form.fields, responses });
+      await insertVisitGroupResponses({
+        client,
+        visitId: visita.id,
+        formVersionId: form.id,
+        groups: form.groups || [],
+        entries: groupResponses,
+      });
       await logAuditStrict(client, {
         tabla: 'bitacora_visitas',
         operacion: 'INSERT',
         registro_id: visita.id,
-        datos_nuevos: { ...visita, respuestas: responses },
+        datos_nuevos: { ...visita, respuestas: responses, grupos: groupResponses },
         ...auditFromReq(req),
       });
       await logAuditStrict(client, {
@@ -1008,7 +1321,52 @@ const createVisita = async (req, res) => {
         datos_nuevos: registro,
         ...auditFromReq(req),
       });
-      return { ...visita, respuestas: responses };
+
+      let finalVisita = visita;
+      if (autorizada && !tipoVisita.requiere_salida) {
+        const exitDetail = visitDetail({
+          action: 'Salida',
+          visitorName: req.body.visitante_nombre,
+          tipoVisitaNombre: tipoVisita.nombre,
+          plate: req.body.placa,
+          house,
+        });
+        const exitRegistro = await insertBitacoraRegistro({
+          client,
+          locationId: location.id,
+          blockId: urban.block.id,
+          villaId: urban.villa.id,
+          actorUserId: actor.id,
+          actorCollaboratorId: actor.colaborador_id,
+          occurredAt: new Date(),
+          detail: exitDetail,
+        });
+        const closedVisita = await closeVisit({
+          client,
+          visitId: visita.id,
+          actorUserId: actor.id,
+          actorCollaboratorId: actor.colaborador_id,
+          exitLogId: exitRegistro.id,
+        });
+        await logAuditStrict(client, {
+          tabla: 'bitacora_visitas',
+          operacion: 'UPDATE',
+          registro_id: closedVisita.id,
+          datos_anteriores: visita,
+          datos_nuevos: closedVisita,
+          ...auditFromReq(req),
+        });
+        await logAuditStrict(client, {
+          tabla: 'bitacora_registros',
+          operacion: 'INSERT',
+          registro_id: exitRegistro.id,
+          datos_nuevos: exitRegistro,
+          ...auditFromReq(req),
+        });
+        finalVisita = closedVisita;
+      }
+
+      return { ...finalVisita, respuestas: responses, grupos: groupResponses };
     });
     return res.status(201).json({
       success: true,
@@ -1022,7 +1380,10 @@ const createVisita = async (req, res) => {
 
 const getVisitas = async (req, res) => {
   try {
-    const pagination = normalizePaginationQuery(req.query);
+    const pagination = normalizePaginationQuery(req.query, {
+      sortBy: 'entrada_at',
+      allowedSorts: VISIT_SORTS,
+    });
     const filters = normalizeVisitFilters(req.query);
     const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
     const [{ items, total }, creators] = await Promise.all([
@@ -1058,6 +1419,13 @@ const closeVisita = async (req, res) => {
       });
       if (visita.estado !== 'ABIERTA') {
         throw domainError(409, 'VISIT_ALREADY_CLOSED', 'La visita ya no está abierta');
+      }
+      if (!visita.requiere_salida) {
+        throw domainError(
+          409,
+          'VISIT_EXIT_NOT_REQUIRED',
+          'Este tipo de visita no requiere registrar salida'
+        );
       }
       const detail = visitDetail({
         action: 'Salida',
@@ -1178,10 +1546,13 @@ module.exports = {
   closeVisita,
   createRegistro,
   createVisita,
+  deleteArchivedVisitForm,
   exportRegistros,
   exportVisitas,
   exportVisitForms,
   getActiveVisitForm,
+  getVisitFormDetail,
+  getResumen,
   getVisitForms,
   getRegistros,
   getVisitas,
@@ -1193,4 +1564,5 @@ module.exports = {
   getVillasElegibles,
   publishVisitForm,
   archiveVisitForm,
+  reactivateVisitForm,
 };
