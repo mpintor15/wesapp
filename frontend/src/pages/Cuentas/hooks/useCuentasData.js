@@ -97,13 +97,17 @@ const useCuentasData = ({ showToast }) => {
     [loadFacturasCatalogo, loadPagos, loadReporte, pagosLoaded]
   );
 
-  // Load all datasets on entry so tab badges and row counters are available from the start.
+  // Preload clientes and the facturas catalog on entry — neither depends on
+  // filters, and nothing else fetches them. Reporte and pagos are NOT
+  // fetched here: the caller (Cuentas.jsx) owns the filtered `params` for
+  // both and fetches them itself. Fetching them here too, with no params,
+  // used to race that filtered fetch — whichever response landed last won,
+  // so the default filters sometimes looked applied in the UI but weren't
+  // actually reflected in the loaded data.
   useEffect(() => {
-    loadReporte();
-    loadPagos();
     loadClientes();
     loadFacturasCatalogo();
-  }, [loadClientes, loadFacturasCatalogo, loadPagos, loadReporte]);
+  }, [loadClientes, loadFacturasCatalogo]);
 
   return {
     clientes,

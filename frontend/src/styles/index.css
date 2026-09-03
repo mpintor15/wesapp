@@ -262,6 +262,19 @@ code {
   }
 }
 
+/* Lightweight refresh indicator shown above a table/list that already has
+   rows, instead of blanking it with .loading-spinner-wrap during refetch
+   (filter change, pagination, sort). */
+.inline-loading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 /* ── Modal overlay (shared) ─────────────────────────────── */
 .modal-overlay {
   position: fixed;

@@ -7,10 +7,12 @@
 }
 
 /* ── Form grid ────────────────────────────────────────────── */
+/* Mismo gap que .personal-form-grid (modal de colaborador) para un
+   espaciado consistente entre los modales de Personal. */
 .usuarios-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 .usuarios-form-grid__full {

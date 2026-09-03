@@ -1,3 +1,4 @@
+import LoadingState from '../../../components/LoadingState';
 import ArticulosFilters from './ArticulosFilters';
 import ArticulosTable from './ArticulosTable';
 
@@ -34,13 +35,18 @@ const ArticulosTab = ({
       onClear={onClearFilters}
     />
 
-    {loading ? (
+    {loading && sortedArticulos.length === 0 ? (
       <div className="loading">
         <div className="loading-spinner"></div>
         Cargando artículos...
       </div>
     ) : (
       <>
+        <LoadingState
+          loading={loading}
+          hasRows={sortedArticulos.length > 0}
+          refreshMessage="Actualizando artículos…"
+        />
         <div className="table-result-count">
           Mostrando {paginatedArticulos.length} de {sortedArticulos.length} artículo(s)
         </div>

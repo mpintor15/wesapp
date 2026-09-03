@@ -1682,4 +1682,92 @@ describe('database migrations', () => {
       }
     );
   });
+
+  test('migration 039 creates WES Security client and reassigns historical locations without merging name collisions', async () => {
+    const sql = await readMigration(39);
+    expect(hasSchemaVersionRegistration(sql, 39)).toBe(true);
+
+    await withTempDatabase('wesapp_migration_wes_security_039', async (pool) => {
+      const schemaSql = await fs.readFile(schemaPath, 'utf8');
+      await pool.query(schemaSql);
+      const migrations = await listMigrations();
+      for (const migration of migrations) {
+        if (migration.version < 29 || migration.version > 38) {
+          continue;
+        }
+        const migrationSql = await fs.readFile(
+          path.join(migrationsDir, migration.fileName),
+          'utf8'
+        );
+        await pool.query(migrationSql);
+      }
+
+      const cliente = await pool.query(
+        'INSERT INTO clientes (nombre, estado) VALUES ($1, $2) RETURNING id',
+        ['Cliente Existente', 'activo']
+      );
+      const asignada = await pool.query(
+        'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, $2) RETURNING id',
+        ['Bodega Asignada', cliente.rows[0].id]
+      );
+      const historicaUnica = await pool.query(
+        'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, NULL) RETURNING id',
+        ['Puesto Historico Unico']
+      );
+      const colisionA = await pool.query(
+        'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, NULL) RETURNING id',
+        [' Puesto Duplicado ']
+      );
+      const colisionB = await pool.query(
+        'INSERT INTO ubicaciones (nombre, cliente_id) VALUES ($1, NULL) RETURNING id',
+        ['puesto duplicado']
+      );
+
+      await applyMigrationInTransaction(pool, 39);
+
+      const wes = await pool.query(
+        'SELECT id, estado FROM clientes WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))',
+        ['WES Security']
+      );
+      expect(wes.rowCount).toBe(1);
+      expect(wes.rows[0].estado).toBe('activo');
+      const wesId = wes.rows[0].id;
+
+      const reasignada = await pool.query('SELECT cliente_id FROM ubicaciones WHERE id = $1', [
+        historicaUnica.rows[0].id,
+      ]);
+      expect(reasignada.rows[0].cliente_id).toBe(wesId);
+
+      const sinTocar = await pool.query('SELECT cliente_id FROM ubicaciones WHERE id = $1', [
+        asignada.rows[0].id,
+      ]);
+      expect(sinTocar.rows[0].cliente_id).toBe(cliente.rows[0].id);
+
+      const colisionRows = await pool.query(
+        'SELECT id, cliente_id FROM ubicaciones WHERE id IN ($1, $2) ORDER BY id',
+        [colisionA.rows[0].id, colisionB.rows[0].id]
+      );
+      expect(colisionRows.rows).toEqual([
+        { id: colisionA.rows[0].id, cliente_id: null },
+        { id: colisionB.rows[0].id, cliente_id: null },
+      ]);
+
+      // Re-applying must be a no-op: no duplicate WES Security client, no re-thrown
+      // errors, and the already-reassigned location stays put.
+      await applyMigrationInTransaction(pool, 39);
+      const wesAfterRerun = await pool.query(
+        'SELECT COUNT(*)::int AS total FROM clientes WHERE LOWER(TRIM(nombre)) = LOWER(TRIM($1))',
+        ['WES Security']
+      );
+      expect(wesAfterRerun.rows[0].total).toBe(1);
+      const reasignadaAfterRerun = await pool.query(
+        'SELECT cliente_id FROM ubicaciones WHERE id = $1',
+        [historicaUnica.rows[0].id]
+      );
+      expect(reasignadaAfterRerun.rows[0].cliente_id).toBe(wesId);
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 39');
+      expect(version.rowCount).toBe(1);
+    });
+  });
 });

@@ -6,6 +6,7 @@ const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/
 const { sanitizeError } = require('../utils/logSanitizer');
 const { assertClienteActivoForOperation } = require('../services/clientesStateService');
 const { findGroupedLocations, toBoolean } = require('../repositories/ubicacionesGroupedRepository');
+const { PERMISSIONS, hasPermission } = require('../config/permissions');
 
 const normalizeName = (value) =>
   typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
@@ -330,7 +331,7 @@ const updateUbicacion = async (req, res) => {
          FROM ubicaciones u
          LEFT JOIN clientes c ON c.id = u.cliente_id
          WHERE u.id = $1
-         FOR UPDATE`,
+         FOR UPDATE OF u`,
         [id]
       );
       if (current.rowCount === 0) {
@@ -362,6 +363,19 @@ const updateUbicacion = async (req, res) => {
         ? requestedCliente.value
         : currentClienteId;
       const clienteChanged = currentClienteId !== requestedClienteId;
+      // Reasignar el cliente de una ubicación es una operación de negocio más
+      // sensible que editar su nombre/tipo: solo gerente y supervisor pueden
+      // hacerlo, aunque el rol ya tenga INVENTARIO_UBICACIONES_EDITAR.
+      if (
+        clienteChanged &&
+        !hasPermission(req.user.tipo_usuario, PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)
+      ) {
+        throw createAppError(
+          403,
+          'LOCATION_CLIENT_REASSIGN_FORBIDDEN',
+          'No tiene permisos para reasignar el cliente de esta ubicación'
+        );
+      }
       if (currentClienteId !== null && requestedCliente.provided && requestedClienteId === null) {
         throw createAppError(
           409,

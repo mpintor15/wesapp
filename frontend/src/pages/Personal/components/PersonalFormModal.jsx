@@ -79,29 +79,42 @@ const PersonalFormModal = ({
             {formErrors.cargo ? <span className="field-error">{formErrors.cargo}</span> : null}
           </div>
           <div className="form-group">
-            <label htmlFor="p-celular">Celular</label>
+            <label htmlFor="p-celular">
+              Celular <span className="required">*</span>
+            </label>
             <input id="p-celular" name="celular" value={formData.celular} onChange={onChange} />
+            {formErrors.celular ? <span className="field-error">{formErrors.celular}</span> : null}
           </div>
           {canViewSensitive ? (
             <div className="form-group">
-              <label htmlFor="p-banco">Banco</label>
+              <label htmlFor="p-banco">
+                Banco <span className="required">*</span>
+              </label>
               <input id="p-banco" name="banco" value={formData.banco} onChange={onChange} />
+              {formErrors.banco ? <span className="field-error">{formErrors.banco}</span> : null}
             </div>
           ) : null}
           {canViewSensitive ? (
             <div className="form-group">
-              <label htmlFor="p-cuenta">Número de cuenta</label>
+              <label htmlFor="p-cuenta">
+                Número de cuenta <span className="required">*</span>
+              </label>
               <input
                 id="p-cuenta"
                 name="numero_cuenta"
                 value={formData.numero_cuenta}
                 onChange={onChange}
               />
+              {formErrors.numero_cuenta ? (
+                <span className="field-error">{formErrors.numero_cuenta}</span>
+              ) : null}
             </div>
           ) : null}
           {canViewSensitive ? (
             <div className="form-group">
-              <label htmlFor="p-sueldo">Sueldo</label>
+              <label htmlFor="p-sueldo">
+                Sueldo <span className="required">*</span>
+              </label>
               <div className="money-input-wrapper">
                 <span className="money-input-prefix">$</span>
                 <input
@@ -113,6 +126,7 @@ const PersonalFormModal = ({
                   onChange={onChange}
                 />
               </div>
+              {formErrors.sueldo ? <span className="field-error">{formErrors.sueldo}</span> : null}
             </div>
           ) : null}
           <div className="form-group">

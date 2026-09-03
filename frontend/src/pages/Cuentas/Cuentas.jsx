@@ -41,7 +41,6 @@ const Cuentas = () => {
     loading,
     clientesLoaded,
     pagosLoading,
-    pagosLoaded,
     loadError,
     loadClientes,
     loadPagos,
@@ -94,11 +93,13 @@ const Cuentas = () => {
     loadReporte(facturasTable.params);
   }, [facturasTable.params, loadReporte]);
 
+  // Loads on mount (with the default filters already baked into
+  // pagosTable.params) so the Pagos tab badge/count is correct from the
+  // start, then re-fetches whenever filters/pagination change — same
+  // pattern as the facturas effect above.
   useEffect(() => {
-    if (activeTab === 'pagos' || pagosLoaded) {
-      loadPagos(pagosTable.params);
-    }
-  }, [activeTab, loadPagos, pagosLoaded, pagosTable.params]);
+    loadPagos(pagosTable.params);
+  }, [loadPagos, pagosTable.params]);
 
   const openCreateFacturaModal = useCallback(async () => {
     if (!permissions.canCreateFactura) {
@@ -137,7 +138,7 @@ const Cuentas = () => {
         }}
       />
 
-      {loading ? (
+      {loading && facturasTable.rows.length === 0 ? (
         <CuentasLoading message="Cargando datos…" />
       ) : (
         <>
@@ -153,6 +154,7 @@ const Cuentas = () => {
 
           {activeTab === 'facturas' && (
             <FacturasTab
+              loading={loading}
               filtersDraft={facturasTable.filtersDraft}
               filters={facturasTable.filters}
               rows={facturasTable.rows}

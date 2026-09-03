@@ -130,6 +130,27 @@ describe('permission matrix', () => {
     expect(hasPermission('contador', PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR)).toBe(false);
     expect(hasPermission('contador', PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR)).toBe(false);
   });
+
+  test('solo gerente y supervisor pueden reasignar el cliente de una ubicación', () => {
+    expect(hasPermission('gerente', PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)).toBe(
+      true
+    );
+    expect(hasPermission('supervisor', PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)).toBe(
+      true
+    );
+    expect(hasPermission('secretario', PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)).toBe(
+      false
+    );
+    expect(hasPermission('contador', PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)).toBe(
+      false
+    );
+    expect(hasPermission('guardia', PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)).toBe(
+      false
+    );
+    expect(hasPermission('monitorista', PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)).toBe(
+      false
+    );
+  });
 });
 
 describe('requirePermission', () => {

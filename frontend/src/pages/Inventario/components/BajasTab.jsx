@@ -9,6 +9,7 @@ import {
   REVERSAL_STATUS_LABELS,
 } from '../utils/inventarioHelpers';
 import FilterDateInput from '../../../components/FilterDateInput';
+import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 
 const BajasTab = ({
@@ -90,13 +91,18 @@ const BajasTab = ({
       </div>
     </div>
 
-    {bajasLoading ? (
+    {bajasLoading && bajas.length === 0 ? (
       <div className="loading">
         <div className="loading-spinner"></div>
         Cargando artículos dados de baja...
       </div>
     ) : (
       <>
+        <LoadingState
+          loading={bajasLoading}
+          hasRows={bajas.length > 0}
+          refreshMessage="Actualizando bajas…"
+        />
         <div className="table-result-count">
           Mostrando {bajas.length} de {bajasTotalItems} baja(s)
         </div>

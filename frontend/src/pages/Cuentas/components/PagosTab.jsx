@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import PagoInvoicesPanel from './PagoInvoicesPanel';
 import PagoFilters from './PagoFilters';
@@ -44,16 +45,20 @@ const PagosTab = ({
         onToggle={onToggleFilter}
       />
 
-      {!loading ? (
-        <div className="cuentas-tab-summary">
-          <span className="table-result-count">
-            Mostrando {rows.length} de {filteredCount} pago(s)
-          </span>
-          <span className="payment-history-note" title="Los pagos no se anulan desde esta vista.">
-            Los pagos registrados se conservan como parte del historial contable.
-          </span>
-        </div>
-      ) : null}
+      <LoadingState
+        loading={loading}
+        hasRows={rows.length > 0}
+        refreshMessage="Actualizando pagos…"
+      />
+
+      <div className="cuentas-tab-summary">
+        <span className="table-result-count">
+          Mostrando {rows.length} de {filteredCount} pago(s)
+        </span>
+        <span className="payment-history-note" title="Los pagos no se anulan desde esta vista.">
+          Los pagos registrados se conservan como parte del historial contable.
+        </span>
+      </div>
 
       <div className="pagos-master-detail">
         <PagosTable
@@ -68,13 +73,7 @@ const PagosTab = ({
         <PagoInvoicesPanel pago={selectedPago} />
       </div>
 
-      {!loading ? (
-        <PaginationControls
-          page={currentPage}
-          totalPages={totalPages}
-          onPageChange={onPageChange}
-        />
-      ) : null}
+      <PaginationControls page={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
     </div>
   );
 };

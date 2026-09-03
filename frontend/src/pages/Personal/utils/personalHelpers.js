@@ -49,12 +49,36 @@ export const getColaboradorFormData = (colaborador) => ({
   estado: colaborador.estado || 'activo',
 });
 
-export const validateColaboradorForm = (formData) => {
+// Celular, banco, número de cuenta y sueldo son obligatorios solo al CREAR
+// (no al editar, para no romper colaboradores legacy que no los tienen).
+// Banco/cuenta/sueldo además solo aplican a quien puede verlos y
+// escribirlos (gerente/secretario); un supervisor puede crear sin ellos
+// porque el backend nunca los aceptaría de su parte.
+export const validateColaboradorForm = (
+  formData,
+  { isEditing = false, canAccessSensitive = true } = {}
+) => {
   const errors = {};
   if (!formData.nombres_completos.trim()) errors.nombres_completos = 'Ingresa el nombre completo';
   if (!formData.cedula.trim()) errors.cedula = 'Ingresa la cédula';
   if (!formData.fecha_nacimiento) errors.fecha_nacimiento = 'Selecciona la fecha de nacimiento';
   if (!formData.cargo.trim()) errors.cargo = 'Ingresa el cargo';
+
+  if (!isEditing) {
+    if (!formData.celular.trim()) errors.celular = 'Ingresa el celular';
+
+    if (canAccessSensitive) {
+      if (!formData.banco.trim()) errors.banco = 'Ingresa el banco';
+      if (!formData.numero_cuenta.trim()) errors.numero_cuenta = 'Ingresa el número de cuenta';
+      const sueldoValue = Number(formData.sueldo);
+      if (formData.sueldo === '' || formData.sueldo === null || formData.sueldo === undefined) {
+        errors.sueldo = 'Ingresa el sueldo';
+      } else if (!Number.isFinite(sueldoValue) || sueldoValue <= 0) {
+        errors.sueldo = 'El sueldo no es válido';
+      }
+    }
+  }
+
   return errors;
 };
 

@@ -121,6 +121,7 @@ describe('personalController.createColaborador', () => {
           cedula: '0102030405',
           fecha_nacimiento: '1990-01-01',
           cargo: 'Analista',
+          celular: '0999999999',
         },
       }),
       res
@@ -151,6 +152,7 @@ describe('personalController.createColaborador', () => {
           cedula: '0102030405',
           fecha_nacimiento: '1990-01-01',
           cargo: 'Analista',
+          celular: '0999999999',
         },
       }),
       res
@@ -170,6 +172,7 @@ describe('personalController.createColaborador', () => {
           cedula: '0102030405',
           fecha_nacimiento: '2026-02-30',
           cargo: 'Analista',
+          celular: '0999999999',
         },
       }),
       res
