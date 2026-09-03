@@ -24,6 +24,13 @@ const PersonalTable = ({
   tableSort,
 }) => {
   const columnCount = 6 + (canViewSensitive ? 2 : 0) + 1;
+  const actionCount = [canManageAcceso, canEdit, canDelete].filter(Boolean).length;
+  const actionsWidthClass =
+    actionCount >= 3
+      ? 'app-col-actions--triple'
+      : actionCount === 2
+        ? 'app-col-actions--double'
+        : 'app-col-actions--single';
   return (
     <div className="table-responsive app-table-shell personal-table-shell">
       <table className="app-table personal-table">
@@ -52,7 +59,7 @@ const PersonalTable = ({
               </th>
             ) : null}
             <th>Acceso</th>
-            <th className="center col-actions app-col-actions app-col-actions--double"></th>
+            <th className={`center col-actions app-col-actions ${actionsWidthClass}`}></th>
           </tr>
         </thead>
         <tbody>
@@ -84,7 +91,7 @@ const PersonalTable = ({
                 <td>
                   <AccesoBadge acceso={c.acceso} />
                 </td>
-                <td className="center col-actions app-col-actions app-col-actions--double">
+                <td className={`center col-actions app-col-actions ${actionsWidthClass}`}>
                   <div className="action-buttons app-table-actions">
                     {canManageAcceso ? (
                       <button

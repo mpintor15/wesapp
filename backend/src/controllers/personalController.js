@@ -82,11 +82,32 @@ const createColaborador = async (req, res) => {
       req.body;
     const { banco, numero_cuenta, sueldo } = stripSensitivePayloadFields(rest, canAccessSensitive);
     const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : 'activo';
+    // Celular es obligatorio para cualquier rol autorizado a crear. Banco,
+    // numero_cuenta y sueldo solo son obligatorios para quien puede verlos
+    // y escribirlos (gerente/secretario) — un supervisor puede crear un
+    // colaborador sin esos 3 campos, ya que nunca podría llenarlos.
+    const celularNormalizado = typeof celular === 'string' ? celular.trim() : '';
+    const bancoNormalizado = typeof banco === 'string' ? banco.trim() : '';
+    const numeroCuentaNormalizado = typeof numero_cuenta === 'string' ? numero_cuenta.trim() : '';
 
-    if (!nombres_completos || !cedula || !fecha_nacimiento || !cargo) {
+    if (!nombres_completos || !cedula || !fecha_nacimiento || !cargo || !celularNormalizado) {
       return res.status(400).json({
         success: false,
-        message: 'Campos requeridos: nombres_completos, cedula, fecha_nacimiento, cargo',
+        message: 'Campos requeridos: nombres_completos, cedula, fecha_nacimiento, cargo, celular',
+      });
+    }
+
+    if (
+      canAccessSensitive &&
+      (!bancoNormalizado ||
+        !numeroCuentaNormalizado ||
+        sueldo === undefined ||
+        sueldo === null ||
+        sueldo === '')
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Campos requeridos: banco, numero_cuenta, sueldo',
       });
     }
 
@@ -129,9 +150,9 @@ const createColaborador = async (req, res) => {
         cedula.trim(),
         fecha_nacimiento,
         cargo.trim(),
-        celular || null,
-        banco || null,
-        numero_cuenta || null,
+        celularNormalizado,
+        bancoNormalizado || null,
+        numeroCuentaNormalizado || null,
         sueldoNormalizado ? sueldoNormalizado.value : null,
         estadoNormalizado,
       ]

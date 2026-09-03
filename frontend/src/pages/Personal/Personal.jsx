@@ -7,6 +7,7 @@ import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import LoadingState from '../../components/LoadingState';
 import PaginationControls from '../../components/PaginationControls';
 import TabularWorkspace from '../../components/TabularWorkspace';
 import { can } from '../../auth/authorization';
@@ -45,6 +46,7 @@ import {
   validateCreateForm,
 } from './utils/usuariosHelpers';
 import './Personal.css';
+import './components/usuarioAcceso.css';
 
 const Personal = () => {
   useScrollToTopOnMount();
@@ -242,7 +244,10 @@ const Personal = () => {
 
   const handleSave = withSaveSubmit(async (e) => {
     e.preventDefault();
-    const errors = validateColaboradorForm(formData);
+    const errors = validateColaboradorForm(formData, {
+      isEditing: Boolean(editingColaborador),
+      canAccessSensitive: permissions.canViewSensitive,
+    });
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -494,14 +499,14 @@ const Personal = () => {
           />
         }
         summary={
-          !loading ? (
+          !(loading && sortedColaboradores.length === 0) ? (
             <div className="table-result-count">
               Mostrando {sortedColaboradores.length} de {pagination.totalItems} colaborador(es)
             </div>
           ) : null
         }
         pagination={
-          !loading ? (
+          !(loading && sortedColaboradores.length === 0) ? (
             <PaginationControls
               page={currentPage}
               totalPages={pagination.totalPages}
@@ -510,13 +515,18 @@ const Personal = () => {
           ) : null
         }
       >
-        {loading ? (
+        {loading && sortedColaboradores.length === 0 ? (
           <div className="loading-spinner-wrap">
             <span className="spinner" />
             <span>Cargando colaboradores…</span>
           </div>
         ) : (
           <>
+            <LoadingState
+              loading={loading}
+              hasRows={sortedColaboradores.length > 0}
+              refreshMessage="Actualizando colaboradores…"
+            />
             <PersonalTable
               canDelete={permissions.canDelete}
               canEdit={permissions.canEdit}
