@@ -23,7 +23,6 @@ test('muestra la navegación principal completa para gerente', async ({ page, re
   await expect(getDashboardModule(page, 'Clientes')).toBeVisible();
   await expect(getDashboardModule(page, 'Inventario')).toBeVisible();
   await expect(getDashboardModule(page, 'Personal')).toBeVisible();
-  await expect(getDashboardModule(page, 'Usuarios')).toBeVisible();
 });
 
 test('oculta módulos sin permiso para contador', async ({ page, request }) => {
@@ -35,5 +34,4 @@ test('oculta módulos sin permiso para contador', async ({ page, request }) => {
   await expect(getDashboardModule(page, 'Clientes')).toBeVisible();
   await expect(getDashboardModule(page, 'Personal')).toBeVisible();
   await expect(getDashboardModule(page, 'Inventario')).toHaveCount(0);
-  await expect(getDashboardModule(page, 'Usuarios')).toHaveCount(0);
 });

@@ -245,7 +245,10 @@ describe('excel export controllers', () => {
     const res = new MockExcelResponse();
 
     await exportColaboradoresExcel(
-      mockReq({ query: { estado: 'activo', cargo: 'supervisora' } }),
+      mockReq({
+        query: { estado: 'activo', cargo: 'supervisora' },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
       res
     );
     const workbook = await loadWorkbookFromResponse(res);
@@ -272,5 +275,44 @@ describe('excel export controllers', () => {
     expect(worksheet.getCell('F2').value).toBe('Banco Pichincha');
     expect(worksheet.getCell('H2').value).toBe(789.45);
     expect(worksheet.getCell('H2').numFmt).toBe('$#,##0.00');
+  });
+
+  test('exportColaboradoresExcel oculta banco, cuenta y sueldo para roles sin acceso a datos sensibles', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [
+        {
+          nombres_completos: 'María José Núñez',
+          cedula: '0102030405',
+          fecha_nacimiento: '1992-05-09',
+          cargo: 'Supervisora de Operaciones',
+          celular: '',
+          banco: 'Banco Pichincha',
+          numero_cuenta: '123456',
+          sueldo: '789.45',
+          estado: 'activo',
+        },
+      ],
+      rowCount: 1,
+    });
+    const res = new MockExcelResponse();
+
+    await exportColaboradoresExcel(
+      mockReq({ query: {}, user: { id: 2, tipo_usuario: 'supervisor' } }),
+      res
+    );
+    const workbook = await loadWorkbookFromResponse(res);
+    const worksheet = workbook.getWorksheet('Colaboradores');
+
+    expect(headerValues(worksheet)).toEqual([
+      'Nombres',
+      'Cédula',
+      'Fecha Nacimiento',
+      'Cargo',
+      'Celular',
+      'Estado',
+    ]);
+    expect(worksheet.getCell('A2').value).toBe('María José Núñez');
+    const rowValues = worksheet.getRow(2).values;
+    expect(JSON.stringify(rowValues)).not.toMatch(/Pichincha|123456|789\.45/);
   });
 });

@@ -24,19 +24,30 @@ const modalCases = [
     open: async (page) => clickFirstVisible(page, [/generar reporte/i, /exportar/i, /reporte/i]),
   },
   {
-    name: 'usuarios-crear-usuario',
-    path: '/usuarios',
-    open: async (page) => clickFirstVisible(page, [/crear usuario/i, /nuevo usuario/i, /crear/i]),
-  },
-  {
-    name: 'usuarios-editar-usuario',
-    path: '/usuarios',
-    open: async (page) => clickFirstVisible(page, [/editar/i]),
-  },
-  {
-    name: 'usuarios-reenviar-invitacion',
-    path: '/usuarios',
-    open: async (page) => clickFirstVisible(page, [/reenviar invitaci[oó]n/i, /invitaci[oó]n/i]),
+    // La gestión de acceso (crear/editar usuario) ahora vive dentro de
+    // Personal, no en una página /usuarios independiente. Los fixtures de
+    // E2E ya tienen usuario asociado, así que este botón abre el modal de
+    // edición — comparte markup/CSS con el de creación (mismo grid de
+    // formulario, mismos selects), así que cubre la geometría responsive
+    // de ambos.
+    name: 'personal-gestionar-acceso',
+    path: '/personal',
+    open: async (page) => {
+      // El botón vive en una fila de la tabla, que solo existe tras
+      // resolver el fetch de colaboradores — a diferencia de los botones
+      // de cabecera, esperarlo explícitamente evita una carrera con
+      // waitForAppIdle (que no espera datos async).
+      // Desktop: aria-label "Gestionar acceso de X"; mobile card: texto
+      // visible corto "Acceso" (mismo botón, misma acción).
+      const trigger = page.getByRole('button', { name: /(gestionar )?acceso/i }).first();
+      const appeared = await trigger
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!appeared) return false;
+      await trigger.click();
+      return true;
+    },
   },
   {
     name: 'inventario-nuevo-articulo',

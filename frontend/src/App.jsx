@@ -10,7 +10,6 @@ import Configuracion from './pages/Configuracion/Configuracion';
 import Cuentas from './pages/Cuentas/Cuentas';
 import Inventario from './pages/Inventario/Inventario';
 import Personal from './pages/Personal/Personal';
-import Usuarios from './pages/Usuarios/Usuarios';
 import Bitacoras from './pages/Bitacoras/Bitacoras';
 import { resetViewportScroll } from './hooks/useScrollToTopOnMount';
 import { MODULE_ACCESS_PERMISSIONS } from './auth/modulePermissions';
@@ -86,14 +85,6 @@ function App() {
               element={
                 <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.personal}>
                   <Personal />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/usuarios"
-              element={
-                <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.usuarios}>
-                  <Usuarios />
                 </ProtectedRoute>
               }
             />

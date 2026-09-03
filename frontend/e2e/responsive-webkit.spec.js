@@ -19,7 +19,6 @@ const routes = [
   { name: 'cuentas', path: '/cuentas' },
   { name: 'inventario', path: '/inventario' },
   { name: 'personal', path: '/personal' },
-  { name: 'usuarios', path: '/usuarios' },
 ];
 
 for (const viewport of webkitViewports) {

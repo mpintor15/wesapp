@@ -2,6 +2,7 @@ import AppModal from '../../../components/AppModal';
 import FilterDateInput from '../../../components/FilterDateInput';
 
 const PersonalFormModal = ({
+  canViewSensitive = true,
   editingColaborador,
   formData,
   formErrors,
@@ -81,33 +82,39 @@ const PersonalFormModal = ({
             <label htmlFor="p-celular">Celular</label>
             <input id="p-celular" name="celular" value={formData.celular} onChange={onChange} />
           </div>
-          <div className="form-group">
-            <label htmlFor="p-banco">Banco</label>
-            <input id="p-banco" name="banco" value={formData.banco} onChange={onChange} />
-          </div>
-          <div className="form-group">
-            <label htmlFor="p-cuenta">Número de cuenta</label>
-            <input
-              id="p-cuenta"
-              name="numero_cuenta"
-              value={formData.numero_cuenta}
-              onChange={onChange}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="p-sueldo">Sueldo</label>
-            <div className="money-input-wrapper">
-              <span className="money-input-prefix">$</span>
+          {canViewSensitive ? (
+            <div className="form-group">
+              <label htmlFor="p-banco">Banco</label>
+              <input id="p-banco" name="banco" value={formData.banco} onChange={onChange} />
+            </div>
+          ) : null}
+          {canViewSensitive ? (
+            <div className="form-group">
+              <label htmlFor="p-cuenta">Número de cuenta</label>
               <input
-                id="p-sueldo"
-                type="number"
-                step="0.01"
-                name="sueldo"
-                value={formData.sueldo}
+                id="p-cuenta"
+                name="numero_cuenta"
+                value={formData.numero_cuenta}
                 onChange={onChange}
               />
             </div>
-          </div>
+          ) : null}
+          {canViewSensitive ? (
+            <div className="form-group">
+              <label htmlFor="p-sueldo">Sueldo</label>
+              <div className="money-input-wrapper">
+                <span className="money-input-prefix">$</span>
+                <input
+                  id="p-sueldo"
+                  type="number"
+                  step="0.01"
+                  name="sueldo"
+                  value={formData.sueldo}
+                  onChange={onChange}
+                />
+              </div>
+            </div>
+          ) : null}
           <div className="form-group">
             <label htmlFor="p-estado">Estado</label>
             <select id="p-estado" name="estado" value={formData.estado} onChange={onChange}>

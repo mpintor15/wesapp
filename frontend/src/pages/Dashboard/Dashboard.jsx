@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Boxes, Building2, ClipboardList, Receipt, ShieldCheck, UserRound } from 'lucide-react';
+import { Boxes, Building2, ClipboardList, Receipt, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -15,8 +15,7 @@ const MODULE_META = {
     description: 'Clientes, ubicaciones y organización del inventario',
   },
   inventario: { description: 'Artículos, equipos y movimientos de bodega' },
-  personal: { description: 'Colaboradores, cargos y nómina' },
-  usuarios: { description: 'Cuentas de acceso y permisos del sistema' },
+  personal: { description: 'Colaboradores, cargos, nómina y accesos al sistema' },
 };
 
 const DASHBOARD_MODULES = [
@@ -54,13 +53,6 @@ const DASHBOARD_MODULES = [
     label: 'Personal',
     Icon: UserRound,
     path: '/personal',
-  },
-  {
-    key: 'usuarios',
-    permission: MODULE_ACCESS_PERMISSIONS.usuarios,
-    label: 'Usuarios',
-    Icon: ShieldCheck,
-    path: '/usuarios',
   },
 ];
 

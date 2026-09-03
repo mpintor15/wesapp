@@ -23,12 +23,16 @@ const {
   parseStrictPositiveNumber,
   validateRequiredDateString,
 } = require('../utils/inputValidation');
-const { COLABORADORES_EXCEL_COLUMNS } = require('../modules/personal/personal.constants');
+const { getColaboradoresExcelColumns } = require('../modules/personal/personal.constants');
 const {
+  attachAccesoSummary,
   buildColaboradorExcelRow,
   buildColaboradoresFilters,
+  canAccessPersonalSensitiveFields,
   isValidEstadoColaborador,
   normalizeEstadoColaborador,
+  redactColaboradorSensitiveFields,
+  stripSensitivePayloadFields,
 } = require('../modules/personal/personal.domain');
 const personalReadRepository = require('../repositories/personal/personalReadRepository');
 
@@ -52,7 +56,10 @@ const getColaboradores = async (req, res) => {
 
     const result = await personalReadRepository.findColaboradores(filters, pagination);
     const totalItems = result.rows[0]?.total_count || 0;
-    const data = result.rows.map(({ total_count: _totalCount, ...row }) => row);
+    const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
+    const data = result.rows.map(({ total_count: _totalCount, ...row }) =>
+      redactColaboradorSensitiveFields(attachAccesoSummary(row), canAccessSensitive)
+    );
 
     res.json({
       success: true,
@@ -70,17 +77,10 @@ const getColaboradores = async (req, res) => {
 
 const createColaborador = async (req, res) => {
   try {
-    const {
-      nombres_completos,
-      cedula,
-      fecha_nacimiento,
-      cargo,
-      celular,
-      banco,
-      numero_cuenta,
-      sueldo,
-      estado,
-    } = req.body;
+    const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
+    const { nombres_completos, cedula, fecha_nacimiento, cargo, celular, estado, ...rest } =
+      req.body;
+    const { banco, numero_cuenta, sueldo } = stripSensitivePayloadFields(rest, canAccessSensitive);
     const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : 'activo';
 
     if (!nombres_completos || !cedula || !fecha_nacimiento || !cargo) {
@@ -164,6 +164,7 @@ const createColaborador = async (req, res) => {
 const updateColaborador = async (req, res) => {
   try {
     const id = parsePositiveInteger(req.params.id, 'El id del colaborador es inválido');
+    const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
 
     const allowedFields = [
       'nombres_completos',
@@ -171,10 +172,8 @@ const updateColaborador = async (req, res) => {
       'fecha_nacimiento',
       'cargo',
       'celular',
-      'banco',
-      'numero_cuenta',
-      'sueldo',
       'estado',
+      ...(canAccessSensitive ? ['banco', 'numero_cuenta', 'sueldo'] : []),
     ];
 
     const updates = [];
@@ -310,12 +309,20 @@ const exportColaboradoresExcel = async (req, res) => {
     });
 
     const result = await personalReadRepository.findColaboradoresForExport(filters);
+    const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
 
-    const { workbook, worksheet } = createWorkbook('Colaboradores', COLABORADORES_EXCEL_COLUMNS);
+    const { workbook, worksheet } = createWorkbook(
+      'Colaboradores',
+      getColaboradoresExcelColumns(canAccessSensitive)
+    );
 
-    result.rows.forEach((row) => worksheet.addRow(buildColaboradorExcelRow(row)));
+    result.rows.forEach((row) =>
+      worksheet.addRow(buildColaboradorExcelRow(row, canAccessSensitive))
+    );
 
-    worksheet.getColumn('sueldo').numFmt = '$#,##0.00';
+    if (canAccessSensitive) {
+      worksheet.getColumn('sueldo').numFmt = '$#,##0.00';
+    }
     styleDataRows(worksheet);
     await sendExcel(workbook, res, 'colaboradores.xlsx');
   } catch (error) {

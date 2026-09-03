@@ -16,7 +16,6 @@ const pages = [
   { name: 'inventario-movimientos', path: '/inventario', tab: [/movimientos/i] },
   { name: 'inventario-bajas', path: '/inventario', tab: [/dados de baja|bajas/i] },
   { name: 'personal', path: '/personal' },
-  { name: 'usuarios', path: '/usuarios' },
 ];
 
 for (const viewport of visualViewports) {

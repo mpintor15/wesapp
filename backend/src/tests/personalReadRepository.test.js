@@ -12,15 +12,21 @@ beforeEach(() => {
 });
 
 describe('personalReadRepository.buildColaboradoresQuery', () => {
-  test('genera consulta base con orden estable', () => {
+  test('genera consulta base con LEFT JOIN a usuarios y orden estable', () => {
     const { query, params } = personalReadRepository.buildColaboradoresQuery();
     const sql = normalizeSql(query);
 
-    expect(sql).toBe('SELECT * FROM colaboradores ORDER BY nombres_completos ASC, id ASC');
+    expect(sql).toBe(
+      'SELECT c.*, u.id AS usuario_id, u.usuario AS usuario_usuario, ' +
+        'u.tipo_usuario AS usuario_tipo_usuario, u.activo AS usuario_activo, ' +
+        'u.primer_login AS usuario_primer_login FROM colaboradores c ' +
+        'LEFT JOIN usuarios u ON u.colaborador_id = c.id ' +
+        'ORDER BY c.nombres_completos ASC, c.id ASC'
+    );
     expect(params).toEqual([]);
   });
 
-  test('preserva búsqueda, filtros y orden de parámetros', () => {
+  test('preserva búsqueda, filtros y orden de parámetros, calificados con el alias c.', () => {
     const { query, params } = personalReadRepository.buildColaboradoresQuery({
       search: 'ana',
       estado: 'activo',
@@ -28,14 +34,16 @@ describe('personalReadRepository.buildColaboradoresQuery', () => {
     });
     const sql = normalizeSql(query);
 
-    expect(sql).toContain('FROM colaboradores WHERE');
-    expect(sql).toContain('nombres_completos ILIKE $1');
-    expect(sql).toContain('cedula ILIKE $1');
-    expect(sql).toContain('celular ILIKE $1');
-    expect(sql).toContain('numero_cuenta ILIKE $1');
-    expect(sql).toContain('estado = $2');
-    expect(sql).toContain('cargo ILIKE $3');
-    expect(sql).toContain('ORDER BY nombres_completos ASC, id ASC');
+    expect(sql).toContain(
+      'FROM colaboradores c LEFT JOIN usuarios u ON u.colaborador_id = c.id WHERE'
+    );
+    expect(sql).toContain('c.nombres_completos ILIKE $1');
+    expect(sql).toContain('c.cedula ILIKE $1');
+    expect(sql).toContain('c.celular ILIKE $1');
+    expect(sql).toContain('c.numero_cuenta ILIKE $1');
+    expect(sql).toContain('c.estado = $2');
+    expect(sql).toContain('c.cargo ILIKE $3');
+    expect(sql).toContain('ORDER BY c.nombres_completos ASC, c.id ASC');
     expect(params).toEqual(['%ana%', 'activo', 'supervisora']);
   });
 
@@ -53,7 +61,7 @@ describe('personalReadRepository.buildColaboradoresQuery', () => {
 });
 
 describe('personalReadRepository.findColaboradores', () => {
-  test('usa executor inyectado, agrega COUNT(*) OVER() y pagina con LIMIT/OFFSET', async () => {
+  test('usa executor inyectado, agrega COUNT(*) OVER(), el join a usuarios y pagina con LIMIT/OFFSET', async () => {
     const executor = {
       query: jest.fn().mockResolvedValue({ rows: [{ id: 1, total_count: 1 }], rowCount: 1 }),
     };
@@ -67,9 +75,14 @@ describe('personalReadRepository.findColaboradores', () => {
     ).resolves.toEqual({ rows: [{ id: 1, total_count: 1 }], rowCount: 1 });
 
     const [sql, params] = executor.query.mock.calls[0];
-    expect(sql).toContain('SELECT *, COUNT(*) OVER()::int AS total_count');
-    expect(sql).toContain('FROM colaboradores');
-    expect(sql).toContain('LIMIT $2 OFFSET $3');
+    const normalized = normalizeSql(sql);
+    expect(normalized).toContain('COUNT(*) OVER()::int AS total_count');
+    expect(normalized).toContain('c.*,');
+    expect(normalized).toContain('usuario_id');
+    expect(normalized).toContain(
+      'FROM colaboradores c LEFT JOIN usuarios u ON u.colaborador_id = c.id'
+    );
+    expect(normalized).toContain('LIMIT $2 OFFSET $3');
     expect(params).toEqual(['activo', 25, 0]);
     expect(db.query).not.toHaveBeenCalled();
   });

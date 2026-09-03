@@ -1,4 +1,15 @@
-const PersonalMobileCards = ({ canDelete, canEdit, colaboradores, onDelete, onEdit }) => (
+import AccesoBadge from './AccesoBadge';
+
+const PersonalMobileCards = ({
+  canDelete,
+  canEdit,
+  canManageAcceso,
+  canViewSensitive,
+  colaboradores,
+  onDelete,
+  onEdit,
+  onManageAcceso,
+}) => (
   <div className="records-mobile">
     {colaboradores.map((colaborador) => (
       <article key={colaborador.id} className="record-card">
@@ -23,14 +34,31 @@ const PersonalMobileCards = ({ canDelete, canEdit, colaboradores, onDelete, onEd
             <dt>Celular</dt>
             <dd>{colaborador.celular || '—'}</dd>
           </div>
+          {canViewSensitive ? (
+            <div>
+              <dt>Sueldo</dt>
+              <dd>
+                {colaborador.sueldo ? `$${Number.parseFloat(colaborador.sueldo).toFixed(2)}` : '—'}
+              </dd>
+            </div>
+          ) : null}
           <div>
-            <dt>Sueldo</dt>
+            <dt>Acceso</dt>
             <dd>
-              {colaborador.sueldo ? `$${Number.parseFloat(colaborador.sueldo).toFixed(2)}` : '—'}
+              <AccesoBadge acceso={colaborador.acceso} />
             </dd>
           </div>
         </dl>
         <div className="record-card-actions">
+          {canManageAcceso ? (
+            <button
+              className="btn btn-neutral btn-sm"
+              onClick={() => onManageAcceso(colaborador)}
+              type="button"
+            >
+              Acceso
+            </button>
+          ) : null}
           {canEdit ? (
             <button
               className="btn btn-neutral btn-sm"
