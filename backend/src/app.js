@@ -43,10 +43,17 @@ app.set('trust proxy', 1);
 // Middlewares de seguridad
 // ======================
 
-// Redirigir HTTP → HTTPS en producción (Railway pone x-forwarded-proto)
+// Redirigir HTTP → HTTPS en producción (Railway pone x-forwarded-proto).
+// Los healthchecks de la plataforma golpean el contenedor por su red interna,
+// sin pasar por el borde HTTPS que agrega ese header, así que /health/live y
+// /health/ready deben quedar exentos o el healthcheck nunca ve un 200.
+const HTTPS_REDIRECT_BYPASS_PATHS = new Set(['/health/live', '/health/ready']);
 if (config.nodeEnv === 'production') {
   app.use((req, res, next) => {
-    if (req.headers['x-forwarded-proto'] !== 'https') {
+    if (
+      req.headers['x-forwarded-proto'] !== 'https' &&
+      !HTTPS_REDIRECT_BYPASS_PATHS.has(req.path)
+    ) {
       return res.redirect(301, `https://${req.headers.host}${req.url}`);
     }
     next();
