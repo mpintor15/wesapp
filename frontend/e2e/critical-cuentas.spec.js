@@ -38,14 +38,12 @@ test('lee facturas y pagos de Cuentas desde fixtures locales', async ({ page, re
   await page.getByRole('button', { name: /aplicar/i }).click();
   await expect(page.locator('.cuentas-table').getByRole('cell', { name: '900001' })).toBeVisible();
 
-  const pagosResponse = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'GET' &&
-      response.url().includes('/api/cuentas/pagos') &&
-      response.status() === 200
-  );
+  // Pagos ya se cargó junto con Facturas al entrar a /cuentas (con sus
+  // filtros default, no solo el de Facturas) para evitar la carrera que
+  // dejaba filtros "vistos como activos" sin aplicar de verdad — ver fix de
+  // useCuentasData/Cuentas.jsx. Por eso cambiar de tab no dispara un nuevo
+  // GET: los datos ya están en memoria.
   await page.getByRole('button', { name: /pagos/i }).click();
-  await pagosResponse;
 
   await expect(page.getByText(/mostrando 1 de 1 pago\(s\)/i)).toBeVisible();
   await expect(
@@ -56,8 +54,6 @@ test('lee facturas y pagos de Cuentas desde fixtures locales', async ({ page, re
   ).toBeVisible();
   // El chip por pago pluraliza sin paréntesis ("1 factura" / "N facturas"),
   // a diferencia del resumen "Mostrando X de Y factura(s)" de arriba.
-  await expect(
-    page.locator('.pagos-table').getByText('1 factura', { exact: true })
-  ).toBeVisible();
+  await expect(page.locator('.pagos-table').getByText('1 factura', { exact: true })).toBeVisible();
   apiGuard.expectNoWrites();
 });
