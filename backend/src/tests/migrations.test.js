@@ -554,6 +554,20 @@ describe('database migrations', () => {
     expect(hasSchemaVersionRegistration(migration030, 30)).toBe(true);
   });
 
+  test('migration 038 agrega soft delete sin habilitar borrado físico ni CASCADE', async () => {
+    const migration038 = await readMigration(38);
+
+    expect(migration038).toContain('ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
+    expect(migration038).toContain(String.raw`OLD.estado = 'ARCHIVED'`);
+    expect(migration038).toContain('OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL');
+    expect(migration038.match(/NEW\.mostrar_fecha_hora = OLD\.mostrar_fecha_hora/g)).toHaveLength(
+      3
+    );
+    expect(migration038).toContain(String.raw`IF TG_OP = 'DELETE'`);
+    expect(migration038).not.toMatch(/ON\s+DELETE\s+CASCADE/i);
+    expect(hasSchemaVersionRegistration(migration038, 38)).toBe(true);
+  });
+
   test('inventory integrity migration prevalidates negative stock before constraints', async () => {
     const sql = await fs.readFile(
       path.resolve(
