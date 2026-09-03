@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppModal from '../../components/AppModal';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import LoadingState from '../../components/LoadingState';
 import PaginationControls from '../../components/PaginationControls';
 import { useToast } from '../../context/ToastContext';
 import clientesService from '../../services/clientesService';
@@ -663,13 +664,18 @@ const ClientesCatalog = ({
           </div>
         )}
 
-        {loading ? (
+        {loading && clientes.length === 0 ? (
           <div className="loading-spinner-wrap" role="status">
             <span className="spinner" />
             <span>Cargando clientes...</span>
           </div>
         ) : (
           <>
+            <LoadingState
+              loading={loading}
+              hasRows={clientes.length > 0}
+              refreshMessage="Actualizando clientes…"
+            />
             <div className="table-result-count" role="status" aria-live="polite">
               Mostrando {clientes.length} de {pagination.totalItems} cliente(s)
             </div>

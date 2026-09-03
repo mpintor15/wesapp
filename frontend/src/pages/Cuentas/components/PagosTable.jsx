@@ -25,7 +25,7 @@ const PagosTable = ({ rows, loading, filters, sort, selectedPagoId, onSort, onSe
         </tr>
       </thead>
       <tbody>
-        {loading ? (
+        {loading && rows.length === 0 ? (
           <tr>
             <td colSpan={5} className="text-center">
               <span className="spinner spinner--sm" /> Cargando pagos…

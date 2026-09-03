@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppModal from '../../../components/AppModal';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import TabularWorkspace from '../../../components/TabularWorkspace';
 import bitacorasService from '../../../services/bitacorasService';
@@ -673,7 +674,7 @@ const FormularioVisitasAdmin = ({
       <TabularWorkspace
         className="bitacoras-history bitacoras-forms-workspace"
         summary={
-          !listLoading && !listError ? (
+          !(listLoading && forms.length === 0) && !listError ? (
             <div className="table-result-count">
               Mostrando {forms.length} de {totalItems} formulario(s)
             </div>
@@ -797,7 +798,7 @@ const FormularioVisitasAdmin = ({
           <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />
         }
       >
-        {listLoading ? (
+        {listLoading && forms.length === 0 ? (
           <div className="loading bitacoras-history-state">Cargando formularios...</div>
         ) : listError ? (
           <div className="bitacoras-history-state" role="alert">
@@ -808,6 +809,11 @@ const FormularioVisitasAdmin = ({
           </div>
         ) : (
           <>
+            <LoadingState
+              loading={listLoading}
+              hasRows={forms.length > 0}
+              refreshMessage="Actualizando formularios…"
+            />
             <div className="table-responsive app-table-shell app-table-scroll bitacoras-forms-table">
               <table className="app-table bitacoras-forms-app-table">
                 <thead>

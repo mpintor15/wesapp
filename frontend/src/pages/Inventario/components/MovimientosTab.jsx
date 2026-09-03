@@ -6,6 +6,7 @@ import {
   getReversalStatus,
   REVERSAL_STATUS_LABELS,
 } from '../utils/inventarioHelpers';
+import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import SortHeader from './SortHeader';
 import FilterDateInput from '../../../components/FilterDateInput';
@@ -32,13 +33,18 @@ const MovimientosTab = ({
   ubicaciones,
 }) => (
   <div className="tab-content tabular-workspace">
-    {movimientosLoading ? (
+    {movimientosLoading && sortedMovimientos.length === 0 ? (
       <div className="loading">
         <div className="loading-spinner"></div>
         Cargando movimientos...
       </div>
     ) : (
       <>
+        <LoadingState
+          loading={movimientosLoading}
+          hasRows={sortedMovimientos.length > 0}
+          refreshMessage="Actualizando movimientos…"
+        />
         <div className="ff-filter-row inventario-movimientos-filter-row">
           <div className="ff-filter-card inventario-movimientos-filter-card">
             <div className="ff-controls">

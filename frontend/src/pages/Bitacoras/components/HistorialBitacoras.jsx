@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FilterDateInput from '../../../components/FilterDateInput';
+import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import TabularWorkspace from '../../../components/TabularWorkspace';
 import bitacorasService from '../../../services/bitacorasService';
@@ -334,8 +335,9 @@ const HistorialBitacoras = ({
     </div>
   );
 
+  const isFirstLoad = loading && records.length === 0;
   const pagination =
-    !loading && !error ? (
+    !isFirstLoad && !error ? (
       <PaginationControls page={page} totalPages={meta.totalPages} onPageChange={setPage} />
     ) : null;
 
@@ -344,7 +346,7 @@ const HistorialBitacoras = ({
       className="bitacoras-history"
       controls={controls}
       summary={
-        !loading && !error ? (
+        !isFirstLoad && !error ? (
           <div className="table-result-count">
             Mostrando {records.length} de {meta.totalItems} registro(s)
           </div>
@@ -352,7 +354,7 @@ const HistorialBitacoras = ({
       }
       pagination={pagination}
     >
-      {loading ? (
+      {isFirstLoad ? (
         <div className="loading bitacoras-history-state" role="status" aria-live="polite">
           <div className="loading-spinner" aria-hidden="true" />
           Cargando historial…
@@ -370,6 +372,11 @@ const HistorialBitacoras = ({
         </div>
       ) : (
         <>
+          <LoadingState
+            loading={loading}
+            hasRows={records.length > 0}
+            refreshMessage="Actualizando historial…"
+          />
           <div className="table-responsive app-table-shell app-table-scroll bitacoras-table-shell">
             <table className="app-table bitacoras-table">
               <thead>

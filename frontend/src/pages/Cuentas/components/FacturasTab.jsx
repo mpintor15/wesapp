@@ -1,3 +1,4 @@
+import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import FacturaFilters from './FacturaFilters';
 import FacturasTable from './FacturasTable';
@@ -7,6 +8,7 @@ const FacturasTab = ({
   filters,
   rows,
   filteredCount,
+  loading = false,
   sort,
   currentPage,
   totalPages,
@@ -30,6 +32,12 @@ const FacturasTab = ({
       onApply={onApplyFilters}
       onClear={onClearFilters}
       onToggle={onToggleFilter}
+    />
+
+    <LoadingState
+      loading={loading}
+      hasRows={rows.length > 0}
+      refreshMessage="Actualizando facturas…"
     />
 
     <div className="table-result-count">

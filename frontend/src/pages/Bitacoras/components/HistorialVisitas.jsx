@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import AppModal from '../../../components/AppModal';
 import FilterDateInput from '../../../components/FilterDateInput';
+import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import TabularWorkspace from '../../../components/TabularWorkspace';
 import bitacorasService from '../../../services/bitacorasService';
@@ -440,19 +441,19 @@ const HistorialVisitas = ({
         className="bitacoras-history"
         controls={controls}
         summary={
-          !loading && !error ? (
+          !(loading && visits.length === 0) && !error ? (
             <div className="table-result-count">
               Mostrando {visits.length} de {meta.totalItems} visita(s)
             </div>
           ) : null
         }
         pagination={
-          !loading && !error ? (
+          !(loading && visits.length === 0) && !error ? (
             <PaginationControls page={page} totalPages={meta.totalPages} onPageChange={goToPage} />
           ) : null
         }
       >
-        {loading ? (
+        {loading && visits.length === 0 ? (
           <div className="loading bitacoras-history-state">Cargando visitas...</div>
         ) : error ? (
           <div className="bitacoras-history-state" role="alert">
@@ -467,6 +468,11 @@ const HistorialVisitas = ({
           </div>
         ) : (
           <>
+            <LoadingState
+              loading={loading}
+              hasRows={visits.length > 0}
+              refreshMessage="Actualizando visitas…"
+            />
             <div className="table-responsive app-table-shell app-table-scroll bitacoras-table-shell">
               <table className="app-table bitacoras-visits-table">
                 <thead>
