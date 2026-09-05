@@ -357,6 +357,20 @@
   vertical-align: top;
 }
 
+/* "Crear ubicación" es una acción del cliente (el grupo), no de su primera
+   ubicación — vive en el header de esta celda, no en la columna de
+   acciones por-fila. */
+.configuracion-client-cell-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.configuracion-client-cell-header .action-btn {
+  flex-shrink: 0;
+}
+
 .configuracion-location-table-row .app-table-actions {
   flex-wrap: nowrap;
   gap: 8px !important;

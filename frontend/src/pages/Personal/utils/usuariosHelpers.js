@@ -109,6 +109,14 @@ export const getUbicacionSearchText = (ubicacion) =>
 export const getTipoUsuarioLabel = (tipoUsuario) =>
   TIPOS_USUARIO.find((tipo) => tipo.value === tipoUsuario)?.label ?? tipoUsuario;
 
+export const getUsuarioSinColaboradorLabel = (usuario) =>
+  `${usuario.usuario} — ${usuario.nombre} ${usuario.apellido} (${getTipoUsuarioLabel(usuario.tipo_usuario)})${
+    usuario.activo === false ? ' (Inactivo)' : ''
+  }`;
+
+export const getUsuarioSinColaboradorSearchText = (usuario) =>
+  `${usuario.usuario} ${usuario.nombre} ${usuario.apellido}`;
+
 export const buildInvitationMessage = (nombre, apellido, usuario, tempPassword) => {
   const url = globalThis.location.origin;
   return `Hola ${nombre} ${apellido}, te damos la bienvenida al sistema WES Security.

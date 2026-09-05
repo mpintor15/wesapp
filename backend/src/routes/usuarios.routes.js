@@ -17,6 +17,11 @@ router.get(
   usuariosController.getColaboradoresElegibles
 );
 router.get(
+  '/sin-colaborador',
+  requirePermission(PERMISSIONS.USUARIOS_VER),
+  usuariosController.getUsuariosSinColaborador
+);
+router.get(
   '/ubicaciones-asignables',
   requirePermission(PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR),
   usuariosController.getUbicacionesAsignables

@@ -86,6 +86,12 @@ const Personal = () => {
   const [accesoUbicacionesError, setAccesoUbicacionesError] = useState('');
   const [accesoCreateData, setAccesoCreateData] = useState(EMPTY_CREATE_USER_FORM);
   const [accesoCreateErrors, setAccesoCreateErrors] = useState({});
+  const [accesoMode, setAccesoMode] = useState('crear');
+  const [usuariosSinColaborador, setUsuariosSinColaborador] = useState([]);
+  const [usuariosSinColaboradorLoading, setUsuariosSinColaboradorLoading] = useState(false);
+  const [usuariosSinColaboradorError, setUsuariosSinColaboradorError] = useState('');
+  const [accesoLinkUsuarioId, setAccesoLinkUsuarioId] = useState('');
+  const [accesoLinkErrors, setAccesoLinkErrors] = useState({});
   const [accesoEditData, setAccesoEditData] = useState(EMPTY_EDIT_USER_FORM);
   const [accesoUsuarioId, setAccesoUsuarioId] = useState(null);
   const [invitationData, setInvitationData] = useState(null);
@@ -313,6 +319,19 @@ const Personal = () => {
     setAccesoColaboradoresLoading(false);
   }, []);
 
+  const loadUsuariosSinColaborador = useCallback(async () => {
+    setUsuariosSinColaboradorLoading(true);
+    setUsuariosSinColaboradorError('');
+    const result = await usuariosService.getUsuariosSinColaborador();
+    if (result.success) {
+      setUsuariosSinColaborador(result.data);
+    } else {
+      setUsuariosSinColaborador([]);
+      setUsuariosSinColaboradorError(result.message || 'No se pudieron cargar los usuarios');
+    }
+    setUsuariosSinColaboradorLoading(false);
+  }, []);
+
   const loadAccesoUbicaciones = useCallback(async () => {
     setAccesoUbicacionesLoading(true);
     setAccesoUbicacionesError('');
@@ -342,9 +361,16 @@ const Personal = () => {
         colaborador_id: String(colaborador.id),
       });
       setAccesoCreateErrors({});
+      setAccesoMode('crear');
+      setAccesoLinkUsuarioId('');
+      setAccesoLinkErrors({});
       setShowAccesoCreateModal(true);
       void loadAccesoColaboradores();
       if (permissions.canManageAssignments) void loadAccesoUbicaciones();
+      // Vincular un usuario legacy (colaborador_id NULL) es técnicamente un
+      // UPDATE (usuarios.editar), no una creación: solo se ofrece la opción
+      // si el rol puede realmente completar esa operación en el backend.
+      if (permissions.canEditAcceso) void loadUsuariosSinColaborador();
       return;
     }
 
@@ -369,12 +395,51 @@ const Personal = () => {
     setAccesoCreateErrors((prev) => ({ ...prev, [field]: '' }));
   };
 
+  const handleAccesoModeChange = (nextMode) => {
+    setAccesoMode(nextMode);
+    setAccesoCreateErrors({});
+    setAccesoLinkErrors({});
+  };
+
+  const handleAccesoLinkUsuarioChange = (value) => {
+    setAccesoLinkUsuarioId(value);
+    setAccesoLinkErrors({});
+  };
+
   const handleAccesoEditChange = (field, value) => {
     setAccesoEditData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleAccesoLink = async () => {
+    if (!permissions.canEditAcceso) {
+      showToast('No tienes permisos para vincular accesos', 'error');
+      return;
+    }
+    if (!accesoLinkUsuarioId) {
+      const errors = { usuario_id: 'Selecciona un usuario' };
+      setAccesoLinkErrors(errors);
+      showToast(errors.usuario_id, 'error');
+      return;
+    }
+    if (!accesoColaborador) return;
+    const result = await usuariosService.updateUsuario(accesoLinkUsuarioId, {
+      colaborador_id: accesoColaborador.id,
+    });
+    if (result.success) {
+      showToast('Usuario vinculado exitosamente', 'success');
+      setShowAccesoCreateModal(false);
+      refreshColaboradores();
+    } else {
+      showToast(result.message, 'error');
+    }
+  };
+
   const handleAccesoCreate = withCreateAccesoSubmit(async (e) => {
     e.preventDefault();
+    if (accesoMode === 'vincular') {
+      await handleAccesoLink();
+      return;
+    }
     const errors = validateCreateForm(accesoCreateData);
     if (Object.keys(errors).length > 0) {
       setAccesoCreateErrors(errors);
@@ -582,11 +647,20 @@ const Personal = () => {
           isCreating={isCreatingAcceso}
           canManageAssignments={permissions.canManageAssignments}
           lockColaborador
+          linkErrors={accesoLinkErrors}
+          linkUsuarioId={accesoLinkUsuarioId}
+          mode={accesoMode}
+          showLinkOption={permissions.canEditAcceso}
           ubicaciones={accesoUbicaciones}
           ubicacionesError={accesoUbicacionesError}
           ubicacionesLoading={accesoUbicacionesLoading}
+          usuariosSinColaborador={usuariosSinColaborador}
+          usuariosSinColaboradorError={usuariosSinColaboradorError}
+          usuariosSinColaboradorLoading={usuariosSinColaboradorLoading}
           onCancel={() => setShowAccesoCreateModal(false)}
           onChange={handleAccesoCreateChange}
+          onLinkUsuarioChange={handleAccesoLinkUsuarioChange}
+          onModeChange={handleAccesoModeChange}
           onSubmit={handleAccesoCreate}
         />
       )}

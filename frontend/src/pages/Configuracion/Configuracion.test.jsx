@@ -1863,13 +1863,15 @@ describe('Configuracion ubicaciones', () => {
       page.container.querySelector('button[aria-label="Crear ubicación para ACME Seguridad"]')
     );
 
+    // "Crear ubicación" es una acción del cliente (grupo), no de su primera
+    // ubicación: vive en la celda de cliente, no en la columna de acciones.
     expect(
       page.container
         .querySelector(
           '.configuracion-ubicaciones-table button[aria-label="Crear ubicación para ACME Seguridad"]'
         )
         .closest('td').className
-    ).toContain('app-col-actions');
+    ).toContain('configuracion-client-cell');
 
     expect(page.field('#ubicacion-cliente').value).toBe('1');
     expect(page.field('#ubicacion-cliente').disabled).toBe(true);

@@ -209,6 +209,23 @@ const getColaboradoresElegibles = async (req, res) => {
   }
 };
 
+// Usuarios legacy (creados antes de exigir colaborador_id, ver migración 026)
+// que aún no están vinculados a ningún colaborador — candidatos para
+// asociar un usuario existente en vez de crear uno nuevo.
+const getUsuariosSinColaborador = async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, usuario, nombre, apellido, tipo_usuario, activo
+       FROM usuarios
+       WHERE colaborador_id IS NULL
+       ORDER BY usuario ASC`
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al obtener usuarios sin colaborador:');
+  }
+};
+
 const assertEligibleColaborador = async (executor, colaboradorId, currentUsuarioId = null) => {
   if (colaboradorId === null || colaboradorId === undefined) {
     throw createHttpError(400, 'El colaborador es requerido');
@@ -568,6 +585,7 @@ const deleteUsuario = async (req, res) => {
 module.exports = {
   getUsuarios,
   getColaboradoresElegibles,
+  getUsuariosSinColaborador,
   getUbicacionesAsignables,
   createUsuario,
   updateUsuario,

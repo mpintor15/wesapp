@@ -19,6 +19,7 @@ const {
   createUsuario,
   getUsuarios,
   getColaboradoresElegibles,
+  getUsuariosSinColaborador,
   getUbicacionesAsignables,
   updateUsuario,
   reenviarInvitacion,
@@ -908,6 +909,52 @@ describe('usuariosController.getColaboradoresElegibles', () => {
     expect(sql).toMatch(/u\.id = \$1/);
     expect(sql).not.toMatch(/c\.estado = 'inactivo'/);
     expect(params).toEqual([12]);
+  });
+});
+
+describe('usuariosController.getUsuariosSinColaborador', () => {
+  test('lista usuarios legacy sin colaborador vinculado', async () => {
+    db.query.mockResolvedValue({
+      rows: [
+        {
+          id: 4,
+          usuario: 'HPinto',
+          nombre: 'Holger',
+          apellido: 'Pinto',
+          tipo_usuario: 'gerente',
+          activo: true,
+        },
+      ],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await getUsuariosSinColaborador(mockReq({ query: {} }), res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: [
+        {
+          id: 4,
+          usuario: 'HPinto',
+          nombre: 'Holger',
+          apellido: 'Pinto',
+          tipo_usuario: 'gerente',
+          activo: true,
+        },
+      ],
+    });
+    expect(db.query.mock.calls[0][0]).toMatch(/colaborador_id IS NULL/);
+    expect(db.query.mock.calls[0][0]).not.toMatch(/password_hash/i);
+  });
+
+  test('responde 500 controlado si la consulta falla', async () => {
+    db.query.mockRejectedValue(new Error('boom'));
+    const res = mockRes();
+
+    await getUsuariosSinColaborador(mockReq({ query: {} }), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
   });
 });
 
