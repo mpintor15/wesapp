@@ -54,15 +54,6 @@ const usuariosService = {
     }
   },
 
-  getUsuariosSinColaborador: async () => {
-    try {
-      const response = await api.get('/usuarios/sin-colaborador');
-      return { success: response.data.success, data: response.data.data || [] };
-    } catch (error) {
-      return buildServiceFailure(error, 'Error al obtener usuarios sin colaborador');
-    }
-  },
-
   getUbicacionesAsignables: async () => {
     try {
       const response = await api.get('/usuarios/ubicaciones-asignables');
