@@ -161,9 +161,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-.personal-table th:nth-child(8),
-.personal-table td:nth-child(8) {
+/* Columna Acceso: usa una clase dedicada (no nth-child) porque su posición
+   cambia según el rol — Gerente/Secretario ven 2 columnas adicionales
+   (Banco/Cuenta, Sueldo) que Contador/Supervisor no ven. */
+.personal-table th.cell-acceso,
+.personal-table td.cell-acceso {
   width: 92px;
+  text-align: center !important;
 }
 
 /* Actions column width tracks how many icon buttons the current role can

@@ -1070,12 +1070,45 @@ const Configuracion = () => {
                                                 title={groupDisplayName}
                                                 rowSpan={clientRowSpan}
                                               >
-                                                <span className="configuracion-client-name">
-                                                  {groupDisplayName}
-                                                </span>
-                                                <small className="configuracion-group-summary">
-                                                  {groupSummary}
-                                                </small>
+                                                <div className="configuracion-client-cell-header">
+                                                  <div>
+                                                    <span className="configuracion-client-name">
+                                                      {groupDisplayName}
+                                                    </span>
+                                                    <small className="configuracion-group-summary">
+                                                      {groupSummary}
+                                                    </small>
+                                                  </div>
+                                                  {canCreate && !isHistoricalGroup && (
+                                                    <button
+                                                      className="action-btn action-btn-add"
+                                                      type="button"
+                                                      onClick={() =>
+                                                        openCreateModal({
+                                                          id: group.cliente_id,
+                                                          nombre: groupDisplayName,
+                                                        })
+                                                      }
+                                                      title={`Crear ubicación para ${groupDisplayName}`}
+                                                      aria-label={`Crear ubicación para ${groupDisplayName}`}
+                                                    >
+                                                      <svg
+                                                        viewBox="0 0 24 24"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        strokeWidth="2"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        width="14"
+                                                        height="14"
+                                                        aria-hidden="true"
+                                                      >
+                                                        <path d="M12 5v14M5 12h14" />
+                                                        <path d="M4 4h16v16H4z" />
+                                                      </svg>
+                                                    </button>
+                                                  )}
+                                                </div>
                                               </td>
                                             )}
                                             <td className="configuracion-location-cell">
@@ -1118,40 +1151,9 @@ const Configuracion = () => {
                                                   aria-label={
                                                     ubicacion
                                                       ? `Acciones de ubicación ${ubicacion.nombre}`
-                                                      : `Acciones de cliente ${groupDisplayName}`
+                                                      : undefined
                                                   }
                                                 >
-                                                  {locationIndex === 0 &&
-                                                    canCreate &&
-                                                    !isHistoricalGroup && (
-                                                      <button
-                                                        className="action-btn action-btn-add"
-                                                        type="button"
-                                                        onClick={() =>
-                                                          openCreateModal({
-                                                            id: group.cliente_id,
-                                                            nombre: groupDisplayName,
-                                                          })
-                                                        }
-                                                        title={`Crear ubicación para ${groupDisplayName}`}
-                                                        aria-label={`Crear ubicación para ${groupDisplayName}`}
-                                                      >
-                                                        <svg
-                                                          viewBox="0 0 24 24"
-                                                          fill="none"
-                                                          stroke="currentColor"
-                                                          strokeWidth="2"
-                                                          strokeLinecap="round"
-                                                          strokeLinejoin="round"
-                                                          width="14"
-                                                          height="14"
-                                                          aria-hidden="true"
-                                                        >
-                                                          <path d="M12 5v14M5 12h14" />
-                                                          <path d="M4 4h16v16H4z" />
-                                                        </svg>
-                                                      </button>
-                                                    )}
                                                   {ubicacion && canEdit && (
                                                     <button
                                                       className="action-btn action-btn-edit"
