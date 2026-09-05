@@ -58,7 +58,7 @@ const PersonalTable = ({
                 <SortButton field="sueldo" label="Sueldo" onSort={onSort} tableSort={tableSort} />
               </th>
             ) : null}
-            <th>Acceso</th>
+            <th className="cell-acceso">Acceso</th>
             <th className={`center col-actions app-col-actions ${actionsWidthClass}`}></th>
           </tr>
         </thead>
@@ -88,7 +88,7 @@ const PersonalTable = ({
                     {c.sueldo ? `$${Number.parseFloat(c.sueldo).toFixed(2)}` : '—'}
                   </td>
                 ) : null}
-                <td>
+                <td className="cell-acceso">
                   <AccesoBadge acceso={c.acceso} />
                 </td>
                 <td className={`center col-actions app-col-actions ${actionsWidthClass}`}>
