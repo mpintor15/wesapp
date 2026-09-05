@@ -40,13 +40,24 @@ describe('inputValidation', () => {
     ['1e2', false, undefined],
     ['12abc', false, undefined],
     ['NaN', false, undefined],
+    // Límite de NUMERIC(10,2): válido en el borde, inválido apenas lo supera.
+    ['99999999.99', true, 99999999.99],
+    ['100000000', false, undefined],
+    ['99999999999999', false, undefined],
   ])('parseStrictPositiveNumber(%p)', (value, expectedValid, expectedValue) => {
     const result = parseStrictPositiveNumber(value, 'Número inválido');
 
     expect(result.valid).toBe(expectedValid);
     if (expectedValid) {
       expect(result.value).toBe(expectedValue);
+    } else {
+      expect(result.status).toBe(400);
     }
+  });
+
+  test('parseStrictPositiveNumber acepta un max personalizado', () => {
+    expect(parseStrictPositiveNumber('50', 'Inválido', { max: 100 }).valid).toBe(true);
+    expect(parseStrictPositiveNumber('101', 'Inválido', { max: 100 }).valid).toBe(false);
   });
 
   test.each([

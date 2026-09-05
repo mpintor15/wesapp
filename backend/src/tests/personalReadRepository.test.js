@@ -47,6 +47,29 @@ describe('personalReadRepository.buildColaboradoresQuery', () => {
     expect(params).toEqual(['%ana%', 'activo', 'supervisora']);
   });
 
+  test('excluye numero_cuenta de la búsqueda cuando el rol no tiene acceso a datos sensibles', () => {
+    const { query, params } = personalReadRepository.buildColaboradoresQuery({
+      search: 'ana',
+      canAccessSensitive: false,
+    });
+    const sql = normalizeSql(query);
+
+    expect(sql).toContain('c.nombres_completos ILIKE $1');
+    expect(sql).toContain('c.cedula ILIKE $1');
+    expect(sql).toContain('c.celular ILIKE $1');
+    expect(sql).not.toContain('numero_cuenta');
+    expect(params).toEqual(['%ana%']);
+  });
+
+  test('incluye numero_cuenta en la búsqueda cuando canAccessSensitive es explícitamente true', () => {
+    const { query } = personalReadRepository.buildColaboradoresQuery({
+      search: 'ana',
+      canAccessSensitive: true,
+    });
+
+    expect(normalizeSql(query)).toContain('c.numero_cuenta ILIKE $1');
+  });
+
   test('no agrega filtros vacíos a exportaciones', () => {
     const { query, params } = personalReadRepository.buildColaboradoresQuery({
       search: '',

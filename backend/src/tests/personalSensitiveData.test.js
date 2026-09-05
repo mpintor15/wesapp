@@ -84,6 +84,26 @@ describe('personalController — acceso a datos sensibles por rol', () => {
       expect(row.nombres_completos).toBe('Ana Torres');
     });
 
+    test(`getColaboradores con ?search= ${canAccessSensitive ? 'sí' : 'no'} usa numero_cuenta como criterio de búsqueda`, async () => {
+      db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+      const res = mockRes();
+
+      await getColaboradores(
+        mockReq({ query: { search: '2200123456' }, user: { id: 9, tipo_usuario } }),
+        res
+      );
+
+      const [sql] = db.query.mock.calls[0];
+      if (canAccessSensitive) {
+        expect(sql).toContain('c.numero_cuenta ILIKE');
+      } else {
+        // Sin acceso a datos sensibles, buscar por un fragmento de cuenta
+        // bancaria no debe poder confirmar/enumerar cuentas reales aunque el
+        // campo venga redactado en la respuesta.
+        expect(sql).not.toContain('numero_cuenta');
+      }
+    });
+
     test(`createColaborador ${canAccessSensitive ? 'guarda' : 'ignora'} banco, numero_cuenta y sueldo enviados en el body`, async () => {
       db.query.mockResolvedValueOnce({
         rows: [{ id: 5, nombres_completos: 'Nuevo Colaborador' }],

@@ -69,10 +69,11 @@ const normalizeEstadoColaborador = (estado) => (estado ? String(estado).trim().t
 
 const isValidEstadoColaborador = (estado) => ESTADOS_COLABORADOR_SET.has(estado);
 
-const buildColaboradoresFilters = ({ search, estado, cargo } = {}) => ({
+const buildColaboradoresFilters = ({ search, estado, cargo, canAccessSensitive = true } = {}) => ({
   search,
   estado: estado ? normalizeEstadoColaborador(estado) : undefined,
   cargo,
+  canAccessSensitive,
 });
 
 const buildColaboradorExcelRow = (row, canAccessSensitive = true) => {

@@ -132,6 +132,27 @@ describe('cuentas validators', () => {
       ).toBe('La retención de IVA requiere que IVA esté habilitado');
     });
 
+    test('acepta valor_factura en el límite de NUMERIC(10,2) y rechaza si lo excede con 400', () => {
+      expect(
+        validateFacturaCreatePayload({
+          num_factura: 1,
+          cliente_id: 1,
+          fecha_factura: '2024-01-01',
+          valor_factura: '99999999.99',
+        })
+      ).toMatchObject({ valid: true, value: { parsedValorFactura: 99999999.99 } });
+
+      const overLimit = validateFacturaCreatePayload({
+        num_factura: 1,
+        cliente_id: 1,
+        fecha_factura: '2024-01-01',
+        valor_factura: '999999999999',
+      });
+      expect(overLimit.valid).toBe(false);
+      expect(overLimit.status).toBe(400);
+      expect(overLimit.message).toBe('El valor de la factura debe ser mayor a 0');
+    });
+
     test('normaliza actualización y desactiva retención IVA sin IVA', () => {
       expect(
         validateFacturaUpdatePayload({
@@ -254,6 +275,15 @@ describe('cuentas validators', () => {
           abonos: [{ num_factura: '1001', valor_abono: '1e2' }],
         }).message
       ).toBe('Cada abono debe tener num_factura y valor_abono mayor a 0');
+
+      const overLimit = validateBatchPaymentPayload({
+        cliente_id: '8',
+        fecha: '2024-01-01',
+        abonos: [{ num_factura: '1001', valor_abono: '999999999999' }],
+      });
+      expect(overLimit.valid).toBe(false);
+      expect(overLimit.status).toBe(400);
+      expect(overLimit.message).toBe('Cada abono debe tener num_factura y valor_abono mayor a 0');
     });
 
     test('preserva orden de errores de lote', () => {

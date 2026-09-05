@@ -182,6 +182,31 @@ describe('personalController.createColaborador', () => {
     expect(body.message).toMatch(/fecha/i);
     expect(db.query).not.toHaveBeenCalled();
   });
+
+  test('rechaza sueldo que excede NUMERIC(10,2) con 400 en vez de 500', async () => {
+    const res = mockRes();
+
+    await createColaborador(
+      mockReq({
+        body: {
+          nombres_completos: 'Ana Torres',
+          cedula: '0102030405',
+          fecha_nacimiento: '1990-01-01',
+          cargo: 'Analista',
+          celular: '0999999999',
+          banco: 'Banco Pichincha',
+          numero_cuenta: '123',
+          sueldo: 999999999999,
+        },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/sueldo/i);
+    expect(db.query).not.toHaveBeenCalled();
+  });
 });
 
 describe('personalController.updateColaborador', () => {

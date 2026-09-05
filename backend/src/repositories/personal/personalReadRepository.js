@@ -16,18 +16,26 @@ const COLABORADORES_JOIN_COLUMNS = `
     u.primer_login AS usuario_primer_login
 `;
 
-const buildColaboradoresWhere = ({ search, estado, cargo } = {}) => {
+const buildColaboradoresWhere = ({ search, estado, cargo, canAccessSensitive = true } = {}) => {
   const params = [];
   const conditions = [];
 
   if (search) {
     params.push(`%${search}%`);
-    conditions.push(`(
-      c.nombres_completos ILIKE $${params.length}
-      OR c.cedula ILIKE $${params.length}
-      OR c.celular ILIKE $${params.length}
-      OR c.numero_cuenta ILIKE $${params.length}
-    )`);
+    // numero_cuenta solo entra al OR de búsqueda para roles con acceso a
+    // datos sensibles de nómina: de lo contrario, un match/no-match sobre un
+    // fragmento de cuenta bancaria funciona como oráculo para confirmar
+    // números de cuenta reales aunque el campo venga redactado en la
+    // respuesta (Contador/Supervisor no deben poder buscar por esto).
+    const searchColumns = [
+      'c.nombres_completos',
+      'c.cedula',
+      'c.celular',
+      ...(canAccessSensitive ? ['c.numero_cuenta'] : []),
+    ];
+    conditions.push(
+      `(${searchColumns.map((column) => `${column} ILIKE $${params.length}`).join(' OR ')})`
+    );
   }
 
   if (estado) {
