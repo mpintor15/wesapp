@@ -276,7 +276,7 @@ CREATE TABLE colaboradores (
 );
 
 ALTER TABLE usuarios
-    ADD COLUMN colaborador_id INTEGER NOT NULL,
+    ADD COLUMN colaborador_id INTEGER NULL,
     ADD CONSTRAINT usuarios_colaborador_id_fkey
         FOREIGN KEY (colaborador_id) REFERENCES colaboradores(id) ON DELETE RESTRICT,
     ADD CONSTRAINT usuarios_colaborador_id_key UNIQUE (colaborador_id);
@@ -651,6 +651,22 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Colaborador es requerido en usuarios nuevos o al reasignarlo, pero se
+-- permite preservar el NULL legacy de usuarios creados antes de esta regla
+-- (ver migración 026).
+CREATE OR REPLACE FUNCTION enforce_usuario_colaborador_required()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.colaborador_id IS NULL THEN
+        IF TG_OP = 'INSERT' OR OLD.colaborador_id IS NOT NULL THEN
+            RAISE EXCEPTION 'El colaborador es requerido'
+                USING ERRCODE = '23514', CONSTRAINT = 'usuarios_colaborador_required';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TRIGGER enforce_manzana_urbanizacion_trigger
     BEFORE INSERT OR UPDATE OF ubicacion_id ON manzanas
     FOR EACH ROW EXECUTE FUNCTION enforce_manzana_urbanizacion();
@@ -666,6 +682,10 @@ CREATE TRIGGER enforce_residente_active_chain_trigger
 CREATE TRIGGER prevent_villa_deactivation_with_resident_trigger
     BEFORE UPDATE OF estado ON villas
     FOR EACH ROW EXECUTE FUNCTION prevent_villa_deactivation_with_resident();
+
+CREATE TRIGGER trg_usuarios_colaborador_required
+    BEFORE INSERT OR UPDATE OF colaborador_id ON usuarios
+    FOR EACH ROW EXECUTE FUNCTION enforce_usuario_colaborador_required();
 
 CREATE TRIGGER update_usuarios_updated_at BEFORE UPDATE ON usuarios
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
