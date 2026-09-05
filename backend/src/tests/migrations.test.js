@@ -1138,9 +1138,63 @@ describe('database migrations', () => {
 
       const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 26');
       expect(version.rowCount).toBe(1);
-      expect(await fs.readFile(schemaPath, 'utf8')).toMatch(
-        /ADD COLUMN colaborador_id INTEGER NOT NULL/
+    });
+  });
+
+  test('schema.sql keeps usuarios.colaborador_id nullable and enforces the 026 requirement trigger', async () => {
+    await withTempDatabase('wesapp_schema_usuario_colaborador', async (pool) => {
+      const schemaSql = await fs.readFile(schemaPath, 'utf8');
+      await pool.query(schemaSql);
+
+      const column = await pool.query(`
+        SELECT is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'usuarios' AND column_name = 'colaborador_id'
+      `);
+      expect(column.rows[0].is_nullable).toBe('YES');
+
+      await expect(
+        pool.query(
+          `INSERT INTO usuarios (usuario, password_hash, tipo_usuario, colaborador_id)
+           VALUES ('nuevo-sin-colaborador', 'hash', 'gerente', NULL)`
+        )
+      ).rejects.toMatchObject({ code: '23514' });
+
+      const legacyColaborador = await pool.query(`
+        INSERT INTO colaboradores (nombres_completos, cedula, fecha_nacimiento, cargo, estado)
+        VALUES ('Legacy Colaborador', 'TEST-COL-LEGACY', '1990-01-01', 'Guardia', 'activo')
+        RETURNING id
+      `);
+
+      await pool.query('ALTER TABLE usuarios DISABLE TRIGGER trg_usuarios_colaborador_required');
+      await pool.query(
+        `INSERT INTO usuarios (usuario, password_hash, tipo_usuario, colaborador_id)
+         VALUES ('legacy-sin-colaborador', 'hash', 'gerente', NULL)`
       );
+      await pool.query('ALTER TABLE usuarios ENABLE TRIGGER trg_usuarios_colaborador_required');
+
+      await pool.query('UPDATE usuarios SET activo = FALSE WHERE usuario = $1', [
+        'legacy-sin-colaborador',
+      ]);
+      const stillNull = await pool.query('SELECT colaborador_id FROM usuarios WHERE usuario = $1', [
+        'legacy-sin-colaborador',
+      ]);
+      expect(stillNull.rows[0].colaborador_id).toBeNull();
+
+      await pool.query('UPDATE usuarios SET colaborador_id = $1 WHERE usuario = $2', [
+        legacyColaborador.rows[0].id,
+        'legacy-sin-colaborador',
+      ]);
+      const linked = await pool.query('SELECT colaborador_id FROM usuarios WHERE usuario = $1', [
+        'legacy-sin-colaborador',
+      ]);
+      expect(linked.rows[0].colaborador_id).toBe(legacyColaborador.rows[0].id);
+
+      await expect(
+        pool.query('UPDATE usuarios SET colaborador_id = NULL WHERE usuario = $1', [
+          'legacy-sin-colaborador',
+        ])
+      ).rejects.toMatchObject({ code: '23514' });
     });
   });
 
