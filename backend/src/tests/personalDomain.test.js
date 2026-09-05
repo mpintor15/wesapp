@@ -16,15 +16,25 @@ describe('personal domain helpers', () => {
     expect(isValidEstadoColaborador('suspendido')).toBe(false);
   });
 
-  test('construye filtros sin mutar la entrada', () => {
+  test('construye filtros sin mutar la entrada, con canAccessSensitive true por defecto', () => {
     const input = { search: 'ana', estado: ' INACTIVO ', cargo: 'Guardia' };
 
     expect(buildColaboradoresFilters(input)).toEqual({
       search: 'ana',
       estado: 'inactivo',
       cargo: 'Guardia',
+      canAccessSensitive: true,
     });
     expect(input).toEqual({ search: 'ana', estado: ' INACTIVO ', cargo: 'Guardia' });
+  });
+
+  test('propaga canAccessSensitive false cuando el rol no tiene acceso a datos sensibles', () => {
+    expect(buildColaboradoresFilters({ search: 'ana', canAccessSensitive: false })).toEqual({
+      search: 'ana',
+      estado: undefined,
+      cargo: undefined,
+      canAccessSensitive: false,
+    });
   });
 
   test('prepara filas de Excel conservando vacíos y sueldo cero', () => {

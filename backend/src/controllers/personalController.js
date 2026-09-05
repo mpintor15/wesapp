@@ -47,16 +47,17 @@ const getColaboradores = async (req, res) => {
     if (estado && !isValidEstadoColaborador(estadoNormalizado)) {
       throw createHttpError(400, 'El filtro estado debe ser activo o inactivo');
     }
+    const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
     const filters = buildColaboradoresFilters({
       search,
       estado,
       cargo,
+      canAccessSensitive,
     });
     const pagination = normalizePaginationQuery(req.query);
 
     const result = await personalReadRepository.findColaboradores(filters, pagination);
     const totalItems = result.rows[0]?.total_count || 0;
-    const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
     const data = result.rows.map(({ total_count: _totalCount, ...row }) =>
       redactColaboradorSensitiveFields(attachAccesoSummary(row), canAccessSensitive)
     );
@@ -323,14 +324,15 @@ const exportColaboradoresExcel = async (req, res) => {
     if (estado && !isValidEstadoColaborador(estadoNormalizado)) {
       throw createHttpError(400, 'El filtro estado debe ser activo o inactivo');
     }
+    const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
     const filters = buildColaboradoresFilters({
       search,
       estado,
       cargo,
+      canAccessSensitive,
     });
 
     const result = await personalReadRepository.findColaboradoresForExport(filters);
-    const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
 
     const { workbook, worksheet } = createWorkbook(
       'Colaboradores',
