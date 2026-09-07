@@ -377,7 +377,7 @@
 }
 
 .cuentas-table td {
-  padding: 9px 5px !important;
+  padding: 6px 5px !important;
   text-align: left !important;
   color: var(--color-text);
   overflow: visible !important;

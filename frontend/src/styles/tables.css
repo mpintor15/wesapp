@@ -247,7 +247,7 @@
 }
 
 .app-table th {
-  padding: 10px 8px !important;
+  padding: 7px 8px !important;
   text-align: center !important;
   font-weight: 700 !important;
   color: var(--color-text-secondary) !important;
@@ -260,7 +260,7 @@
 }
 
 .app-table td {
-  padding: 12px 8px !important;
+  padding: 8px 8px !important;
   border-bottom: 1px solid var(--color-border-light) !important;
   color: var(--color-text) !important;
   font-size: 0.86em !important;
@@ -323,7 +323,7 @@
 }
 
 .app-table td.app-col-actions {
-  padding: 12px 8px !important;
+  padding: 6px 8px !important;
   overflow: visible !important;
   text-overflow: clip !important;
 }
