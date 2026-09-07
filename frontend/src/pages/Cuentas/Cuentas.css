@@ -121,8 +121,8 @@
 
 .facturas-filter-card .ff-search,
 .pagos-filter-card .ff-search {
-  flex: 1 1 280px;
-  min-width: 240px;
+  flex: 1 1 190px;
+  min-width: 190px;
   max-width: none;
 }
 
