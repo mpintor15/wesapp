@@ -538,7 +538,7 @@
 .ff-date-row input[type='date'],
 .ff-date-field input[type='date'],
 .ff-date-input {
-  width: 140px;
+  width: 124px;
   min-height: 40px;
   padding: 7px 9px;
   border: 1.5px solid var(--color-border);
@@ -565,7 +565,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
-  min-width: 160px;
+  min-width: 144px;
   flex-shrink: 0;
 }
 
