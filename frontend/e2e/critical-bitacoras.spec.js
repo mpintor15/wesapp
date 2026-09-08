@@ -283,11 +283,9 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   expect(createVisitApiResponse.status()).toBe(201);
   await expect(page.locator('.toast-text')).toContainText(/visita registrada/i);
 
-  const visitRow = page
-    .locator('.bitacoras-visits-table tbody tr')
-    .filter({ hasText: 'Delivery' });
+  const visitRow = page.locator('.bitacoras-visits-table tbody tr').filter({ hasText: 'Delivery' });
   await expect(visitRow).toBeVisible();
-  await expect(visitRow).toContainText('ADENTRO');
+  await expect(visitRow).toContainText('AUTORIZADO');
   await expect(visitRow.getByRole('button', { name: /anular/i })).toHaveCount(0);
 
   const closeVisitResponse = page.waitForResponse(
@@ -298,8 +296,7 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   const closeVisitApiResponse = await closeVisitResponse;
   expect(closeVisitApiResponse.status()).toBe(200);
 
-  // The default Visitas filter only shows ABIERTA visits, so the just-closed row drops out of
-  // view — switch the Estado filter to CERRADA to confirm it persisted with the new state.
+  // Switch the Estado filter to CERRADA explicitly to confirm the visit persisted with the new state.
   const closedListResponse = page.waitForResponse(
     (response) => response.url().includes('/api/bitacoras/visitas') && response.status() === 200
   );
