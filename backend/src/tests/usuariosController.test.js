@@ -631,7 +631,7 @@ describe('usuariosController.updateUsuario', () => {
       mockReq({
         params: { id: '2' },
         body: { ubicacion_ids: [4] },
-        user: { id: 9, tipo_usuario: 'supervisor' },
+        user: { id: 9, tipo_usuario: 'secretario' },
       }),
       res
     );
