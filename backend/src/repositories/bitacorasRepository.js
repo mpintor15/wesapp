@@ -835,6 +835,10 @@ const buildVisitFilters = ({ filters, hasGlobalScope, userId }) => {
     params.push(filters.estado);
     conditions.push(`bv.estado = $${params.length}`);
   }
+  if (filters.ubicacionId) {
+    params.push(filters.ubicacionId);
+    conditions.push(`bv.ubicacion_id = $${params.length}`);
+  }
   if (filters.creator) {
     params.push(`%${filters.creator}%`);
     conditions.push(

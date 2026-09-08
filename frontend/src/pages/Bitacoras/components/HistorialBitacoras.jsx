@@ -59,7 +59,7 @@ const StatusBadge = ({ estado }) => {
   return <span className={`bitacoras-status ${getStatusClass(label)}`}>{label}</span>;
 };
 
-const RecordDetails = ({ registro }) => (
+const RecordDetails = ({ registro, showCasa }) => (
   <>
     <div>
       <dt>Fecha/hora</dt>
@@ -72,12 +72,14 @@ const RecordDetails = ({ registro }) => (
         {registro.tipo_punto ? <small>{registro.tipo_punto}</small> : null}
       </dd>
     </div>
-    <div>
-      <dt>Casa</dt>
-      <dd>
-        <span className="bitacoras-cell-primary">{getCasaLabel(registro)}</span>
-      </dd>
-    </div>
+    {showCasa ? (
+      <div>
+        <dt>Casa</dt>
+        <dd>
+          <span className="bitacoras-cell-primary">{getCasaLabel(registro)}</span>
+        </dd>
+      </div>
+    ) : null}
     <div>
       <dt>Autor</dt>
       <dd>
@@ -113,6 +115,11 @@ const HistorialBitacoras = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const requestSequenceRef = useRef(0);
+
+  const hasUrbanizaciones = useMemo(
+    () => ubicaciones.some((ubicacion) => ubicacion.tipo_punto === 'URBANIZACION'),
+    [ubicaciones]
+  );
 
   const groupedLocations = useMemo(() => {
     const groups = new Map();
@@ -388,7 +395,9 @@ const HistorialBitacoras = ({
                     onSort={handleSort}
                   />
                   <SortHeader field="ubicacion" label="Ubicación" sort={sort} onSort={handleSort} />
-                  <SortHeader field="casa" label="Casa" sort={sort} onSort={handleSort} />
+                  {hasUrbanizaciones ? (
+                    <SortHeader field="casa" label="Casa" sort={sort} onSort={handleSort} />
+                  ) : null}
                   <SortHeader field="autor" label="Autor" sort={sort} onSort={handleSort} />
                   <SortHeader field="detalle" label="Detalle" sort={sort} onSort={handleSort} />
                 </tr>
@@ -405,9 +414,11 @@ const HistorialBitacoras = ({
                       </span>
                       {registro.tipo_punto ? <small>{registro.tipo_punto}</small> : null}
                     </td>
-                    <td>
-                      <span className="bitacoras-cell-primary">{getCasaLabel(registro)}</span>
-                    </td>
+                    {hasUrbanizaciones ? (
+                      <td>
+                        <span className="bitacoras-cell-primary">{getCasaLabel(registro)}</span>
+                      </td>
+                    ) : null}
                     <td>
                       <span className="bitacoras-cell-primary">{getAuthorName(registro)}</span>
                       {registro.autor_colaborador_nombre && registro.autor_usuario ? (
@@ -434,7 +445,7 @@ const HistorialBitacoras = ({
                   <StatusBadge estado={registro.estado} />
                 </div>
                 <dl className="record-card-details">
-                  <RecordDetails registro={registro} />
+                  <RecordDetails registro={registro} showCasa={hasUrbanizaciones} />
                 </dl>
                 {registro.estado === 'ANULADA' && registro.motivo_anulacion ? (
                   <p className="bitacoras-cancel-reason">

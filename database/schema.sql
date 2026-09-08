@@ -687,6 +687,23 @@ CREATE TRIGGER trg_usuarios_colaborador_required
     BEFORE INSERT OR UPDATE OF colaborador_id ON usuarios
     FOR EACH ROW EXECUTE FUNCTION enforce_usuario_colaborador_required();
 
+-- Un colaborador inactivo no debe conservar acceso al sistema.
+CREATE OR REPLACE FUNCTION revoke_usuario_access_on_colaborador_inactivo()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.estado = 'inactivo' AND OLD.estado IS DISTINCT FROM 'inactivo' THEN
+        UPDATE usuarios
+        SET activo = FALSE
+        WHERE colaborador_id = NEW.id AND activo = TRUE;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_revoke_usuario_access_on_colaborador_inactivo
+    AFTER UPDATE OF estado ON colaboradores
+    FOR EACH ROW EXECUTE FUNCTION revoke_usuario_access_on_colaborador_inactivo();
+
 CREATE TRIGGER update_usuarios_updated_at BEFORE UPDATE ON usuarios
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
