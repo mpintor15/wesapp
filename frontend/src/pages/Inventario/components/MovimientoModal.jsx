@@ -4,7 +4,6 @@ import { isStockTipo } from '../utils/inventarioHelpers';
 
 const MovimientoModal = ({
   catalogArticulos,
-  canCreateDestinoUbicacion,
   clientes = [],
   filterArticulos,
   isSavingMovimiento,
@@ -221,48 +220,25 @@ const MovimientoModal = ({
 
           <div className="form-group">
             <label htmlFor="mov-destino">Ubicación Destino</label>
-            {canCreateDestinoUbicacion ? (
-              <>
-                <input
-                  id="mov-destino"
-                  type="text"
-                  name="ubicacion_destino_nombre"
-                  value={movimientoForm.ubicacion_destino_nombre}
-                  onChange={onFormChange}
-                  placeholder="Ej: Puesto Norte"
-                  required
-                />
-                <span className="inventory-location-field-meta">
-                  Si no existe para el cliente seleccionado, se creará una nueva ubicación.
-                </span>
-              </>
-            ) : (
-              <>
-                <select
-                  id="mov-destino"
-                  name="ubicacion_destino_id"
-                  value={movimientoForm.ubicacion_destino_id || ''}
-                  onChange={onFormChange}
-                  required
-                  disabled={!selectedClienteId}
-                >
-                  <option value="">
-                    {selectedClienteId
-                      ? 'Selecciona una ubicación existente'
-                      : 'Selecciona primero un cliente'}
-                  </option>
-                  {destinationOptions.map((ubicacion) => (
-                    <option key={ubicacion.id} value={ubicacion.id}>
-                      {ubicacion.nombre}
-                    </option>
-                  ))}
-                </select>
-                <span className="inventory-location-field-meta">
-                  Puedes trasladar a una ubicación existente, pero no crear una nueva desde este
-                  formulario.
-                </span>
-              </>
-            )}
+            <select
+              id="mov-destino"
+              name="ubicacion_destino_id"
+              value={movimientoForm.ubicacion_destino_id || ''}
+              onChange={onFormChange}
+              required
+              disabled={!selectedClienteId}
+            >
+              <option value="">
+                {selectedClienteId
+                  ? 'Selecciona una ubicación existente'
+                  : 'Selecciona primero un cliente'}
+              </option>
+              {destinationOptions.map((ubicacion) => (
+                <option key={ubicacion.id} value={ubicacion.id}>
+                  {ubicacion.nombre}
+                </option>
+              ))}
+            </select>
             {movimientoErrors.ubicacion_destino_nombre ? (
               <span className="field-error">{movimientoErrors.ubicacion_destino_nombre}</span>
             ) : null}

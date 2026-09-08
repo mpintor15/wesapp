@@ -12,6 +12,7 @@ import { formatLocalTimestamp } from '../utils/bitacorasHelpers';
 const PAGE_SIZE = 25;
 const EMPTY_FILTERS = {
   estado: 'ABIERTA',
+  ubicacion_id: '',
   creator: '',
   fecha_desde: '',
   fecha_hasta: '',
@@ -32,6 +33,7 @@ const buildParams = (page, filters, sort) => ({
   sortBy: sort.field,
   sortOrder: sort.direction,
   ...(filters.estado ? { estado: filters.estado } : {}),
+  ...(filters.ubicacion_id ? { ubicacion_id: Number(filters.ubicacion_id) } : {}),
   ...(filters.creator.trim() ? { creator: filters.creator.trim() } : {}),
   ...(filters.fecha_desde ? { fecha_desde: filters.fecha_desde } : {}),
   ...(filters.fecha_hasta ? { fecha_hasta: filters.fecha_hasta } : {}),
@@ -164,6 +166,7 @@ const VisitActions = ({ visit, closingId, onExitRequest, canCancel, onCancelRequ
 };
 
 const HistorialVisitas = ({
+  ubicaciones = [],
   refreshKey,
   onChanged,
   showToast,
@@ -171,8 +174,21 @@ const HistorialVisitas = ({
   canCancelVisita = false,
   onTotalChange,
 }) => {
+  const urbanizaciones = ubicaciones.filter((ubicacion) => ubicacion.tipo_punto === 'URBANIZACION');
   const [draftFilters, setDraftFilters] = useState({ ...EMPTY_FILTERS });
   const [appliedFilters, setAppliedFilters] = useState({ ...EMPTY_FILTERS });
+  const hasAutoSelectedRef = useRef(false);
+
+  // Selecciona automáticamente la primera urbanización disponible para que
+  // la tabla nunca mezcle Manzana/Villa de urbanizaciones distintas: esos
+  // datos no incluyen a qué urbanización pertenecen en cada fila.
+  useEffect(() => {
+    if (hasAutoSelectedRef.current || urbanizaciones.length === 0) return;
+    hasAutoSelectedRef.current = true;
+    const firstId = String(urbanizaciones[0].id);
+    setDraftFilters((current) => ({ ...current, ubicacion_id: firstId }));
+    setAppliedFilters((current) => ({ ...current, ubicacion_id: firstId }));
+  }, [urbanizaciones]);
   const [dateError, setDateError] = useState('');
   const [page, setPage] = useState(1);
   const [visits, setVisits] = useState([]);
@@ -363,6 +379,24 @@ const HistorialVisitas = ({
             />
           </div>
           <div className="ff-state bitacoras-status-filter">
+            <label className="ff-state-label" htmlFor="visitas-filter-ubicacion">
+              Urbanización
+            </label>
+            <select
+              id="visitas-filter-ubicacion"
+              name="ubicacion_id"
+              value={draftFilters.ubicacion_id}
+              onChange={updateFilter}
+            >
+              {urbanizaciones.length === 0 ? <option value="">Sin urbanizaciones</option> : null}
+              {urbanizaciones.map((urbanizacion) => (
+                <option key={urbanizacion.id} value={urbanizacion.id}>
+                  {urbanizacion.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="ff-state bitacoras-status-filter">
             <label className="ff-state-label" htmlFor="visitas-filter-creator">
               Creador
             </label>
@@ -423,8 +457,10 @@ const HistorialVisitas = ({
             className="ff-clear-btn"
             type="button"
             onClick={() => {
-              setDraftFilters({ ...EMPTY_FILTERS });
-              setAppliedFilters({ ...EMPTY_FILTERS });
+              const preservedUbicacionId =
+                urbanizaciones.length > 0 ? draftFilters.ubicacion_id : '';
+              setDraftFilters({ ...EMPTY_FILTERS, ubicacion_id: preservedUbicacionId });
+              setAppliedFilters({ ...EMPTY_FILTERS, ubicacion_id: preservedUbicacionId });
               setPage(1);
             }}
           >

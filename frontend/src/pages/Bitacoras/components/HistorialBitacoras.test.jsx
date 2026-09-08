@@ -180,7 +180,17 @@ describe('HistorialBitacoras', () => {
         ],
       })
     );
-    const view = renderHistory();
+    const view = renderHistory({
+      ubicaciones: [
+        ...LOCATIONS,
+        {
+          id: 9,
+          nombre: 'Urbanización Norte',
+          cliente_nombre: 'Cliente X',
+          tipo_punto: 'URBANIZACION',
+        },
+      ],
+    });
     await flush();
 
     const tableRows = Array.from(view.container.querySelectorAll('tbody tr'));

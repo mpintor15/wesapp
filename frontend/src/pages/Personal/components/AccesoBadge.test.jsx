@@ -19,36 +19,36 @@ describe('AccesoBadge', () => {
     expect(container.querySelector('.badge-inactive')).toBeTruthy();
   });
 
-  test('usuario pendiente de primer login muestra "Pendiente"', () => {
+  test('usuario pendiente de primer login muestra "Con acceso"', () => {
     const container = renderBadge({
       tiene_usuario: true,
       pendiente: true,
       activo: true,
       tipo_usuario: 'guardia',
     });
-    expect(container.textContent).toBe('Pendiente');
-    expect(container.querySelector('.badge-pending')).toBeTruthy();
+    expect(container.textContent).toBe('Con acceso');
+    expect(container.querySelector('.badge-active')).toBeTruthy();
   });
 
-  test('usuario activo muestra el rol', () => {
+  test('usuario activo muestra "Con acceso" sin importar el rol', () => {
     const container = renderBadge({
       tiene_usuario: true,
       pendiente: false,
       activo: true,
       tipo_usuario: 'supervisor',
     });
-    expect(container.textContent).toBe('Supervisor');
+    expect(container.textContent).toBe('Con acceso');
     expect(container.querySelector('.badge-active')).toBeTruthy();
   });
 
-  test('usuario inactivo muestra "Inactivo"', () => {
+  test('usuario inactivo muestra "Sin acceso"', () => {
     const container = renderBadge({
       tiene_usuario: true,
       pendiente: false,
       activo: false,
       tipo_usuario: 'supervisor',
     });
-    expect(container.textContent).toBe('Inactivo');
+    expect(container.textContent).toBe('Sin acceso');
     expect(container.querySelector('.badge-inactive')).toBeTruthy();
   });
 });

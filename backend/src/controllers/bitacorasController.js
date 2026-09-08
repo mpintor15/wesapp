@@ -59,6 +59,7 @@ const VISIT_QUERY_FIELDS = new Set([
   'page',
   'pageSize',
   'estado',
+  'ubicacion_id',
   'creator',
   'fecha_desde',
   'fecha_hasta',
@@ -214,6 +215,9 @@ const normalizeVisitFilters = (query = {}) => {
   if (estado && !VISIT_STATES.has(estado)) {
     throw createHttpError(400, 'estado debe ser ABIERTA, CERRADA, ANULADA o NO_AUTORIZADA');
   }
+  const ubicacionId = query.ubicacion_id
+    ? parsePositiveInteger(query.ubicacion_id, 'La Urbanización es inválida')
+    : undefined;
   const fechaDesde = query.fecha_desde || undefined;
   const fechaHasta = query.fecha_hasta || undefined;
   if (fechaDesde && !isValidDateString(fechaDesde)) {
@@ -240,6 +244,7 @@ const normalizeVisitFilters = (query = {}) => {
   };
   return {
     estado,
+    ubicacionId,
     fechaDesde,
     fechaHasta,
     creator: textFilter(query.creator, 'creator'),

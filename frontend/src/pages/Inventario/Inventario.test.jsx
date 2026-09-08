@@ -281,31 +281,7 @@ describe('Inventario ubicación inline en formulario de artículos', () => {
     page.unmount();
   });
 
-  test('movimientos con permiso operativo sin ubicaciones.crear usa solo selector existente', async () => {
-    useAuth.mockReturnValue({
-      user: {
-        id: 6,
-        usuario: 'movimientos-create',
-        tipo_usuario: 'custom',
-        permisos: ['inventario.movimientos.crear'],
-      },
-    });
-    const page = await renderPage();
-
-    await page.click(page.button('Movimientos'));
-    await page.click(page.button('Crear nuevo movimiento'));
-    page.change('#mov-cliente-destino', '10');
-
-    expect(page.query('#mov-destino').tagName).toBe('SELECT');
-    expect(page.query('#mov-destino').getAttribute('name')).toBe('ubicacion_destino_id');
-    expect(page.text()).toContain(
-      'Puedes trasladar a una ubicación existente, pero no crear una nueva desde este formulario.'
-    );
-
-    page.unmount();
-  });
-
-  test('movimientos con ubicaciones.crear permite destino nuevo por nombre', async () => {
+  test('movimientos siempre usa un selector de ubicaciones existentes del cliente, aun con ubicaciones.crear', async () => {
     useAuth.mockReturnValue({
       user: {
         id: 7,
@@ -320,11 +296,8 @@ describe('Inventario ubicación inline en formulario de artículos', () => {
     await page.click(page.button('Crear nuevo movimiento'));
     page.change('#mov-cliente-destino', '10');
 
-    expect(page.query('#mov-destino').tagName).toBe('INPUT');
-    expect(page.query('#mov-destino').getAttribute('name')).toBe('ubicacion_destino_nombre');
-    expect(page.text()).toContain(
-      'Si no existe para el cliente seleccionado, se creará una nueva ubicación.'
-    );
+    expect(page.query('#mov-destino').tagName).toBe('SELECT');
+    expect(page.query('#mov-destino').getAttribute('name')).toBe('ubicacion_destino_id');
 
     page.unmount();
   });

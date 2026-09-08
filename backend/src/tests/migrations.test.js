@@ -1824,4 +1824,61 @@ describe('database migrations', () => {
       expect(version.rowCount).toBe(1);
     });
   });
+
+  test('migration 040 revokes system access when a colaborador becomes inactive', async () => {
+    const sql = await readMigration(40);
+    expect(hasSchemaVersionRegistration(sql, 40)).toBe(true);
+
+    await withTempDatabase('wesapp_migration_colaborador_inactivo_040', async (pool) => {
+      const schemaSql = await fs.readFile(schemaPath, 'utf8');
+      await pool.query(schemaSql);
+      const migrations = await listMigrations();
+      for (const migration of migrations) {
+        if (migration.version < 29 || migration.version > 39) {
+          continue;
+        }
+        const migrationSql = await fs.readFile(
+          path.join(migrationsDir, migration.fileName),
+          'utf8'
+        );
+        await pool.query(migrationSql);
+      }
+
+      await applyMigrationInTransaction(pool, 40);
+
+      const colaborador = await pool.query(
+        `INSERT INTO colaboradores (nombres_completos, cedula, fecha_nacimiento, cargo, estado)
+         VALUES ('Test Colaborador', 'MIG040-001', '1990-01-01', 'Guardia', 'activo')
+         RETURNING id`
+      );
+      const colaboradorId = colaborador.rows[0].id;
+      await pool.query(
+        `INSERT INTO usuarios (usuario, password_hash, tipo_usuario, colaborador_id, activo)
+         VALUES ('mig040user', 'hash', 'guardia', $1, TRUE)`,
+        [colaboradorId]
+      );
+
+      await pool.query('UPDATE colaboradores SET estado = $1 WHERE id = $2', [
+        'inactivo',
+        colaboradorId,
+      ]);
+      const revoked = await pool.query('SELECT activo FROM usuarios WHERE colaborador_id = $1', [
+        colaboradorId,
+      ]);
+      expect(revoked.rows[0].activo).toBe(false);
+
+      await pool.query('UPDATE colaboradores SET estado = $1 WHERE id = $2', [
+        'activo',
+        colaboradorId,
+      ]);
+      const stillRevoked = await pool.query(
+        'SELECT activo FROM usuarios WHERE colaborador_id = $1',
+        [colaboradorId]
+      );
+      expect(stillRevoked.rows[0].activo).toBe(false);
+
+      const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 40');
+      expect(version.rowCount).toBe(1);
+    });
+  });
 });

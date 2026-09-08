@@ -731,4 +731,53 @@ describe('HistorialVisitas', () => {
     act(() => root.unmount());
     container.remove();
   });
+
+  test('con varias urbanizaciones, selecciona la primera automáticamente y permite cambiarla para evitar mezclar Manzana/Villa', async () => {
+    bitacorasService.getVisitas.mockResolvedValue({
+      success: true,
+      data: [],
+      meta: { page: 1, pageSize: 25, totalItems: 0, totalPages: 0 },
+    });
+    const ubicaciones = [
+      { id: 5, nombre: 'Urbanización Norte', tipo_punto: 'URBANIZACION' },
+      { id: 6, nombre: 'Urbanización Sur', tipo_punto: 'URBANIZACION' },
+      { id: 7, nombre: 'Garita principal', tipo_punto: 'GENERAL' },
+    ];
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <HistorialVisitas
+          ubicaciones={ubicaciones}
+          refreshKey={0}
+          onChanged={jest.fn()}
+          showToast={jest.fn()}
+        />
+      )
+    );
+    await act(async () => flush());
+
+    const select = container.querySelector('#visitas-filter-ubicacion');
+    expect(select).not.toBeNull();
+    expect(Array.from(select.options).map((option) => option.textContent)).toEqual([
+      'Urbanización Norte',
+      'Urbanización Sur',
+    ]);
+    expect(bitacorasService.getVisitas).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ubicacion_id: 5 })
+    );
+
+    act(() => setValue(select, '6'));
+    await act(async () => {
+      findButtonByText(container, 'Aplicar').click();
+      await flush();
+    });
+    expect(bitacorasService.getVisitas).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ubicacion_id: 6 })
+    );
+
+    act(() => root.unmount());
+    container.remove();
+  });
 });

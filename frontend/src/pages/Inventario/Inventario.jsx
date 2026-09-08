@@ -42,7 +42,6 @@ import {
 } from './utils/inventarioHelpers';
 import {
   canCreateLocationFromArticle,
-  canCreateLocationFromMovement,
   getInventoryPermissions,
   INVENTORY_ACTIONS,
 } from './utils/inventarioPermissions';
@@ -145,7 +144,6 @@ const Inventario = () => {
   const canDarBajaArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_BAJA);
   const canEditArticulo = inventoryPermissions.can(INVENTORY_ACTIONS.ARTICULOS_EDIT);
   const canCreateUbicacionFromArticle = canCreateLocationFromArticle(user);
-  const canCreateUbicacionFromMovement = canCreateLocationFromMovement(user);
   const showArticuloActions = canEditArticulo || canDeleteArticulo || canDarBajaArticulo;
   const articuloActionCount = [canEditArticulo, canDarBajaArticulo, canDeleteArticulo].filter(
     Boolean
@@ -581,40 +579,6 @@ const Inventario = () => {
     });
   };
 
-  const handleVoidBaja = (baja) => {
-    openReasonAction({
-      type: 'voidBaja',
-      title: 'Anular baja',
-      confirmText: 'Anular baja',
-      entityLabel: 'Baja',
-      entityName: baja.nombre_articulo || baja.numero_serie || baja.id,
-      target: baja,
-      messages: [
-        'La anulación intentará restaurar el stock asociado a esta baja.',
-        'La baja permanecerá visible como anulada.',
-        'Se requiere un motivo entre 10 y 500 caracteres.',
-      ],
-      placeholder: 'Describe el motivo de la anulación',
-    });
-  };
-
-  const handleDeleteBaja = (baja) => {
-    openReasonAction({
-      type: 'deleteBaja',
-      title: 'Eliminar baja administrativamente',
-      confirmText: 'Eliminar administrativamente',
-      entityLabel: 'Baja',
-      entityName: baja.nombre_articulo || baja.numero_serie || baja.id,
-      target: baja,
-      messages: [
-        'Esta eliminación es administrativa y conserva el historial.',
-        'La baja debe estar anulada antes de eliminarse administrativamente.',
-        'Se requiere un motivo entre 10 y 500 caracteres.',
-      ],
-      placeholder: 'Describe el motivo administrativo',
-    });
-  };
-
   const handleConfirmReasonAction = withReasonSubmit(async () => {
     if (!reasonAction) return;
     const validationError = validateMotivoAdministrativo(reasonMotivo);
@@ -629,8 +593,6 @@ const Inventario = () => {
       deleteArticulo: () => inventarioService.deleteArticulo(targetId, motivo),
       voidMovimiento: () => inventarioService.anularMovimiento(targetId, motivo),
       deleteMovimiento: () => inventarioService.eliminarMovimiento(targetId, motivo),
-      voidBaja: () => inventarioService.anularBaja(targetId, motivo),
-      deleteBaja: () => inventarioService.eliminarBaja(targetId, motivo),
     };
 
     const result = await operations[reasonAction.type]?.();
@@ -660,19 +622,6 @@ const Inventario = () => {
 
     if (reasonAction.type === 'deleteMovimiento') {
       await loadMovimientos(getMovimientosListParams());
-      return;
-    }
-
-    if (reasonAction.type === 'voidBaja') {
-      await Promise.all([
-        loadBajas(getActiveBajasFilterParams()),
-        fetchArticulos(getArticulosListParams(), true),
-      ]);
-      return;
-    }
-
-    if (reasonAction.type === 'deleteBaja') {
-      await loadBajas(getActiveBajasFilterParams());
     }
   });
 
@@ -875,13 +824,10 @@ const Inventario = () => {
           bajasTotalPages={bajasTotalPages}
           bajasFiltersDraft={bajasFiltersDraft}
           bajasLoading={bajasLoading}
-          onDeleteBaja={handleDeleteBaja}
           onApplyFilters={handleApplyBajasFilters}
           onClearFilters={handleClearBajasFilters}
           onDraftChange={handleBajasDraftChange}
           onPageChange={handleBajasPageChange}
-          onVoidBaja={handleVoidBaja}
-          permissions={inventoryPermissions}
         />
       )}
 
@@ -943,7 +889,6 @@ const Inventario = () => {
       {movimientoFormState.isOpen && (
         <MovimientoModal
           catalogArticulos={catalogArticulos}
-          canCreateDestinoUbicacion={canCreateUbicacionFromMovement}
           clientes={clientes}
           filterArticulos={movimientoFormState.filterArticulos}
           isSavingMovimiento={isSavingMovimiento}

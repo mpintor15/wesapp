@@ -2044,6 +2044,35 @@ describe('bitacorasController visitas urbanas', () => {
     );
   });
 
+  test('acepta filtro ubicacion_id para acotar visitas a una sola urbanización', async () => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
+    });
+    const res = makeResponse();
+
+    await controller.getVisitas(makeRequest({ query: { ubicacion_id: '5' } }), res);
+
+    expect(repository.findVisits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ ubicacionId: 5 }),
+      })
+    );
+  });
+
+  test('rechaza ubicacion_id inválido en Visitas', async () => {
+    db.query.mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
+    });
+    const res = makeResponse();
+
+    await controller.getVisitas(makeRequest({ query: { ubicacion_id: 'abc' } }), res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(repository.findVisits).not.toHaveBeenCalled();
+  });
+
   test('regresión: Visitas acepta sortBy=entrada_at (default del frontend) junto con filtros y paginación', async () => {
     db.query.mockResolvedValue({
       rowCount: 1,

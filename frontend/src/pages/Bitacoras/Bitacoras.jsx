@@ -300,6 +300,7 @@ const Bitacoras = () => {
             />
           ) : activeView === 'visitas' && canViewHistorial ? (
             <HistorialVisitas
+              ubicaciones={ubicaciones}
               refreshKey={historyRefreshKey}
               onChanged={() => setHistoryRefreshKey((current) => current + 1)}
               showToast={showToast}
