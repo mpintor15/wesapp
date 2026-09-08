@@ -75,6 +75,7 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
   const [noActiveForm, setNoActiveForm] = useState(false);
   const [errors, setErrors] = useState({});
   const [motivoNoAutorizacion, setMotivoNoAutorizacion] = useState('');
+  const [showMotivoNoAutorizacion, setShowMotivoNoAutorizacion] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const locationRef = useRef(null);
   const manzanaRef = useRef(null);
@@ -303,9 +304,9 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
     showToast(getVisibleErrorMessage(result, 'No se pudo registrar la visita.'), 'error');
   };
 
-  return (
+  const mainModal = (
     <AppModal
-      isOpen={isOpen}
+      isOpen={isOpen && !showMotivoNoAutorizacion}
       onClose={onClose}
       title="Registrar Visita"
       size="lg"
@@ -401,27 +402,6 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
                 </select>
                 {errors.tipo_visita_id ? (
                   <span className="field-error">{errors.tipo_visita_id}</span>
-                ) : null}
-              </div>
-              <div className="form-group bitacoras-field-span-2">
-                <label htmlFor="visita-motivo-no-autorizacion">
-                  Motivo de no autorización
-                  <span className="bitacoras-field-hint"> (solo si vas a rechazar la visita)</span>
-                </label>
-                <textarea
-                  id="visita-motivo-no-autorizacion"
-                  value={motivoNoAutorizacion}
-                  onChange={(event) => {
-                    setMotivoNoAutorizacion(event.target.value);
-                    setErrors((current) => ({ ...current, motivo_no_autorizacion: '' }));
-                  }}
-                  placeholder="Explica por qué no se autoriza el ingreso..."
-                  rows={2}
-                  maxLength={200}
-                  aria-invalid={Boolean(errors.motivo_no_autorizacion)}
-                />
-                {errors.motivo_no_autorizacion ? (
-                  <span className="field-error">{errors.motivo_no_autorizacion}</span>
                 ) : null}
               </div>
               {loadError ? <p className="bitacoras-filter-error">{loadError}</p> : null}
@@ -680,10 +660,10 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
           <button
             className="btn btn-danger"
             type="button"
-            onClick={() => handleSubmit(false)}
+            onClick={() => setShowMotivoNoAutorizacion(true)}
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Registrando...' : 'No autorizada'}
+            No autorizada
           </button>
           <button
             className="btn btn-modal-clear"
@@ -696,6 +676,68 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
         </AppModal.Footer>
       </form>
     </AppModal>
+  );
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {mainModal}
+      {showMotivoNoAutorizacion ? (
+        <AppModal
+          isOpen
+          onClose={onClose}
+          closeOnBackdrop={!isSubmitting}
+          closeButtonDisabled={isSubmitting}
+          title="Motivo de no autorización"
+          size="md"
+          className="bitacoras-rechazo-visita-modal"
+        >
+          <AppModal.Header />
+          <AppModal.Body>
+            <div className="form-group">
+              <label htmlFor="visita-motivo-no-autorizacion">
+                Explica por qué no se autoriza el ingreso
+              </label>
+              <textarea
+                id="visita-motivo-no-autorizacion"
+                value={motivoNoAutorizacion}
+                onChange={(event) => {
+                  setMotivoNoAutorizacion(event.target.value);
+                  setErrors((current) => ({ ...current, motivo_no_autorizacion: '' }));
+                }}
+                placeholder="Explica por qué no se autoriza el ingreso..."
+                rows={3}
+                maxLength={200}
+                autoFocus
+                aria-invalid={Boolean(errors.motivo_no_autorizacion)}
+              />
+              {errors.motivo_no_autorizacion ? (
+                <span className="field-error">{errors.motivo_no_autorizacion}</span>
+              ) : null}
+            </div>
+          </AppModal.Body>
+          <AppModal.Footer className="modal-buttons">
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={() => handleSubmit(false)}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Registrando...' : 'Confirmar no autorizada'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-modal-clear"
+              onClick={() => setShowMotivoNoAutorizacion(false)}
+              disabled={isSubmitting}
+            >
+              Volver
+            </button>
+          </AppModal.Footer>
+        </AppModal>
+      ) : null}
+    </>
   );
 };
 

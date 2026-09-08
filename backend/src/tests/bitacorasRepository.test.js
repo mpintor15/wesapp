@@ -523,7 +523,7 @@ describe('bitacorasRepository', () => {
     ]);
   });
 
-  test('resumen cuenta registros, visitas ABIERTA y formularios respetando el scope', async () => {
+  test('resumen cuenta registros, todas las visitas y formularios respetando el scope', async () => {
     db.query
       .mockResolvedValueOnce({ rows: [{ total: 12 }] })
       .mockResolvedValueOnce({ rows: [{ total: 3 }] })
@@ -540,8 +540,8 @@ describe('bitacorasRepository', () => {
     expect(db.query.mock.calls[0][0]).toContain('uu.usuario_id = $1');
     expect(db.query.mock.calls[0][1]).toEqual([7]);
     expect(db.query.mock.calls[1][0]).toContain('FROM bitacora_visitas bv');
-    expect(db.query.mock.calls[1][0]).toContain('bv.estado = $2');
-    expect(db.query.mock.calls[1][1]).toEqual([7, 'ABIERTA']);
+    expect(db.query.mock.calls[1][0]).not.toContain('bv.estado');
+    expect(db.query.mock.calls[1][1]).toEqual([7]);
     expect(db.query.mock.calls[2][0]).toContain('FROM bitacora_visit_form_versions bfv');
     expect(db.query.mock.calls[2][0]).toContain('bfv.deleted_at IS NULL');
     expect(db.query.mock.calls[2][1]).toEqual([7]);

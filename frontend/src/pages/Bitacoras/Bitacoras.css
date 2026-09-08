@@ -259,7 +259,7 @@
 
 .bitacoras-author-filter {
   width: auto;
-  flex: 2 1 300px;
+  flex: 1 1 300px;
 }
 
 .bitacoras-location-filter,
@@ -272,7 +272,7 @@
 }
 
 .bitacoras-status-filter {
-  flex: 0 1 150px;
+  flex: 1 1 150px;
 }
 
 .bitacoras-urbanizacion-filter {
@@ -281,7 +281,7 @@
 }
 
 .bitacoras-date-filters {
-  flex: 0 1 310px;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
