@@ -90,7 +90,7 @@ describe('permission matrix', () => {
     expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS)).toBe(true);
     expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR)).toBe(true);
     expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR)).toBe(true);
-    expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(false);
+    expect(hasPermission('supervisor', PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(true);
 
     expect(hasPermission('secretario', PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
     expect(hasPermission('contador', PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);

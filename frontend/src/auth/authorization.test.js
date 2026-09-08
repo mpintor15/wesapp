@@ -68,7 +68,7 @@ describe('authorization', () => {
     expect(can(user('monitorista'), PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR)).toBe(true);
     expect(can(user('supervisor'), PERMISSIONS.BITACORAS_REGISTRO_CREAR)).toBe(true);
     expect(can(user('supervisor'), PERMISSIONS.BITACORAS_URBANIZACION_ADMINISTRAR)).toBe(true);
-    expect(can(user('supervisor'), PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(false);
+    expect(can(user('supervisor'), PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(true);
     expect(can(user('secretario'), PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
     expect(can(user('contador'), PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
     expect(can(user('gerente'), PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(true);
