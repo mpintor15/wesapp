@@ -378,7 +378,7 @@ const HistorialVisitas = ({
               placeholder="Visitante, placa, casa o titular..."
             />
           </div>
-          <div className="ff-state bitacoras-status-filter">
+          <div className="ff-state bitacoras-status-filter bitacoras-urbanizacion-filter">
             <label className="ff-state-label" htmlFor="visitas-filter-ubicacion">
               Urbanización
             </label>

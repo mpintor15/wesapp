@@ -275,6 +275,11 @@
   flex: 0 1 150px;
 }
 
+.bitacoras-urbanizacion-filter {
+  flex: 0 1 210px;
+  min-width: 180px;
+}
+
 .bitacoras-date-filters {
   flex: 0 1 310px;
   min-width: 0;
