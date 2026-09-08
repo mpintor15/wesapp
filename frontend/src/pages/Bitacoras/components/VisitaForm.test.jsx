@@ -553,8 +553,24 @@ describe('VisitaForm', () => {
       (button) => button.textContent === 'No autorizada'
     );
 
+    // regresión: el cuadro de motivo no debe existir hasta el primer clic en "No autorizada".
+    expect(view.container.querySelector('#visita-motivo-no-autorizacion')).toBeNull();
+
     await act(async () => {
       rejectButton.click();
+      await flush();
+    });
+    // regresión: el motivo aparece en un segundo popup, no en el formulario principal.
+    expect(view.container.textContent).not.toContain('Registrar Visita');
+    expect(view.container.querySelector('#visita-motivo-no-autorizacion')).not.toBeNull();
+    expect(bitacorasService.createVisita).not.toHaveBeenCalled();
+
+    const confirmButton = Array.from(view.container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Confirmar no autorizada'
+    );
+
+    await act(async () => {
+      confirmButton.click();
       await flush();
     });
     expect(view.container.textContent).toContain('El motivo de no autorización es requerido.');
@@ -568,7 +584,7 @@ describe('VisitaForm', () => {
       await flush();
     });
     await act(async () => {
-      rejectButton.click();
+      confirmButton.click();
       await flush();
     });
 

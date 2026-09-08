@@ -219,7 +219,7 @@ const countHistoryScoped = async ({ hasGlobalScope, userId, executor = db }) => 
   return result.rows[0]?.total || 0;
 };
 
-const countVisitasAbiertasScoped = async ({ hasGlobalScope, userId, executor = db }) => {
+const countVisitasScoped = async ({ hasGlobalScope, userId, executor = db }) => {
   const params = [];
   const scopeCondition = buildScopeCondition({
     hasGlobalScope,
@@ -227,13 +227,10 @@ const countVisitasAbiertasScoped = async ({ hasGlobalScope, userId, executor = d
     params,
     locationExpression: 'bv.ubicacion_id',
   });
-  const conditions = scopeCondition ? [scopeCondition] : [];
-  params.push('ABIERTA');
-  conditions.push(`bv.estado = $${params.length}`);
-  const result = await executor.query(
-    `SELECT COUNT(*)::int AS total FROM bitacora_visitas bv WHERE ${conditions.join(' AND ')}`,
-    params
-  );
+  const query = scopeCondition
+    ? `SELECT COUNT(*)::int AS total FROM bitacora_visitas bv WHERE ${scopeCondition}`
+    : 'SELECT COUNT(*)::int AS total FROM bitacora_visitas bv';
+  const result = await executor.query(query, params);
   return result.rows[0]?.total || 0;
 };
 
@@ -264,7 +261,7 @@ const getBitacorasResumen = async ({
 }) => {
   const [registros, visitas, formularios] = await Promise.all([
     includeHistorial ? countHistoryScoped({ hasGlobalScope, userId, executor }) : null,
-    includeHistorial ? countVisitasAbiertasScoped({ hasGlobalScope, userId, executor }) : null,
+    includeHistorial ? countVisitasScoped({ hasGlobalScope, userId, executor }) : null,
     includeFormularios ? countVisitFormsScoped({ hasGlobalScope, userId, executor }) : null,
   ]);
   return { registros, visitas, formularios };

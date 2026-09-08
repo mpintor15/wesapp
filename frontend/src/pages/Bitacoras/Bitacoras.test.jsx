@@ -252,7 +252,6 @@ describe('Bitacoras', () => {
     });
     expect(bitacorasService.exportVisitas).toHaveBeenCalledWith({
       pageSize: 25,
-      estado: 'ABIERTA',
       ubicacion_id: 8,
       sortBy: 'entrada_at',
       sortOrder: 'desc',

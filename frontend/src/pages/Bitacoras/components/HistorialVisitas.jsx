@@ -11,7 +11,7 @@ import { formatLocalTimestamp } from '../utils/bitacorasHelpers';
 
 const PAGE_SIZE = 25;
 const EMPTY_FILTERS = {
-  estado: 'ABIERTA',
+  estado: '',
   ubicacion_id: '',
   creator: '',
   fecha_desde: '',
@@ -87,19 +87,21 @@ const visitantesSummary = (visit) => visitantesList(visit).join(', ');
 // salida y ya se registró) vs REGISTRADO (nunca la requirió). ANULADA no
 // forma parte de este pase de trabajo y se conserva tal cual.
 const visitEstadoLabel = (visit) => {
-  if (visit.estado === 'ABIERTA') return 'ADENTRO';
+  if (visit.estado === 'ABIERTA') return 'AUTORIZADO';
   if (visit.estado === 'NO_AUTORIZADA') return 'NO AUTORIZADO';
-  if (visit.estado === 'CERRADA') return visit.requiere_salida ? 'SALIÓ' : 'REGISTRADO';
+  if (visit.estado === 'CERRADA') return visit.requiere_salida ? 'SALIÓ' : 'AUTORIZADO';
   return visit.estado;
 };
 
-// ADENTRO -> celda vacía (sin registrar todavía); REGISTRADO/NO AUTORIZADO
-// -> "-" centrado (nunca hay salida real que mostrar); cualquier otro caso
-// (SALIÓ, ANULADA) -> fecha y hora reales de salida_at.
+// Visita aún ABIERTA (esperando salida) -> celda vacía; visita autorizada sin
+// requerir salida, o no autorizada -> "-" centrado (nunca hay salida real que
+// mostrar); cualquier otro caso (SALIÓ, ANULADA) -> fecha y hora reales de
+// salida_at.
 const salidaLabel = (visit) => {
-  const estadoLabel = visitEstadoLabel(visit);
-  if (estadoLabel === 'ADENTRO') return '';
-  if (estadoLabel === 'REGISTRADO' || estadoLabel === 'NO AUTORIZADO') return '-';
+  if (visit.estado === 'ABIERTA') return '';
+  if (visit.estado === 'NO_AUTORIZADA' || (visit.estado === 'CERRADA' && !visit.requiere_salida)) {
+    return '-';
+  }
   return formatLocalTimestamp(visit.salida_at) || '—';
 };
 

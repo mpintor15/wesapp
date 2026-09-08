@@ -272,7 +272,7 @@ describe('HistorialVisitas', () => {
     container.remove();
   });
 
-  test('el reporte usa los mismos filtros efectivos que la tabla, incluido estado=ABIERTA por defecto', async () => {
+  test('el reporte usa los mismos filtros efectivos que la tabla, sin estado por defecto (muestra todas)', async () => {
     const onFiltersChange = jest.fn();
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -290,7 +290,7 @@ describe('HistorialVisitas', () => {
     await act(async () => flush());
 
     expect(onFiltersChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ estado: 'ABIERTA', pageSize: 25 })
+      expect.not.objectContaining({ estado: expect.anything() })
     );
 
     const estadoSelect = container.querySelector('#visitas-filter-estado');
@@ -564,7 +564,7 @@ describe('HistorialVisitas', () => {
     container.remove();
   });
 
-  test('regresión: Estado muestra ADENTRO/SALIÓ/REGISTRADO/NO AUTORIZADO y NO_AUTORIZADA no ofrece acciones', async () => {
+  test('regresión: Estado muestra AUTORIZADO/SALIÓ/NO AUTORIZADO y NO_AUTORIZADA no ofrece acciones', async () => {
     bitacorasService.getVisitas.mockResolvedValue({
       success: true,
       data: [
@@ -608,12 +608,12 @@ describe('HistorialVisitas', () => {
 
     const rows = Array.from(document.querySelectorAll('.bitacoras-visits-table tbody tr'));
     const estados = rows.map((row) => Array.from(row.querySelectorAll('td'))[7].textContent);
-    expect(estados).toEqual(['ADENTRO', 'SALIÓ', 'REGISTRADO', 'NO AUTORIZADO']);
+    expect(estados).toEqual(['AUTORIZADO', 'SALIÓ', 'AUTORIZADO', 'NO AUTORIZADO']);
 
     // regresión: mismo patrón visual (badge) que FormStatus en Formularios.
     const badges = rows.map((row) => row.querySelector('td .badge'));
     expect(badges.every((badge) => badge)).toBe(true);
-    expect(badges[0].className).toContain('badge-active'); // ADENTRO
+    expect(badges[0].className).toContain('badge-active'); // AUTORIZADO
     expect(badges[3].className).toContain('badge-inactive'); // NO AUTORIZADO
 
     // regresión: columna Observación solo tiene contenido para NO AUTORIZADO.
@@ -725,7 +725,7 @@ describe('HistorialVisitas', () => {
     await act(async () => flush());
 
     expect(container.querySelector('[aria-label="Registrar salida"]')).toBeNull();
-    expect(container.textContent).toContain('REGISTRADO');
+    expect(container.textContent).toContain('AUTORIZADO');
     expect(bitacorasService.closeVisita).not.toHaveBeenCalled();
 
     act(() => root.unmount());
