@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useId, useMemo, useRef, useState } from 'react';
+import SelectLoading from './SelectLoading';
 import './SelectionControls.css';
 
 const normalize = (value) =>
@@ -108,6 +109,7 @@ const SearchableSelect = forwardRef(
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
         />
+        {loading ? <SelectLoading message={loadingMessage} /> : null}
         {open && !disabled && !loading ? (
           <ul id={listboxId} className="selection-popover" role="listbox">
             {filtered.length === 0 ? (

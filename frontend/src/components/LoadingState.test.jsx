@@ -33,16 +33,15 @@ describe('LoadingState', () => {
     unmount();
   });
 
-  test('muestra el bloque centrado cuando carga por primera vez sin filas', () => {
+  test('muestra el esqueleto de tabla cuando carga por primera vez sin filas', () => {
     const { container, unmount } = renderLoadingState({
       loading: true,
       hasRows: false,
       message: 'Cargando facturas...',
     });
 
-    expect(container.querySelector('.loading-spinner-wrap')).not.toBeNull();
-    expect(container.querySelector('.spinner')).not.toBeNull();
-    expect(container.querySelector('.spinner--sm')).toBeNull();
+    expect(container.querySelector('.table-skeleton')).not.toBeNull();
+    expect(container.querySelectorAll('.table-skeleton__row')).toHaveLength(5);
     expect(container.textContent).toBe('Cargando facturas...');
     expect(container.querySelector('.inline-loading-indicator')).toBeNull();
 

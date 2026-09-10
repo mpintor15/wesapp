@@ -1,3 +1,49 @@
+/* Filtros colapsables (compartido por Inventario, Cuentas, Configuracion,
+   Bitacoras y Personal): en desktop el botón se oculta y el contenido
+   siempre se muestra; en móvil arranca colapsado. */
+.collapsible-filters__toggle {
+  display: none;
+}
+
+.collapsible-filters__body {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .collapsible-filters__toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .collapsible-filters__chevron {
+    transition: transform var(--transition-fast, 0.15s ease);
+  }
+
+  .collapsible-filters__chevron.is-open {
+    transform: rotate(180deg);
+  }
+
+  .collapsible-filters__body {
+    display: none;
+  }
+
+  .collapsible-filters__body.is-open {
+    display: block;
+  }
+}
+
 /* Shared table shell used by Inventario & Cuentas */
 
 .app-table-shell {
@@ -701,6 +747,12 @@
   .app-table-shell {
     max-width: 100%;
     min-width: 0;
+  }
+
+  /* Área táctil mínima recomendada (44x44px) sin agrandar el ícono visual. */
+  .app-icon-btn {
+    width: 44px !important;
+    height: 44px !important;
   }
 
   .ff-filter-row {

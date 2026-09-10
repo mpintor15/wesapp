@@ -275,6 +275,55 @@ code {
   font-weight: 700;
 }
 
+.route-loading {
+  min-height: 60vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  color: var(--color-text-muted);
+}
+
+.table-skeleton {
+  display: grid;
+  gap: 10px;
+  padding: 18px 0;
+}
+
+.table-skeleton__row {
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-muted),
+    var(--color-border),
+    var(--color-surface-muted)
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+.select-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-muted);
+  font-size: 0.84rem;
+}
+
+@keyframes skeleton-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .table-skeleton__row {
+    animation: none;
+  }
+}
+
 /* ── Modal overlay (shared) ─────────────────────────────── */
 .modal-overlay {
   position: fixed;
@@ -590,6 +639,13 @@ code {
     min-width: 0;
     font-size: 16px;
     box-sizing: border-box;
+  }
+
+  /* Área táctil mínima recomendada (44x44px) sin agrandar el tamaño visual. */
+  .app-modal__close {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
   }
 }
 
@@ -1201,6 +1257,13 @@ code {
       max(12px, env(safe-area-inset-bottom, 0px));
     align-items: flex-start;
     overflow: hidden;
+  }
+
+  /* Área táctil mínima recomendada (44x44px) sin agrandar el tamaño visual
+     del ícono, para no romper la densidad de las tablas en desktop. */
+  .action-btn {
+    width: 44px;
+    height: 44px;
   }
 
   .modal {

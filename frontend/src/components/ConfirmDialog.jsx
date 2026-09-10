@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import AppModal from './AppModal';
+import ButtonLoading from './ButtonLoading';
 import './ConfirmDialog.css';
 
 /**
@@ -81,8 +82,9 @@ const ConfirmDialog = ({
           aria-busy={isSubmitting}
           aria-label={visibleConfirmText}
         >
-          {isSubmitting && <span className="spinner spinner--sm" />}
-          {visibleConfirmText}
+          <ButtonLoading loading={isSubmitting} loadingText={visibleConfirmText}>
+            {confirmText}
+          </ButtonLoading>
         </button>
       </AppModal.Footer>
     </AppModal>
