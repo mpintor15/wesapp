@@ -19,6 +19,7 @@ const HISTORY_PARAM_KEYS = [
 const VISIT_PARAM_KEYS = [
   'page',
   'pageSize',
+  'ubicacion_id',
   'estado',
   'creator',
   'fecha_desde',
@@ -77,24 +78,6 @@ const bitacorasService = {
       return response.data;
     } catch (error) {
       return buildServiceFailure(error, 'Error al obtener Ubicaciones de Bitácora');
-    }
-  },
-
-  async getManzanas(ubicacionId) {
-    try {
-      const response = await api.get(`/bitacoras/ubicaciones/${ubicacionId}/manzanas`);
-      return response.data;
-    } catch (error) {
-      return buildServiceFailure(error, 'Error al obtener Manzanas de Bitácora');
-    }
-  },
-
-  async getVillas(manzanaId) {
-    try {
-      const response = await api.get(`/bitacoras/manzanas/${manzanaId}/villas`);
-      return response.data;
-    } catch (error) {
-      return buildServiceFailure(error, 'Error al obtener Villas de Bitácora');
     }
   },
 
@@ -186,8 +169,8 @@ const bitacorasService = {
   async createVisita(data = {}) {
     const payload = pickDefined(data, [
       'ubicacion_id',
-      'manzana_id',
-      'villa_id',
+      'manzana',
+      'villa',
       'visitante_nombre',
       'visitante_documento',
       'visitante_telefono',

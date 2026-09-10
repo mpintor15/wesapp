@@ -10,20 +10,15 @@ jest.mock('../utils/audit', () => ({
 
 jest.mock('../repositories/bitacorasRepository', () => ({
   getBitacorasResumen: jest.fn(),
-  findActiveBlocksForLocation: jest.fn(),
-  findActivePrincipalResidentForVilla: jest.fn(),
   findActiveVisitFormForLocation: jest.fn(),
   findVisitForms: jest.fn(),
   findVisitFormCreators: jest.fn(),
-  findActiveVillasForBlock: jest.fn(),
   findHistory: jest.fn(),
+  findHistoryAutores: jest.fn(),
   findLockedVisit: jest.fn(),
-  findLockedBlock: jest.fn(),
   findLockedUserLocationAssignment: jest.fn(),
-  findLockedVilla: jest.fn(),
   findVisits: jest.fn(),
   findVisitCreators: jest.fn(),
-  findVisibleBlock: jest.fn(),
   findVisibleLocation: jest.fn(),
   findVisibleLocations: jest.fn(),
   insertBitacoraRegistro: jest.fn(),
@@ -39,6 +34,7 @@ jest.mock('../repositories/bitacorasRepository', () => ({
   createVisit: jest.fn(),
   closeVisit: jest.fn(),
   cancelVisit: jest.fn(),
+  userHasLocationAccess: jest.fn(),
 }));
 
 const db = require('../config/database');
@@ -129,24 +125,6 @@ const transactionForCreate = ({
 beforeEach(() => {
   jest.clearAllMocks();
   audit.logAuditStrict.mockResolvedValue(undefined);
-  repository.findLockedBlock.mockResolvedValue({
-    id: 8,
-    ubicacion_id: 3,
-    nombre: 'A',
-    estado: 'activo',
-  });
-  repository.findLockedVilla.mockResolvedValue({
-    id: 9,
-    manzana_id: 8,
-    identificador: 'V1',
-    estado: 'activo',
-  });
-  repository.findActivePrincipalResidentForVilla.mockResolvedValue({
-    id: 15,
-    villa_id: 9,
-    nombre: 'Ana Titular',
-    contacto: '0991234567',
-  });
   repository.findVisitFormCreators.mockResolvedValue([{ id: 7, usuario: 'guardia' }]);
   repository.hasVisitFormHistory.mockResolvedValue(true);
   repository.findActiveVisitFormForLocation.mockResolvedValue({
@@ -239,15 +217,7 @@ describe('bitacorasController.createRegistro', () => {
     const insertCall = client.query.mock.calls.find(([sql]) =>
       String(sql).includes('INSERT INTO bitacora_registros')
     );
-    expect(insertCall[1]).toEqual([
-      3,
-      null,
-      null,
-      7,
-      21,
-      '2026-08-20T14:30:00',
-      'Novedad registrada',
-    ]);
+    expect(insertCall[1]).toEqual([3, 7, 21, '2026-08-20T14:30:00', 'Novedad registrada']);
     expect(audit.logAuditStrict).toHaveBeenCalledWith(
       client,
       expect.objectContaining({
@@ -258,106 +228,6 @@ describe('bitacorasController.createRegistro', () => {
       })
     );
   });
-
-  test('valida y persiste Manzana y Villa activas de la cadena seleccionada', async () => {
-    const urbanCreated = { ...createdRow, manzana_id: 8, villa_id: 9 };
-    const client = transactionForCreate({
-      created: urbanCreated,
-      locationType: 'URBANIZACION',
-    });
-    const req = makeRequest({
-      body: { ...makeRequest().body, manzana_id: 8, villa_id: 9 },
-    });
-
-    await controller.createRegistro(req, makeResponse());
-
-    expect(repository.findLockedBlock).toHaveBeenCalledWith({ client, blockId: 8 });
-    expect(repository.findLockedVilla).toHaveBeenCalledWith({ client, villaId: 9 });
-    expect(repository.findActivePrincipalResidentForVilla).toHaveBeenCalledWith({
-      client,
-      villaId: 9,
-    });
-    const insertCall = client.query.mock.calls.find(([sql]) =>
-      String(sql).includes('INSERT INTO bitacora_registros')
-    );
-    expect(insertCall[1]).toEqual([3, 8, 9, 7, 21, '2026-08-20T14:30:00', 'Novedad registrada']);
-    expect(audit.logAuditStrict).toHaveBeenCalledWith(
-      client,
-      expect.objectContaining({ datos_nuevos: urbanCreated })
-    );
-  });
-
-  test.each([
-    ['GENERAL con contexto', {}, 409, 'URBAN_CONTEXT_NOT_ALLOWED'],
-    ['Manzana inexistente', { block: null }, 404, 'BLOCK_NOT_FOUND'],
-    ['Manzana inactiva', { block: { estado: 'inactivo' } }, 409, 'BLOCK_INACTIVE'],
-    ['Manzana de otra Ubicación', { block: { ubicacion_id: 99 } }, 409, 'INVALID_URBAN_CHAIN'],
-    ['Villa inexistente', { villa: null }, 404, 'VILLA_NOT_FOUND'],
-    ['Villa inactiva', { villa: { estado: 'inactivo' } }, 409, 'VILLA_INACTIVE'],
-    ['Villa de otra Manzana', { villa: { manzana_id: 99 } }, 409, 'INVALID_URBAN_CHAIN'],
-    ['Villa sin titular activo', { resident: null }, 409, 'VILLA_WITHOUT_ACTIVE_RESIDENT'],
-  ])('rechaza %s con semántica pública estable', async (_label, overrides, status, code) => {
-    const locationType = _label === 'GENERAL con contexto' ? 'GENERAL' : 'URBANIZACION';
-    transactionForCreate({ locationType });
-    if (Object.hasOwn(overrides, 'block')) {
-      repository.findLockedBlock.mockResolvedValue(
-        overrides.block && {
-          id: 8,
-          ubicacion_id: 3,
-          nombre: 'A',
-          estado: 'activo',
-          ...overrides.block,
-        }
-      );
-    }
-    if (Object.hasOwn(overrides, 'villa')) {
-      repository.findLockedVilla.mockResolvedValue(
-        overrides.villa && {
-          id: 9,
-          manzana_id: 8,
-          identificador: 'V1',
-          estado: 'activo',
-          ...overrides.villa,
-        }
-      );
-    }
-    if (Object.hasOwn(overrides, 'resident')) {
-      repository.findActivePrincipalResidentForVilla.mockResolvedValue(overrides.resident);
-    }
-    const res = makeResponse();
-
-    await controller.createRegistro(
-      makeRequest({ body: { ...makeRequest().body, manzana_id: 8, villa_id: 9 } }),
-      res
-    );
-
-    expect(res.status).toHaveBeenCalledWith(status);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ code }));
-  });
-
-  test.each([
-    ['sin Manzana ni Villa', {}],
-    ['solo con Manzana', { manzana_id: 8 }],
-    ['solo con Villa', { villa_id: 9 }],
-  ])(
-    'rechaza URBANIZACION %s porque Casa completa es obligatoria',
-    async (_label, urbanContext) => {
-      transactionForCreate({ locationType: 'URBANIZACION' });
-      const res = makeResponse();
-
-      await controller.createRegistro(
-        makeRequest({ body: { ...makeRequest().body, ...urbanContext } }),
-        res
-      );
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          code: 'COMPLETE_HOUSE_REQUIRED',
-        })
-      );
-    }
-  );
 
   test('convierte una defensa FK de D1 en 409 sin filtrar detalles SQL', async () => {
     const client = transactionForCreate({ locationType: 'URBANIZACION' });
@@ -593,6 +463,7 @@ describe('bitacorasController.getRegistros', () => {
 
   test('consulta historial global con filtros, paginación y metadata', async () => {
     repository.findHistory.mockResolvedValue({ items: [createdRow], total: 26 });
+    repository.findHistoryAutores.mockResolvedValue([{ id: 1, nombre: 'Ana' }]);
     const req = makeRequest({
       user: { id: 8, usuario: 'supervisor', tipo_usuario: 'supervisor', activo: true },
       query: {
@@ -626,10 +497,15 @@ describe('bitacorasController.getRegistros', () => {
       userId: 8,
       pagination: expect.objectContaining({ page: 2, pageSize: 10, offset: 10 }),
     });
+    expect(repository.findHistoryAutores).toHaveBeenCalledWith({
+      hasGlobalScope: true,
+      userId: 8,
+    });
     expect(res.json).toHaveBeenCalledWith({
       success: true,
       data: [createdRow],
       meta: expect.objectContaining({ page: 2, pageSize: 10, totalItems: 26, totalPages: 3 }),
+      filters: { autores: [{ id: 1, nombre: 'Ana' }] },
     });
   });
 
@@ -703,12 +579,11 @@ describe('bitacorasController.getRegistros', () => {
   });
 
   test('rechaza filtro de Ubicación fuera del alcance', async () => {
-    db.query
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
-      })
-      .mockResolvedValueOnce({ rowCount: 0, rows: [] });
+    db.query.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
+    });
+    repository.userHasLocationAccess.mockResolvedValueOnce(false);
     const res = makeResponse();
     await controller.getRegistros(makeRequest({ query: { ubicacion_id: '99' } }), res);
     expect(res.status).toHaveBeenCalledWith(403);
@@ -771,119 +646,6 @@ describe('bitacorasController.getUbicacionesVisibles', () => {
     expect(repository.findVisibleLocations).toHaveBeenCalledWith({
       hasGlobalScope: true,
       userId: 7,
-    });
-  });
-});
-
-describe('bitacorasController opciones urbanas', () => {
-  const scopeClient = (location = { id: 3, tipo_punto: 'URBANIZACION' }) => ({
-    query: jest.fn().mockResolvedValue({ rowCount: 1, rows: [location] }),
-  });
-
-  beforeEach(() => {
-    db.query.mockResolvedValue({
-      rowCount: 1,
-      rows: [{ id: 7, tipo_usuario: 'guardia', activo: true }],
-    });
-    repository.findLockedUserLocationAssignment.mockResolvedValue({
-      usuario_id: 7,
-      ubicacion_id: 3,
-    });
-    repository.findActiveBlocksForLocation.mockResolvedValue([{ id: 8, nombre: 'A' }]);
-    repository.findActiveVillasForBlock.mockResolvedValue([{ id: 9, identificador: 'A-1' }]);
-    repository.findVisibleBlock.mockResolvedValue({ id: 8, ubicacion_id: 3, estado: 'activo' });
-    repository.findVisibleLocation.mockResolvedValue({
-      id: 3,
-      tipo_punto: 'URBANIZACION',
-    });
-    repository.findLockedBlock.mockResolvedValue({ id: 8, ubicacion_id: 3, estado: 'activo' });
-  });
-
-  test('lista Manzanas activas dentro del alcance y GENERAL devuelve vacío', async () => {
-    let client = scopeClient();
-    db.transaction.mockImplementation(async (callback) => callback(client));
-    const urbanResponse = makeResponse();
-    await controller.getManzanasElegibles(
-      makeRequest({ params: { ubicacionId: '3' } }),
-      urbanResponse
-    );
-    expect(repository.findActiveBlocksForLocation).toHaveBeenCalledWith({
-      locationId: 3,
-      executor: client,
-    });
-
-    client = scopeClient({ id: 3, tipo_punto: 'GENERAL' });
-    const generalResponse = makeResponse();
-    await controller.getManzanasElegibles(
-      makeRequest({ params: { ubicacionId: '3' } }),
-      generalResponse
-    );
-    expect(generalResponse.json).toHaveBeenCalledWith({ success: true, data: [] });
-  });
-
-  test('lista Villas activas solo después de validar alcance y Manzana activa', async () => {
-    const client = scopeClient();
-    db.transaction.mockImplementation(async (callback) => callback(client));
-    const res = makeResponse();
-    await controller.getVillasElegibles(makeRequest({ params: { manzanaId: '8' } }), res);
-    expect(repository.findActiveVillasForBlock).toHaveBeenCalledWith({
-      blockId: 8,
-      executor: client,
-    });
-    expect(res.json).toHaveBeenCalledWith({
-      success: true,
-      data: [{ id: 9, identificador: 'A-1' }],
-    });
-  });
-
-  test('opciones de Manzanas colapsan inexistente y fuera de alcance a la misma respuesta', async () => {
-    const client = scopeClient();
-    db.transaction.mockImplementation(async (callback) => callback(client));
-    repository.findVisibleLocation.mockResolvedValue(null);
-    const missing = makeResponse();
-    await controller.getManzanasElegibles(makeRequest({ params: { ubicacionId: '999' } }), missing);
-    const outsideScope = makeResponse();
-    await controller.getManzanasElegibles(
-      makeRequest({ params: { ubicacionId: '3' } }),
-      outsideScope
-    );
-    expect(missing.status).toHaveBeenCalledWith(404);
-    expect(outsideScope.status).toHaveBeenCalledWith(404);
-    expect(missing.json.mock.calls[0][0]).toEqual(outsideScope.json.mock.calls[0][0]);
-    expect(repository.findActiveBlocksForLocation).not.toHaveBeenCalled();
-  });
-
-  test('opciones de Villas colapsan Manzana inexistente y fuera de alcance', async () => {
-    repository.findVisibleBlock.mockResolvedValue(null);
-    const missing = makeResponse();
-    await controller.getVillasElegibles(makeRequest({ params: { manzanaId: '999' } }), missing);
-    const outsideScope = makeResponse();
-    await controller.getVillasElegibles(makeRequest({ params: { manzanaId: '8' } }), outsideScope);
-    expect(missing.status).toHaveBeenCalledWith(404);
-    expect(outsideScope.status).toHaveBeenCalledWith(404);
-    expect(missing.json.mock.calls[0][0]).toEqual(outsideScope.json.mock.calls[0][0]);
-    expect(repository.findActiveVillasForBlock).not.toHaveBeenCalled();
-  });
-
-  test('alcance global puede resolver una Manzana de otra Urbanización', async () => {
-    db.query.mockResolvedValue({
-      rowCount: 1,
-      rows: [{ id: 7, tipo_usuario: 'supervisor', activo: true }],
-    });
-    repository.findVisibleBlock.mockResolvedValue({ id: 18, ubicacion_id: 4, estado: 'activo' });
-    repository.findLockedBlock.mockResolvedValue({ id: 18, ubicacion_id: 4, estado: 'activo' });
-    const client = scopeClient({ id: 4, tipo_punto: 'URBANIZACION' });
-    db.transaction.mockImplementation(async (callback) => callback(client));
-    const res = makeResponse();
-    await controller.getVillasElegibles(makeRequest({ params: { manzanaId: '18' } }), res);
-    expect(repository.findVisibleBlock).toHaveBeenCalledWith({
-      blockId: 18,
-      hasGlobalScope: true,
-      userId: 7,
-    });
-    expect(res.json).toHaveBeenCalledWith({
-      success: true,
-      data: [{ id: 9, identificador: 'A-1' }],
     });
   });
 });
@@ -1199,7 +961,7 @@ describe('bitacorasController visitas urbanas', () => {
     expect(repository.archiveVisitFormVersion).not.toHaveBeenCalled();
   });
 
-  test('registra check-in con Casa, titular, formulario activo, respuestas y Bitácora automática', async () => {
+  test('registra check-in con Casa manual, formulario activo, respuestas y Bitácora automática', async () => {
     const client = transactionForCreate({ locationType: 'URBANIZACION' });
     const res = makeResponse();
 
@@ -1207,8 +969,8 @@ describe('bitacorasController visitas urbanas', () => {
       makeRequest({
         body: {
           ubicacion_id: 3,
-          manzana_id: 8,
-          villa_id: 9,
+          manzana: 'A',
+          villa: 'V1',
           visitante_nombre: ' Carlos Ruiz ',
           visitante_documento: '0912345678',
           visitante_telefono: '0991234567',
@@ -1228,8 +990,8 @@ describe('bitacorasController visitas urbanas', () => {
       expect.objectContaining({
         client,
         locationId: 3,
-        blockId: 8,
-        villaId: 9,
+        blockId: null,
+        villaId: null,
         actorUserId: 7,
         actorCollaboratorId: 21,
       })
@@ -1238,9 +1000,11 @@ describe('bitacorasController visitas urbanas', () => {
       expect.objectContaining({
         client,
         locationId: 3,
-        blockId: 8,
-        villaId: 9,
-        principalResidentId: 15,
+        blockId: null,
+        villaId: null,
+        blockText: 'A',
+        villaText: 'V1',
+        principalResidentId: null,
         formVersionId: 51,
         visitor: {
           nombre: ' Carlos Ruiz ',

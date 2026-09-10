@@ -157,7 +157,7 @@ const visitFormFieldSchema = z
       .trim()
       .min(1, 'label no puede estar vacío')
       .max(120, 'label no puede exceder 120 caracteres'),
-    type: z.enum(['text', 'textarea', 'number', 'select', 'checkbox', 'cedula', 'placa']),
+    type: z.enum(['text', 'textarea', 'number', 'select', 'checkbox', 'cedula', 'placa', 'photo']),
     aplica_a: visitFormFieldAplicaASchema.optional().default('TODOS'),
     required: z.boolean().optional().default(false),
     options: z.array(z.string().trim().min(1).max(120)).optional().default([]),
@@ -243,6 +243,7 @@ const bitacoraVisitFormPublishSchema = z
   .object({
     titulo: z.string().trim().min(1).max(150).optional(),
     mostrar_fecha_hora: z.boolean().optional().default(true),
+    mostrar_casa: z.boolean().optional().default(true),
     tipos_visita: z
       .array(visitFormTipoSchema)
       .min(1, 'Se requiere al menos un tipo de visita')
@@ -324,6 +325,13 @@ const bitacoraVisitFormPublishSchema = z
         }
       });
     });
+    if (data.fields.filter((field) => field.type === 'photo').length > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['fields'],
+        message: 'Solo se permite una pregunta de foto por formulario',
+      });
+    }
   });
 
 const visitResponsesSchema = z.record(z.string(), z.unknown()).optional().default({});
@@ -336,8 +344,8 @@ const visitGroupResponsesSchema = z
 const bitacoraVisitCreateSchema = z
   .object({
     ubicacion_id: positiveInt('Ubicación ID'),
-    manzana_id: positiveInt('Manzana ID'),
-    villa_id: positiveInt('Villa ID'),
+    manzana: optionalTrimmedString(100, 'Manzana'),
+    villa: optionalTrimmedString(100, 'Villa'),
     visitante_nombre: optionalTrimmedString(150, 'Nombre del visitante'),
     visitante_documento: z.preprocess(
       emptyToUndefined,

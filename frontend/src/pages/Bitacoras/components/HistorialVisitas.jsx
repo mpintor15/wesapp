@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppModal from '../../../components/AppModal';
+import CollapsibleFilters from '../../../components/CollapsibleFilters';
 import FilterDateInput from '../../../components/FilterDateInput';
 import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
@@ -42,19 +43,11 @@ const buildParams = (page, filters, sort) => ({
 
 const casaLabel = (visit) =>
   visit.manzana_nombre && visit.villa_identificador
-    ? `${visit.manzana_nombre}${visit.villa_identificador}`
-    : '—';
+    ? `${visit.manzana_nombre} - ${visit.villa_identificador}`
+    : '';
 
 // La placa puede venir del campo fijo legacy (bv.placa) o, en formularios
 // dinámicos, como una respuesta de tipo 'placa'.
-const placaLabel = (visit) => {
-  if (visit.placa) return visit.placa;
-  const respuesta = Array.isArray(visit.respuestas)
-    ? visit.respuestas.find((item) => item.type === 'placa')
-    : undefined;
-  return respuesta?.value || '';
-};
-
 // Lista de visitantes: prioriza los registros del grupo "Visitantes"
 // (Nombre + Cédula, capturados en bitacora_visita_grupo_registros); si la
 // visita no usa el grupo, cae a los campos fijos legacy de bitacora_visitas.
@@ -64,7 +57,7 @@ const visitantesList = (visit) => {
     const findValue = (entry, key) =>
       Array.isArray(entry) ? entry.find((item) => item.field_key === key)?.value : undefined;
     return entries.map((entry) => {
-      const nombre = findValue(entry, 'nombre') || '—';
+      const nombre = findValue(entry, 'nombre') || '';
       const cedula = findValue(entry, 'cedula');
       return cedula ? `${nombre} · ${cedula}` : nombre;
     });
@@ -76,10 +69,78 @@ const visitantesList = (visit) => {
         : visit.visitante_nombre,
     ];
   }
-  return ['—'];
+  return [];
 };
 
 const visitantesSummary = (visit) => visitantesList(visit).join(', ');
+
+const responseValue = (response, onPreviewPhoto) => {
+  if (response?.type === 'checkbox') return response.value ? 'Sí' : 'No';
+  if (response?.type === 'photo' && response.value) {
+    return (
+      <button
+        className="bitacoras-photo-button"
+        type="button"
+        onClick={() =>
+          onPreviewPhoto({ src: response.value, label: response.label || 'Foto de visita' })
+        }
+        title={`Ver ${response.label || 'foto de visita'}`}
+        aria-label={`Ver ${response.label || 'foto de visita'}`}
+      >
+        <img
+          className="bitacoras-photo-thumbnail"
+          src={response.value}
+          alt={response.label || 'Foto de visita'}
+        />
+      </button>
+    );
+  }
+  return response?.value === 0 ? '0' : response?.value || '';
+};
+
+const buildDynamicColumns = (visits) => {
+  const columns = [];
+  if (visits.some((visit) => visitantesList(visit).length > 0)) {
+    columns.push({ key: 'visitantes', label: 'Visitantes' });
+  }
+  if (visits.some((visit) => visit.tipo_visita_nombre)) {
+    columns.push({ key: 'tipo_visita', label: 'Tipo de visita' });
+  }
+  if (visits.some((visit) => visit.manzana_nombre || visit.villa_identificador)) {
+    columns.push({ key: 'casa', label: 'Casa' });
+  }
+  const seen = new Set();
+  visits.forEach((visit) =>
+    (Array.isArray(visit.respuestas) ? visit.respuestas : []).forEach((response) => {
+      if (!response.field_key || seen.has(response.field_key)) return;
+      seen.add(response.field_key);
+      columns.push({ key: response.field_key, label: response.label || response.field_key });
+    })
+  );
+  if (visits.some((visit) => visit.placa) && !columns.some((column) => column.key === 'placa')) {
+    columns.push({ key: 'legacy_placa', label: 'Placa' });
+  }
+  return columns;
+};
+
+const dynamicCell = (visit, column, onPreviewPhoto) => {
+  if (column.key === 'visitantes') {
+    return (
+      <div className="bitacoras-visitantes-list">
+        {visitantesList(visit).map((line, index) => (
+          <span className="bitacoras-cell-primary" key={`${visit.id}-visitante-${index}`}>
+            {line}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  if (column.key === 'tipo_visita') return visit.tipo_visita_nombre || '';
+  if (column.key === 'casa') return casaLabel(visit);
+  if (column.key === 'legacy_placa') return visit.placa || '';
+  const response = (visit.respuestas || []).find((item) => item.field_key === column.key);
+  return responseValue(response, onPreviewPhoto);
+};
 
 // Estado visible: ABIERTA siempre implica requiere_salida (si no lo
 // requiere, createVisita la auto-cierra en la misma transacción), así que
@@ -93,22 +154,18 @@ const visitEstadoLabel = (visit) => {
   return visit.estado;
 };
 
-// Visita aún ABIERTA (esperando salida) -> celda vacía; visita autorizada sin
-// requerir salida, o no autorizada -> "-" centrado (nunca hay salida real que
-// mostrar); cualquier otro caso (SALIÓ, ANULADA) -> fecha y hora reales de
-// salida_at.
 const salidaLabel = (visit) => {
   if (visit.estado === 'ABIERTA') return '';
   if (visit.estado === 'NO_AUTORIZADA' || (visit.estado === 'CERRADA' && !visit.requiere_salida)) {
-    return '-';
+    return '';
   }
-  return formatLocalTimestamp(visit.salida_at) || '—';
+  return formatLocalTimestamp(visit.salida_at) || '';
 };
 
 // Observación: solo NO AUTORIZADO tiene algo que mostrar (el motivo de
 // rechazo); el resto de estados no tiene un dato equivalente.
 const observacionLabel = (visit) =>
-  visitEstadoLabel(visit) === 'NO AUTORIZADO' ? visit.motivo_no_autorizacion || '—' : '';
+  visitEstadoLabel(visit) === 'NO AUTORIZADO' ? visit.motivo_no_autorizacion || '' : '';
 
 // Mismo patrón visual que FormStatus (Formularios): badge-active/badge-
 // inactive, sin inventar variantes nuevas.
@@ -122,7 +179,7 @@ const VisitActions = ({ visit, closingId, onExitRequest, canCancel, onCancelRequ
   const isAbierta = visit.estado === 'ABIERTA';
   const canRegisterExit = isAbierta && visit.requiere_salida;
   const canAnular = isAbierta && canCancel;
-  if (!canRegisterExit && !canAnular) return '—';
+  if (!canRegisterExit && !canAnular) return '';
   const disabled = closingId === visit.id;
   return (
     <div className="action-buttons bitacoras-visit-actions">
@@ -203,6 +260,8 @@ const HistorialVisitas = ({
   const [error, setError] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelMotivo, setCancelMotivo] = useState('');
+  const [previewPhoto, setPreviewPhoto] = useState(null);
+  const dynamicColumns = useMemo(() => buildDynamicColumns(visits), [visits]);
   const [isCancelling, setIsCancelling] = useState(false);
   const [creators, setCreators] = useState([]);
   const requestSequenceRef = useRef(0);
@@ -355,122 +414,124 @@ const HistorialVisitas = ({
   };
 
   const controls = (
-    <div className="ff-filter-row bitacoras-filter-row">
-      <div className="ff-filter-card bitacoras-filter-card">
-        <div className="ff-controls bitacoras-filter-controls bitacoras-visit-filters">
-          <div className="ff-search">
-            <svg
-              className="ff-search-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              name="search"
-              value={draftFilters.search}
-              onChange={updateFilter}
-              onKeyDown={(event) => event.key === 'Enter' && applyFilters()}
-              placeholder="Visitante, placa, casa o titular..."
-            />
+    <CollapsibleFilters>
+      <div className="ff-filter-row bitacoras-filter-row">
+        <div className="ff-filter-card bitacoras-filter-card">
+          <div className="ff-controls bitacoras-filter-controls bitacoras-visit-filters">
+            <div className="ff-search">
+              <svg
+                className="ff-search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                name="search"
+                value={draftFilters.search}
+                onChange={updateFilter}
+                onKeyDown={(event) => event.key === 'Enter' && applyFilters()}
+                placeholder="Visitante, placa, casa o titular..."
+              />
+            </div>
+            <div className="ff-state bitacoras-status-filter bitacoras-urbanizacion-filter">
+              <label className="ff-state-label" htmlFor="visitas-filter-ubicacion">
+                Urbanización
+              </label>
+              <select
+                id="visitas-filter-ubicacion"
+                name="ubicacion_id"
+                value={draftFilters.ubicacion_id}
+                onChange={updateFilter}
+              >
+                {urbanizaciones.length === 0 ? <option value="">Sin urbanizaciones</option> : null}
+                {urbanizaciones.map((urbanizacion) => (
+                  <option key={urbanizacion.id} value={urbanizacion.id}>
+                    {urbanizacion.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="ff-state bitacoras-status-filter">
+              <label className="ff-state-label" htmlFor="visitas-filter-creator">
+                Creador
+              </label>
+              <select
+                id="visitas-filter-creator"
+                name="creator"
+                value={draftFilters.creator}
+                onChange={updateFilter}
+              >
+                <option value="">Todos</option>
+                {creators.map((creator) => (
+                  <option key={creator.id} value={creator.nombre}>
+                    {creator.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="ff-state bitacoras-status-filter">
+              <label className="ff-state-label" htmlFor="visitas-filter-estado">
+                Estado
+              </label>
+              <select
+                id="visitas-filter-estado"
+                name="estado"
+                value={draftFilters.estado}
+                onChange={updateFilter}
+              >
+                <option value="">Todos</option>
+                <option value="ABIERTA">ABIERTA</option>
+                <option value="CERRADA">CERRADA</option>
+                <option value="ANULADA">ANULADA</option>
+                <option value="NO_AUTORIZADA">NO AUTORIZADA</option>
+              </select>
+            </div>
+            <div className="ff-dates bitacoras-date-filters">
+              <FilterDateInput
+                aria-label="Desde"
+                name="fecha_desde"
+                value={draftFilters.fecha_desde}
+                onChange={updateFilter}
+              />
+              <FilterDateInput
+                aria-label="Hasta"
+                name="fecha_hasta"
+                value={draftFilters.fecha_hasta}
+                onChange={updateFilter}
+              />
+            </div>
           </div>
-          <div className="ff-state bitacoras-status-filter bitacoras-urbanizacion-filter">
-            <label className="ff-state-label" htmlFor="visitas-filter-ubicacion">
-              Urbanización
-            </label>
-            <select
-              id="visitas-filter-ubicacion"
-              name="ubicacion_id"
-              value={draftFilters.ubicacion_id}
-              onChange={updateFilter}
+          {dateError ? <p className="bitacoras-filter-error">{dateError}</p> : null}
+        </div>
+        <div className="ff-filter-actions-card bitacoras-filter-actions-card">
+          <div className="ff-actions">
+            <button className="btn btn-primary btn-sm" type="button" onClick={applyFilters}>
+              Aplicar
+            </button>
+            <button
+              className="ff-clear-btn"
+              type="button"
+              onClick={() => {
+                const preservedUbicacionId =
+                  urbanizaciones.length > 0 ? draftFilters.ubicacion_id : '';
+                setDraftFilters({ ...EMPTY_FILTERS, ubicacion_id: preservedUbicacionId });
+                setAppliedFilters({ ...EMPTY_FILTERS, ubicacion_id: preservedUbicacionId });
+                setPage(1);
+              }}
             >
-              {urbanizaciones.length === 0 ? <option value="">Sin urbanizaciones</option> : null}
-              {urbanizaciones.map((urbanizacion) => (
-                <option key={urbanizacion.id} value={urbanizacion.id}>
-                  {urbanizacion.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="ff-state bitacoras-status-filter">
-            <label className="ff-state-label" htmlFor="visitas-filter-creator">
-              Creador
-            </label>
-            <select
-              id="visitas-filter-creator"
-              name="creator"
-              value={draftFilters.creator}
-              onChange={updateFilter}
-            >
-              <option value="">Todos</option>
-              {creators.map((creator) => (
-                <option key={creator.id} value={creator.nombre}>
-                  {creator.nombre}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="ff-state bitacoras-status-filter">
-            <label className="ff-state-label" htmlFor="visitas-filter-estado">
-              Estado
-            </label>
-            <select
-              id="visitas-filter-estado"
-              name="estado"
-              value={draftFilters.estado}
-              onChange={updateFilter}
-            >
-              <option value="">Todos</option>
-              <option value="ABIERTA">ABIERTA</option>
-              <option value="CERRADA">CERRADA</option>
-              <option value="ANULADA">ANULADA</option>
-              <option value="NO_AUTORIZADA">NO AUTORIZADA</option>
-            </select>
-          </div>
-          <div className="ff-dates bitacoras-date-filters">
-            <FilterDateInput
-              aria-label="Desde"
-              name="fecha_desde"
-              value={draftFilters.fecha_desde}
-              onChange={updateFilter}
-            />
-            <FilterDateInput
-              aria-label="Hasta"
-              name="fecha_hasta"
-              value={draftFilters.fecha_hasta}
-              onChange={updateFilter}
-            />
+              Limpiar
+            </button>
           </div>
         </div>
-        {dateError ? <p className="bitacoras-filter-error">{dateError}</p> : null}
       </div>
-      <div className="ff-filter-actions-card bitacoras-filter-actions-card">
-        <div className="ff-actions">
-          <button className="btn btn-primary btn-sm" type="button" onClick={applyFilters}>
-            Aplicar
-          </button>
-          <button
-            className="ff-clear-btn"
-            type="button"
-            onClick={() => {
-              const preservedUbicacionId =
-                urbanizaciones.length > 0 ? draftFilters.ubicacion_id : '';
-              setDraftFilters({ ...EMPTY_FILTERS, ubicacion_id: preservedUbicacionId });
-              setAppliedFilters({ ...EMPTY_FILTERS, ubicacion_id: preservedUbicacionId });
-              setPage(1);
-            }}
-          >
-            Limpiar
-          </button>
-        </div>
-      </div>
-    </div>
+    </CollapsibleFilters>
   );
 
   return (
@@ -515,23 +576,15 @@ const HistorialVisitas = ({
               <table className="app-table bitacoras-visits-table">
                 <thead>
                   <tr>
-                    <th>Visitantes</th>
                     <SortHeader
-                      field="tipo_visita"
-                      label="Tipo de visita"
+                      field="entrada_at"
+                      label="Ingreso"
                       sort={sort}
                       onSort={handleSort}
                     />
-                    <SortHeader field="placa" label="Placa" sort={sort} onSort={handleSort} />
-                    <SortHeader field="casa" label="Casa" sort={sort} onSort={handleSort} />
-                    <SortHeader field="titular" label="Titular" sort={sort} onSort={handleSort} />
-                    <SortHeader
-                      field="registrado_por"
-                      label="Registrado por"
-                      sort={sort}
-                      onSort={handleSort}
-                    />
-                    <SortHeader field="salida_at" label="Salida" sort={sort} onSort={handleSort} />
+                    {dynamicColumns.map((column) => (
+                      <th key={column.key}>{column.label}</th>
+                    ))}
                     <SortHeader
                       className="bitacoras-visit-state"
                       field="estado"
@@ -539,15 +592,11 @@ const HistorialVisitas = ({
                       sort={sort}
                       onSort={handleSort}
                     />
+                    <SortHeader field="salida_at" label="Salida" sort={sort} onSort={handleSort} />
                     <SortHeader
+                      className="bitacoras-cell-observacion"
                       field="observacion"
                       label="Observación"
-                      sort={sort}
-                      onSort={handleSort}
-                    />
-                    <SortHeader
-                      field="entrada_at"
-                      label="Ingreso"
                       sort={sort}
                       onSort={handleSort}
                     />
@@ -557,29 +606,15 @@ const HistorialVisitas = ({
                 <tbody>
                   {visits.map((visit, index) => (
                     <tr key={visit.id} className={index % 2 === 0 ? 'row-even' : 'row-odd'}>
-                      <td>
-                        <div className="bitacoras-visitantes-list">
-                          {visitantesList(visit).map((linea, entryIndex) => (
-                            <span
-                              className="bitacoras-cell-primary"
-                              key={`${visit.id}-visitante-${entryIndex}`}
-                            >
-                              {linea}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td>{visit.tipo_visita_nombre || '—'}</td>
-                      <td>{placaLabel(visit) || '—'}</td>
-                      <td>{casaLabel(visit)}</td>
-                      <td>{visit.residente_principal_nombre || '—'}</td>
-                      <td>{visit.registrado_por_usuario || '—'}</td>
-                      <td className="bitacoras-cell-salida">{salidaLabel(visit)}</td>
+                      <td>{formatLocalTimestamp(visit.entrada_at) || ''}</td>
+                      {dynamicColumns.map((column) => (
+                        <td key={column.key}>{dynamicCell(visit, column, setPreviewPhoto)}</td>
+                      ))}
                       <td className="bitacoras-visit-state">
                         <VisitStatusBadge label={visitEstadoLabel(visit)} />
                       </td>
-                      <td>{observacionLabel(visit)}</td>
-                      <td>{formatLocalTimestamp(visit.entrada_at) || '—'}</td>
+                      <td className="bitacoras-cell-salida">{salidaLabel(visit)}</td>
+                      <td className="bitacoras-cell-observacion">{observacionLabel(visit)}</td>
                       <td className="app-col-actions app-col-actions--double">
                         <VisitActions
                           visit={visit}
@@ -605,31 +640,23 @@ const HistorialVisitas = ({
                   <dl className="record-card-details">
                     <div>
                       <dt>Ingreso</dt>
-                      <dd>{formatLocalTimestamp(visit.entrada_at) || '—'}</dd>
+                      <dd>{formatLocalTimestamp(visit.entrada_at) || ''}</dd>
                     </div>
+                    {dynamicColumns.map((column) => (
+                      <div key={column.key}>
+                        <dt>{column.label}</dt>
+                        <dd>{dynamicCell(visit, column, setPreviewPhoto)}</dd>
+                      </div>
+                    ))}
                     <div>
-                      <dt>Tipo de visita</dt>
-                      <dd>{visit.tipo_visita_nombre || '—'}</dd>
-                    </div>
-                    <div>
-                      <dt>Placa</dt>
-                      <dd>{placaLabel(visit) || '—'}</dd>
-                    </div>
-                    <div>
-                      <dt>Casa</dt>
-                      <dd>{casaLabel(visit)}</dd>
-                    </div>
-                    <div>
-                      <dt>Titular</dt>
-                      <dd>{visit.residente_principal_nombre || '—'}</dd>
-                    </div>
-                    <div>
-                      <dt>Registrado por</dt>
-                      <dd>{visit.registrado_por_usuario || '—'}</dd>
+                      <dt>Estado</dt>
+                      <dd>
+                        <VisitStatusBadge label={visitEstadoLabel(visit)} />
+                      </dd>
                     </div>
                     <div>
                       <dt>Salida</dt>
-                      <dd>{salidaLabel(visit) || '—'}</dd>
+                      <dd>{salidaLabel(visit)}</dd>
                     </div>
                     {observacionLabel(visit) ? (
                       <div>
@@ -656,6 +683,33 @@ const HistorialVisitas = ({
           </>
         )}
       </TabularWorkspace>
+
+      {previewPhoto ? (
+        <AppModal
+          isOpen
+          onClose={() => setPreviewPhoto(null)}
+          title={previewPhoto.label}
+          size="lg"
+          closeOnBackdrop
+          className="bitacoras-photo-preview-modal"
+        >
+          <AppModal.Header />
+          <AppModal.Body>
+            <div className="bitacoras-photo-preview">
+              <img src={previewPhoto.src} alt={previewPhoto.label} />
+            </div>
+          </AppModal.Body>
+          <AppModal.Footer className="modal-buttons">
+            <button
+              className="btn btn-modal-clear"
+              type="button"
+              onClick={() => setPreviewPhoto(null)}
+            >
+              Cerrar
+            </button>
+          </AppModal.Footer>
+        </AppModal>
+      ) : null}
 
       {exitTarget ? (
         <AppModal

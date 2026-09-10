@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppModal from '../../../components/AppModal';
-import SearchableSelect from '../../../components/SearchableSelect';
 import { getVisibleErrorMessage } from '../../../services/serviceUtils';
 import bitacorasService from '../../../services/bitacorasService';
 
 const EMPTY_FIXED = {
   ubicacion_id: '',
-  manzana_id: '',
-  villa_id: '',
+  manzana: '',
+  villa: '',
   tipo_visita_id: '',
 };
 
@@ -67,10 +66,8 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
   }));
   const [responses, setResponses] = useState({});
   const [groupEntries, setGroupEntries] = useState({});
-  const [manzanas, setManzanas] = useState([]);
-  const [villas, setVillas] = useState([]);
   const [formVersion, setFormVersion] = useState(null);
-  const [loading, setLoading] = useState({ manzanas: false, villas: false, form: false });
+  const [loading, setLoading] = useState({ form: false });
   const [loadError, setLoadError] = useState('');
   const [noActiveForm, setNoActiveForm] = useState(false);
   const [errors, setErrors] = useState({});
@@ -80,16 +77,12 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
   const locationRef = useRef(null);
   const manzanaRef = useRef(null);
   const villaRef = useRef(null);
-  const sequenceRef = useRef({ manzanas: 0, villas: 0, form: 0 });
+  const sequenceRef = useRef({ form: 0 });
   const mountedRef = useRef(false);
 
   const urbanLocations = useMemo(
     () => ubicaciones.filter((location) => location.tipo_punto === URBANIZATION_TYPE),
     [ubicaciones]
-  );
-  const selectedVilla = useMemo(
-    () => villas.find((villa) => String(villa.id) === String(fixed.villa_id)) || null,
-    [fixed.villa_id, villas]
   );
   const applicableFields = useMemo(
     () => (formVersion?.fields || []).filter((field) => fieldApplies(field, fixed.tipo_visita_id)),
@@ -99,14 +92,13 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
     () => (formVersion?.groups || []).filter((group) => fieldApplies(group, fixed.tipo_visita_id)),
     [formVersion, fixed.tipo_visita_id]
   );
+  const showHouse = formVersion?.mostrar_casa !== false;
 
   useEffect(() => {
     const sequence = sequenceRef.current;
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      sequence.manzanas += 1;
-      sequence.villas += 1;
       sequence.form += 1;
     };
   }, []);
@@ -140,38 +132,6 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
     setErrors((current) => ({ ...current, [`grupos.${groupKey}.${entryIndex}.${fieldKey}`]: '' }));
   };
 
-  const loadManzanas = useCallback(async (ubicacionId) => {
-    if (!ubicacionId) return;
-    const requestId = sequenceRef.current.manzanas + 1;
-    sequenceRef.current.manzanas = requestId;
-    setLoading((current) => ({ ...current, manzanas: true }));
-    setLoadError('');
-    const result = await bitacorasService.getManzanas(ubicacionId);
-    if (!mountedRef.current || sequenceRef.current.manzanas !== requestId) return;
-    setLoading((current) => ({ ...current, manzanas: false }));
-    if (result.success) setManzanas(Array.isArray(result.data) ? result.data : []);
-    else {
-      setManzanas([]);
-      setLoadError(getVisibleErrorMessage(result, 'No se pudieron cargar las Manzanas.'));
-    }
-  }, []);
-
-  const loadVillas = useCallback(async (manzanaId) => {
-    if (!manzanaId) return;
-    const requestId = sequenceRef.current.villas + 1;
-    sequenceRef.current.villas = requestId;
-    setLoading((current) => ({ ...current, villas: true }));
-    setLoadError('');
-    const result = await bitacorasService.getVillas(manzanaId);
-    if (!mountedRef.current || sequenceRef.current.villas !== requestId) return;
-    setLoading((current) => ({ ...current, villas: false }));
-    if (result.success) setVillas(Array.isArray(result.data) ? result.data : []);
-    else {
-      setVillas([]);
-      setLoadError(getVisibleErrorMessage(result, 'No se pudieron cargar las Villas.'));
-    }
-  }, []);
-
   const loadForm = useCallback(async (ubicacionId) => {
     if (!ubicacionId) return;
     const requestId = sequenceRef.current.form + 1;
@@ -198,36 +158,23 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
   }, []);
 
   useEffect(() => {
-    setFixed((current) => ({ ...current, manzana_id: '', villa_id: '', tipo_visita_id: '' }));
-    setManzanas([]);
-    setVillas([]);
+    setFixed((current) => ({ ...current, manzana: '', villa: '', tipo_visita_id: '' }));
     setFormVersion(null);
     setResponses({});
     setGroupEntries({});
-    sequenceRef.current.manzanas += 1;
-    sequenceRef.current.villas += 1;
     sequenceRef.current.form += 1;
-    setLoading({ manzanas: false, villas: false, form: false });
+    setLoading({ form: false });
     if (fixed.ubicacion_id) {
-      void loadManzanas(fixed.ubicacion_id);
       void loadForm(fixed.ubicacion_id);
     }
-  }, [fixed.ubicacion_id, loadForm, loadManzanas]);
-
-  useEffect(() => {
-    setFixed((current) => ({ ...current, villa_id: '' }));
-    setVillas([]);
-    sequenceRef.current.villas += 1;
-    setLoading((current) => ({ ...current, villas: false }));
-    if (fixed.manzana_id) void loadVillas(fixed.manzana_id);
-  }, [fixed.manzana_id, loadVillas]);
+  }, [fixed.ubicacion_id, loadForm]);
 
   const handleSubmit = async (autorizada) => {
     if (isSubmitting) return;
     const nextErrors = {
       ubicacion_id: Number(fixed.ubicacion_id) > 0 ? '' : 'Selecciona una Urbanización.',
-      manzana_id: Number(fixed.manzana_id) > 0 ? '' : 'Selecciona una Manzana.',
-      villa_id: Number(fixed.villa_id) > 0 ? '' : 'Selecciona una Villa.',
+      manzana: !showHouse || fixed.manzana.trim() ? '' : 'Ingresa la Manzana.',
+      villa: !showHouse || fixed.villa.trim() ? '' : 'Ingresa la Villa.',
       tipo_visita_id: Number(fixed.tipo_visita_id) > 0 ? '' : 'Selecciona el tipo de visita.',
       form: formVersion ? '' : 'Publica un formulario activo antes de registrar visitas.',
       motivo_no_autorizacion:
@@ -277,15 +224,15 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
     });
     setErrors(nextErrors);
     if (nextErrors.ubicacion_id) locationRef.current?.focus();
-    else if (nextErrors.manzana_id) manzanaRef.current?.focus();
-    else if (nextErrors.villa_id) villaRef.current?.focus();
+    else if (nextErrors.manzana) manzanaRef.current?.focus();
+    else if (nextErrors.villa) villaRef.current?.focus();
     if (Object.values(nextErrors).some(Boolean)) return;
 
     setIsSubmitting(true);
     const result = await bitacorasService.createVisita({
       ubicacion_id: Number(fixed.ubicacion_id),
-      manzana_id: Number(fixed.manzana_id),
-      villa_id: Number(fixed.villa_id),
+      manzana: showHouse ? fixed.manzana.trim() : undefined,
+      villa: showHouse ? fixed.villa.trim() : undefined,
       tipo_visita_id: Number(fixed.tipo_visita_id),
       respuestas: normalizeResponses(formVersion.fields || [], responses, fixed.tipo_visita_id),
       grupos: normalizeGroupEntries(formVersion.groups || [], groupEntries, fixed.tipo_visita_id),
@@ -339,51 +286,36 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
                   <span className="field-error">{errors.ubicacion_id}</span>
                 ) : null}
               </div>
-              <div className="form-group">
-                <label htmlFor="visita-manzana">Manzana</label>
-                <SearchableSelect
-                  ref={manzanaRef}
-                  inputId="visita-manzana"
-                  value={fixed.manzana_id}
-                  onChange={(value) => setField('manzana_id', value)}
-                  options={manzanas}
-                  getOptionLabel={(manzana) => manzana.nombre}
-                  loading={loading.manzanas}
-                  disabled={!fixed.ubicacion_id || loading.manzanas}
-                  placeholder="Selecciona una Manzana"
-                  aria-invalid={Boolean(errors.manzana_id)}
-                />
-                {errors.manzana_id ? (
-                  <span className="field-error">{errors.manzana_id}</span>
-                ) : null}
-              </div>
-              <div className="form-group">
-                <label htmlFor="visita-villa">Villa</label>
-                <SearchableSelect
-                  ref={villaRef}
-                  inputId="visita-villa"
-                  value={fixed.villa_id}
-                  onChange={(value) => setField('villa_id', value)}
-                  options={villas}
-                  getOptionLabel={(villa) => villa.identificador}
-                  loading={loading.villas}
-                  disabled={!fixed.manzana_id || loading.villas}
-                  placeholder="Selecciona una Villa"
-                  aria-invalid={Boolean(errors.villa_id)}
-                />
-                {errors.villa_id ? <span className="field-error">{errors.villa_id}</span> : null}
-                {selectedVilla ? (
-                  <span className="bitacoras-resident-summary">
-                    Titular: <strong>{selectedVilla.residente_principal_nombre}</strong>
-                    {selectedVilla.residente_principal_contacto ? (
-                      <>
-                        {' '}
-                        · <strong>{selectedVilla.residente_principal_contacto}</strong>
-                      </>
-                    ) : null}
-                  </span>
-                ) : null}
-              </div>
+              {showHouse ? (
+                <>
+                  <div className="form-group">
+                    <label htmlFor="visita-manzana">Manzana</label>
+                    <input
+                      ref={manzanaRef}
+                      id="visita-manzana"
+                      value={fixed.manzana}
+                      onChange={(event) => setField('manzana', event.target.value)}
+                      maxLength={100}
+                      placeholder="Escribe la Manzana"
+                      aria-invalid={Boolean(errors.manzana)}
+                    />
+                    {errors.manzana ? <span className="field-error">{errors.manzana}</span> : null}
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="visita-villa">Villa</label>
+                    <input
+                      ref={villaRef}
+                      id="visita-villa"
+                      value={fixed.villa}
+                      onChange={(event) => setField('villa', event.target.value)}
+                      maxLength={100}
+                      placeholder="Escribe la Villa"
+                      aria-invalid={Boolean(errors.villa)}
+                    />
+                    {errors.villa ? <span className="field-error">{errors.villa}</span> : null}
+                  </div>
+                </>
+              ) : null}
               <div className="form-group">
                 <label htmlFor="visita-tipo-visita">Tipo de visita</label>
                 <select
@@ -614,6 +546,31 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
                         />
                         Sí
                       </label>
+                    ) : field.type === 'photo' ? (
+                      <input
+                        id={`visita-respuesta-${field.field_key}`}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file || file.size > 600000) {
+                            setErrors((current) => ({
+                              ...current,
+                              [`respuestas.${field.field_key}`]: file
+                                ? 'La foto no puede superar 600 KB.'
+                                : '',
+                            }));
+                            return;
+                          }
+                          const reader = new window.FileReader();
+                          reader.onload = () =>
+                            setResponses((current) => ({
+                              ...current,
+                              [field.field_key]: reader.result,
+                            }));
+                          reader.readAsDataURL(file);
+                        }}
+                      />
                     ) : (
                       <input
                         id={`visita-respuesta-${field.field_key}`}

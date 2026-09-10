@@ -92,13 +92,19 @@ describe('HistorialVisitas', () => {
     await act(async () => flush());
 
     expect(container.textContent).toContain('Carlos Ruiz');
-    expect(container.textContent).toContain('A1');
+    expect(container.textContent).toContain('A - 1');
     expect(container.textContent).toContain('Tipo de visita');
     expect(container.textContent).toContain('Vehículo');
-    expect(container.textContent).toContain('Registrado por');
-    expect(container.textContent).toContain('qa_guardia');
     expect(container.querySelector('th.bitacoras-visit-state')?.textContent).toContain('Estado');
     expect(container.querySelector('td.bitacoras-visit-state')).not.toBeNull();
+    const headers = Array.from(container.querySelectorAll('.bitacoras-visits-table th')).map(
+      (header) => header.textContent.trim()
+    );
+    const headerIndex = (label) => headers.findIndex((header) => header.includes(label));
+    expect(headers[0]).toContain('Ingreso');
+    expect(headerIndex('Estado')).toBeGreaterThan(headerIndex('Casa'));
+    expect(headerIndex('Salida')).toBeGreaterThan(headerIndex('Estado'));
+    expect(headerIndex('Observación')).toBeGreaterThan(headerIndex('Salida'));
     expect(container.querySelector('.records-mobile')).not.toBeNull();
     expect(container.querySelector('[aria-label="Anular visita"]')).toBeNull();
     await act(async () => {
@@ -375,18 +381,18 @@ describe('HistorialVisitas', () => {
       await flush();
     });
 
-    const placaSort = Array.from(container.querySelectorAll('.th-sort-btn')).find((button) =>
-      button.textContent.includes('Placa')
+    const ingresoSort = Array.from(container.querySelectorAll('.th-sort-btn')).find((button) =>
+      button.textContent.includes('Ingreso')
     );
     await act(async () => {
-      placaSort.click();
+      ingresoSort.click();
       await flush();
     });
     expect(bitacorasService.getVisitas).toHaveBeenLastCalledWith(
       expect.objectContaining({
         page: 1,
         search: 'Carlos',
-        sortBy: 'placa',
+        sortBy: 'entrada_at',
         sortOrder: 'asc',
       })
     );
@@ -456,6 +462,40 @@ describe('HistorialVisitas', () => {
     container.remove();
   });
 
+  test('abre una vista previa interna al seleccionar una foto', async () => {
+    bitacorasService.getVisitas.mockResolvedValue({
+      success: true,
+      data: [
+        visitRow({
+          respuestas: [
+            {
+              field_key: 'evidencia',
+              label: 'Evidencia',
+              type: 'photo',
+              value: 'data:image/png;base64,AAAA',
+            },
+          ],
+        }),
+      ],
+      meta: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() =>
+      root.render(<HistorialVisitas refreshKey={0} onChanged={jest.fn()} showToast={jest.fn()} />)
+    );
+    await act(async () => flush());
+
+    await act(async () => container.querySelector('[aria-label="Ver Evidencia"]').click());
+    expect(container.querySelector('.bitacoras-photo-preview img')?.getAttribute('src')).toBe(
+      'data:image/png;base64,AAAA'
+    );
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
   test('regresión: muestra TODOS los visitantes verticalmente, sin truncar con +N', async () => {
     bitacorasService.getVisitas.mockResolvedValue({
       success: true,
@@ -496,7 +536,7 @@ describe('HistorialVisitas', () => {
     container.remove();
   });
 
-  test('regresión: columna Salida distingue vacío / "-" / fecha real', async () => {
+  test('regresión: columna Salida deja vacíos sin guion y conserva la fecha real', async () => {
     bitacorasService.getVisitas.mockResolvedValue({
       success: true,
       data: [
@@ -520,7 +560,7 @@ describe('HistorialVisitas', () => {
     await act(async () => flush());
 
     const cells = Array.from(container.querySelectorAll('.bitacoras-cell-salida'));
-    expect(cells.map((cell) => cell.textContent)).toEqual(['', '-', expect.stringContaining('20')]);
+    expect(cells.map((cell) => cell.textContent)).toEqual(['', '', expect.stringContaining('20')]);
 
     act(() => root.unmount());
     container.remove();
@@ -607,7 +647,7 @@ describe('HistorialVisitas', () => {
     await act(async () => flush());
 
     const rows = Array.from(document.querySelectorAll('.bitacoras-visits-table tbody tr'));
-    const estados = rows.map((row) => Array.from(row.querySelectorAll('td'))[7].textContent);
+    const estados = rows.map((row) => row.querySelector('td.bitacoras-visit-state').textContent);
     expect(estados).toEqual(['AUTORIZADO', 'SALIÓ', 'AUTORIZADO', 'NO AUTORIZADO']);
 
     // regresión: mismo patrón visual (badge) que FormStatus en Formularios.
@@ -617,13 +657,15 @@ describe('HistorialVisitas', () => {
     expect(badges[3].className).toContain('badge-inactive'); // NO AUTORIZADO
 
     // regresión: columna Observación solo tiene contenido para NO AUTORIZADO.
-    const observaciones = rows.map((row) => Array.from(row.querySelectorAll('td'))[8].textContent);
+    const observaciones = rows.map(
+      (row) => row.querySelector('td.bitacoras-cell-observacion').textContent
+    );
     expect(observaciones).toEqual(['', '', '', 'No aparece en lista']);
 
     const noAutorizadaRow = rows[3];
     expect(noAutorizadaRow.querySelector('[aria-label="Registrar salida"]')).toBeNull();
     expect(noAutorizadaRow.querySelector('[aria-label="Anular visita"]')).toBeNull();
-    expect(noAutorizadaRow.textContent).toContain('—');
+    expect(noAutorizadaRow.textContent).not.toContain('—');
 
     act(() => root.unmount());
     container.remove();

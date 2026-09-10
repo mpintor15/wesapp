@@ -258,8 +258,14 @@
 }
 
 .bitacoras-author-filter {
+  display: grid;
+  gap: 4px;
   width: auto;
   flex: 1 1 300px;
+}
+
+.bitacoras-search-control {
+  position: relative;
 }
 
 .bitacoras-location-filter,
@@ -378,14 +384,17 @@
 }
 
 .bitacoras-status {
+  /* Métricas alineadas a .badge (styles/index.css) para que los badges de
+     estado se vean iguales en todos los módulos, incluida la otra vista
+     de este mismo módulo (Visitas) que ya usa .badge. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 86px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .bitacoras-status--registered {
@@ -440,6 +449,15 @@
   display: grid;
   gap: 14px;
   width: 100%;
+}
+
+.bitacoras-admin-form > .bitacoras-form-basics {
+  order: 1;
+}
+
+.bitacoras-admin-form > .bitacoras-field-hint,
+.bitacoras-admin-form > .bitacoras-filter-error {
+  order: 5;
 }
 
 .bitacoras-admin-form .form-group {
@@ -514,10 +532,58 @@
   width: auto;
 }
 
+.bitacoras-photo-thumbnail {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.bitacoras-photo-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bitacoras-photo-preview {
+  display: grid;
+  min-height: 18rem;
+  place-items: center;
+}
+
+.bitacoras-photo-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 0.75rem;
+  object-fit: contain;
+}
+
 .bitacoras-form-basics {
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr);
+  grid-template-columns: minmax(280px, 1.2fr) minmax(220px, 0.8fr);
+  grid-template-areas:
+    'name location'
+    'date date';
   gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface);
+}
+
+.bitacoras-form-name {
+  grid-area: name;
+}
+
+.bitacoras-form-location {
+  grid-area: location;
+}
+
+.bitacoras-date-time-toggle {
+  grid-area: date;
+  padding-top: 2px;
 }
 
 .bitacoras-forms-table table {
@@ -646,8 +712,37 @@
 }
 
 .bitacoras-groups-title {
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 1rem;
+}
+
+.bitacoras-builder-section {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-surface-subtle);
+}
+
+.bitacoras-builder-section--visitors {
+  order: 2;
+}
+
+.bitacoras-visit-types {
+  order: 3;
+}
+
+.bitacoras-builder-section--house {
+  order: 4;
+}
+
+.bitacoras-builder-section--questions {
+  order: 6;
+}
+
+.bitacoras-builder-section > .bitacoras-field-hint {
+  margin: 0;
 }
 
 .bitacoras-form-groups {
@@ -775,18 +870,7 @@
 
 .bitacoras-visit-types {
   display: grid;
-  gap: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 12px;
-}
-
-.bitacoras-visit-types legend {
-  font-size: 0.75em;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  gap: 10px;
 }
 
 .bitacoras-applies-types {
@@ -817,76 +901,26 @@
 
 .bitacoras-visits-table {
   width: 100%;
-  min-width: 1346px;
-  table-layout: fixed;
+  min-width: 900px;
+  table-layout: auto;
 }
 
-.bitacoras-visits-table th:nth-child(1),
-.bitacoras-visits-table td:nth-child(1) {
-  width: 190px;
+.bitacoras-visits-table th,
+.bitacoras-visits-table td {
+  min-width: 125px;
 }
 
-.bitacoras-visits-table th:nth-child(2),
-.bitacoras-visits-table td:nth-child(2) {
-  width: 115px;
-}
-
-.bitacoras-visits-table th:nth-child(3),
-.bitacoras-visits-table td:nth-child(3) {
-  width: 90px;
-}
-
-.bitacoras-visits-table th:nth-child(4),
-.bitacoras-visits-table td:nth-child(4) {
-  width: 75px;
-}
-
-.bitacoras-visits-table th:nth-child(5),
-.bitacoras-visits-table td:nth-child(5) {
-  width: 140px;
-}
-
-.bitacoras-visits-table th:nth-child(6),
-.bitacoras-visits-table td:nth-child(6) {
-  width: 150px;
-}
-
-.bitacoras-visits-table th:nth-child(7),
-.bitacoras-visits-table td:nth-child(7) {
-  width: 125px;
-}
-
-.bitacoras-visits-table th:nth-child(8),
-.bitacoras-visits-table td:nth-child(8) {
-  width: 120px;
-}
-
-.bitacoras-visits-table th:nth-child(9),
-.bitacoras-visits-table td:nth-child(9) {
-  width: 130px;
-}
-
-.bitacoras-visits-table th:nth-child(10),
-.bitacoras-visits-table td:nth-child(10) {
-  width: 135px;
-}
-
-/* Acciones: mínimo necesario para 2 icon buttons + separación. */
-.bitacoras-visits-table th:nth-child(11),
-.bitacoras-visits-table td:nth-child(11) {
+.bitacoras-visits-table th:last-child,
+.bitacoras-visits-table td:last-child {
+  min-width: 76px;
   width: 76px !important;
   padding-left: 4px !important;
   padding-right: 4px !important;
 }
 
-.bitacoras-visits-table td:nth-child(1) {
+.bitacoras-visits-table td {
   white-space: normal !important;
   overflow: visible !important;
-  text-overflow: clip !important;
-}
-
-.bitacoras-visits-table td:nth-child(6) {
-  white-space: normal !important;
   text-overflow: clip !important;
 }
 
@@ -897,6 +931,11 @@
 
 .bitacoras-visits-table .bitacoras-visit-state {
   text-align: center !important;
+}
+
+.bitacoras-visits-table .bitacoras-cell-observacion {
+  width: 220px;
+  min-width: 220px;
 }
 
 .bitacoras-visits-table td.bitacoras-visit-state .badge {
@@ -1058,6 +1097,13 @@
     grid-template-columns: 1fr;
   }
 
+  .bitacoras-form-basics {
+    grid-template-areas:
+      'name'
+      'location'
+      'date';
+  }
+
   .bitacoras-list-options {
     grid-area: list;
     grid-column: auto;
@@ -1112,6 +1158,30 @@
   .bitacoras-filter-controls {
     flex-wrap: wrap;
   }
+}
+
+.report-filters-summary {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+}
+
+.report-filters-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  padding-bottom: 0.4rem;
+}
+
+.report-filters-summary dt {
+  font-weight: 600;
+  color: var(--text-secondary, #6b7280);
+}
+
+.report-filters-summary dd {
+  margin: 0;
+  text-align: right;
 }
 
 @media (min-width: 1024px) {

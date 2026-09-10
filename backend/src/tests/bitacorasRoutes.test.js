@@ -23,20 +23,14 @@ jest.mock('../utils/audit', () => ({
 
 jest.mock('../repositories/bitacorasRepository', () => ({
   getBitacorasResumen: jest.fn(),
-  findActiveBlocksForLocation: jest.fn(),
-  findActivePrincipalResidentForVilla: jest.fn(),
   findActiveVisitFormForLocation: jest.fn(),
   findVisitForms: jest.fn(),
   findVisitFormCreators: jest.fn(),
-  findActiveVillasForBlock: jest.fn(),
   findHistory: jest.fn(),
   findLockedVisit: jest.fn(),
-  findLockedBlock: jest.fn(),
   findLockedUserLocationAssignment: jest.fn(),
-  findLockedVilla: jest.fn(),
   findVisits: jest.fn(),
   findVisitCreators: jest.fn(),
-  findVisibleBlock: jest.fn(),
   findVisibleLocation: jest.fn(),
   findVisibleLocations: jest.fn(),
   insertBitacoraRegistro: jest.fn(),
@@ -109,24 +103,9 @@ beforeEach(() => {
     ubicacion_id: 1,
   });
   repository.findVisibleLocations.mockResolvedValue([]);
-  repository.findActiveBlocksForLocation.mockResolvedValue([]);
-  repository.findActiveVillasForBlock.mockResolvedValue([]);
-  repository.findVisibleBlock.mockResolvedValue({ id: 8, ubicacion_id: 1, estado: 'activo' });
   repository.findVisibleLocation.mockResolvedValue({
     id: 1,
     tipo_punto: 'URBANIZACION',
-  });
-  repository.findLockedBlock.mockResolvedValue({
-    id: 8,
-    ubicacion_id: 1,
-    estado: 'activo',
-  });
-  repository.findLockedVilla.mockResolvedValue({ id: 9, manzana_id: 8, estado: 'activo' });
-  repository.findActivePrincipalResidentForVilla.mockResolvedValue({
-    id: 15,
-    villa_id: 9,
-    nombre: 'Ana Titular',
-    contacto: '0991234567',
   });
   repository.findActiveVisitFormForLocation.mockResolvedValue({
     id: 7,
@@ -270,38 +249,6 @@ describe('bitacoras routes', () => {
     expect(Object.keys(response.body.errors).join(',')).toContain(expectedField);
     expect(db.transaction).not.toHaveBeenCalled();
   });
-
-  test('POST rechaza contexto urbano incompleto', async () => {
-    const client = { query: jest.fn() };
-    client.query
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [{ ...currentUser, colaborador_id: 4, tipo_usuario: 'supervisor' }],
-      })
-      .mockResolvedValueOnce({ rowCount: 1, rows: [{ id: 4 }] })
-      .mockResolvedValueOnce({
-        rowCount: 1,
-        rows: [{ id: 1, nombre: 'Urbanización', tipo_punto: 'URBANIZACION' }],
-      });
-    db.transaction.mockImplementation(async (callback) => callback(client));
-
-    const response = await authRequest('post', '/api/bitacoras/registros').send({
-      ubicacion_id: 1,
-      ocurrido_at: '2026-08-20T10:00:00',
-      detalle: 'Novedad',
-    });
-
-    expect(response.status).toBe(400);
-    expect(response.body.code).toBe('COMPLETE_HOUSE_REQUIRED');
-  });
-
-  test.each(['/api/bitacoras/ubicaciones/1/manzanas', '/api/bitacoras/manzanas/8/villas'])(
-    'opciones D3 exigen permiso de creación: %s',
-    async (url) => {
-      currentUser.tipo_usuario = 'monitorista';
-      expect((await authRequest('get', url)).status).toBe(403);
-    }
-  );
 
   test('GET formulario activo permite Guardia con permiso de registro', async () => {
     const response = await authRequest(
@@ -590,8 +537,8 @@ describe('bitacoras routes', () => {
   test('Guardia registra y cierra visitas, pero no anula', async () => {
     const create = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: 9,
+      manzana: 'A',
+      villa: '1',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',
@@ -628,8 +575,8 @@ describe('bitacoras routes', () => {
   test('valida payload estricto de visitas y formularios', async () => {
     const visit = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: 9,
+      manzana: 'A',
+      villa: '1',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',
@@ -654,8 +601,8 @@ describe('bitacoras routes', () => {
   test('regresión: rechaza "No autorizada" sin motivo, aunque el frontend no valide', async () => {
     const response = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: 9,
+      manzana: 'A',
+      villa: '1',
       tipo_visita_id: 901,
       autorizada: false,
       respuestas: {},
@@ -673,8 +620,8 @@ describe('bitacoras routes', () => {
     });
     const response = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: 9,
+      manzana: 'A',
+      villa: '1',
       tipo_visita_id: 901,
       autorizada: false,
       motivo_no_autorizacion: 'Documento vencido',
@@ -697,8 +644,8 @@ describe('bitacoras routes', () => {
   test('acepta visitas sin placa para cualquier tipo (placa ya no es exclusiva de un tipo)', async () => {
     const pedestrian = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: 9,
+      manzana: 'A',
+      villa: '1',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',
@@ -709,8 +656,8 @@ describe('bitacoras routes', () => {
 
     const vehicle = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: 9,
+      manzana: 'A',
+      villa: '1',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',
@@ -723,8 +670,8 @@ describe('bitacoras routes', () => {
   test('rechaza un tipo_visita_id que no pertenece al formulario activo', async () => {
     const response = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: 9,
+      manzana: 'A',
+      villa: '1',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',
@@ -739,8 +686,8 @@ describe('bitacoras routes', () => {
   test('Cédula exige exactamente 10 dígitos numéricos', async () => {
     const response = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,
-      manzana_id: 8,
-      villa_id: 9,
+      manzana: 'A',
+      villa: '1',
       visitante_nombre: 'Ana',
       visitante_documento: '09123A5678',
       visitante_telefono: '0991234567',
@@ -926,61 +873,6 @@ describe('bitacoras routes', () => {
     expect(response.status).toBe(400);
     expect(response.body.errors['fields.0.field_key']).toBeDefined();
     expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
-  });
-
-  test('Villas no distingue Manzana inexistente de Manzana fuera de scope', async () => {
-    repository.findVisibleBlock.mockResolvedValue(null);
-    const missing = await authRequest('get', '/api/bitacoras/manzanas/999/villas');
-    const outsideScope = await authRequest('get', '/api/bitacoras/manzanas/18/villas');
-    expect(missing.status).toBe(404);
-    expect(outsideScope.status).toBe(404);
-    expect(outsideScope.body).toEqual(missing.body);
-    expect(outsideScope.body).not.toHaveProperty('data');
-    expect(repository.findActiveVillasForBlock).not.toHaveBeenCalled();
-  });
-
-  test('Manzanas no distingue Ubicación inexistente de Ubicación fuera de scope', async () => {
-    repository.findVisibleLocation.mockResolvedValue(null);
-    const missing = await authRequest('get', '/api/bitacoras/ubicaciones/999/manzanas');
-    const outsideScope = await authRequest('get', '/api/bitacoras/ubicaciones/2/manzanas');
-    expect(missing.status).toBe(404);
-    expect(outsideScope.status).toBe(404);
-    expect(outsideScope.body).toEqual(missing.body);
-    expect(outsideScope.body).not.toHaveProperty('data');
-    expect(repository.findActiveBlocksForLocation).not.toHaveBeenCalled();
-  });
-
-  test('ver_todos conserva acceso a Villas activas de otra Urbanización', async () => {
-    currentUser.tipo_usuario = 'supervisor';
-    repository.findVisibleBlock.mockResolvedValue({ id: 18, ubicacion_id: 2, estado: 'activo' });
-    repository.findLockedBlock.mockResolvedValue({ id: 18, ubicacion_id: 2, estado: 'activo' });
-    repository.findActiveVillasForBlock.mockResolvedValue([
-      {
-        id: 19,
-        identificador: 'B-1',
-        residente_principal_id: 29,
-        residente_principal_nombre: 'Ana Titular',
-        residente_principal_contacto: '0991234567',
-      },
-    ]);
-    const client = {
-      query: jest.fn().mockResolvedValue({
-        rowCount: 1,
-        rows: [{ id: 2, nombre: 'B', tipo_punto: 'URBANIZACION' }],
-      }),
-    };
-    db.transaction.mockImplementation(async (callback) => callback(client));
-    const response = await authRequest('get', '/api/bitacoras/manzanas/18/villas');
-    expect(response.status).toBe(200);
-    expect(response.body.data).toEqual([
-      {
-        id: 19,
-        identificador: 'B-1',
-        residente_principal_id: 29,
-        residente_principal_nombre: 'Ana Titular',
-        residente_principal_contacto: '0991234567',
-      },
-    ]);
   });
 
   test('POST acepta únicamente el contrato permitido', async () => {

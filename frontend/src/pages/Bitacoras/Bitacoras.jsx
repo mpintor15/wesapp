@@ -11,8 +11,22 @@ import FormularioVisitasAdmin from './components/FormularioVisitasAdmin';
 import HistorialBitacoras from './components/HistorialBitacoras';
 import HistorialVisitas from './components/HistorialVisitas';
 import RegistroForm from './components/RegistroForm';
+import ReportFiltersModal from './components/ReportFiltersModal';
 import VisitaForm from './components/VisitaForm';
 import './Bitacoras.css';
+
+const EMPTY_REPORT_FILTERS = {
+  historial: { ubicacion_id: '', fecha_desde: '', fecha_hasta: '', estado: '', autor: '' },
+  visitas: {
+    ubicacion_id: '',
+    fecha_desde: '',
+    fecha_hasta: '',
+    estado: '',
+    creator: '',
+    search: '',
+  },
+  formularios: { nombre: '', ubicacion_id: '', creator: '', estado: '' },
+};
 
 const Bitacoras = () => {
   useScrollToTopOnMount();
@@ -41,12 +55,9 @@ const Bitacoras = () => {
   const [locationsError, setLocationsError] = useState('');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [formsRefreshKey, setFormsRefreshKey] = useState(0);
-  const [reportFilters, setReportFilters] = useState({
-    historial: {},
-    visitas: {},
-    formularios: {},
-  });
+  const [reportFilters, setReportFilters] = useState(EMPTY_REPORT_FILTERS);
   const [isExporting, setIsExporting] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [tabCounts, setTabCounts] = useState({
     historial: null,
     visitas: null,
@@ -131,21 +142,28 @@ const Bitacoras = () => {
     setIsExporting(true);
     const result = await exporter(reportFilters[activeView]);
     setIsExporting(false);
-    if (result.success) showToast('Reporte exportado exitosamente.', 'success');
-    else if (!result.cancelled)
+    if (result.success) {
+      showToast('Reporte exportado exitosamente.', 'success');
+      setIsReportModalOpen(false);
+    } else if (!result.cancelled) {
       showToast(result.message || 'No se pudo exportar el reporte.', 'error');
+    }
   };
-  const updateHistorialReportFilters = useCallback(
-    (filters) => setReportFilters((current) => ({ ...current, historial: filters })),
-    []
+  const handleReportFilterChange = useCallback(
+    (field, value) =>
+      setReportFilters((current) => ({
+        ...current,
+        [activeView]: { ...current[activeView], [field]: value },
+      })),
+    [activeView]
   );
-  const updateVisitasReportFilters = useCallback(
-    (filters) => setReportFilters((current) => ({ ...current, visitas: filters })),
-    []
-  );
-  const updateFormulariosReportFilters = useCallback(
-    (filters) => setReportFilters((current) => ({ ...current, formularios: filters })),
-    []
+  const handleClearReportFilters = useCallback(
+    () =>
+      setReportFilters((current) => ({
+        ...current,
+        [activeView]: EMPTY_REPORT_FILTERS[activeView],
+      })),
+    [activeView]
   );
   const updateTabCount = useCallback((tabId, total) => {
     setTabCounts((current) => {
@@ -221,7 +239,7 @@ const Bitacoras = () => {
               <button
                 className="btn btn-ghost btn-sm"
                 type="button"
-                onClick={exportActiveReport}
+                onClick={() => setIsReportModalOpen(true)}
                 disabled={isExporting}
               >
                 Generar reporte de Bitácoras
@@ -240,7 +258,7 @@ const Bitacoras = () => {
               <button
                 className="btn btn-ghost btn-sm"
                 type="button"
-                onClick={exportActiveReport}
+                onClick={() => setIsReportModalOpen(true)}
                 disabled={isExporting}
               >
                 Generar reporte de Visitas
@@ -258,7 +276,7 @@ const Bitacoras = () => {
                 <button
                   className="btn btn-ghost btn-sm"
                   type="button"
-                  onClick={exportActiveReport}
+                  onClick={() => setIsReportModalOpen(true)}
                   disabled={isExporting}
                 >
                   Generar reporte de Formularios
@@ -295,7 +313,6 @@ const Bitacoras = () => {
               locationsError={locationsError}
               onReloadUbicaciones={loadUbicaciones}
               refreshKey={historyRefreshKey}
-              onFiltersChange={updateHistorialReportFilters}
               onTotalChange={handleHistorialTotalChange}
             />
           ) : activeView === 'visitas' && canViewHistorial ? (
@@ -304,7 +321,6 @@ const Bitacoras = () => {
               refreshKey={historyRefreshKey}
               onChanged={() => setHistoryRefreshKey((current) => current + 1)}
               showToast={showToast}
-              onFiltersChange={updateVisitasReportFilters}
               canCancelVisita={canManageVisitForms}
               onTotalChange={handleVisitasTotalChange}
             />
@@ -315,9 +331,7 @@ const Bitacoras = () => {
               isBuilderOpen={isFormBuilderOpen}
               onOpenBuilder={() => setIsFormBuilderOpen(true)}
               onCloseBuilder={() => setIsFormBuilderOpen(false)}
-              onFiltersChange={updateFormulariosReportFilters}
               canGestionar={canGestionarFormularios}
-              canDelete={user?.tipo_usuario === 'gerente'}
               onTotalChange={handleFormulariosTotalChange}
               onFormsChanged={handleFormsChanged}
             />
@@ -358,6 +372,17 @@ const Bitacoras = () => {
           showToast={showToast}
         />
       ) : null}
+      <ReportFiltersModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        onExport={exportActiveReport}
+        onFilterChange={handleReportFilterChange}
+        onClear={handleClearReportFilters}
+        isSubmitting={isExporting}
+        filters={reportFilters[activeView]}
+        ubicaciones={ubicaciones}
+        activeView={activeView}
+      />
     </div>
   );
 };

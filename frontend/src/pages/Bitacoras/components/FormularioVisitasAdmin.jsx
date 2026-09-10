@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppModal from '../../../components/AppModal';
-import ConfirmDialog from '../../../components/ConfirmDialog';
+import CollapsibleFilters from '../../../components/CollapsibleFilters';
 import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import TabularWorkspace from '../../../components/TabularWorkspace';
@@ -14,8 +14,8 @@ const FIELD_TYPES = [
   ['textarea', 'Texto largo', 'Respuesta amplia en varias líneas.'],
   ['number', 'Número', 'Acepta únicamente valores numéricos.'],
   ['select', 'Lista', 'Permite elegir una opción definida.'],
-  ['checkbox', 'Casilla', 'Confirmación de sí o no.'],
-  ['cedula', 'Cédula', 'Acepta exactamente 10 dígitos numéricos.'],
+  ['checkbox', 'Sí o No', 'Confirmación de sí o no.'],
+  ['photo', 'Adjuntar foto', 'Permite tomar o seleccionar una imagen.'],
   ['placa', 'Placa', 'Acepta entre 5 y 10 letras o números.'],
 ];
 const EMPTY_FILTERS = { nombre: '', ubicacion_id: '', creator: '', estado: '' };
@@ -41,16 +41,6 @@ const newTipoVisita = (tipo = {}) => ({
   nombre: tipo.nombre || '',
   requiereSalida: tipo.requiere_salida === true,
 });
-
-const resolveFieldForDraft = (field, tiposById) => {
-  if (field.aplica_a === 'TODOS' || !Array.isArray(field.tipos)) {
-    return newField(field);
-  }
-  return newField({
-    ...field,
-    aplica_a: field.tipos.map((tipoId) => tiposById.get(tipoId)).filter(Boolean),
-  });
-};
 
 const normalizeFieldKey = (label) => {
   const normalized = label
@@ -130,16 +120,6 @@ const newVisitantesGroup = (group = {}) => ({
   }),
 });
 
-const resolveGroupForDraft = (group, tiposById) => {
-  if (group.aplica_a === 'TODOS' || !Array.isArray(group.tipos)) {
-    return newVisitantesGroup(group);
-  }
-  return newVisitantesGroup({
-    ...group,
-    aplica_a: group.tipos.map((tipoId) => tiposById.get(tipoId)).filter(Boolean),
-  });
-};
-
 const buildApiGroups = (groups) => {
   if (!groups.length) return [];
   const group = groups[0];
@@ -173,124 +153,39 @@ const aplicaALabel = (item, tiposById) => {
 
 const requiredLabel = (required) => (required ? 'Requerido' : 'Opcional');
 
-const FormActions = ({ form, canGestionar, canDelete, onEdit, onArchive, onPreview, onDelete }) => {
-  if (!canGestionar) return null;
-  if (form.estado === 'ACTIVE') {
-    return (
-      <div className="action-buttons app-table-actions">
-        <button
-          className="action-btn action-btn-edit"
-          onClick={() => onEdit(form)}
-          title="Editar formulario"
-          aria-label={`Editar formulario de ${form.ubicacion_nombre}`}
-          type="button"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-        <button
-          className="action-btn action-btn-cancel"
-          onClick={() => onArchive(form)}
-          title="Cambiar estado"
-          aria-label={`Archivar formulario de ${form.ubicacion_nombre}`}
-          type="button"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M3 5h18v3.5H3z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M4.5 8.5V18a1.5 1.5 0 001.5 1.5h12a1.5 1.5 0 001.5-1.5V8.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M10 13h4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-      </div>
-    );
-  }
-  if (form.estado === 'ARCHIVED') {
-    return (
-      <div className="action-buttons app-table-actions">
-        <button
-          className="action-btn action-btn-edit"
-          onClick={() => onPreview(form)}
-          title="Vista previa"
-          aria-label={`Vista previa del formulario de ${form.ubicacion_nombre}`}
-          type="button"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" strokeWidth="2.2" />
-          </svg>
-        </button>
-        {canDelete ? (
-          <button
-            className="action-btn action-btn-cancel"
-            onClick={() => onDelete(form)}
-            title="Eliminar formulario"
-            aria-label={`Eliminar formulario de ${form.ubicacion_nombre}`}
-            type="button"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14H6L5 6m3 0V4h8v2M10 10v6M14 10v6" />
-            </svg>
-          </button>
-        ) : null}
-      </div>
-    );
-  }
-  return null;
+const FormActions = ({ form, onPreview }) => {
+  return (
+    <div className="action-buttons app-table-actions">
+      <button
+        className="action-btn action-btn-edit"
+        onClick={() => onPreview(form)}
+        title="Vista previa"
+        aria-label={`Vista previa del formulario de ${form.ubicacion_nombre}`}
+        type="button"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="12" cy="12" r="2.5" fill="none" stroke="currentColor" strokeWidth="2.2" />
+        </svg>
+      </button>
+    </div>
+  );
 };
 
 const FormularioVisitasAdmin = ({
   ubicaciones,
   showToast,
   isBuilderOpen,
-  onOpenBuilder,
   onCloseBuilder,
   onFiltersChange,
   canGestionar = false,
-  canDelete = false,
   onTotalChange,
   onFormsChanged,
 }) => {
@@ -311,6 +206,7 @@ const FormularioVisitasAdmin = ({
   const [ubicacionId, setUbicacionId] = useState('');
   const [title, setTitle] = useState('Formulario de visitas');
   const [showDateTime, setShowDateTime] = useState(true);
+  const [showHouse, setShowHouse] = useState(true);
   const [tiposVisita, setTiposVisita] = useState([]);
   const [tipoDraft, setTipoDraft] = useState('');
   const [fields, setFields] = useState([newField()]);
@@ -319,15 +215,11 @@ const FormularioVisitasAdmin = ({
   const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [templateError, setTemplateError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [archiveTarget, setArchiveTarget] = useState(null);
-  const [isArchiving, setIsArchiving] = useState(false);
   const [previewTarget, setPreviewTarget] = useState(null);
   const [previewDetail, setPreviewDetail] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [isReactivating, setIsReactivating] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
   const requestSequenceRef = useRef(0);
 
   const loadForms = useCallback(async () => {
@@ -376,6 +268,7 @@ const FormularioVisitasAdmin = ({
       setUbicacionId('');
       setTitle('Formulario de visitas');
       setShowDateTime(true);
+      setShowHouse(true);
       setTiposVisita([]);
       setTipoDraft('');
       setFields([newField()]);
@@ -390,37 +283,22 @@ const FormularioVisitasAdmin = ({
       return undefined;
     }
     let stale = false;
+    setTitle('Formulario de visitas');
+    setShowDateTime(true);
+    setShowHouse(true);
+    setTiposVisita([]);
+    setTipoDraft('');
+    setFields([newField()]);
+    setGroups([]);
     setLoadingTemplate(true);
     setTemplateError('');
     bitacorasService.getFormularioVisitasActivo(ubicacionId).then((result) => {
       if (stale) return;
       setLoadingTemplate(false);
       if (result.success) {
-        const tipos = Array.isArray(result.data.tipos) ? result.data.tipos : [];
-        const tiposById = new Map(tipos.map((tipo) => [tipo.id, tipo.nombre]));
         setActiveForm(result.data);
-        setTitle(result.data.titulo || 'Formulario de visitas');
-        setShowDateTime(result.data.mostrar_fecha_hora !== false);
-        setTiposVisita(tipos.map((tipo) => newTipoVisita(tipo)));
-        setTipoDraft('');
-        setFields(
-          result.data.fields?.length
-            ? result.data.fields.map((field) => resolveFieldForDraft(field, tiposById))
-            : []
-        );
-        setGroups(
-          result.data.groups?.length
-            ? result.data.groups.map((group) => resolveGroupForDraft(group, tiposById))
-            : []
-        );
       } else if (result.status === 404) {
         setActiveForm(null);
-        setTitle('Formulario de visitas');
-        setShowDateTime(true);
-        setTiposVisita([]);
-        setTipoDraft('');
-        setFields([newField()]);
-        setGroups([]);
       } else {
         setTemplateError(getVisibleErrorMessage(result, 'No se pudo cargar la versión activa.'));
       }
@@ -529,6 +407,10 @@ const FormularioVisitasAdmin = ({
       return;
     }
     const apiFields = buildApiFields(fields);
+    if (apiFields.filter((field) => field.type === 'photo').length > 1) {
+      showToast('Solo se permite una pregunta de foto por formulario.', 'error');
+      return;
+    }
     const invalidList = apiFields.find(
       (field) => field.type === 'select' && field.options.length === 0
     );
@@ -575,6 +457,7 @@ const FormularioVisitasAdmin = ({
     const result = await bitacorasService.publishFormularioVisitas(ubicacionId, {
       titulo: title.trim() || 'Formulario de visitas',
       mostrar_fecha_hora: showDateTime,
+      mostrar_casa: showHouse,
       tipos_visita: tiposVisita.map((tipo) => ({
         nombre: tipo.nombre,
         requiere_salida: tipo.requiereSalida,
@@ -591,29 +474,6 @@ const FormularioVisitasAdmin = ({
       return;
     }
     showToast(getVisibleErrorMessage(result, 'No se pudo publicar el formulario.'), 'error');
-  };
-
-  const handleEditRequest = (form) => {
-    setUbicacionId(String(form.ubicacion_id));
-    onOpenBuilder?.();
-  };
-
-  const handleArchiveConfirmed = async () => {
-    if (!archiveTarget || isArchiving) return;
-    setIsArchiving(true);
-    const result = await bitacorasService.archiveFormularioVisitas(archiveTarget.id);
-    setIsArchiving(false);
-    if (result.success) {
-      showToast(result.message || 'Formulario archivado.', 'success');
-      setArchiveTarget(null);
-      await loadForms();
-      onFormsChanged?.();
-      return;
-    }
-    showToast(
-      getVisibleErrorMessage(result, 'No se pudo cambiar el estado del formulario.'),
-      'error'
-    );
   };
 
   const handlePreviewRequest = async (form) => {
@@ -654,21 +514,6 @@ const FormularioVisitasAdmin = ({
     showToast(getVisibleErrorMessage(result, 'No se pudo activar el formulario.'), 'error');
   };
 
-  const handleDeleteConfirmed = async () => {
-    if (!deleteTarget || isDeleting) return;
-    setIsDeleting(true);
-    const result = await bitacorasService.deleteFormularioVisitas(deleteTarget.id);
-    setIsDeleting(false);
-    if (result.success) {
-      showToast(result.message || 'Formulario eliminado.', 'success');
-      setDeleteTarget(null);
-      await loadForms();
-      onFormsChanged?.();
-      return;
-    }
-    showToast(getVisibleErrorMessage(result, 'No se pudo eliminar el formulario.'), 'error');
-  };
-
   return (
     <>
       <TabularWorkspace
@@ -681,118 +526,120 @@ const FormularioVisitasAdmin = ({
           ) : null
         }
         controls={
-          <div className="ff-filter-row bitacoras-forms-filter-row">
-            <div className="ff-filter-card">
-              <div className="ff-controls">
-                <div className="ff-search">
-                  <svg
-                    className="ff-search-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                  <input
-                    aria-label="Filtrar por nombre"
-                    placeholder="Nombre del formulario"
-                    value={filtersDraft.nombre}
-                    onChange={(event) =>
-                      setFiltersDraft((current) => ({ ...current, nombre: event.target.value }))
-                    }
-                  />
+          <CollapsibleFilters>
+            <div className="ff-filter-row bitacoras-forms-filter-row">
+              <div className="ff-filter-card">
+                <div className="ff-controls">
+                  <div className="ff-search">
+                    <svg
+                      className="ff-search-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      aria-label="Filtrar por nombre"
+                      placeholder="Nombre del formulario"
+                      value={filtersDraft.nombre}
+                      onChange={(event) =>
+                        setFiltersDraft((current) => ({ ...current, nombre: event.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="ff-state">
+                    <label className="ff-state-label" htmlFor="formularios-filter-ubicacion">
+                      Urbanización
+                    </label>
+                    <select
+                      id="formularios-filter-ubicacion"
+                      value={filtersDraft.ubicacion_id}
+                      onChange={(event) =>
+                        setFiltersDraft((current) => ({
+                          ...current,
+                          ubicacion_id: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">Todas</option>
+                      {urbanLocations.map((location) => (
+                        <option key={location.id} value={location.id}>
+                          {location.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="ff-state">
+                    <label className="ff-state-label" htmlFor="formularios-filter-creator">
+                      Creador
+                    </label>
+                    <select
+                      id="formularios-filter-creator"
+                      value={filtersDraft.creator}
+                      onChange={(event) =>
+                        setFiltersDraft((current) => ({ ...current, creator: event.target.value }))
+                      }
+                    >
+                      <option value="">Todos</option>
+                      {creators.map((creator) => (
+                        <option key={creator.id} value={creator.usuario}>
+                          {creator.usuario}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="ff-state">
+                    <label className="ff-state-label" htmlFor="formularios-filter-estado">
+                      Estado
+                    </label>
+                    <select
+                      id="formularios-filter-estado"
+                      value={filtersDraft.estado}
+                      onChange={(event) =>
+                        setFiltersDraft((current) => ({ ...current, estado: event.target.value }))
+                      }
+                    >
+                      <option value="">Todos</option>
+                      <option value="ACTIVE">Activo</option>
+                      <option value="ARCHIVED">Archivado</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="ff-state">
-                  <label className="ff-state-label" htmlFor="formularios-filter-ubicacion">
-                    Urbanización
-                  </label>
-                  <select
-                    id="formularios-filter-ubicacion"
-                    value={filtersDraft.ubicacion_id}
-                    onChange={(event) =>
-                      setFiltersDraft((current) => ({
-                        ...current,
-                        ubicacion_id: event.target.value,
-                      }))
-                    }
+              </div>
+              <div className="ff-filter-actions-card">
+                <div className="ff-actions">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    type="button"
+                    onClick={() => {
+                      setPage(1);
+                      setFilters(filtersDraft);
+                      onFiltersChange?.(filtersDraft);
+                    }}
                   >
-                    <option value="">Todas</option>
-                    {urbanLocations.map((location) => (
-                      <option key={location.id} value={location.id}>
-                        {location.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="ff-state">
-                  <label className="ff-state-label" htmlFor="formularios-filter-creator">
-                    Creador
-                  </label>
-                  <select
-                    id="formularios-filter-creator"
-                    value={filtersDraft.creator}
-                    onChange={(event) =>
-                      setFiltersDraft((current) => ({ ...current, creator: event.target.value }))
-                    }
+                    Aplicar
+                  </button>
+                  <button
+                    className="ff-clear-btn"
+                    type="button"
+                    onClick={() => {
+                      setFiltersDraft(EMPTY_FILTERS);
+                      setFilters(EMPTY_FILTERS);
+                      setPage(1);
+                      onFiltersChange?.({});
+                    }}
                   >
-                    <option value="">Todos</option>
-                    {creators.map((creator) => (
-                      <option key={creator.id} value={creator.usuario}>
-                        {creator.usuario}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="ff-state">
-                  <label className="ff-state-label" htmlFor="formularios-filter-estado">
-                    Estado
-                  </label>
-                  <select
-                    id="formularios-filter-estado"
-                    value={filtersDraft.estado}
-                    onChange={(event) =>
-                      setFiltersDraft((current) => ({ ...current, estado: event.target.value }))
-                    }
-                  >
-                    <option value="">Todos</option>
-                    <option value="ACTIVE">Activo</option>
-                    <option value="ARCHIVED">Archivado</option>
-                  </select>
+                    Limpiar
+                  </button>
                 </div>
               </div>
             </div>
-            <div className="ff-filter-actions-card">
-              <div className="ff-actions">
-                <button
-                  className="btn btn-primary btn-sm"
-                  type="button"
-                  onClick={() => {
-                    setPage(1);
-                    setFilters(filtersDraft);
-                    onFiltersChange?.(filtersDraft);
-                  }}
-                >
-                  Aplicar
-                </button>
-                <button
-                  className="ff-clear-btn"
-                  type="button"
-                  onClick={() => {
-                    setFiltersDraft(EMPTY_FILTERS);
-                    setFilters(EMPTY_FILTERS);
-                    setPage(1);
-                    onFiltersChange?.({});
-                  }}
-                >
-                  Limpiar
-                </button>
-              </div>
-            </div>
-          </div>
+          </CollapsibleFilters>
         }
         pagination={
           <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />
@@ -862,15 +709,7 @@ const FormularioVisitasAdmin = ({
                         <td>{form.creador || '—'}</td>
                         <td>{form.published_at ? formatLocalTimestamp(form.published_at) : '—'}</td>
                         <td className="app-col-actions app-col-actions--double">
-                          <FormActions
-                            form={form}
-                            canGestionar={canGestionar}
-                            canDelete={canDelete}
-                            onEdit={handleEditRequest}
-                            onArchive={setArchiveTarget}
-                            onPreview={handlePreviewRequest}
-                            onDelete={setDeleteTarget}
-                          />
+                          <FormActions form={form} onPreview={handlePreviewRequest} />
                         </td>
                       </tr>
                     ))
@@ -912,15 +751,7 @@ const FormularioVisitasAdmin = ({
                       <div>
                         <dt>Acciones</dt>
                         <dd>
-                          <FormActions
-                            form={form}
-                            canGestionar={canGestionar}
-                            canDelete={canDelete}
-                            onEdit={handleEditRequest}
-                            onArchive={setArchiveTarget}
-                            onPreview={handlePreviewRequest}
-                            onDelete={setDeleteTarget}
-                          />
+                          <FormActions form={form} onPreview={handlePreviewRequest} />
                         </dd>
                       </div>
                     </dl>
@@ -945,7 +776,7 @@ const FormularioVisitasAdmin = ({
         <AppModal.Body aria-busy={loadingTemplate || saving}>
           <div className="bitacoras-admin-form">
             <div className="bitacoras-form-basics">
-              <div className="form-group">
+              <div className="form-group bitacoras-form-location">
                 <label htmlFor="visit-form-location">Urbanización</label>
                 <select
                   id="visit-form-location"
@@ -961,7 +792,7 @@ const FormularioVisitasAdmin = ({
                   ))}
                 </select>
               </div>
-              <div className="form-group">
+              <div className="form-group bitacoras-form-name">
                 <label htmlFor="visit-form-title">Nombre</label>
                 <input
                   id="visit-form-title"
@@ -970,18 +801,41 @@ const FormularioVisitasAdmin = ({
                   disabled={saving}
                 />
               </div>
+              <label className="bitacoras-checkbox-field bitacoras-date-time-toggle">
+                <input
+                  type="checkbox"
+                  checked={showDateTime}
+                  onChange={(event) => setShowDateTime(event.target.checked)}
+                  disabled={saving}
+                />
+                Mostrar fecha y hora en el formulario
+              </label>
             </div>
-            <label className="bitacoras-checkbox-field">
-              <input
-                type="checkbox"
-                checked={showDateTime}
-                onChange={(event) => setShowDateTime(event.target.checked)}
-                disabled={saving}
-              />
-              Mostrar fecha y hora en el formulario
-            </label>
-            <fieldset className="bitacoras-visit-types">
-              <legend>Tipos de visita</legend>
+            <section
+              className="bitacoras-builder-section bitacoras-builder-section--house"
+              aria-labelledby="casa-section-title"
+            >
+              <h4 id="casa-section-title" className="bitacoras-groups-title">
+                Casa
+              </h4>
+              <p className="bitacoras-field-hint">
+                Solicita Manzana y Villa al registrar una visita.
+              </p>
+              <label className="bitacoras-checkbox-field bitacoras-group-toggle">
+                <input
+                  type="checkbox"
+                  checked={showHouse}
+                  onChange={(event) => setShowHouse(event.target.checked)}
+                  disabled={saving || loadingTemplate}
+                />
+                Solicitar Manzana y Villa
+              </label>
+            </section>
+            <section className="bitacoras-builder-section bitacoras-visit-types">
+              <h4 className="bitacoras-groups-title">Tipos de visita</h4>
+              <p className="bitacoras-field-hint">
+                Define las categorías disponibles y si requieren registrar salida.
+              </p>
               <div className="bitacoras-option-entry">
                 <input
                   aria-label="Nuevo tipo de visita"
@@ -1041,7 +895,7 @@ const FormularioVisitasAdmin = ({
                   Agrega al menos un tipo de visita (ej. Peatón, Vehículo, Delivery).
                 </p>
               )}
-            </fieldset>
+            </section>
             {loadingTemplate ? <p className="bitacoras-field-hint">Cargando versión...</p> : null}
             {templateError ? <p className="bitacoras-filter-error">{templateError}</p> : null}
             {activeForm ? (
@@ -1049,151 +903,47 @@ const FormularioVisitasAdmin = ({
                 La nueva publicación reemplazará la versión activa {activeForm.version}.
               </p>
             ) : null}
-            <h4 className="bitacoras-groups-title">Visitantes</h4>
-            <p className="bitacoras-field-hint">
-              Estructura predefinida para capturar visitantes repetibles (Nombre y Cédula fijos). El
-              guardia podrá agregar Visitante 1, Visitante 2, Visitante 3...
-            </p>
-            <label className="bitacoras-checkbox-field bitacoras-group-toggle">
-              <input
-                type="checkbox"
-                checked={groups.length > 0}
-                onChange={(event) => toggleVisitantesGroup(event.target.checked)}
-                disabled={loadingTemplate}
-              />
-              Habilitar grupo Visitantes
-            </label>
-            {!loadingTemplate && groups.length > 0
-              ? groups.map((group) => (
-                  <fieldset className="bitacoras-group-row" key={group.draftId}>
-                    <legend>Visitantes</legend>
-                    <label className="bitacoras-checkbox-field bitacoras-group-min-input">
-                      <input
-                        type="checkbox"
-                        checked={group.minCount === 1}
-                        onChange={(event) =>
-                          updateGroup(group.draftId, { minCount: event.target.checked ? 1 : 0 })
-                        }
-                      />
-                      Mínimo 1 registro
-                    </label>
-                    <div className="form-group bitacoras-applies-input bitacoras-group-applies">
-                      <label htmlFor={`visit-group-applies-${group.draftId}`}>Aplica a</label>
-                      <select
-                        id={`visit-group-applies-${group.draftId}`}
-                        aria-label="Aplica a"
-                        value={group.aplica_a === 'TODOS' ? 'TODOS' : 'SELECCIONADOS'}
-                        onChange={(event) =>
-                          updateGroup(group.draftId, {
-                            aplica_a: event.target.value === 'TODOS' ? 'TODOS' : [],
-                          })
-                        }
-                      >
-                        <option value="TODOS">Todos</option>
-                        <option value="SELECCIONADOS">Tipos específicos</option>
-                      </select>
-                      {group.aplica_a !== 'TODOS' ? (
-                        tiposVisita.length ? (
-                          <div
-                            className="bitacoras-applies-types"
-                            aria-label="Tipos de visita para el grupo Visitantes"
-                          >
-                            {tiposVisita.map((tipo) => (
-                              <label key={tipo.nombre} className="bitacoras-checkbox-field">
-                                <input
-                                  type="checkbox"
-                                  checked={group.aplica_a.includes(tipo.nombre)}
-                                  onChange={() => toggleGroupTipo(group, tipo.nombre)}
-                                />
-                                {tipo.nombre}
-                              </label>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="bitacoras-field-hint">
-                            Agrega tipos de visita para poder seleccionarlos aquí.
-                          </p>
-                        )
-                      ) : null}
-                    </div>
-                    <div className="bitacoras-group-fields">
-                      {group.fields.map((groupField) => (
-                        <div
-                          className="bitacoras-group-field-row bitacoras-group-field-row--fixed"
-                          key={groupField.draftId}
-                        >
-                          <div className="bitacoras-group-field-fixed">
-                            <span className="bitacoras-group-field-fixed-label">
-                              {groupField.label}
-                            </span>
-                            <span className="bitacoras-field-hint">{groupField.hint}</span>
-                          </div>
-                          <label
-                            className="bitacoras-checkbox-field bitacoras-group-field-required"
-                            title="Requerido"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={groupField.required}
-                              onChange={(event) =>
-                                updateGroupField(group.draftId, groupField.draftId, {
-                                  required: event.target.checked,
-                                })
-                              }
-                            />
-                            <span>Requerido</span>
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  </fieldset>
-                ))
-              : null}
-
-            <h4 className="bitacoras-groups-title">Preguntas adicionales</h4>
-            <div className="bitacoras-form-fields">
-              {loadingTemplate
-                ? null
-                : fields.map((field, index) => (
-                    <fieldset className="bitacoras-form-field-row" key={field.draftId}>
-                      <legend>Pregunta {index + 1}</legend>
-                      <div className="form-group bitacoras-question-input">
-                        <label htmlFor={`visit-question-${field.draftId}`}>Pregunta</label>
+            <section
+              className="bitacoras-builder-section bitacoras-builder-section--visitors"
+              aria-labelledby="visitantes-section-title"
+            >
+              <h4 id="visitantes-section-title" className="bitacoras-groups-title">
+                Visitantes
+              </h4>
+              <p className="bitacoras-field-hint">
+                Captura visitantes repetibles con Nombre y Cédula.
+              </p>
+              <label className="bitacoras-checkbox-field bitacoras-group-toggle">
+                <input
+                  type="checkbox"
+                  checked={groups.length > 0}
+                  onChange={(event) => toggleVisitantesGroup(event.target.checked)}
+                  disabled={loadingTemplate}
+                />
+                Habilitar grupo Visitantes
+              </label>
+              {!loadingTemplate && groups.length > 0
+                ? groups.map((group) => (
+                    <fieldset className="bitacoras-group-row" key={group.draftId}>
+                      <legend>Visitantes</legend>
+                      <label className="bitacoras-checkbox-field bitacoras-group-min-input">
                         <input
-                          id={`visit-question-${field.draftId}`}
-                          aria-label="Pregunta del campo"
-                          placeholder="Escribe la pregunta"
-                          value={field.label}
+                          type="checkbox"
+                          checked={group.minCount === 1}
                           onChange={(event) =>
-                            updateField(field.draftId, { label: event.target.value })
+                            updateGroup(group.draftId, { minCount: event.target.checked ? 1 : 0 })
                           }
                         />
-                      </div>
-                      <div className="form-group bitacoras-type-input">
-                        <label htmlFor={`visit-type-${field.draftId}`}>Tipo</label>
+                        Mínimo 1 registro
+                      </label>
+                      <div className="form-group bitacoras-applies-input bitacoras-group-applies">
+                        <label htmlFor={`visit-group-applies-${group.draftId}`}>Aplica a</label>
                         <select
-                          id={`visit-type-${field.draftId}`}
-                          aria-label="Tipo de campo"
-                          value={field.type}
-                          onChange={(event) =>
-                            updateField(field.draftId, { type: event.target.value })
-                          }
-                        >
-                          {FIELD_TYPES.map(([value, label]) => (
-                            <option key={value} value={value}>
-                              {label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="form-group bitacoras-applies-input">
-                        <label htmlFor={`visit-applies-${field.draftId}`}>Aplica a</label>
-                        <select
-                          id={`visit-applies-${field.draftId}`}
+                          id={`visit-group-applies-${group.draftId}`}
                           aria-label="Aplica a"
-                          value={field.aplica_a === 'TODOS' ? 'TODOS' : 'SELECCIONADOS'}
+                          value={group.aplica_a === 'TODOS' ? 'TODOS' : 'SELECCIONADOS'}
                           onChange={(event) =>
-                            updateField(field.draftId, {
+                            updateGroup(group.draftId, {
                               aplica_a: event.target.value === 'TODOS' ? 'TODOS' : [],
                             })
                           }
@@ -1201,18 +951,18 @@ const FormularioVisitasAdmin = ({
                           <option value="TODOS">Todos</option>
                           <option value="SELECCIONADOS">Tipos específicos</option>
                         </select>
-                        {field.aplica_a !== 'TODOS' ? (
+                        {group.aplica_a !== 'TODOS' ? (
                           tiposVisita.length ? (
                             <div
                               className="bitacoras-applies-types"
-                              aria-label={`Tipos de visita para pregunta ${index + 1}`}
+                              aria-label="Tipos de visita para el grupo Visitantes"
                             >
                               {tiposVisita.map((tipo) => (
                                 <label key={tipo.nombre} className="bitacoras-checkbox-field">
                                   <input
                                     type="checkbox"
-                                    checked={field.aplica_a.includes(tipo.nombre)}
-                                    onChange={() => toggleFieldTipo(field, tipo.nombre)}
+                                    checked={group.aplica_a.includes(tipo.nombre)}
+                                    onChange={() => toggleGroupTipo(group, tipo.nombre)}
                                   />
                                   {tipo.nombre}
                                 </label>
@@ -1225,100 +975,219 @@ const FormularioVisitasAdmin = ({
                           )
                         ) : null}
                       </div>
-                      <label className="bitacoras-checkbox-field bitacoras-required-input">
-                        <input
-                          type="checkbox"
-                          checked={field.required}
-                          onChange={(event) =>
-                            updateField(field.draftId, { required: event.target.checked })
-                          }
-                        />
-                        Requerido
-                      </label>
-                      <div className="bitacoras-remove-question-slot">
-                        <button
-                          className="action-btn action-btn-destructive"
-                          type="button"
-                          title="Eliminar pregunta"
-                          aria-label="Eliminar pregunta"
-                          onClick={() =>
-                            setFields((current) =>
-                              current.filter((item) => item.draftId !== field.draftId)
-                            )
-                          }
-                          disabled={saving || loadingTemplate}
-                        >
-                          <svg viewBox="0 0 24 24" aria-hidden="true">
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                            <path d="M10 11v6M14 11v6" />
-                            <path d="M9 6V4h6v2" />
-                          </svg>
-                        </button>
-                      </div>
-                      {field.type === 'select' ? (
-                        <div className="bitacoras-list-options">
-                          <label htmlFor={`visit-option-${field.draftId}`}>Opciones de Lista</label>
-                          <div className="bitacoras-option-entry">
-                            <input
-                              id={`visit-option-${field.draftId}`}
-                              aria-label="Nueva opción"
-                              value={field.optionDraft}
-                              onChange={(event) =>
-                                updateField(field.draftId, { optionDraft: event.target.value })
-                              }
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  event.preventDefault();
-                                  addOption(field);
-                                }
-                              }}
-                              placeholder="Escribe una opción"
-                            />
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              type="button"
-                              onClick={() => addOption(field)}
+                      <div className="bitacoras-group-fields">
+                        {group.fields.map((groupField) => (
+                          <div
+                            className="bitacoras-group-field-row bitacoras-group-field-row--fixed"
+                            key={groupField.draftId}
+                          >
+                            <div className="bitacoras-group-field-fixed">
+                              <span className="bitacoras-group-field-fixed-label">
+                                {groupField.label}
+                              </span>
+                              <span className="bitacoras-field-hint">{groupField.hint}</span>
+                            </div>
+                            <label
+                              className="bitacoras-checkbox-field bitacoras-group-field-required"
+                              title="Requerido"
                             >
-                              Agregar opción
-                            </button>
+                              <input
+                                type="checkbox"
+                                checked={groupField.required}
+                                onChange={(event) =>
+                                  updateGroupField(group.draftId, groupField.draftId, {
+                                    required: event.target.checked,
+                                  })
+                                }
+                              />
+                              <span>Requerido</span>
+                            </label>
                           </div>
-                          {field.options.length ? (
-                            <ul className="bitacoras-option-list">
-                              {field.options.map((option) => (
-                                <li key={option}>
-                                  <span>{option}</span>
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-sm"
-                                    aria-label={`Quitar opción ${option}`}
-                                    onClick={() =>
-                                      updateField(field.draftId, {
-                                        options: field.options.filter((item) => item !== option),
-                                      })
-                                    }
-                                  >
-                                    Quitar
-                                  </button>
-                                </li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="bitacoras-field-hint">Agrega al menos una opción.</p>
-                          )}
-                        </div>
-                      ) : null}
+                        ))}
+                      </div>
                     </fieldset>
-                  ))}
-            </div>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => setFields((current) => [...current, newField()])}
-              disabled={loadingTemplate}
+                  ))
+                : null}
+            </section>
+
+            <section
+              className="bitacoras-builder-section bitacoras-builder-section--questions"
+              aria-labelledby="questions-section-title"
             >
-              Agregar pregunta
-            </button>
+              <h4 id="questions-section-title" className="bitacoras-groups-title">
+                Preguntas adicionales
+              </h4>
+              <div className="bitacoras-form-fields">
+                {loadingTemplate
+                  ? null
+                  : fields.map((field, index) => (
+                      <fieldset className="bitacoras-form-field-row" key={field.draftId}>
+                        <legend>Pregunta {index + 1}</legend>
+                        <div className="form-group bitacoras-question-input">
+                          <label htmlFor={`visit-question-${field.draftId}`}>Pregunta</label>
+                          <input
+                            id={`visit-question-${field.draftId}`}
+                            aria-label="Pregunta del campo"
+                            placeholder="Escribe la pregunta"
+                            value={field.label}
+                            onChange={(event) =>
+                              updateField(field.draftId, { label: event.target.value })
+                            }
+                          />
+                        </div>
+                        <div className="form-group bitacoras-type-input">
+                          <label htmlFor={`visit-type-${field.draftId}`}>Tipo</label>
+                          <select
+                            id={`visit-type-${field.draftId}`}
+                            aria-label="Tipo de campo"
+                            value={field.type}
+                            onChange={(event) =>
+                              updateField(field.draftId, { type: event.target.value })
+                            }
+                          >
+                            {FIELD_TYPES.map(([value, label]) => (
+                              <option key={value} value={value}>
+                                {label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="form-group bitacoras-applies-input">
+                          <label htmlFor={`visit-applies-${field.draftId}`}>Aplica a</label>
+                          <select
+                            id={`visit-applies-${field.draftId}`}
+                            aria-label="Aplica a"
+                            value={field.aplica_a === 'TODOS' ? 'TODOS' : 'SELECCIONADOS'}
+                            onChange={(event) =>
+                              updateField(field.draftId, {
+                                aplica_a: event.target.value === 'TODOS' ? 'TODOS' : [],
+                              })
+                            }
+                          >
+                            <option value="TODOS">Todos</option>
+                            <option value="SELECCIONADOS">Tipos específicos</option>
+                          </select>
+                          {field.aplica_a !== 'TODOS' ? (
+                            tiposVisita.length ? (
+                              <div
+                                className="bitacoras-applies-types"
+                                aria-label={`Tipos de visita para pregunta ${index + 1}`}
+                              >
+                                {tiposVisita.map((tipo) => (
+                                  <label key={tipo.nombre} className="bitacoras-checkbox-field">
+                                    <input
+                                      type="checkbox"
+                                      checked={field.aplica_a.includes(tipo.nombre)}
+                                      onChange={() => toggleFieldTipo(field, tipo.nombre)}
+                                    />
+                                    {tipo.nombre}
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="bitacoras-field-hint">
+                                Agrega tipos de visita para poder seleccionarlos aquí.
+                              </p>
+                            )
+                          ) : null}
+                        </div>
+                        <label className="bitacoras-checkbox-field bitacoras-required-input">
+                          <input
+                            type="checkbox"
+                            checked={field.required}
+                            onChange={(event) =>
+                              updateField(field.draftId, { required: event.target.checked })
+                            }
+                          />
+                          Requerido
+                        </label>
+                        <div className="bitacoras-remove-question-slot">
+                          <button
+                            className="action-btn action-btn-destructive"
+                            type="button"
+                            title="Eliminar pregunta"
+                            aria-label="Eliminar pregunta"
+                            onClick={() =>
+                              setFields((current) =>
+                                current.filter((item) => item.draftId !== field.draftId)
+                              )
+                            }
+                            disabled={saving || loadingTemplate}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              <path d="M10 11v6M14 11v6" />
+                              <path d="M9 6V4h6v2" />
+                            </svg>
+                          </button>
+                        </div>
+                        {field.type === 'select' ? (
+                          <div className="bitacoras-list-options">
+                            <label htmlFor={`visit-option-${field.draftId}`}>
+                              Opciones de Lista
+                            </label>
+                            <div className="bitacoras-option-entry">
+                              <input
+                                id={`visit-option-${field.draftId}`}
+                                aria-label="Nueva opción"
+                                value={field.optionDraft}
+                                onChange={(event) =>
+                                  updateField(field.draftId, { optionDraft: event.target.value })
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    addOption(field);
+                                  }
+                                }}
+                                placeholder="Escribe una opción"
+                              />
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                type="button"
+                                onClick={() => addOption(field)}
+                              >
+                                Agregar opción
+                              </button>
+                            </div>
+                            {field.options.length ? (
+                              <ul className="bitacoras-option-list">
+                                {field.options.map((option) => (
+                                  <li key={option}>
+                                    <span>{option}</span>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost btn-sm"
+                                      aria-label={`Quitar opción ${option}`}
+                                      onClick={() =>
+                                        updateField(field.draftId, {
+                                          options: field.options.filter((item) => item !== option),
+                                        })
+                                      }
+                                    >
+                                      Quitar
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="bitacoras-field-hint">Agrega al menos una opción.</p>
+                            )}
+                          </div>
+                        ) : null}
+                      </fieldset>
+                    ))}
+              </div>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => setFields((current) => [...current, newField()])}
+                disabled={loadingTemplate}
+              >
+                Agregar pregunta
+              </button>
+            </section>
           </div>
         </AppModal.Body>
         <AppModal.Footer className="modal-buttons">
@@ -1340,40 +1209,6 @@ const FormularioVisitasAdmin = ({
           </button>
         </AppModal.Footer>
       </AppModal>
-
-      <ConfirmDialog
-        isOpen={Boolean(archiveTarget)}
-        title="Cambiar estado del formulario"
-        message={
-          archiveTarget
-            ? `El formulario activo de "${archiveTarget.ubicacion_nombre}" (versión ${archiveTarget.version}) pasará a ARCHIVADO y dejará de usarse para registrar visitas.`
-            : ''
-        }
-        confirmText="Archivar"
-        processingText="Archivando..."
-        cancelText="Cancelar"
-        variant="danger"
-        isSubmitting={isArchiving}
-        onConfirm={handleArchiveConfirmed}
-        onCancel={() => setArchiveTarget(null)}
-      />
-
-      <ConfirmDialog
-        isOpen={Boolean(deleteTarget)}
-        title="Eliminar formulario archivado"
-        message={
-          deleteTarget
-            ? `Se ocultará el formulario "${deleteTarget.titulo}" (versión ${deleteTarget.version}). Las visitas y la auditoría histórica se conservarán.`
-            : ''
-        }
-        confirmText="Eliminar"
-        processingText="Eliminando..."
-        cancelText="Cancelar"
-        variant="danger"
-        isSubmitting={isDeleting}
-        onConfirm={handleDeleteConfirmed}
-        onCancel={() => setDeleteTarget(null)}
-      />
 
       <AppModal
         isOpen={Boolean(previewTarget)}
@@ -1467,22 +1302,26 @@ const FormularioVisitasAdmin = ({
                   <p className="bitacoras-field-hint">No contiene preguntas adicionales.</p>
                 )}
               </section>
-              <p className="bitacoras-form-preview__notice">
-                Activar publicará este contenido como una nueva versión y archivará el formulario
-                activo actual.
-              </p>
+              {previewDetail.estado === 'ARCHIVED' ? (
+                <p className="bitacoras-form-preview__notice">
+                  Restaurar publicará este contenido como una nueva versión y archivará el
+                  formulario activo actual.
+                </p>
+              ) : null}
             </div>
           ) : null}
         </AppModal.Body>
         <AppModal.Footer className="modal-buttons">
-          <button
-            className="btn btn-primary"
-            type="button"
-            onClick={handleReactivateConfirmed}
-            disabled={!previewDetail || previewLoading || Boolean(previewError) || isReactivating}
-          >
-            {isReactivating ? 'Activando...' : 'Activar'}
-          </button>
+          {previewDetail?.estado === 'ARCHIVED' && canGestionar ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={handleReactivateConfirmed}
+              disabled={previewLoading || Boolean(previewError) || isReactivating}
+            >
+              {isReactivating ? 'Restaurando...' : 'Restaurar versión'}
+            </button>
+          ) : null}
           <button
             className="btn btn-modal-clear"
             type="button"

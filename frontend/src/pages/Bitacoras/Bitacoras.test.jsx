@@ -25,8 +25,6 @@ jest.mock('../../services/bitacorasService', () => ({
   default: {
     getResumen: jest.fn(),
     getUbicaciones: jest.fn(),
-    getManzanas: jest.fn(),
-    getVillas: jest.fn(),
     getFormulariosVisitas: jest.fn(),
     getFormularioVisitasActivo: jest.fn(),
     publishFormularioVisitas: jest.fn(),
@@ -87,27 +85,6 @@ const flushPromises = async (cycles = 3) => {
   }
 };
 
-const changeAndFlush = async (element, value, cycles = 3) => {
-  act(() => setValue(element, value));
-  await act(async () => flushPromises(cycles));
-};
-
-const selectSearchOption = async (container, input, text, cycles = 3) => {
-  await act(async () => {
-    input.dispatchEvent(new globalThis.FocusEvent('focusin', { bubbles: true }));
-    await flushPromises();
-  });
-  const option = Array.from(container.querySelectorAll('[role="option"]')).find(
-    (item) => item.textContent === text
-  );
-  expect(option).not.toBeUndefined();
-  await act(async () => {
-    option.dispatchEvent(new globalThis.MouseEvent('mousedown', { bubbles: true }));
-    option.dispatchEvent(new globalThis.MouseEvent('click', { bubbles: true }));
-    await flushPromises(cycles);
-  });
-};
-
 const renderBitacoras = (permissions, user = { id: 7, colaborador_id: 4 }) => {
   useAuth.mockReturnValue({
     user,
@@ -158,21 +135,6 @@ describe('Bitacoras', () => {
     bitacorasService.exportRegistros.mockResolvedValue({ success: true });
     bitacorasService.exportVisitas.mockResolvedValue({ success: true });
     bitacorasService.exportFormulariosVisitas.mockResolvedValue({ success: true });
-    bitacorasService.getManzanas.mockResolvedValue({
-      success: true,
-      data: [{ id: 31, nombre: 'Manzana A' }],
-    });
-    bitacorasService.getVillas.mockResolvedValue({
-      success: true,
-      data: [
-        {
-          id: 41,
-          identificador: 'A-1',
-          residente_principal_nombre: 'Ana Titular',
-          residente_principal_contacto: '0991234567',
-        },
-      ],
-    });
   });
 
   afterEach(() => jest.useRealTimers());
@@ -236,7 +198,20 @@ describe('Bitacoras', () => {
       view.button('Generar reporte de Bitácoras').click();
       await Promise.resolve();
     });
-    expect(bitacorasService.exportRegistros).toHaveBeenCalledWith({});
+    await act(async () => {
+      const buttons = Array.from(view.container.querySelectorAll('button')).filter(
+        (button) => button.textContent === 'Generar reporte'
+      );
+      buttons[0].click();
+      await Promise.resolve();
+    });
+    expect(bitacorasService.exportRegistros).toHaveBeenCalledWith({
+      ubicacion_id: '',
+      fecha_desde: '',
+      fecha_hasta: '',
+      estado: '',
+      autor: '',
+    });
 
     await act(async () => {
       view.button('Visitas').click();
@@ -250,11 +225,20 @@ describe('Bitacoras', () => {
       view.button('Generar reporte de Visitas').click();
       await Promise.resolve();
     });
+    await act(async () => {
+      const buttons = Array.from(view.container.querySelectorAll('button')).filter(
+        (button) => button.textContent === 'Generar reporte'
+      );
+      buttons[0].click();
+      await Promise.resolve();
+    });
     expect(bitacorasService.exportVisitas).toHaveBeenCalledWith({
-      pageSize: 25,
-      ubicacion_id: 8,
-      sortBy: 'entrada_at',
-      sortOrder: 'desc',
+      ubicacion_id: '',
+      fecha_desde: '',
+      fecha_hasta: '',
+      estado: '',
+      creator: '',
+      search: '',
     });
 
     view.unmount();
@@ -444,22 +428,14 @@ describe('Bitacoras', () => {
     view.unmount();
   });
 
-  test('cerrar y reabrir conserva Ubicación urbana pero reinicia Manzana y Villa', async () => {
+  test('cerrar y reabrir conserva la Ubicación urbana sin campos de Casa', async () => {
     const view = renderBitacoras([PERMISSIONS.BITACORAS_REGISTRO_CREAR]);
     await act(async () => Promise.resolve());
     act(() => view.button('Registrar Bitácora').click());
-    await changeAndFlush(view.container.querySelector('#bitacora-ubicacion'), '8');
-    await selectSearchOption(
-      view.container,
-      view.container.querySelector('#bitacora-manzana'),
-      'Manzana A'
-    );
-    await selectSearchOption(
-      view.container,
-      view.container.querySelector('#bitacora-villa'),
-      'A-1'
-    );
-    act(() => view.button('Cancelar').click());
+    act(() => {
+      setValue(view.container.querySelector('#bitacora-ubicacion'), '8');
+      view.button('Cancelar').click();
+    });
 
     expect(view.container.querySelector('[role="dialog"]')).toBeNull();
     act(() => view.button('Registrar Bitácora').click());
@@ -468,7 +444,7 @@ describe('Bitacoras', () => {
     });
 
     expect(view.container.querySelector('#bitacora-ubicacion').value).toBe('8');
-    expect(view.container.querySelector('#bitacora-manzana').value).toBe('');
+    expect(view.container.querySelector('#bitacora-manzana')).toBeNull();
     expect(view.container.querySelector('#bitacora-villa')).toBeNull();
     view.unmount();
   });

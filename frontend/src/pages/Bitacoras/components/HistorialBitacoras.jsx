@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import CollapsibleFilters from '../../../components/CollapsibleFilters';
 import FilterDateInput from '../../../components/FilterDateInput';
 import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
@@ -44,13 +45,6 @@ const buildHistoryParams = (page, filters, sort) => ({
 const getAuthorName = (registro) =>
   registro.autor_colaborador_nombre || registro.autor_usuario || '—';
 
-const getCasaLabel = (registro) => {
-  if (registro.manzana_nombre && registro.villa_identificador) {
-    return `${registro.manzana_nombre} - ${registro.villa_identificador}`;
-  }
-  return registro.manzana_nombre || registro.villa_identificador || '—';
-};
-
 const getStatusClass = (estado) =>
   estado === 'ANULADA' ? 'bitacoras-status--cancelled' : 'bitacoras-status--registered';
 
@@ -59,7 +53,7 @@ const StatusBadge = ({ estado }) => {
   return <span className={`bitacoras-status ${getStatusClass(label)}`}>{label}</span>;
 };
 
-const RecordDetails = ({ registro, showCasa }) => (
+const RecordDetails = ({ registro }) => (
   <>
     <div>
       <dt>Fecha/hora</dt>
@@ -72,14 +66,6 @@ const RecordDetails = ({ registro, showCasa }) => (
         {registro.tipo_punto ? <small>{registro.tipo_punto}</small> : null}
       </dd>
     </div>
-    {showCasa ? (
-      <div>
-        <dt>Casa</dt>
-        <dd>
-          <span className="bitacoras-cell-primary">{getCasaLabel(registro)}</span>
-        </dd>
-      </div>
-    ) : null}
     <div>
       <dt>Autor</dt>
       <dd>
@@ -114,12 +100,8 @@ const HistorialBitacoras = ({
   const [meta, setMeta] = useState(EMPTY_META);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [autores, setAutores] = useState([]);
   const requestSequenceRef = useRef(0);
-
-  const hasUrbanizaciones = useMemo(
-    () => ubicaciones.some((ubicacion) => ubicacion.tipo_punto === 'URBANIZACION'),
-    [ubicaciones]
-  );
 
   const groupedLocations = useMemo(() => {
     const groups = new Map();
@@ -157,6 +139,7 @@ const HistorialBitacoras = ({
 
     setRecords(Array.isArray(result.data) ? result.data : []);
     setMeta(nextMeta);
+    setAutores(Array.isArray(result.filters?.autores) ? result.filters.autores : []);
     setLoading(false);
   }, [appliedFilters, page, sort]);
 
@@ -214,132 +197,125 @@ const HistorialBitacoras = ({
     : 'No hay registros de Bitácora.';
 
   const controls = (
-    <div className="ff-filter-row bitacoras-filter-row">
-      <div className="ff-filter-card bitacoras-filter-card">
-        <div className="ff-controls bitacoras-filter-controls">
-          <div className="ff-search bitacoras-author-filter">
-            <svg
-              className="ff-search-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <label className="sr-only" htmlFor="bitacoras-filter-autor">
-              Autor
-            </label>
-            <input
-              id="bitacoras-filter-autor"
-              name="autor"
-              type="text"
-              value={draftFilters.autor}
-              onChange={handleDraftChange}
-              onKeyDown={(event) => event.key === 'Enter' && handleApply()}
-              placeholder="Buscar autor..."
-            />
-          </div>
-          <div className="ff-state bitacoras-location-filter">
-            <label className="ff-state-label" htmlFor="bitacoras-filter-ubicacion">
-              Ubicación
-            </label>
-            <select
-              id="bitacoras-filter-ubicacion"
-              name="ubicacion_id"
-              value={draftFilters.ubicacion_id}
-              onChange={handleDraftChange}
-              disabled={locationsLoading}
-            >
-              <option value="">Todas</option>
-              {groupedLocations.map(([clientName, locations]) => (
-                <optgroup key={clientName} label={clientName}>
-                  {locations.map((ubicacion) => (
-                    <option key={ubicacion.id} value={ubicacion.id}>
-                      {ubicacion.nombre}
-                      {ubicacion.tipo_punto ? ` — ${ubicacion.tipo_punto}` : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-            {locationsError ? (
-              <button
-                className="bitacoras-inline-retry"
-                type="button"
-                onClick={() => onReloadUbicaciones()}
+    <CollapsibleFilters>
+      <div className="ff-filter-row bitacoras-filter-row">
+        <div className="ff-filter-card bitacoras-filter-card">
+          <div className="ff-controls bitacoras-filter-controls">
+            <div className="ff-state bitacoras-author-filter">
+              <label className="ff-state-label" htmlFor="bitacoras-filter-autor">
+                Autor
+              </label>
+              <select
+                id="bitacoras-filter-autor"
+                name="autor"
+                value={draftFilters.autor}
+                onChange={handleDraftChange}
               >
-                Reintentar Ubicaciones
-              </button>
-            ) : null}
-          </div>
-
-          <div className="ff-dates bitacoras-date-filters">
-            <div className="ff-date-field">
-              <label className="ff-date-label" htmlFor="bitacoras-filter-desde">
-                Desde
-              </label>
-              <FilterDateInput
-                id="bitacoras-filter-desde"
-                name="fecha_desde"
-                value={draftFilters.fecha_desde}
-                onChange={handleDraftChange}
-                aria-invalid={Boolean(dateError)}
-                aria-describedby={dateError ? 'bitacoras-date-error' : undefined}
-              />
+                <option value="">Todos</option>
+                {autores.map((autor) => (
+                  <option key={autor.id} value={autor.nombre}>
+                    {autor.nombre}
+                  </option>
+                ))}
+              </select>
             </div>
-            <div className="ff-date-field">
-              <label className="ff-date-label" htmlFor="bitacoras-filter-hasta">
-                Hasta
+            <div className="ff-state bitacoras-location-filter">
+              <label className="ff-state-label" htmlFor="bitacoras-filter-ubicacion">
+                Ubicación
               </label>
-              <FilterDateInput
-                id="bitacoras-filter-hasta"
-                name="fecha_hasta"
-                value={draftFilters.fecha_hasta}
+              <select
+                id="bitacoras-filter-ubicacion"
+                name="ubicacion_id"
+                value={draftFilters.ubicacion_id}
                 onChange={handleDraftChange}
-                aria-invalid={Boolean(dateError)}
-                aria-describedby={dateError ? 'bitacoras-date-error' : undefined}
-              />
+                disabled={locationsLoading}
+              >
+                <option value="">Todas</option>
+                {groupedLocations.map(([clientName, locations]) => (
+                  <optgroup key={clientName} label={clientName}>
+                    {locations.map((ubicacion) => (
+                      <option key={ubicacion.id} value={ubicacion.id}>
+                        {ubicacion.nombre}
+                        {ubicacion.tipo_punto ? ` — ${ubicacion.tipo_punto}` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              {locationsError ? (
+                <button
+                  className="bitacoras-inline-retry"
+                  type="button"
+                  onClick={() => onReloadUbicaciones()}
+                >
+                  Reintentar Ubicaciones
+                </button>
+              ) : null}
+            </div>
+
+            <div className="ff-dates bitacoras-date-filters">
+              <div className="ff-date-field">
+                <label className="ff-date-label" htmlFor="bitacoras-filter-desde">
+                  Desde
+                </label>
+                <FilterDateInput
+                  id="bitacoras-filter-desde"
+                  name="fecha_desde"
+                  value={draftFilters.fecha_desde}
+                  onChange={handleDraftChange}
+                  aria-invalid={Boolean(dateError)}
+                  aria-describedby={dateError ? 'bitacoras-date-error' : undefined}
+                />
+              </div>
+              <div className="ff-date-field">
+                <label className="ff-date-label" htmlFor="bitacoras-filter-hasta">
+                  Hasta
+                </label>
+                <FilterDateInput
+                  id="bitacoras-filter-hasta"
+                  name="fecha_hasta"
+                  value={draftFilters.fecha_hasta}
+                  onChange={handleDraftChange}
+                  aria-invalid={Boolean(dateError)}
+                  aria-describedby={dateError ? 'bitacoras-date-error' : undefined}
+                />
+              </div>
+            </div>
+
+            <div className="ff-state bitacoras-status-filter">
+              <label className="ff-state-label" htmlFor="bitacoras-filter-estado">
+                Estado
+              </label>
+              <select
+                id="bitacoras-filter-estado"
+                name="estado"
+                value={draftFilters.estado}
+                onChange={handleDraftChange}
+              >
+                <option value="">Todos</option>
+                <option value="REGISTRADA">REGISTRADA</option>
+                <option value="ANULADA">ANULADA</option>
+              </select>
             </div>
           </div>
-
-          <div className="ff-state bitacoras-status-filter">
-            <label className="ff-state-label" htmlFor="bitacoras-filter-estado">
-              Estado
-            </label>
-            <select
-              id="bitacoras-filter-estado"
-              name="estado"
-              value={draftFilters.estado}
-              onChange={handleDraftChange}
-            >
-              <option value="">Todos</option>
-              <option value="REGISTRADA">REGISTRADA</option>
-              <option value="ANULADA">ANULADA</option>
-            </select>
+          {dateError ? (
+            <p id="bitacoras-date-error" className="bitacoras-filter-error" role="alert">
+              {dateError}
+            </p>
+          ) : null}
+        </div>
+        <div className="ff-filter-actions-card bitacoras-filter-actions-card">
+          <div className="ff-actions">
+            <button className="btn btn-primary btn-sm" type="button" onClick={handleApply}>
+              Aplicar
+            </button>
+            <button className="ff-clear-btn" type="button" onClick={handleClear}>
+              Limpiar
+            </button>
           </div>
         </div>
-        {dateError ? (
-          <p id="bitacoras-date-error" className="bitacoras-filter-error" role="alert">
-            {dateError}
-          </p>
-        ) : null}
       </div>
-      <div className="ff-filter-actions-card bitacoras-filter-actions-card">
-        <div className="ff-actions">
-          <button className="btn btn-primary btn-sm" type="button" onClick={handleApply}>
-            Aplicar
-          </button>
-          <button className="ff-clear-btn" type="button" onClick={handleClear}>
-            Limpiar
-          </button>
-        </div>
-      </div>
-    </div>
+    </CollapsibleFilters>
   );
 
   const isFirstLoad = loading && records.length === 0;
@@ -395,9 +371,6 @@ const HistorialBitacoras = ({
                     onSort={handleSort}
                   />
                   <SortHeader field="ubicacion" label="Ubicación" sort={sort} onSort={handleSort} />
-                  {hasUrbanizaciones ? (
-                    <SortHeader field="casa" label="Casa" sort={sort} onSort={handleSort} />
-                  ) : null}
                   <SortHeader field="autor" label="Autor" sort={sort} onSort={handleSort} />
                   <SortHeader field="detalle" label="Detalle" sort={sort} onSort={handleSort} />
                 </tr>
@@ -414,11 +387,6 @@ const HistorialBitacoras = ({
                       </span>
                       {registro.tipo_punto ? <small>{registro.tipo_punto}</small> : null}
                     </td>
-                    {hasUrbanizaciones ? (
-                      <td>
-                        <span className="bitacoras-cell-primary">{getCasaLabel(registro)}</span>
-                      </td>
-                    ) : null}
                     <td>
                       <span className="bitacoras-cell-primary">{getAuthorName(registro)}</span>
                       {registro.autor_colaborador_nombre && registro.autor_usuario ? (
@@ -445,7 +413,7 @@ const HistorialBitacoras = ({
                   <StatusBadge estado={registro.estado} />
                 </div>
                 <dl className="record-card-details">
-                  <RecordDetails registro={registro} showCasa={hasUrbanizaciones} />
+                  <RecordDetails registro={registro} />
                 </dl>
                 {registro.estado === 'ANULADA' && registro.motivo_anulacion ? (
                   <p className="bitacoras-cancel-reason">

@@ -20,34 +20,6 @@ const findLockedUserLocationAssignment = async ({ client, userId, locationId }) 
   return result.rows[0] || null;
 };
 
-const findLockedBlock = async ({ client, blockId }) => {
-  const result = await client.query(
-    `SELECT id, ubicacion_id, nombre, estado
-     FROM manzanas
-     WHERE id = $1
-     FOR SHARE`,
-    [blockId]
-  );
-  return result.rows[0] || null;
-};
-
-const findVisibleBlock = async ({ blockId, hasGlobalScope, userId, executor = db }) => {
-  const params = [blockId];
-  const scopeCondition = buildScopeCondition({
-    hasGlobalScope,
-    userId,
-    params,
-    locationExpression: 'm.ubicacion_id',
-  });
-  const result = await executor.query(
-    `SELECT m.id, m.ubicacion_id, m.nombre, m.estado
-     FROM manzanas m
-     WHERE m.id = $1${scopeCondition ? ` AND ${scopeCondition}` : ''}`,
-    params
-  );
-  return result.rows[0] || null;
-};
-
 const findVisibleLocation = async ({ locationId, hasGlobalScope, userId, executor = db }) => {
   const params = [locationId];
   const scopeCondition = buildScopeCondition({
@@ -61,30 +33,6 @@ const findVisibleLocation = async ({ locationId, hasGlobalScope, userId, executo
      FROM ubicaciones u
      WHERE u.id = $1${scopeCondition ? ` AND ${scopeCondition}` : ''}`,
     params
-  );
-  return result.rows[0] || null;
-};
-
-const findLockedVilla = async ({ client, villaId }) => {
-  const result = await client.query(
-    `SELECT id, manzana_id, identificador, estado
-     FROM villas
-     WHERE id = $1
-     FOR SHARE`,
-    [villaId]
-  );
-  return result.rows[0] || null;
-};
-
-const findActivePrincipalResidentForVilla = async ({ client, villaId }) => {
-  const result = await client.query(
-    `SELECT id, villa_id, nombre, contacto
-     FROM residentes
-     WHERE villa_id = $1 AND es_principal = TRUE AND activo = TRUE
-     ORDER BY created_at DESC, id DESC
-     LIMIT 1
-     FOR SHARE`,
-    [villaId]
   );
   return result.rows[0] || null;
 };
@@ -106,6 +54,16 @@ const buildScopeCondition = ({
     WHERE uu.usuario_id = $${params.length}
       AND uu.ubicacion_id = ${locationExpression}
   )`;
+};
+
+const userHasLocationAccess = async (userId, ubicacionId, executor = db) => {
+  const result = await executor.query(
+    `SELECT 1
+     FROM usuario_ubicaciones
+     WHERE usuario_id = $1 AND ubicacion_id = $2`,
+    [userId, ubicacionId]
+  );
+  return result.rowCount > 0;
 };
 
 const buildHistoryFilters = ({ filters, hasGlobalScope, userId }) => {
@@ -167,8 +125,21 @@ const findHistory = async ({ filters, hasGlobalScope, userId, pagination, execut
   const dataParams = [...params, pagination.pageSize, pagination.offset];
   const limitIndex = dataParams.length - 1;
   const offsetIndex = dataParams.length;
+  // buildHistoryFilters solo referencia columnas de br (o subqueries EXISTS
+  // autocontenidas), así que el filtrado, orden y paginación pueden resolverse
+  // contra bitacora_registros sola: el CTE evita materializar y ordenar el
+  // join completo (5 tablas) antes del LIMIT, que era el costo dominante de
+  // COUNT(*) OVER() aplicado después de los joins (ver benchmark Fase 4).
   const dataResult = await executor.query(
-    `SELECT
+    `WITH page_registros AS (
+       SELECT br.id, COUNT(*) OVER()::int AS total_count
+       FROM bitacora_registros br
+       ${where}
+       ORDER BY ${pagination.sortExpression || 'br.ocurrido_at'} ${(pagination.sortOrder || 'desc').toUpperCase()} NULLS LAST,
+         br.id ${(pagination.sortOrder || 'desc').toUpperCase()}
+       LIMIT $${limitIndex} OFFSET $${offsetIndex}
+     )
+     SELECT
        br.id,
        br.ubicacion_id,
        u.nombre AS ubicacion_nombre,
@@ -188,17 +159,16 @@ const findHistory = async ({ filters, hasGlobalScope, userId, pagination, execut
        br.anulado_at,
        br.anulado_por_usuario_id,
        br.motivo_anulacion,
-       COUNT(*) OVER()::int AS total_count
-     FROM bitacora_registros br
+       pr.total_count
+     FROM page_registros pr
+     INNER JOIN bitacora_registros br ON br.id = pr.id
      INNER JOIN ubicaciones u ON u.id = br.ubicacion_id
      INNER JOIN usuarios au ON au.id = br.autor_usuario_id
      INNER JOIN colaboradores c ON c.id = br.autor_colaborador_id
      LEFT JOIN manzanas m ON m.id = br.manzana_id
      LEFT JOIN villas v ON v.id = br.villa_id
-     ${where}
      ORDER BY ${pagination.sortExpression || 'br.ocurrido_at'} ${(pagination.sortOrder || 'desc').toUpperCase()} NULLS LAST,
-       br.id ${(pagination.sortOrder || 'desc').toUpperCase()}
-     LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
+       br.id ${(pagination.sortOrder || 'desc').toUpperCase()}`,
     dataParams
   );
 
@@ -265,38 +235,6 @@ const getBitacorasResumen = async ({
     includeFormularios ? countVisitFormsScoped({ hasGlobalScope, userId, executor }) : null,
   ]);
   return { registros, visitas, formularios };
-};
-
-const findActiveBlocksForLocation = async ({ locationId, executor = db }) => {
-  const result = await executor.query(
-    `SELECT id, ubicacion_id, nombre
-     FROM manzanas
-     WHERE ubicacion_id = $1 AND estado = 'activo'
-     ORDER BY nombre ASC, id ASC`,
-    [locationId]
-  );
-  return result.rows;
-};
-
-const findActiveVillasForBlock = async ({ blockId, executor = db }) => {
-  const result = await executor.query(
-    `SELECT
-       v.id,
-       v.manzana_id,
-       v.identificador,
-       r.id AS residente_principal_id,
-       r.nombre AS residente_principal_nombre,
-       r.contacto AS residente_principal_contacto
-     FROM villas v
-     INNER JOIN residentes r
-       ON r.villa_id = v.id
-      AND r.es_principal = TRUE
-      AND r.activo = TRUE
-     WHERE v.manzana_id = $1 AND v.estado = 'activo'
-     ORDER BY v.identificador ASC, v.id ASC`,
-    [blockId]
-  );
-  return result.rows;
 };
 
 const findVisitFormTipos = async ({ formVersionId, executor = db }) => {
@@ -409,7 +347,7 @@ const attachVersionDetails = async (version, executor) => {
 
 const findActiveVisitFormForLocation = async ({ locationId, executor = db }) => {
   const versionResult = await executor.query(
-    `SELECT id, ubicacion_id, version, titulo, mostrar_fecha_hora, estado, created_by, published_by, created_at, published_at
+    `SELECT id, ubicacion_id, version, titulo, mostrar_fecha_hora, mostrar_casa, estado, created_by, published_by, created_at, published_at
      FROM bitacora_visit_form_versions
      WHERE ubicacion_id = $1 AND estado = 'ACTIVE' AND published_at IS NOT NULL
        AND deleted_at IS NULL
@@ -422,7 +360,7 @@ const findActiveVisitFormForLocation = async ({ locationId, executor = db }) => 
 
 const findVisitFormVersionDetail = async ({ formId, executor = db }) => {
   const versionResult = await executor.query(
-    `SELECT id, ubicacion_id, version, titulo, mostrar_fecha_hora, estado, created_by, published_by, created_at, published_at
+    `SELECT id, ubicacion_id, version, titulo, mostrar_fecha_hora, mostrar_casa, estado, created_by, published_by, created_at, published_at
      FROM bitacora_visit_form_versions
      WHERE id = $1 AND deleted_at IS NULL`,
     [formId]
@@ -462,7 +400,7 @@ const findVisitForms = async ({ hasGlobalScope, userId, filters, pagination, exe
   const dataParams = [...params, pagination.pageSize, pagination.offset];
   const result = await executor.query(
     `SELECT bfv.id, bfv.ubicacion_id, u.nombre AS ubicacion_nombre,
-       bfv.version, bfv.titulo, bfv.mostrar_fecha_hora, bfv.estado,
+       bfv.version, bfv.titulo, bfv.mostrar_fecha_hora, bfv.mostrar_casa, bfv.estado,
        bfv.created_by, creator.usuario AS creador,
        bfv.published_at,
        COUNT(*) OVER()::int AS total_count
@@ -521,6 +459,7 @@ const publishVisitFormForLocation = async ({
   locationId,
   title,
   showDateTime,
+  showHouse,
   tiposVisita,
   fields,
   groups = [],
@@ -549,10 +488,10 @@ const publishVisitFormForLocation = async ({
   );
   const versionResult = await client.query(
     `INSERT INTO bitacora_visit_form_versions
-       (ubicacion_id, version, titulo, mostrar_fecha_hora, estado, created_by, published_by)
-     VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $5)
-     RETURNING id, ubicacion_id, version, titulo, mostrar_fecha_hora, estado, created_by, published_by, created_at, published_at`,
-    [locationId, nextVersion, title || 'Formulario de visitas', showDateTime, userId]
+       (ubicacion_id, version, titulo, mostrar_fecha_hora, mostrar_casa, estado, created_by, published_by)
+     VALUES ($1, $2, $3, $4, $5, 'ACTIVE', $6, $6)
+     RETURNING id, ubicacion_id, version, titulo, mostrar_fecha_hora, mostrar_casa, estado, created_by, published_by, created_at, published_at`,
+    [locationId, nextVersion, title || 'Formulario de visitas', showDateTime, showHouse, userId]
   );
   const version = versionResult.rows[0];
 
@@ -647,7 +586,7 @@ const publishVisitFormForLocation = async ({
 
 const findLockedVisitFormVersion = async ({ client, formId }) => {
   const result = await client.query(
-    `SELECT id, ubicacion_id, version, titulo, mostrar_fecha_hora, estado,
+    `SELECT id, ubicacion_id, version, titulo, mostrar_fecha_hora, mostrar_casa, estado,
        created_by, published_by, created_at, published_at, deleted_at
      FROM bitacora_visit_form_versions
      WHERE id = $1 AND deleted_at IS NULL
@@ -673,7 +612,7 @@ const archiveVisitFormVersion = async ({ client, formId }) => {
     `UPDATE bitacora_visit_form_versions
      SET estado = 'ARCHIVED'
      WHERE id = $1 AND estado = 'ACTIVE'
-     RETURNING id, ubicacion_id, version, titulo, mostrar_fecha_hora, estado,
+     RETURNING id, ubicacion_id, version, titulo, mostrar_fecha_hora, mostrar_casa, estado,
        created_by, published_by, created_at, published_at`,
     [formId]
   );
@@ -715,6 +654,8 @@ const createVisit = async ({
   locationId,
   blockId,
   villaId,
+  blockText,
+  villaText,
   principalResidentId,
   formVersionId,
   visitor,
@@ -726,11 +667,11 @@ const createVisit = async ({
 }) => {
   const result = await client.query(
     `INSERT INTO bitacora_visitas
-      (ubicacion_id, manzana_id, villa_id, residente_principal_id, form_version_id,
+      (ubicacion_id, manzana_id, villa_id, manzana_texto, villa_texto, residente_principal_id, form_version_id,
        visitante_nombre, visitante_documento, visitante_telefono, tipo_visita_id, placa,
        registrado_por_usuario_id, registrado_por_colaborador_id, entrada_bitacora_registro_id,
        estado, motivo_no_autorizacion)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
      RETURNING id, ubicacion_id, manzana_id, villa_id, residente_principal_id, form_version_id,
        visitante_nombre, visitante_documento, visitante_telefono, tipo_visita_id, placa, estado, entrada_at,
        salida_at, registrado_por_usuario_id, registrado_por_colaborador_id,
@@ -740,6 +681,8 @@ const createVisit = async ({
       locationId,
       blockId,
       villaId,
+      blockText,
+      villaText,
       principalResidentId,
       formVersionId,
       visitor.nombre,
@@ -857,9 +800,9 @@ const buildVisitFilters = ({ filters, hasGlobalScope, userId }) => {
       `(bv.visitante_nombre ILIKE $${searchIndex}
         OR bv.visitante_documento ILIKE $${searchIndex}
         OR bv.placa ILIKE $${searchIndex}
-        OR m.nombre ILIKE $${searchIndex}
-        OR v.identificador ILIKE $${searchIndex}
-        OR regexp_replace(COALESCE(m.nombre, '') || COALESCE(v.identificador, ''), '\\s+', '', 'g')
+        OR COALESCE(bv.manzana_texto, m.nombre) ILIKE $${searchIndex}
+        OR COALESCE(bv.villa_texto, v.identificador) ILIKE $${searchIndex}
+        OR regexp_replace(COALESCE(bv.manzana_texto, m.nombre, '') || COALESCE(bv.villa_texto, v.identificador, ''), '\\s+', '', 'g')
           ILIKE regexp_replace($${searchIndex}, '\\s+', '', 'g')
         OR r.nombre ILIKE $${searchIndex}
         OR EXISTS (
@@ -867,14 +810,12 @@ const buildVisitFilters = ({ filters, hasGlobalScope, userId }) => {
           FROM bitacora_visita_grupo_registros search_group
           CROSS JOIN LATERAL jsonb_array_elements(search_group.respuestas) search_answer
           WHERE search_group.visita_id = bv.id
-            AND search_answer->>'field_key' IN ('nombre', 'cedula')
             AND search_answer->>'value' ILIKE $${searchIndex}
         )
         OR EXISTS (
           SELECT 1
           FROM bitacora_visita_respuestas search_response
           WHERE search_response.visita_id = bv.id
-            AND search_response.type_snapshot = 'placa'
             AND search_response.value_text ILIKE $${searchIndex}
         ))`
     );
@@ -891,10 +832,23 @@ const findVisits = async ({ filters, hasGlobalScope, userId, pagination, executo
   const limitIndex = dataParams.length - 1;
   const offsetIndex = dataParams.length;
   const dataResult = await executor.query(
-    `SELECT
+    `WITH page_visits AS (
+       SELECT bv.id, COUNT(*) OVER()::int AS total_count
+       FROM bitacora_visitas bv
+       LEFT JOIN manzanas m ON m.id = bv.manzana_id
+       LEFT JOIN villas v ON v.id = bv.villa_id
+       LEFT JOIN residentes r ON r.id = bv.residente_principal_id
+       INNER JOIN usuarios u ON u.id = bv.registrado_por_usuario_id
+       INNER JOIN colaboradores c ON c.id = bv.registrado_por_colaborador_id
+       ${where}
+       ORDER BY ${pagination.sortExpression || 'bv.entrada_at'} ${(pagination.sortOrder || 'desc').toUpperCase()} NULLS LAST,
+         bv.id ${(pagination.sortOrder || 'desc').toUpperCase()}
+       LIMIT $${limitIndex} OFFSET $${offsetIndex}
+     )
+     SELECT
        bv.id, bv.ubicacion_id, ub.nombre AS ubicacion_nombre,
-       bv.manzana_id, m.nombre AS manzana_nombre,
-       bv.villa_id, v.identificador AS villa_identificador,
+       bv.manzana_id, COALESCE(bv.manzana_texto, m.nombre) AS manzana_nombre,
+       bv.villa_id, COALESCE(bv.villa_texto, v.identificador) AS villa_identificador,
        bv.residente_principal_id, r.nombre AS residente_principal_nombre,
        r.contacto AS residente_principal_contacto,
        bv.form_version_id, bfv.version AS form_version,
@@ -922,12 +876,13 @@ const findVisits = async ({ filters, hasGlobalScope, userId, pagination, executo
          FROM bitacora_visita_grupo_registros gr
          WHERE gr.visita_id = bv.id
        ) AS visitantes,
-       COUNT(*) OVER()::int AS total_count
-     FROM bitacora_visitas bv
+       pv.total_count
+     FROM page_visits pv
+     INNER JOIN bitacora_visitas bv ON bv.id = pv.id
      INNER JOIN ubicaciones ub ON ub.id = bv.ubicacion_id
-     INNER JOIN manzanas m ON m.id = bv.manzana_id
-     INNER JOIN villas v ON v.id = bv.villa_id
-     INNER JOIN residentes r ON r.id = bv.residente_principal_id
+     LEFT JOIN manzanas m ON m.id = bv.manzana_id
+     LEFT JOIN villas v ON v.id = bv.villa_id
+     LEFT JOIN residentes r ON r.id = bv.residente_principal_id
      INNER JOIN bitacora_visit_form_versions bfv ON bfv.id = bv.form_version_id
      INNER JOIN bitacora_visit_form_tipos tv ON tv.id = bv.tipo_visita_id
      INNER JOIN usuarios u ON u.id = bv.registrado_por_usuario_id
@@ -936,17 +891,31 @@ const findVisits = async ({ filters, hasGlobalScope, userId, pagination, executo
      LEFT JOIN colaboradores cc ON cc.id = bv.cerrado_por_colaborador_id
      LEFT JOIN bitacora_visita_respuestas bvr ON bvr.visita_id = bv.id
      LEFT JOIN bitacora_visit_form_fields bff ON bff.id = bvr.form_field_id
-     ${where}
-     GROUP BY bv.id, ub.nombre, m.nombre, v.identificador, r.nombre, r.contacto, bfv.version,
-       tv.nombre, tv.requiere_salida, u.usuario, c.nombres_completos, cu.usuario, cc.nombres_completos
+     GROUP BY bv.id, pv.total_count, ub.nombre, m.nombre, v.identificador, r.nombre, r.contacto,
+       bfv.version, tv.nombre, tv.requiere_salida, u.usuario, c.nombres_completos, cu.usuario,
+       cc.nombres_completos
      ORDER BY ${pagination.sortExpression || 'bv.entrada_at'} ${(pagination.sortOrder || 'desc').toUpperCase()} NULLS LAST,
-       bv.id ${(pagination.sortOrder || 'desc').toUpperCase()}
-     LIMIT $${limitIndex} OFFSET $${offsetIndex}`,
+       bv.id ${(pagination.sortOrder || 'desc').toUpperCase()}`,
     dataParams
   );
   const total = dataResult.rows[0]?.total_count || 0;
   const items = dataResult.rows.map(({ total_count: _totalCount, ...row }) => row);
   return { items, total };
+};
+
+const findHistoryAutores = async ({ hasGlobalScope, userId, executor = db }) => {
+  const params = [];
+  const scopeCondition = buildScopeCondition({ hasGlobalScope, userId, params });
+  const result = await executor.query(
+    // eslint-disable-next-line quotes -- prettier prefers double quotes here to avoid escaping
+    `SELECT DISTINCT c.id, c.nombres_completos AS nombre
+     FROM bitacora_registros br
+     INNER JOIN colaboradores c ON c.id = br.autor_colaborador_id
+     WHERE br.origen = 'MANUAL'${scopeCondition ? ` AND ${scopeCondition}` : ''}
+     ORDER BY c.nombres_completos ASC, c.id ASC`,
+    params
+  );
+  return result.rows;
 };
 
 const findVisitCreators = async ({ hasGlobalScope, userId, executor = db }) => {
@@ -970,15 +939,15 @@ const findVisitCreators = async ({ hasGlobalScope, userId, executor = db }) => {
 
 const findLockedVisit = async ({ client, visitId }) => {
   const result = await client.query(
-    `SELECT bv.id, bv.ubicacion_id, bv.manzana_id, m.nombre AS manzana_nombre,
-       bv.villa_id, v.identificador AS villa_identificador, bv.estado,
+    `SELECT bv.id, bv.ubicacion_id, bv.manzana_id, COALESCE(bv.manzana_texto, m.nombre) AS manzana_nombre,
+       bv.villa_id, COALESCE(bv.villa_texto, v.identificador) AS villa_identificador, bv.estado,
        bv.visitante_nombre, bv.tipo_visita_id, tv.nombre AS tipo_visita_nombre,
        tv.requiere_salida, bv.placa,
        bv.registrado_por_usuario_id,
        bv.registrado_por_colaborador_id, bv.entrada_at
      FROM bitacora_visitas bv
-     INNER JOIN manzanas m ON m.id = bv.manzana_id
-     INNER JOIN villas v ON v.id = bv.villa_id
+     LEFT JOIN manzanas m ON m.id = bv.manzana_id
+     LEFT JOIN villas v ON v.id = bv.villa_id
      INNER JOIN bitacora_visit_form_tipos tv ON tv.id = bv.tipo_visita_id
      WHERE bv.id = $1
      FOR UPDATE OF bv`,
@@ -1060,18 +1029,13 @@ const findVisibleLocations = async ({ hasGlobalScope, userId, executor = db }) =
 module.exports = {
   buildHistoryFilters,
   getBitacorasResumen,
-  findActiveBlocksForLocation,
-  findActiveVillasForBlock,
-  findActivePrincipalResidentForVilla,
   findActiveVisitFormForLocation,
   findVisitForms,
   findVisitFormCreators,
-  findVisibleBlock,
   findVisibleLocation,
-  findLockedBlock,
-  findLockedVilla,
   findLockedUserLocationAssignment,
   findHistory,
+  findHistoryAutores,
   findLockedVisit,
   findVisits,
   findVisitCreators,
@@ -1089,4 +1053,5 @@ module.exports = {
   createVisit,
   closeVisit,
   cancelVisit,
+  userHasLocationAccess,
 };

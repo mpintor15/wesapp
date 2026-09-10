@@ -1,10 +1,6 @@
 const db = require('../config/database');
 const repository = require('../repositories/bitacorasRepository');
 const {
-  lockResidentChainForUpdate,
-  lockVillaChainForUpdate,
-} = require('../controllers/urbanizacionMastersController');
-const {
   assertSafeTestDatabase,
   buildSafeTestResourceName,
 } = require('./helpers/testDatabaseSafety');
@@ -95,6 +91,7 @@ describe('bitacoras PostgreSQL API persistence', () => {
         version INTEGER NOT NULL,
         titulo TEXT NOT NULL,
         mostrar_fecha_hora BOOLEAN NOT NULL DEFAULT TRUE,
+        mostrar_casa BOOLEAN NOT NULL DEFAULT TRUE,
         estado VARCHAR(12) NOT NULL DEFAULT 'ACTIVE' CHECK (estado IN ('ACTIVE', 'ARCHIVED')),
         created_by INTEGER REFERENCES ${schemaIdent}.usuarios(id) ON DELETE SET NULL,
         published_by INTEGER REFERENCES ${schemaIdent}.usuarios(id) ON DELETE SET NULL,
@@ -878,157 +875,6 @@ describe('bitacoras PostgreSQL API persistence', () => {
     await expect(insert(2, null, 1)).rejects.toMatchObject({ code: '23514' });
   });
 
-  test.each([
-    ['Manzana', 'findLockedBlock', 'manzanas', 'blockId'],
-    ['Villa', 'findLockedVilla', 'villas', 'villaId'],
-  ])(
-    'lock de %s serializa su inactivación hasta terminar el POST',
-    async (_label, method, table, idKey) => {
-      const creator = await db.getClient();
-      const editor = await db.getClient();
-      try {
-        await creator.query('BEGIN');
-        await creator.query(`SET LOCAL search_path TO ${schemaIdent}`);
-        await repository[method]({ client: creator, [idKey]: 1 });
-
-        await editor.query('BEGIN');
-        await editor.query(`SET LOCAL search_path TO ${schemaIdent}`);
-        await editor.query(String.raw`SET LOCAL lock_timeout = '100ms'`);
-        await expect(
-          editor.query(`UPDATE ${table} SET estado = 'inactivo' WHERE id = 1`)
-        ).rejects.toMatchObject({
-          code: '55P03',
-        });
-        await editor.query('ROLLBACK');
-        await creator.query('COMMIT');
-
-        await editor.query('BEGIN');
-        await editor.query(`SET LOCAL search_path TO ${schemaIdent}`);
-        const updated = await editor.query(`UPDATE ${table} SET estado = 'inactivo' WHERE id = 1`);
-        expect(updated.rowCount).toBe(1);
-        await editor.query('ROLLBACK');
-      } finally {
-        await creator.query('ROLLBACK').catch(() => undefined);
-        creator.release();
-        await editor.query('ROLLBACK').catch(() => undefined);
-        editor.release();
-      }
-    }
-  );
-
-  test('orden Manzana → Villa evita el deadlock con el flujo administrativo', async () => {
-    const creator = await db.getClient();
-    const administrator = await db.getClient();
-    const observer = await db.getClient();
-    try {
-      await creator.query('BEGIN');
-      await creator.query(`SET LOCAL search_path TO ${schemaIdent}`);
-      await repository.findLockedBlock({ client: creator, blockId: 1 });
-
-      await administrator.query('BEGIN');
-      await administrator.query(`SET LOCAL search_path TO ${schemaIdent}`);
-      const pidResult = await administrator.query('SELECT pg_backend_pid() AS pid');
-      const administratorPid = pidResult.rows[0].pid;
-      const administrativeLock = lockVillaChainForUpdate(administrator, 1);
-
-      let waitingForBlock = false;
-      for (let attempt = 0; attempt < 100 && !waitingForBlock; attempt += 1) {
-        const state = await observer.query(
-          `SELECT wait_event_type
-           FROM pg_stat_activity
-           WHERE pid = $1`,
-          [administratorPid]
-        );
-        waitingForBlock = state.rows[0]?.wait_event_type === 'Lock';
-      }
-      expect(waitingForBlock).toBe(true);
-
-      const lockedVilla = await repository.findLockedVilla({ client: creator, villaId: 1 });
-      expect(lockedVilla).toEqual(expect.objectContaining({ id: 1, manzana_id: 1 }));
-      await creator.query('COMMIT');
-
-      await expect(administrativeLock).resolves.toEqual(
-        expect.objectContaining({ id: 1, manzana_id: 1 })
-      );
-      await administrator.query('ROLLBACK');
-
-      const state = await observer.query(
-        `SELECT m.estado AS manzana_estado, v.estado AS villa_estado
-         FROM ${schemaIdent}.manzanas m
-         JOIN ${schemaIdent}.villas v ON v.manzana_id = m.id
-         WHERE m.id = 1 AND v.id = 1`
-      );
-      expect(state.rows[0]).toEqual({ manzana_estado: 'activo', villa_estado: 'activo' });
-    } finally {
-      await creator.query('ROLLBACK').catch(() => undefined);
-      creator.release();
-      await administrator.query('ROLLBACK').catch(() => undefined);
-      administrator.release();
-      observer.release();
-    }
-  });
-
-  test('orden Manzana → Villa → Residente evita el deadlock entre crear y actualizar principal', async () => {
-    const creator = await db.getClient();
-    const updater = await db.getClient();
-    const observer = await db.getClient();
-    try {
-      await creator.query('BEGIN');
-      await creator.query(`SET LOCAL search_path TO ${schemaIdent}`);
-      await repository.findLockedBlock({ client: creator, blockId: 1 });
-      await repository.findLockedVilla({ client: creator, villaId: 1 });
-
-      await updater.query('BEGIN');
-      await updater.query(`SET LOCAL search_path TO ${schemaIdent}`);
-      const pidResult = await updater.query('SELECT pg_backend_pid() AS pid');
-      const updaterPid = pidResult.rows[0].pid;
-      const updateLock = lockResidentChainForUpdate(updater, 1);
-
-      let waitingForBlock = false;
-      for (let attempt = 0; attempt < 100 && !waitingForBlock; attempt += 1) {
-        const state = await observer.query(
-          `SELECT wait_event_type
-           FROM pg_stat_activity
-           WHERE pid = $1`,
-          [updaterPid]
-        );
-        waitingForBlock = state.rows[0]?.wait_event_type === 'Lock';
-      }
-      expect(waitingForBlock).toBe(true);
-
-      await creator.query(String.raw`SET LOCAL lock_timeout = '100ms'`);
-      const resident = await creator.query('SELECT id FROM residentes WHERE id = 1 FOR UPDATE');
-      expect(resident.rows[0]).toEqual({ id: 1 });
-      await creator.query('COMMIT');
-
-      await expect(updateLock).resolves.toEqual({
-        current: expect.objectContaining({ id: 1, villa_id: 1, activo: true }),
-        villa: expect.objectContaining({ id: 1, manzana_id: 1 }),
-      });
-      await updater.query('COMMIT');
-
-      const state = await observer.query(
-        `SELECT m.estado AS manzana_estado, v.estado AS villa_estado,
-                r.activo AS residente_activo
-         FROM ${schemaIdent}.manzanas m
-         JOIN ${schemaIdent}.villas v ON v.manzana_id = m.id
-         JOIN ${schemaIdent}.residentes r ON r.villa_id = v.id
-         WHERE m.id = 1 AND v.id = 1 AND r.id = 1`
-      );
-      expect(state.rows[0]).toEqual({
-        manzana_estado: 'activo',
-        villa_estado: 'activo',
-        residente_activo: true,
-      });
-    } finally {
-      await creator.query('ROLLBACK').catch(() => undefined);
-      creator.release();
-      await updater.query('ROLLBACK').catch(() => undefined);
-      updater.release();
-      observer.release();
-    }
-  });
-
   test('lista solo Ubicaciones asignadas o todas según alcance', async () => {
     await db.transaction(async (client) => {
       await client.query(`SET LOCAL search_path TO ${schemaIdent}`);
@@ -1044,75 +890,6 @@ describe('bitacoras PostgreSQL API persistence', () => {
       });
       expect(assigned.map((location) => location.nombre)).toEqual(['Asignada']);
       expect(global).toHaveLength(2);
-    });
-  });
-
-  test('resolución de opciones colapsa recursos inexistentes y fuera de scope', async () => {
-    await db.transaction(async (client) => {
-      await client.query(`SET LOCAL search_path TO ${schemaIdent}`);
-      const missingBlock = await repository.findVisibleBlock({
-        blockId: 999,
-        hasGlobalScope: false,
-        userId: 1,
-        executor: client,
-      });
-      const hiddenBlock = await repository.findVisibleBlock({
-        blockId: 1,
-        hasGlobalScope: false,
-        userId: 1,
-        executor: client,
-      });
-      const globalBlock = await repository.findVisibleBlock({
-        blockId: 1,
-        hasGlobalScope: true,
-        userId: 1,
-        executor: client,
-      });
-      expect(missingBlock).toBeNull();
-      expect(hiddenBlock).toBeNull();
-      expect(globalBlock).toEqual(expect.objectContaining({ id: 1, ubicacion_id: 2 }));
-
-      const missingLocation = await repository.findVisibleLocation({
-        locationId: 999,
-        hasGlobalScope: false,
-        userId: 1,
-        executor: client,
-      });
-      const hiddenLocation = await repository.findVisibleLocation({
-        locationId: 2,
-        hasGlobalScope: false,
-        userId: 1,
-        executor: client,
-      });
-      expect(missingLocation).toBeNull();
-      expect(hiddenLocation).toBeNull();
-    });
-  });
-
-  test('opciones de Villas para Bitácoras solo incluyen Casas activas con titular activo', async () => {
-    await db.transaction(async (client) => {
-      await client.query(`SET LOCAL search_path TO ${schemaIdent}`);
-      const options = await repository.findActiveVillasForBlock({
-        blockId: 1,
-        executor: client,
-      });
-
-      expect(options).toEqual([
-        expect.objectContaining({
-          id: 1,
-          identificador: 'A-1 Renombrada',
-          residente_principal_nombre: 'Residente A',
-          residente_principal_contacto: '0990000000',
-        }),
-      ]);
-      expect(options.map((option) => option.identificador)).not.toContain('A-X');
-
-      const optionsWithoutResident = await repository.findActiveVillasForBlock({
-        blockId: 2,
-        executor: client,
-      });
-
-      expect(optionsWithoutResident).toEqual([]);
     });
   });
 

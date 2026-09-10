@@ -45,18 +45,6 @@ router.get(
 );
 
 router.get(
-  '/ubicaciones/:ubicacionId/manzanas',
-  requirePermission(PERMISSIONS.BITACORAS_REGISTRO_CREAR),
-  bitacorasController.getManzanasElegibles
-);
-
-router.get(
-  '/manzanas/:manzanaId/villas',
-  requirePermission(PERMISSIONS.BITACORAS_REGISTRO_CREAR),
-  bitacorasController.getVillasElegibles
-);
-
-router.get(
   '/formularios-visitas',
   requirePermission(PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR),
   bitacorasController.getVisitForms

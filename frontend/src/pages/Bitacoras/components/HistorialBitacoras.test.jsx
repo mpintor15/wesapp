@@ -47,6 +47,11 @@ const RECORDS = [
   },
 ];
 
+const AUTORES = [
+  { id: 1, nombre: 'Ana' },
+  { id: 2, nombre: 'Guardia' },
+];
+
 const successResult = ({ data = RECORDS, page = 1, pageSize = 25, totalPages = 1 } = {}) => ({
   success: true,
   data,
@@ -58,6 +63,7 @@ const successResult = ({ data = RECORDS, page = 1, pageSize = 25, totalPages = 1
     hasNextPage: page < totalPages,
     hasPreviousPage: page > 1,
   },
+  filters: { autores: AUTORES },
 });
 
 const setValue = (element, value) => {
@@ -149,7 +155,7 @@ describe('HistorialBitacoras', () => {
     view.unmount();
   });
 
-  test('muestra Casa separada de Ubicación en tabla y cards', async () => {
+  test('muestra únicamente la Ubicación porque Registro ya no utiliza Casa', async () => {
     bitacorasService.getRegistros.mockResolvedValue(
       successResult({
         data: [
@@ -201,21 +207,15 @@ describe('HistorialBitacoras', () => {
       'Urbanización Norte'
     );
     expect(tableRows[0].querySelector('td:nth-child(2)').textContent).not.toContain('Manzana A');
-    expect(tableRows[0].querySelector('td:nth-child(3)').textContent).toContain(
-      'Manzana A - Villa 12'
-    );
     expect(tableRows[1].querySelector('td:nth-child(2)').textContent).toContain('Urbanización Sur');
-    expect(tableRows[1].querySelector('td:nth-child(3)').textContent).toContain('Manzana B');
     expect(tableRows[2].querySelector('td:nth-child(2)').textContent).toContain('Garita principal');
-    expect(tableRows[2].querySelector('td:nth-child(3)').textContent).toContain('—');
+    expect(view.container.querySelector('th:nth-child(3)').textContent).toContain('Autor');
 
     const cardHeadings = Array.from(view.container.querySelectorAll('.record-card-header h3')).map(
       (heading) => heading.textContent
     );
     expect(cardHeadings).toEqual(['Urbanización Norte', 'Urbanización Sur', 'Garita principal']);
-    const cardDetails = view.container.querySelectorAll('.record-card-details');
-    expect(cardDetails[0].textContent).toContain('CasaManzana A - Villa 12');
-    expect(cardDetails[2].textContent).toContain('Casa—');
+    expect(view.container.textContent).not.toContain('Casa');
     expect(view.container.querySelectorAll('.record-card')).toHaveLength(3);
     view.unmount();
   });
@@ -228,7 +228,7 @@ describe('HistorialBitacoras', () => {
     await flush();
 
     act(() => {
-      setValue(view.field('#bitacoras-filter-autor'), '  Ana  ');
+      setValue(view.field('#bitacoras-filter-autor'), 'Ana');
       setValue(view.field('#bitacoras-filter-ubicacion'), '7');
       setValue(view.field('#bitacoras-filter-desde'), '2026-08-01');
       setValue(view.field('#bitacoras-filter-hasta'), '2026-08-21');

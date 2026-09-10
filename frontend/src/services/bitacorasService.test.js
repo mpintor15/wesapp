@@ -71,43 +71,6 @@ describe('bitacorasService', () => {
     });
   });
 
-  test('obtiene opciones urbanas usando endpoints de Bitácoras', async () => {
-    api.get
-      .mockResolvedValueOnce({ data: { success: true, data: [{ id: 3, nombre: 'A' }] } })
-      .mockResolvedValueOnce({
-        data: {
-          success: true,
-          data: [
-            {
-              id: 4,
-              identificador: 'A-1',
-              residente_principal_nombre: 'Ana Titular',
-              residente_principal_contacto: '0991234567',
-            },
-          ],
-        },
-      });
-
-    await expect(bitacorasService.getManzanas(1)).resolves.toEqual({
-      success: true,
-      data: [{ id: 3, nombre: 'A' }],
-    });
-    await expect(bitacorasService.getVillas(3)).resolves.toEqual({
-      success: true,
-      data: [
-        {
-          id: 4,
-          identificador: 'A-1',
-          residente_principal_nombre: 'Ana Titular',
-          residente_principal_contacto: '0991234567',
-        },
-      ],
-    });
-
-    expect(api.get).toHaveBeenNthCalledWith(1, '/bitacoras/ubicaciones/1/manzanas');
-    expect(api.get).toHaveBeenNthCalledWith(2, '/bitacoras/manzanas/3/villas');
-  });
-
   test('consulta historial con params soportados y elimina vacíos o desconocidos', async () => {
     api.get.mockResolvedValue({ data: { success: true, data: [], meta: {} } });
 
@@ -156,8 +119,8 @@ describe('bitacorasService', () => {
     });
     await bitacorasService.createVisita({
       ubicacion_id: 3,
-      manzana_id: 4,
-      villa_id: 5,
+      manzana: 'A',
+      villa: '5',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',
@@ -191,8 +154,8 @@ describe('bitacorasService', () => {
     );
     expect(api.post).toHaveBeenNthCalledWith(2, '/bitacoras/visitas', {
       ubicacion_id: 3,
-      manzana_id: 4,
-      villa_id: 5,
+      manzana: 'A',
+      villa: '5',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',
@@ -237,8 +200,8 @@ describe('bitacorasService', () => {
     });
     await bitacorasService.createVisita({
       ubicacion_id: 3,
-      manzana_id: 4,
-      villa_id: 5,
+      manzana: 'A',
+      villa: '5',
       tipo_visita_id: 901,
       respuestas: {},
       grupos: { visitantes: [{ nombre: 'Ana' }] },
@@ -327,8 +290,8 @@ describe('bitacorasService', () => {
 
     await bitacorasService.createVisita({
       ubicacion_id: 3,
-      manzana_id: 4,
-      villa_id: 5,
+      manzana: 'A',
+      villa: '5',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',
@@ -339,8 +302,8 @@ describe('bitacorasService', () => {
 
     expect(api.post).toHaveBeenCalledWith('/bitacoras/visitas', {
       ubicacion_id: 3,
-      manzana_id: 4,
-      villa_id: 5,
+      manzana: 'A',
+      villa: '5',
       visitante_nombre: 'Ana',
       visitante_documento: '0912345678',
       visitante_telefono: '0991234567',

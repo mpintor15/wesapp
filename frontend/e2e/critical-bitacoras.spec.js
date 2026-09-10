@@ -159,28 +159,9 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   await expect(activeFormRow).toBeVisible();
   await expect(activeFormRow).toContainText('1');
 
-  await activeFormRow.getByRole('button', { name: /Editar formulario/ }).click();
-  await builderDialog.getByText(/reemplazará la versión activa 1/i).waitFor();
-  await builderDialog.getByLabel('Nombre').fill('Formulario E2E versión 2');
-  const publishV2Response = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'POST' &&
-      response.url().includes('/formulario-visitas/publicar')
-  );
-  await builderDialog.getByRole('button', { name: 'Publicar versión' }).click();
-  expect((await publishV2Response).status()).toBe(201);
-  activeFormRow = page
-    .locator('.bitacoras-forms-table tbody tr')
-    .filter({ hasText: 'Formulario E2E versión 2' })
-    .filter({ hasText: 'ACTIVO' });
-  await expect(activeFormRow).toContainText('2');
-
-  await activeFormRow.getByRole('button', { name: /Archivar formulario/ }).click();
-  const archiveResponse = page.waitForResponse(
-    (response) => response.request().method() === 'POST' && response.url().includes('/archivar')
-  );
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Archivar' }).click();
-  expect((await archiveResponse).status()).toBe(200);
+  await expect(activeFormRow.getByRole('button', { name: /Editar formulario/ })).toHaveCount(0);
+  await expect(activeFormRow.getByRole('button', { name: /Archivar formulario/ })).toHaveCount(0);
+  await expect(activeFormRow.getByRole('button', { name: /Vista previa/ })).toBeVisible();
 
   const locationsResponse = await request.get(`${getApiURL()}/bitacoras/ubicaciones`, {
     headers: { Authorization: `Bearer ${supervisorSession.token}` },
@@ -192,7 +173,7 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   );
   expect(urbanizacion).toBeTruthy();
 
-  const v3Payload = {
+  const v2Payload = {
     titulo: 'Formulario E2E activo',
     mostrar_fecha_hora: true,
     tipos_visita: [
@@ -219,14 +200,14 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
       },
     ],
   };
-  const publishV3Response = await request.post(
+  const publishV2Response = await request.post(
     `${getApiURL()}/bitacoras/ubicaciones/${urbanizacion.id}/formulario-visitas/publicar`,
     {
       headers: { Authorization: `Bearer ${supervisorSession.token}` },
-      data: v3Payload,
+      data: v2Payload,
     }
   );
-  expect(publishV3Response.status()).toBe(201);
+  expect(publishV2Response.status()).toBe(201);
 
   await clearBrowserSession(page);
   const guardiaSession = await loginWithRole({ request, page, role: 'guardia' });
@@ -245,22 +226,14 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   await page.getByRole('tab', { name: 'Visitas' }).click();
   await guardiaVisitasResponse;
 
-  const manzanasResponse = page.waitForResponse((response) => response.url().includes('/manzanas'));
   const visitaFormActiveResponse = page.waitForResponse((response) =>
     response.url().includes('/formulario-visitas/activo')
   );
   await page.getByRole('button', { name: 'Registrar Visita' }).click();
-  await manzanasResponse;
   await visitaFormActiveResponse;
 
-  const villasResponse = page.waitForResponse((response) => response.url().includes('/villas'));
-  await page.getByLabel('Manzana').click();
-  await page.getByRole('option', { name: 'Manzana E2E' }).click();
-  await villasResponse;
-
-  await page.getByLabel('Villa').click();
-  await page.getByRole('option', { name: 'V1 E2E' }).click();
-  await expect(page.getByText(/titular:\s*residente e2e principal/i)).toBeVisible();
+  await page.getByLabel('Manzana').fill('Manzana E2E');
+  await page.getByLabel('Villa').fill('V1 E2E');
 
   await expect(page.getByLabel('Nombre de contacto')).toHaveCount(0);
   await page.locator('#visita-tipo-visita').selectOption({ label: 'Delivery' });
@@ -314,24 +287,12 @@ test('flujo crítico versionado de Formularios y Visitas', async ({ page, reques
   expect(activeFormResponse.status()).toBe(200);
   const activeForm = (await activeFormResponse.json()).data;
   const deliveryType = activeForm.tipos.find((tipo) => tipo.nombre === 'Delivery');
-  const blocksResponse = await request.get(
-    `${getApiURL()}/bitacoras/ubicaciones/${urbanizacion.id}/manzanas`,
-    { headers: { Authorization: `Bearer ${guardiaSession.token}` } }
-  );
-  const block = (await blocksResponse.json()).data.find((item) => item.nombre === 'Manzana E2E');
-  const villasApiResponse = await request.get(
-    `${getApiURL()}/bitacoras/manzanas/${block.id}/villas`,
-    { headers: { Authorization: `Bearer ${guardiaSession.token}` } }
-  );
-  const villa = (await villasApiResponse.json()).data.find(
-    (item) => item.identificador === 'V1 E2E'
-  );
   const cancellableVisitResponse = await request.post(`${getApiURL()}/bitacoras/visitas`, {
     headers: { Authorization: `Bearer ${guardiaSession.token}` },
     data: {
       ubicacion_id: urbanizacion.id,
-      manzana_id: block.id,
-      villa_id: villa.id,
+      manzana: 'Manzana E2E',
+      villa: 'V1 E2E',
       visitante_nombre: 'Visitante E2E Anulable',
       visitante_documento: '0923456789',
       visitante_telefono: '0992223344',

@@ -137,7 +137,7 @@ describe('FormularioVisitasAdmin', () => {
     expect(view.container.querySelector('.app-modal--xl')).not.toBeNull();
     expect(view.container.querySelector('[data-app-modal-body]')).not.toBeNull();
     const fieldTypes = view.container.querySelector('[aria-label="Tipo de campo"]').textContent;
-    expect(fieldTypes).toContain('Cédula');
+    expect(fieldTypes).toContain('Adjuntar foto');
     expect(fieldTypes).toContain('Placa');
     expect(fieldTypes).not.toContain('Fecha');
     expect(fieldTypes).not.toContain('Hora');
@@ -194,6 +194,7 @@ describe('FormularioVisitasAdmin', () => {
     expect(bitacorasService.publishFormularioVisitas).toHaveBeenCalledWith('2', {
       titulo: 'Formulario de visitas',
       mostrar_fecha_hora: true,
+      mostrar_casa: true,
       tipos_visita: [{ nombre: 'Peatón', requiere_salida: false }],
       fields: [
         {
@@ -300,7 +301,11 @@ describe('FormularioVisitasAdmin', () => {
 
     expect(view.container.querySelector('.bitacoras-group-row')).toBeNull();
     await act(async () => {
-      view.container.querySelector('.bitacoras-group-toggle input[type="checkbox"]').click();
+      view.container
+        .querySelector('#visitantes-section-title')
+        .closest('section')
+        .querySelector('.bitacoras-group-toggle input[type="checkbox"]')
+        .click();
       await flush();
     });
     expect(view.container.textContent).toContain('Visitantes');
@@ -365,7 +370,11 @@ describe('FormularioVisitasAdmin', () => {
       await flush();
     });
     await act(async () => {
-      view.container.querySelector('.bitacoras-group-toggle input[type="checkbox"]').click();
+      view.container
+        .querySelector('#visitantes-section-title')
+        .closest('section')
+        .querySelector('.bitacoras-group-toggle input[type="checkbox"]')
+        .click();
       await flush();
     });
     await act(async () => {
@@ -657,7 +666,7 @@ describe('FormularioVisitasAdmin', () => {
     view.container.remove();
   });
 
-  test('Gerente/Supervisor pueden Editar (crea nueva versión, no muta la publicada) y Cambiar estado', async () => {
+  test('las versiones solo permiten vista previa y una archivada puede restaurarse', async () => {
     bitacorasService.getFormulariosVisitas.mockResolvedValue({
       success: true,
       data: [
@@ -685,75 +694,15 @@ describe('FormularioVisitasAdmin', () => {
       meta: { totalItems: 2, totalPages: 1 },
       filters: { creators: [{ id: 7, usuario: 'monitor' }] },
     });
-    bitacorasService.getFormularioVisitasActivo.mockResolvedValue({
-      success: true,
-      data: {
-        id: 5,
-        version: 2,
-        titulo: 'Ingreso principal',
-        mostrar_fecha_hora: true,
-        tipos: [{ id: 900, form_version_id: 5, nombre: 'Peatón', sort_order: 1 }],
-        fields: [],
-      },
-    });
-    bitacorasService.archiveFormularioVisitas.mockResolvedValue({
-      success: true,
-      message: 'Formulario archivado',
-    });
-
     const view = await renderAdmin({ canGestionar: true });
     const desktopTable = view.container.querySelector('.bitacoras-forms-table');
-
-    // El contenido publicado es inmutable, pero un archivado sí puede
-    // reactivarse (republica como versión nueva); solo el activo se archiva.
-    const archiveButtons = Array.from(
-      desktopTable.querySelectorAll('[aria-label^="Archivar formulario"]')
-    );
-    expect(archiveButtons).toHaveLength(1);
+    expect(desktopTable.querySelector('[aria-label^="Editar formulario"]')).toBeNull();
+    expect(desktopTable.querySelector('[aria-label^="Archivar formulario"]')).toBeNull();
+    expect(desktopTable.querySelector('[aria-label^="Eliminar formulario"]')).toBeNull();
+    expect(desktopTable.querySelectorAll('[aria-label^="Vista previa"]')).toHaveLength(2);
     const archivedRow = Array.from(desktopTable.querySelectorAll('tbody tr')).find((row) =>
       row.textContent.includes('Versión anterior')
     );
-    expect(archivedRow.querySelector('[aria-label^="Vista previa"]')).not.toBeNull();
-    expect(archivedRow.querySelector('[aria-label^="Editar formulario"]')).toBeNull();
-
-    await act(async () => {
-      desktopTable.querySelector('[aria-label="Editar formulario de Urb Norte"]').click();
-      await flush();
-    });
-    expect(view.container.querySelector('.app-modal--xl')).not.toBeNull();
-    expect(view.container.querySelector('#visit-form-location').value).toBe('2');
-    expect(view.container.textContent).toContain(
-      'La nueva publicación reemplazará la versión activa 2'
-    );
-
-    await act(async () => {
-      Array.from(view.container.querySelectorAll('button'))
-        .find((button) => button.textContent === 'Publicar versión')
-        .click();
-      await flush();
-    });
-    expect(bitacorasService.publishFormularioVisitas).toHaveBeenCalledWith('2', {
-      titulo: 'Ingreso principal',
-      mostrar_fecha_hora: true,
-      tipos_visita: [{ nombre: 'Peatón', requiere_salida: false }],
-      fields: [],
-      grupos: [],
-    });
-
-    await act(async () => {
-      view.container.querySelector('[aria-label="Archivar formulario de Urb Norte"]').click();
-      await flush();
-    });
-    expect(view.container.textContent).toContain('Cambiar estado del formulario');
-
-    await act(async () => {
-      Array.from(view.container.querySelectorAll('button'))
-        .find((button) => button.textContent === 'Archivar')
-        .click();
-      await flush();
-    });
-    expect(bitacorasService.archiveFormularioVisitas).toHaveBeenCalledWith(5);
-    expect(view.showToast).toHaveBeenCalledWith('Formulario archivado', 'success');
 
     bitacorasService.activateFormularioVisitas.mockResolvedValue({
       success: true,
@@ -763,6 +712,7 @@ describe('FormularioVisitasAdmin', () => {
       success: true,
       data: {
         id: 3,
+        estado: 'ARCHIVED',
         version: 1,
         titulo: 'Versión anterior',
         mostrar_fecha_hora: true,
@@ -790,7 +740,7 @@ describe('FormularioVisitasAdmin', () => {
       },
     });
     await act(async () => {
-      view.container.querySelector('[aria-label^="Vista previa"]').click();
+      archivedRow.querySelector('[aria-label^="Vista previa"]').click();
       await flush();
     });
     expect(bitacorasService.getFormularioVisitasDetalle).toHaveBeenCalledWith(3);
@@ -810,12 +760,12 @@ describe('FormularioVisitasAdmin', () => {
     expect(bitacorasService.activateFormularioVisitas).not.toHaveBeenCalled();
     expect(view.container.textContent).not.toContain('Vista previa del formulario');
     await act(async () => {
-      view.container.querySelector('[aria-label^="Vista previa"]').click();
+      archivedRow.querySelector('[aria-label^="Vista previa"]').click();
       await flush();
     });
     await act(async () => {
       Array.from(view.container.querySelectorAll('button'))
-        .find((button) => button.textContent === 'Activar')
+        .find((button) => button.textContent === 'Restaurar versión')
         .click();
       await flush();
     });
@@ -826,7 +776,7 @@ describe('FormularioVisitasAdmin', () => {
     view.container.remove();
   });
 
-  test('Gerente elimina con confirmación solo una versión ARCHIVED y refresca el listado', async () => {
+  test('ni siquiera Gerente puede eliminar versiones desde la interfaz', async () => {
     bitacorasService.getFormulariosVisitas.mockResolvedValue({
       success: true,
       data: [
@@ -864,27 +814,8 @@ describe('FormularioVisitasAdmin', () => {
     );
 
     expect(activeRow.querySelector('[aria-label^="Eliminar formulario"]')).toBeNull();
-    const deleteButton = archivedRow.querySelector(
-      '[aria-label="Eliminar formulario de Urb Norte"]'
-    );
-    expect(deleteButton).not.toBeNull();
-    await act(async () => {
-      deleteButton.click();
-      await flush();
-    });
-    expect(view.container.textContent).toContain('Eliminar formulario archivado');
+    expect(archivedRow.querySelector('[aria-label^="Eliminar formulario"]')).toBeNull();
     expect(bitacorasService.deleteFormularioVisitas).not.toHaveBeenCalled();
-
-    await act(async () => {
-      Array.from(view.container.querySelectorAll('button'))
-        .find((button) => button.textContent === 'Eliminar')
-        .click();
-      await flush();
-    });
-
-    expect(bitacorasService.deleteFormularioVisitas).toHaveBeenCalledWith(3);
-    expect(bitacorasService.getFormulariosVisitas).toHaveBeenCalledTimes(2);
-    expect(view.showToast).toHaveBeenCalledWith('Formulario eliminado', 'success');
     act(() => view.root.unmount());
     view.container.remove();
   });

@@ -6,8 +6,6 @@ import VisitaForm from './VisitaForm';
 jest.mock('../../../services/bitacorasService', () => ({
   __esModule: true,
   default: {
-    getManzanas: jest.fn(),
-    getVillas: jest.fn(),
     getFormularioVisitasActivo: jest.fn(),
     createVisita: jest.fn(),
   },
@@ -34,22 +32,6 @@ const setValue = (element, value) => {
 const flush = async () => {
   await Promise.resolve();
   await Promise.resolve();
-};
-
-const selectOption = async (container, input, label) => {
-  await act(async () => {
-    input.dispatchEvent(new globalThis.FocusEvent('focusin', { bubbles: true }));
-    await flush();
-  });
-  const option = Array.from(container.querySelectorAll('[role="option"]')).find(
-    (item) => item.textContent === label
-  );
-  expect(option).not.toBeUndefined();
-  await act(async () => {
-    option.dispatchEvent(new globalThis.MouseEvent('mousedown', { bubbles: true }));
-    option.dispatchEvent(new globalThis.MouseEvent('click', { bubbles: true }));
-    await flush();
-  });
 };
 
 const renderForm = () => {
@@ -86,24 +68,17 @@ const submitForm = async (container) => {
   });
 };
 
+const fillHouse = async (container) => {
+  await act(async () => {
+    setValue(container.querySelector('#visita-manzana'), 'A');
+    setValue(container.querySelector('#visita-villa'), '1');
+    await flush();
+  });
+};
+
 describe('VisitaForm', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    bitacorasService.getManzanas.mockResolvedValue({
-      success: true,
-      data: [{ id: 10, nombre: 'A' }],
-    });
-    bitacorasService.getVillas.mockResolvedValue({
-      success: true,
-      data: [
-        {
-          id: 20,
-          identificador: '1',
-          residente_principal_nombre: 'Ana Titular',
-          residente_principal_contacto: '0991112222',
-        },
-      ],
-    });
     bitacorasService.getFormularioVisitasActivo.mockResolvedValue({
       success: true,
       data: {
@@ -142,10 +117,7 @@ describe('VisitaForm', () => {
       await flush();
     });
     expect(bitacorasService.getFormularioVisitasActivo).toHaveBeenCalledWith('2');
-    await selectOption(view.container, view.container.querySelector('#visita-manzana'), 'A');
-    await selectOption(view.container, view.container.querySelector('#visita-villa'), '1');
-    expect(view.container.textContent).toContain('Titular: Ana Titular');
-    expect(view.container.textContent).toContain('0991112222');
+    await fillHouse(view.container);
 
     await act(async () => {
       setValue(view.container.querySelector('#visita-tipo-visita'), '901');
@@ -159,8 +131,8 @@ describe('VisitaForm', () => {
 
     expect(bitacorasService.createVisita).toHaveBeenCalledWith({
       ubicacion_id: 2,
-      manzana_id: 10,
-      villa_id: 20,
+      manzana: 'A',
+      villa: '1',
       tipo_visita_id: 901,
       respuestas: { motivo: 'Entrega' },
       grupos: {},
@@ -181,6 +153,36 @@ describe('VisitaForm', () => {
     view.unmount();
   });
 
+  test('oculta Casa cuando el formulario de la Urbanización la deshabilita', async () => {
+    bitacorasService.getFormularioVisitasActivo.mockResolvedValue({
+      success: true,
+      data: {
+        id: 30,
+        mostrar_casa: false,
+        tipos: [{ id: 900, nombre: 'Peatón' }],
+        fields: [],
+        groups: [],
+      },
+    });
+    const view = renderForm();
+    await act(async () => {
+      setValue(view.container.querySelector('#visita-ubicacion'), '2');
+      await flush();
+    });
+    await act(async () => {
+      setValue(view.container.querySelector('#visita-tipo-visita'), '900');
+      await flush();
+    });
+
+    expect(view.container.querySelector('#visita-manzana')).toBeNull();
+    expect(view.container.querySelector('#visita-villa')).toBeNull();
+    await submitForm(view.container);
+    expect(bitacorasService.createVisita).toHaveBeenCalledWith(
+      expect.objectContaining({ manzana: undefined, villa: undefined })
+    );
+    view.unmount();
+  });
+
   test('exige seleccionar un Tipo de visita antes de registrar', async () => {
     const view = renderForm();
     await act(async () => flush());
@@ -188,8 +190,7 @@ describe('VisitaForm', () => {
       setValue(view.container.querySelector('#visita-ubicacion'), '2');
       await flush();
     });
-    await selectOption(view.container, view.container.querySelector('#visita-manzana'), 'A');
-    await selectOption(view.container, view.container.querySelector('#visita-villa'), '1');
+    await fillHouse(view.container);
 
     await submitForm(view.container);
     expect(view.container.textContent).toContain('Selecciona el tipo de visita');
@@ -336,8 +337,7 @@ describe('VisitaForm', () => {
       setValue(view.container.querySelector('#visita-ubicacion'), '2');
       await flush();
     });
-    await selectOption(view.container, view.container.querySelector('#visita-manzana'), 'A');
-    await selectOption(view.container, view.container.querySelector('#visita-villa'), '1');
+    await fillHouse(view.container);
     await act(async () => {
       setValue(view.container.querySelector('#visita-tipo-visita'), '900');
       await flush();
@@ -390,8 +390,7 @@ describe('VisitaForm', () => {
       setValue(view.container.querySelector('#visita-ubicacion'), '2');
       await flush();
     });
-    await selectOption(view.container, view.container.querySelector('#visita-manzana'), 'A');
-    await selectOption(view.container, view.container.querySelector('#visita-villa'), '1');
+    await fillHouse(view.container);
     await act(async () => {
       setValue(view.container.querySelector('#visita-tipo-visita'), '900');
       await flush();
@@ -483,8 +482,7 @@ describe('VisitaForm', () => {
       setValue(view.container.querySelector('#visita-ubicacion'), '2');
       await flush();
     });
-    await selectOption(view.container, view.container.querySelector('#visita-manzana'), 'A');
-    await selectOption(view.container, view.container.querySelector('#visita-villa'), '1');
+    await fillHouse(view.container);
     await act(async () => {
       setValue(view.container.querySelector('#visita-tipo-visita'), '900');
       await flush();
@@ -538,8 +536,7 @@ describe('VisitaForm', () => {
       setValue(view.container.querySelector('#visita-ubicacion'), '2');
       await flush();
     });
-    await selectOption(view.container, view.container.querySelector('#visita-manzana'), 'A');
-    await selectOption(view.container, view.container.querySelector('#visita-villa'), '1');
+    await fillHouse(view.container);
     await act(async () => {
       setValue(view.container.querySelector('#visita-tipo-visita'), '900');
       await flush();

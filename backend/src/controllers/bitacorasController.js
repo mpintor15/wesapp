@@ -3,25 +3,19 @@ const { hasPermission, PERMISSIONS } = require('../config/permissions');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
-const { isValidDateString } = require('../utils/inputValidation');
 const {
   getBitacorasResumen,
-  findActiveBlocksForLocation,
-  findActivePrincipalResidentForVilla,
   findActiveVisitFormForLocation,
   findVisitFormVersionDetail,
   hasVisitFormHistory,
   findVisitForms,
   findVisitFormCreators,
-  findActiveVillasForBlock,
   findHistory,
-  findLockedBlock,
+  findHistoryAutores,
   findLockedVisit,
   findLockedUserLocationAssignment,
-  findLockedVilla,
   findVisits,
   findVisitCreators,
-  findVisibleBlock,
   findVisibleLocation,
   findVisibleLocations,
   insertBitacoraRegistro,
@@ -35,86 +29,25 @@ const {
   createVisit,
   closeVisit,
   cancelVisit,
+  userHasLocationAccess,
 } = require('../repositories/bitacorasRepository');
 const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
+const {
+  URBAN_CONTEXT_CONSTRAINTS,
+  HISTORY_SORTS,
+  VISIT_SORTS,
+  VISIT_FORM_SORTS,
+  hasGlobalLocationScope,
+  domainError,
+  normalizeHistoryFilters,
+  normalizeVisitFilters,
+  normalizeVisitFormFilters,
+  validateVisitResponses,
+  validateVisitGroupResponses,
+  visitDetail,
+} = require('../modules/bitacoras/bitacoras.domain');
 
-const BITACORA_STATES = new Set(['REGISTRADA', 'ANULADA']);
-const URBAN_CONTEXT_CONSTRAINTS = new Set([
-  'bitacora_registros_villa_requiere_manzana_check',
-  'bitacora_registros_manzana_ubicacion_fkey',
-  'bitacora_registros_villa_manzana_fkey',
-]);
-const HISTORY_QUERY_FIELDS = new Set([
-  'page',
-  'pageSize',
-  'ubicacion_id',
-  'fecha_desde',
-  'fecha_hasta',
-  'estado',
-  'autor',
-  'sortBy',
-  'sortOrder',
-]);
-const VISIT_QUERY_FIELDS = new Set([
-  'page',
-  'pageSize',
-  'estado',
-  'ubicacion_id',
-  'creator',
-  'fecha_desde',
-  'fecha_hasta',
-  'search',
-  'sortBy',
-  'sortOrder',
-]);
-const VISIT_STATES = new Set(['ABIERTA', 'CERRADA', 'ANULADA', 'NO_AUTORIZADA']);
-const VISIT_FORM_STATES = new Set(['ACTIVE', 'ARCHIVED']);
-const VISIT_FORM_QUERY_FIELDS = new Set([
-  'page',
-  'pageSize',
-  'nombre',
-  'ubicacion_id',
-  'creator',
-  'estado',
-  'sortBy',
-  'sortOrder',
-]);
 const EXPORT_PAGE = { page: 1, pageSize: 100000, offset: 0 };
-const HISTORY_SORTS = {
-  ocurrido_at: 'br.ocurrido_at',
-  ubicacion: 'u.nombre',
-  casa: String.raw`COALESCE(m.nombre, '') || COALESCE(v.identificador, '')`,
-  autor: 'c.nombres_completos',
-  detalle: 'br.detalle',
-};
-const VISIT_SORTS = {
-  tipo_visita: 'tv.nombre',
-  placa: 'bv.placa',
-  casa: String.raw`COALESCE(m.nombre, '') || COALESCE(v.identificador, '')`,
-  titular: 'r.nombre',
-  registrado_por: 'u.usuario',
-  salida_at: 'bv.salida_at',
-  estado: 'bv.estado',
-  observacion: 'bv.motivo_no_autorizacion',
-  entrada_at: 'bv.entrada_at',
-};
-const VISIT_FORM_SORTS = {
-  nombre: 'bfv.titulo',
-  ubicacion: 'u.nombre',
-  version: 'bfv.version',
-  estado: 'bfv.estado',
-  creador: 'creator.usuario',
-  published_at: 'bfv.published_at',
-};
-
-const hasGlobalLocationScope = (tipoUsuario) =>
-  hasPermission(tipoUsuario, PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS);
-
-const domainError = (status, code, message) => {
-  const error = createHttpError(status, message);
-  error.appCode = code;
-  return error;
-};
 
 const getCurrentUserScope = async (userId, executor = db) => {
   const result = await executor.query(
@@ -163,126 +96,6 @@ const getCurrentActor = async (userId, client) => {
   };
 };
 
-const normalizeHistoryFilters = (query = {}) => {
-  const unknownFields = Object.keys(query).filter((field) => !HISTORY_QUERY_FIELDS.has(field));
-  if (unknownFields.length > 0) {
-    throw createHttpError(400, `Filtro no permitido: ${unknownFields[0]}`);
-  }
-  const repeatedField = Object.entries(query).find(([, value]) => Array.isArray(value));
-  if (repeatedField) {
-    throw createHttpError(400, `El filtro ${repeatedField[0]} no puede repetirse`);
-  }
-  const ubicacionId = query.ubicacion_id
-    ? parsePositiveInteger(query.ubicacion_id, 'El filtro ubicación es inválido')
-    : undefined;
-  const fechaDesde = query.fecha_desde || undefined;
-  const fechaHasta = query.fecha_hasta || undefined;
-  const estado = query.estado || undefined;
-  if (query.autor !== undefined && typeof query.autor !== 'string') {
-    throw createHttpError(400, 'autor debe ser texto');
-  }
-  const autor = query.autor?.trim() || undefined;
-
-  if (fechaDesde && !isValidDateString(fechaDesde)) {
-    throw createHttpError(400, 'fecha_desde debe tener formato YYYY-MM-DD y ser real');
-  }
-  if (fechaHasta && !isValidDateString(fechaHasta)) {
-    throw createHttpError(400, 'fecha_hasta debe tener formato YYYY-MM-DD y ser real');
-  }
-  if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
-    throw createHttpError(400, 'El rango de fechas es inválido');
-  }
-  if (estado && !BITACORA_STATES.has(estado)) {
-    throw createHttpError(400, 'estado debe ser REGISTRADA o ANULADA');
-  }
-  if (autor && autor.length > 100) {
-    throw createHttpError(400, 'autor no puede exceder 100 caracteres');
-  }
-
-  return { ubicacionId, fechaDesde, fechaHasta, estado, autor };
-};
-
-const normalizeVisitFilters = (query = {}) => {
-  const unknownFields = Object.keys(query).filter((field) => !VISIT_QUERY_FIELDS.has(field));
-  if (unknownFields.length > 0) {
-    throw createHttpError(400, `Filtro no permitido: ${unknownFields[0]}`);
-  }
-  const repeatedField = Object.entries(query).find(([, value]) => Array.isArray(value));
-  if (repeatedField) {
-    throw createHttpError(400, `El filtro ${repeatedField[0]} no puede repetirse`);
-  }
-  const estado = query.estado || undefined;
-  if (estado && !VISIT_STATES.has(estado)) {
-    throw createHttpError(400, 'estado debe ser ABIERTA, CERRADA, ANULADA o NO_AUTORIZADA');
-  }
-  const ubicacionId = query.ubicacion_id
-    ? parsePositiveInteger(query.ubicacion_id, 'La Urbanización es inválida')
-    : undefined;
-  const fechaDesde = query.fecha_desde || undefined;
-  const fechaHasta = query.fecha_hasta || undefined;
-  if (fechaDesde && !isValidDateString(fechaDesde)) {
-    throw createHttpError(400, 'fecha_desde debe tener formato YYYY-MM-DD y ser real');
-  }
-  if (fechaHasta && !isValidDateString(fechaHasta)) {
-    throw createHttpError(400, 'fecha_hasta debe tener formato YYYY-MM-DD y ser real');
-  }
-  if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
-    throw createHttpError(400, 'El rango de fechas es inválido');
-  }
-  const textFilter = (value, field) => {
-    if (value === undefined) {
-      return undefined;
-    }
-    if (typeof value !== 'string') {
-      throw createHttpError(400, `${field} debe ser texto`);
-    }
-    const trimmed = value.trim();
-    if (trimmed.length > 100) {
-      throw createHttpError(400, `${field} no puede exceder 100 caracteres`);
-    }
-    return trimmed || undefined;
-  };
-  return {
-    estado,
-    ubicacionId,
-    fechaDesde,
-    fechaHasta,
-    creator: textFilter(query.creator, 'creator'),
-    search: textFilter(query.search, 'search'),
-  };
-};
-
-const normalizeVisitFormFilters = (query = {}) => {
-  const unknownField = Object.keys(query).find((field) => !VISIT_FORM_QUERY_FIELDS.has(field));
-  if (unknownField) {
-    throw createHttpError(400, `Filtro no permitido: ${unknownField}`);
-  }
-  const repeatedField = Object.entries(query).find(([, value]) => Array.isArray(value));
-  if (repeatedField) {
-    throw createHttpError(400, `El filtro ${repeatedField[0]} no puede repetirse`);
-  }
-  const normalizeTextFilter = (value, field) => {
-    const normalized = value?.trim() || undefined;
-    if (normalized && normalized.length > 100) {
-      throw createHttpError(400, `${field} no puede exceder 100 caracteres`);
-    }
-    return normalized;
-  };
-  const locationId = query.ubicacion_id
-    ? parsePositiveInteger(query.ubicacion_id, 'La Urbanización es inválida')
-    : undefined;
-  const estado = query.estado || undefined;
-  if (estado && !VISIT_FORM_STATES.has(estado)) {
-    throw createHttpError(400, 'estado debe ser ACTIVE o ARCHIVED');
-  }
-  return {
-    nombre: normalizeTextFilter(query.nombre, 'nombre'),
-    creator: normalizeTextFilter(query.creator, 'creator'),
-    locationId,
-    estado,
-  };
-};
-
 const addRowsAndSend = async ({ rows, sheetName, columns, filename, res }) => {
   const { workbook, worksheet } = createWorkbook(sheetName, columns);
   rows.forEach((row) => worksheet.addRow(row));
@@ -321,235 +134,6 @@ const assertLocationScope = async ({
   return locationResult.rows[0];
 };
 
-const assertUrbanContext = async ({ client, location, blockId, villaId }) => {
-  const hasBlock = blockId !== null && blockId !== undefined;
-  const hasVilla = villaId !== null && villaId !== undefined;
-
-  if (location.tipo_punto !== 'URBANIZACION') {
-    if (hasBlock || hasVilla) {
-      throw domainError(409, 'URBAN_CONTEXT_NOT_ALLOWED', 'La Ubicación no admite contexto urbano');
-    }
-    return;
-  }
-
-  if (!hasBlock || !hasVilla) {
-    throw domainError(400, 'COMPLETE_HOUSE_REQUIRED', 'Selecciona Manzana y Villa para la Casa');
-  }
-
-  const block = await findLockedBlock({ client, blockId });
-  if (!block) {
-    throw domainError(404, 'BLOCK_NOT_FOUND', 'Manzana no encontrada');
-  }
-  if (block.estado !== 'activo') {
-    throw domainError(409, 'BLOCK_INACTIVE', 'La Manzana seleccionada está inactiva');
-  }
-  if (block.ubicacion_id !== location.id) {
-    throw domainError(409, 'INVALID_URBAN_CHAIN', 'La Manzana no pertenece a la Ubicación');
-  }
-
-  const villa = await findLockedVilla({ client, villaId });
-  if (!villa) {
-    throw domainError(404, 'VILLA_NOT_FOUND', 'Villa no encontrada');
-  }
-  if (villa.estado !== 'activo') {
-    throw domainError(409, 'VILLA_INACTIVE', 'La Villa seleccionada está inactiva');
-  }
-  if (villa.manzana_id !== block.id) {
-    throw domainError(409, 'INVALID_URBAN_CHAIN', 'La Villa no pertenece a la Manzana');
-  }
-
-  const principalResident = await findActivePrincipalResidentForVilla({ client, villaId });
-  if (!principalResident) {
-    throw domainError(409, 'VILLA_WITHOUT_ACTIVE_RESIDENT', 'La Villa no tiene titular activo');
-  }
-  return { block, villa, principalResident };
-};
-
-const respondError = (code, message, detailKey) => {
-  const error = domainError(400, code, message);
-  error.details = { [detailKey]: [message] };
-  return error;
-};
-
-// Validates and normalizes a single field's raw answer against its type/required
-// rules. Returns `undefined` for an intentionally-empty optional answer, or the
-// normalized value to persist. Shared by scalar fields and group-member fields
-// (each person entry inside a repeatable group answers the same field shapes).
-const validateFieldAnswer = (field, rawValue, detailKey) => {
-  const missing = rawValue === undefined || rawValue === null || rawValue === '';
-  if (field.required && (missing || (field.type === 'checkbox' && rawValue !== true))) {
-    throw respondError('VISIT_RESPONSE_REQUIRED', `${field.label} es requerido`, detailKey);
-  }
-  if (missing) {
-    return undefined;
-  }
-
-  if (field.type === 'checkbox') {
-    if (typeof rawValue !== 'boolean') {
-      throw respondError('VISIT_RESPONSE_INVALID', `${field.label} debe ser sí/no`, detailKey);
-    }
-    return rawValue;
-  }
-  const stringValue = String(rawValue).trim();
-  if (!stringValue && field.required) {
-    throw respondError('VISIT_RESPONSE_REQUIRED', `${field.label} es requerido`, detailKey);
-  }
-  if (!stringValue) {
-    return undefined;
-  }
-  if (field.type === 'number' && !Number.isFinite(Number(stringValue))) {
-    throw respondError('VISIT_RESPONSE_INVALID', `${field.label} debe ser numérico`, detailKey);
-  }
-  if (field.type === 'cedula' && (typeof rawValue !== 'string' || !/^\d{10}$/.test(stringValue))) {
-    throw respondError('VISIT_RESPONSE_INVALID', `${field.label} debe tener 10 dígitos`, detailKey);
-  }
-  const normalizedPlate =
-    field.type === 'placa' && typeof rawValue === 'string'
-      ? stringValue.toUpperCase().replace(/[^A-Z0-9]/g, '')
-      : stringValue;
-  if (
-    field.type === 'placa' &&
-    (typeof rawValue !== 'string' || !/^[A-Z0-9]{5,10}$/.test(normalizedPlate))
-  ) {
-    throw respondError(
-      'VISIT_RESPONSE_INVALID',
-      `${field.label} debe tener entre 5 y 10 letras o números`,
-      detailKey
-    );
-  }
-  if (field.type === 'select') {
-    const options = Array.isArray(field.options) ? field.options : [];
-    if (!options.includes(stringValue)) {
-      throw respondError(
-        'VISIT_RESPONSE_INVALID',
-        `${field.label} no es una opción válida`,
-        detailKey
-      );
-    }
-  }
-  return field.type === 'number'
-    ? Number(stringValue)
-    : field.type === 'placa'
-      ? normalizedPlate
-      : stringValue;
-};
-
-const fieldAppliesToTipo = (field, tipoVisitaId) =>
-  !field.aplica_a ||
-  field.aplica_a === 'TODOS' ||
-  (Array.isArray(field.tipos) && field.tipos.includes(tipoVisitaId));
-
-const validateVisitResponses = (fields, responses = {}, tipoVisitaId) => {
-  const allowedKeys = new Set(fields.map((field) => field.field_key));
-  const unknownKey = Object.keys(responses).find((key) => !allowedKeys.has(key));
-  if (unknownKey) {
-    const error = domainError(
-      400,
-      'VISIT_RESPONSE_FIELD_NOT_ALLOWED',
-      'Campo de visita no permitido'
-    );
-    error.details = { respuestas: [`Campo no permitido: ${unknownKey}`] };
-    throw error;
-  }
-
-  const normalized = {};
-  fields.forEach((field) => {
-    const rawValue = responses[field.field_key];
-    const detailKey = `respuestas.${field.field_key}`;
-    if (!fieldAppliesToTipo(field, tipoVisitaId)) {
-      if (rawValue !== undefined) {
-        throw respondError(
-          'VISIT_RESPONSE_NOT_APPLICABLE',
-          `${field.label} no aplica al tipo de ingreso`,
-          detailKey
-        );
-      }
-      return;
-    }
-    const value = validateFieldAnswer(field, rawValue, detailKey);
-    if (value !== undefined) {
-      normalized[field.field_key] = value;
-    }
-  });
-  return normalized;
-};
-
-// Validates the repeatable-group entries submitted for a visit: applicability
-// per tipo, minimum entry count, and per-entry/per-field required+type rules
-// (via validateFieldAnswer). Returns a normalized { [group_key]: entry[] } map
-// ready to persist, mirroring validateVisitResponses's normalized output.
-const validateVisitGroupResponses = (groups, groupResponses = {}, tipoVisitaId) => {
-  const allowedKeys = new Set(groups.map((group) => group.group_key));
-  const unknownKey = Object.keys(groupResponses).find((key) => !allowedKeys.has(key));
-  if (unknownKey) {
-    const error = domainError(400, 'VISIT_GROUP_NOT_ALLOWED', 'Grupo de visita no permitido');
-    error.details = { grupos: [`Grupo no permitido: ${unknownKey}`] };
-    throw error;
-  }
-
-  const normalized = {};
-  groups.forEach((group) => {
-    const entries = Array.isArray(groupResponses[group.group_key])
-      ? groupResponses[group.group_key]
-      : [];
-    const applies = fieldAppliesToTipo(group, tipoVisitaId);
-    if (!applies) {
-      if (entries.length > 0) {
-        throw respondError(
-          'VISIT_GROUP_NOT_APPLICABLE',
-          `${group.label} no aplica al tipo de ingreso`,
-          `grupos.${group.group_key}`
-        );
-      }
-      return;
-    }
-    if (group.min_count > 0 && entries.length < group.min_count) {
-      throw respondError(
-        'VISIT_GROUP_MIN_COUNT',
-        `${group.label} requiere al menos ${group.min_count} registro(s)`,
-        `grupos.${group.group_key}`
-      );
-    }
-
-    const allowedFieldKeys = new Set(group.fields.map((field) => field.field_key));
-    normalized[group.group_key] = entries.map((entry, entryIndex) => {
-      if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-        throw respondError(
-          'VISIT_GROUP_INVALID',
-          `${group.label} #${entryIndex + 1} tiene un formato inválido`,
-          `grupos.${group.group_key}.${entryIndex}`
-        );
-      }
-      const unknownFieldKey = Object.keys(entry).find((key) => !allowedFieldKeys.has(key));
-      if (unknownFieldKey) {
-        throw respondError(
-          'VISIT_GROUP_FIELD_NOT_ALLOWED',
-          `Campo no permitido en ${group.label}: ${unknownFieldKey}`,
-          `grupos.${group.group_key}.${entryIndex}`
-        );
-      }
-      const normalizedEntry = {};
-      group.fields.forEach((field) => {
-        const value = validateFieldAnswer(
-          field,
-          entry[field.field_key],
-          `grupos.${group.group_key}.${entryIndex}.${field.field_key}`
-        );
-        if (value !== undefined) {
-          normalizedEntry[field.field_key] = value;
-        }
-      });
-      return normalizedEntry;
-    });
-  });
-  return normalized;
-};
-
-const visitDetail = ({ action, visitorName, tipoVisitaNombre, plate, house }) => {
-  const access = plate ? `${tipoVisitaNombre} · Placa ${plate}` : tipoVisitaNombre;
-  return `${action} visita: ${visitorName || 'Visitante'} · ${access} · Casa ${house}`;
-};
-
 const createRegistro = async (req, res) => {
   try {
     const created = await db.transaction(async (client) => {
@@ -580,31 +164,24 @@ const createRegistro = async (req, res) => {
         throw createHttpError(409, 'El Colaborador asociado al Usuario no existe');
       }
 
-      const location = await assertLocationScope({
+      // Registro is a free-form internal note: it may target any location
+      // (General or Urbanización) but never requires a Casa, unlike Visitas.
+      await assertLocationScope({
         client,
         userId: actor.id,
         locationId: req.body.ubicacion_id,
         hasGlobalScope,
       });
 
-      await assertUrbanContext({
-        client,
-        location,
-        blockId: req.body.manzana_id ?? null,
-        villaId: req.body.villa_id ?? null,
-      });
-
       const result = await client.query(
         `INSERT INTO bitacora_registros
           (ubicacion_id, manzana_id, villa_id, autor_usuario_id, autor_colaborador_id,
            ocurrido_at, detalle)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         VALUES ($1, NULL, NULL, $2, $3, $4, $5)
          RETURNING id, ubicacion_id, manzana_id, villa_id, autor_usuario_id, autor_colaborador_id,
                    ocurrido_at, detalle, estado, created_at`,
         [
           req.body.ubicacion_id,
-          req.body.manzana_id ?? null,
-          req.body.villa_id ?? null,
           actor.id,
           actor.colaborador_id,
           req.body.ocurrido_at,
@@ -636,63 +213,6 @@ const createRegistro = async (req, res) => {
       error.message = 'El contexto urbano dejó de ser válido';
     }
     return handleControllerError(res, error, 'Error al crear registro de Bitácora');
-  }
-};
-
-const getManzanasElegibles = async (req, res) => {
-  try {
-    const locationId = parsePositiveInteger(req.params.ubicacionId, 'La Ubicación es inválida');
-    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
-    const visibleLocation = await findVisibleLocation({ locationId, hasGlobalScope, userId });
-    if (!visibleLocation) {
-      throw domainError(404, 'LOCATION_NOT_FOUND', 'Ubicación no encontrada');
-    }
-    const data = await db.transaction(async (client) => {
-      const location = await assertLocationScope({
-        client,
-        userId,
-        locationId,
-        hasGlobalScope,
-        concealUnauthorized: true,
-      });
-      return location.tipo_punto === 'URBANIZACION'
-        ? findActiveBlocksForLocation({ locationId, executor: client })
-        : [];
-    });
-    return res.json({ success: true, data });
-  } catch (error) {
-    return handleControllerError(res, error, 'Error al consultar Manzanas de Bitácora');
-  }
-};
-
-const getVillasElegibles = async (req, res) => {
-  try {
-    const blockId = parsePositiveInteger(req.params.manzanaId, 'La Manzana es inválida');
-    const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
-    const existingBlock = await findVisibleBlock({ blockId, hasGlobalScope, userId });
-    if (!existingBlock) {
-      throw domainError(404, 'BLOCK_NOT_FOUND', 'Manzana no encontrada');
-    }
-    const data = await db.transaction(async (client) => {
-      const location = await assertLocationScope({
-        client,
-        userId,
-        locationId: existingBlock.ubicacion_id,
-        hasGlobalScope,
-        concealUnauthorized: true,
-      });
-      const block = await findLockedBlock({ client, blockId });
-      if (!block || block.ubicacion_id !== location.id) {
-        throw domainError(409, 'INVALID_URBAN_CHAIN', 'La Manzana dejó de estar disponible');
-      }
-      if (location.tipo_punto !== 'URBANIZACION' || block.estado !== 'activo') {
-        throw domainError(409, 'BLOCK_INACTIVE', 'La Manzana no está disponible');
-      }
-      return findActiveVillasForBlock({ blockId, executor: client });
-    });
-    return res.json({ success: true, data });
-  } catch (error) {
-    return handleControllerError(res, error, 'Error al consultar Villas de Bitácora');
   }
 };
 
@@ -737,30 +257,23 @@ const getRegistros = async (req, res) => {
     const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);
 
     if (filters.ubicacionId && !hasGlobalScope) {
-      const scopeResult = await db.query(
-        `SELECT 1
-         FROM usuario_ubicaciones
-         WHERE usuario_id = $1 AND ubicacion_id = $2`,
-        [userId, filters.ubicacionId]
-      );
-      if (scopeResult.rowCount === 0) {
+      const hasAccess = await userHasLocationAccess(userId, filters.ubicacionId);
+      if (!hasAccess) {
         throw createHttpError(403, 'No tienes acceso a la Ubicación seleccionada');
       }
     }
 
-    const { items, total } = await findHistory({
-      filters,
-      hasGlobalScope,
-      userId,
-      pagination,
-    });
+    const [{ items, total }, autores] = await Promise.all([
+      findHistory({ filters, hasGlobalScope, userId, pagination }),
+      findHistoryAutores({ hasGlobalScope, userId }),
+    ]);
     const meta = buildPaginationMetadata({
       page: pagination.page,
       pageSize: pagination.pageSize,
       totalItems: total,
     });
 
-    return res.json({ success: true, data: items, meta });
+    return res.json({ success: true, data: items, meta, filters: { autores } });
   } catch (error) {
     return handleControllerError(res, error, 'Error al consultar historial de Bitácora');
   }
@@ -982,6 +495,7 @@ const publishVisitForm = async (req, res) => {
         locationId,
         title: req.body.titulo,
         showDateTime: req.body.mostrar_fecha_hora,
+        showHouse: req.body.mostrar_casa,
         tiposVisita: req.body.tipos_visita,
         fields: req.body.fields || [],
         groups: req.body.grupos || [],
@@ -1228,12 +742,6 @@ const createVisita = async (req, res) => {
           'Solo se registran visitas para Urbanizaciones'
         );
       }
-      const urban = await assertUrbanContext({
-        client,
-        location,
-        blockId: req.body.manzana_id,
-        villaId: req.body.villa_id,
-      });
       const form = await findActiveVisitFormForLocation({
         locationId: location.id,
         executor: client,
@@ -1255,6 +763,14 @@ const createVisita = async (req, res) => {
         error.details = { tipo_visita_id: [error.message] };
         throw error;
       }
+      if (form.mostrar_casa === true && (!req.body.manzana || !req.body.villa)) {
+        const error = domainError(400, 'VISIT_HOUSE_REQUIRED', 'Manzana y Villa son requeridas');
+        error.details = {
+          ...(!req.body.manzana ? { manzana: ['Manzana es requerida'] } : {}),
+          ...(!req.body.villa ? { villa: ['Villa es requerida'] } : {}),
+        };
+        throw error;
+      }
       const responses = validateVisitResponses(
         form.fields,
         req.body.respuestas || {},
@@ -1265,7 +781,10 @@ const createVisita = async (req, res) => {
         req.body.grupos || {},
         req.body.tipo_visita_id
       );
-      const house = `${urban.block.nombre} - ${urban.villa.identificador}`;
+      const house =
+        form.mostrar_casa !== false && req.body.manzana && req.body.villa
+          ? `${req.body.manzana} - ${req.body.villa}`
+          : null;
       const autorizada = req.body.autorizada !== false;
       const detail = visitDetail({
         action: autorizada ? 'Ingreso' : 'No autorizada',
@@ -1277,8 +796,8 @@ const createVisita = async (req, res) => {
       const registro = await insertBitacoraRegistro({
         client,
         locationId: location.id,
-        blockId: urban.block.id,
-        villaId: urban.villa.id,
+        blockId: null,
+        villaId: null,
         actorUserId: actor.id,
         actorCollaboratorId: actor.colaborador_id,
         occurredAt: new Date(),
@@ -1287,9 +806,11 @@ const createVisita = async (req, res) => {
       const visita = await createVisit({
         client,
         locationId: location.id,
-        blockId: urban.block.id,
-        villaId: urban.villa.id,
-        principalResidentId: urban.principalResident.id,
+        blockId: null,
+        villaId: null,
+        blockText: form.mostrar_casa === false ? null : req.body.manzana,
+        villaText: form.mostrar_casa === false ? null : req.body.villa,
+        principalResidentId: null,
         formVersionId: form.id,
         visitor: {
           nombre: req.body.visitante_nombre || null,
@@ -1339,8 +860,8 @@ const createVisita = async (req, res) => {
         const exitRegistro = await insertBitacoraRegistro({
           client,
           locationId: location.id,
-          blockId: urban.block.id,
-          villaId: urban.villa.id,
+          blockId: null,
+          villaId: null,
           actorUserId: actor.id,
           actorCollaboratorId: actor.colaborador_id,
           occurredAt: new Date(),
@@ -1565,8 +1086,6 @@ module.exports = {
   normalizeHistoryFilters,
   normalizeVisitFilters,
   getCurrentUserScope,
-  getManzanasElegibles,
-  getVillasElegibles,
   publishVisitForm,
   archiveVisitForm,
   reactivateVisitForm,
