@@ -80,31 +80,20 @@ export const getMovimientoActionState = (movimiento, permissions) => {
     return {
       canDownloadPdf: false,
       canRegeneratePdf: false,
-      canVoid: false,
       canDelete: false,
-      showDisabledVoid: false,
-      disabledVoidReason: '',
       hasAnyAction: false,
     };
   }
 
   const canDownloadPdf = permissions.can('movimientos.pdf.download');
   const canRegeneratePdf = permissions.can('movimientos.pdf.regenerate');
-  const canVoid = permissions.can('movimientos.void') && canVoidRecord(movimiento);
   const canDelete = permissions.can('movimientos.deleteAdmin') && canDeleteAdminRecord(movimiento);
-  const showDisabledVoid =
-    permissions.can('movimientos.void') &&
-    getEstadoOperativo(movimiento?.estado) === 'ACTIVO' &&
-    !canVoid;
 
   return {
     canDownloadPdf,
     canRegeneratePdf,
-    canVoid,
     canDelete,
-    showDisabledVoid,
-    disabledVoidReason: showDisabledVoid ? getNonReversibleReason(movimiento, 'movimiento') : '',
-    hasAnyAction: canDownloadPdf || canRegeneratePdf || canVoid || canDelete || showDisabledVoid,
+    hasAnyAction: canDownloadPdf || canRegeneratePdf || canDelete,
   };
 };
 

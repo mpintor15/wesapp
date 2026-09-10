@@ -26,14 +26,8 @@ test('lee artículos y movimientos de Inventario desde fixtures locales', async 
       response.url().includes('/api/inventario/articulos') &&
       response.status() === 200
   );
-  const movimientosResponse = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'GET' &&
-      response.url().includes('/api/inventario/movimientos') &&
-      response.status() === 200
-  );
   await page.goto('/inventario');
-  await Promise.all([articulosResponse, movimientosResponse]);
+  await articulosResponse;
 
   await expect(page.locator('.inventario-container')).toBeVisible();
   await expect(page.getByText(/mostrando 1 de 1 artículo\(s\)/i)).toBeVisible();
@@ -53,7 +47,14 @@ test('lee artículos y movimientos de Inventario desde fixtures locales', async 
     page.locator('.articulos-table').getByRole('cell', { name: 'Radio E2E Alpha' })
   ).toBeVisible();
 
+  const movimientosResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      response.url().includes('/api/inventario/movimientos') &&
+      response.status() === 200
+  );
   await page.getByRole('button', { name: /movimientos/i }).click();
+  await movimientosResponse;
 
   await expect(page.getByText(/mostrando 1 de 1 movimiento\(s\)/i)).toBeVisible();
   await expect(

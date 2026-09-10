@@ -1,4 +1,5 @@
 import { formatDate, getSerieDisplay, getTipoLabel } from '../utils/inventarioHelpers';
+import CollapsibleFilters from '../../../components/CollapsibleFilters';
 import FilterDateInput from '../../../components/FilterDateInput';
 import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
@@ -16,68 +17,70 @@ const BajasTab = ({
   onPageChange,
 }) => (
   <div className="tab-content">
-    <div className="ff-filter-row inventario-bajas-filter-row">
-      <div className="ff-filter-card inventario-bajas-filter-card">
-        <div className="ff-controls">
-          <div className="ff-search">
-            <svg
-              className="ff-search-icon"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              name="search"
-              value={bajasFiltersDraft.search}
-              onChange={onDraftChange}
-              onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
-              placeholder="Buscar artículo, serie, motivo, ubicación o usuario..."
-            />
-          </div>
-          <div className="ff-dates">
-            <div className="ff-date-field">
-              <span className="ff-date-label">Desde</span>
-              <FilterDateInput
-                ariaLabel="Desde"
-                id="bajas-desde"
-                name="from"
-                value={bajasFiltersDraft.from}
+    <CollapsibleFilters>
+      <div className="ff-filter-row inventario-bajas-filter-row">
+        <div className="ff-filter-card inventario-bajas-filter-card">
+          <div className="ff-controls">
+            <div className="ff-search">
+              <svg
+                className="ff-search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                name="search"
+                value={bajasFiltersDraft.search}
                 onChange={onDraftChange}
                 onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
+                placeholder="Buscar artículo, serie, motivo, ubicación o usuario..."
               />
             </div>
-            <div className="ff-date-field">
-              <span className="ff-date-label">Hasta</span>
-              <FilterDateInput
-                ariaLabel="Hasta"
-                id="bajas-hasta"
-                name="to"
-                value={bajasFiltersDraft.to}
-                onChange={onDraftChange}
-                onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
-              />
+            <div className="ff-dates">
+              <div className="ff-date-field">
+                <span className="ff-date-label">Desde</span>
+                <FilterDateInput
+                  ariaLabel="Desde"
+                  id="bajas-desde"
+                  name="from"
+                  value={bajasFiltersDraft.from}
+                  onChange={onDraftChange}
+                  onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
+                />
+              </div>
+              <div className="ff-date-field">
+                <span className="ff-date-label">Hasta</span>
+                <FilterDateInput
+                  ariaLabel="Hasta"
+                  id="bajas-hasta"
+                  name="to"
+                  value={bajasFiltersDraft.to}
+                  onChange={onDraftChange}
+                  onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div className="ff-filter-actions-card inventario-bajas-filter-actions-card">
-        <div className="ff-actions">
-          <button className="btn btn-primary btn-sm" onClick={onApplyFilters} type="button">
-            Aplicar
-          </button>
-          <button className="ff-clear-btn" onClick={onClearFilters} type="button">
-            Limpiar
-          </button>
+        <div className="ff-filter-actions-card inventario-bajas-filter-actions-card">
+          <div className="ff-actions">
+            <button className="btn btn-primary btn-sm" onClick={onApplyFilters} type="button">
+              Aplicar
+            </button>
+            <button className="ff-clear-btn" onClick={onClearFilters} type="button">
+              Limpiar
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </CollapsibleFilters>
 
     {bajasLoading && bajas.length === 0 ? (
       <div className="loading">

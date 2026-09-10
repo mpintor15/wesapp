@@ -441,7 +441,7 @@
 }
 
 .inventario-container .movimientos-table {
-  min-width: 1480px;
+  min-width: 1080px;
 }
 
 .inventario-container .app-table td {
@@ -512,9 +512,11 @@
 
 .inventario-container .bajas-table .cell-motivo-heading,
 .inventario-container .bajas-table .cell-motivo {
-  width: 450px !important;
-  min-width: 450px !important;
-  max-width: 450px !important;
+  /* Ancho flexible con tope, igual al resto de columnas de texto largo
+     (ej. .cell-cliente en Cuentas): evita el ancho rígido que forzaba
+     scroll incluso en pantallas donde la columna cabría más angosta. */
+  width: auto;
+  max-width: 450px;
 }
 
 .inventario-container .bajas-table td.cell-motivo {
@@ -588,8 +590,6 @@
   padding-right: 8px !important;
 }
 
-.inventario-container .movimientos-table th:nth-last-child(2),
-.inventario-container .movimientos-table td:nth-last-child(2),
 .inventario-container .bajas-table th:nth-last-child(2),
 .inventario-container .bajas-table td:nth-last-child(2) {
   width: 168px;
@@ -600,7 +600,6 @@
   word-break: normal;
 }
 
-.inventario-container .movimientos-table td:nth-last-child(2) .status-badge,
 .inventario-container .bajas-table td:nth-last-child(2) .status-badge {
   display: flex;
   width: 132px;
@@ -680,12 +679,14 @@
 }
 
 .status-badge {
+  /* Métricas alineadas a .badge (styles/index.css) para que los badges de
+     estado se vean iguales en todos los módulos. */
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 74px;
-  padding: 3px 8px;
-  border-radius: 999px;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.25;
@@ -719,19 +720,10 @@
 }
 
 .inventario-container .app-table-actions .action-btn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  max-width: 28px;
-  flex: 0 0 28px;
+  /* Tamaño heredado del default compartido (index.css) para verse igual
+     al resto de tablas de la app. */
   padding: 0;
-  border-radius: 8px;
   line-height: 1;
-}
-
-.inventario-container .app-table-actions .action-btn svg {
-  width: 14px;
-  height: 14px;
 }
 
 .inventario-container .action-btn-baja {

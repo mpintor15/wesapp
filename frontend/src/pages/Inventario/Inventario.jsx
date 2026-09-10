@@ -545,23 +545,6 @@ const Inventario = () => {
     setReasonMotivo('');
   };
 
-  const handleVoidMovimiento = (movimiento) => {
-    openReasonAction({
-      type: 'voidMovimiento',
-      title: 'Anular movimiento',
-      confirmText: 'Anular movimiento',
-      entityLabel: 'Movimiento',
-      entityName: movimiento.articulos_movidos || `Movimiento ${movimiento.id}`,
-      target: movimiento,
-      messages: [
-        'La anulación intentará revertir el stock asociado a este movimiento.',
-        'El movimiento permanecerá visible como anulado.',
-        'Se requiere un motivo entre 10 y 500 caracteres.',
-      ],
-      placeholder: 'Describe el motivo de la anulación',
-    });
-  };
-
   const handleDeleteMovimiento = (movimiento) => {
     openReasonAction({
       type: 'deleteMovimiento',
@@ -591,7 +574,6 @@ const Inventario = () => {
     const targetId = reasonAction.target.id;
     const operations = {
       deleteArticulo: () => inventarioService.deleteArticulo(targetId, motivo),
-      voidMovimiento: () => inventarioService.anularMovimiento(targetId, motivo),
       deleteMovimiento: () => inventarioService.eliminarMovimiento(targetId, motivo),
     };
 
@@ -609,14 +591,6 @@ const Inventario = () => {
 
     if (reasonAction.type === 'deleteArticulo') {
       await fetchArticulos(getArticulosListParams(), true);
-      return;
-    }
-
-    if (reasonAction.type === 'voidMovimiento') {
-      await Promise.all([
-        loadMovimientos(getMovimientosListParams()),
-        fetchArticulos(getArticulosListParams(), true),
-      ]);
       return;
     }
 
@@ -846,7 +820,6 @@ const Inventario = () => {
           onPageChange={handleMovimientosPageChange}
           onRegeneratePdf={handleRegeneratePdf}
           onSort={handleMovimientosSort}
-          onVoidMovimiento={handleVoidMovimiento}
           paginatedMovimientos={movimientos}
           permissions={inventoryPermissions}
           regeneratingPdfId={regeneratingPdfId}

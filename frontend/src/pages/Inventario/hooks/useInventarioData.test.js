@@ -40,26 +40,25 @@ describe('useInventarioData', () => {
     inventarioService.getBajasArticulos.mockResolvedValue(success([{ id: 30 }]));
   });
 
-  test('carga datos iniciales de inventario, movimientos y bajas', async () => {
+  test('carga solo los datos necesarios para la pestaña inicial', async () => {
     const hook = renderHook(() => useInventarioData({ showMessage }));
 
     await flushPromises();
-
     expect(inventarioService.getUbicaciones).toHaveBeenCalledTimes(1);
     expect(clientesService.listOpcionesUbicaciones).toHaveBeenCalledTimes(1);
     expect(clientesService.listClientes).not.toHaveBeenCalled();
     expect(inventarioService.getArticulos).toHaveBeenCalledWith();
-    expect(inventarioService.getMovimientos).toHaveBeenCalledTimes(1);
-    expect(inventarioService.getBajasArticulos).toHaveBeenCalledWith({});
+    expect(inventarioService.getMovimientos).not.toHaveBeenCalled();
+    expect(inventarioService.getBajasArticulos).not.toHaveBeenCalled();
     expect(hook.result.ubicaciones).toEqual([{ id: 1, nombre: 'Bodega' }]);
     expect(hook.result.clientes).toEqual([{ id: 3, nombre: 'ACME', estado: 'activo' }]);
     expect(hook.result.articulos).toEqual([{ id: 10, nombre_articulo: 'Radio' }]);
     expect(hook.result.catalogArticulos).toEqual([{ id: 10, nombre_articulo: 'Radio' }]);
-    expect(hook.result.movimientos).toEqual([{ id: 20 }]);
-    expect(hook.result.bajas).toEqual([{ id: 30 }]);
+    expect(hook.result.movimientos).toEqual([]);
+    expect(hook.result.bajas).toEqual([]);
     expect(hook.result.loading).toBe(false);
-    expect(hook.result.movimientosLoaded).toBe(true);
-    expect(hook.result.bajasLoaded).toBe(true);
+    expect(hook.result.movimientosLoaded).toBe(false);
+    expect(hook.result.bajasLoaded).toBe(false);
 
     hook.unmount();
   });
@@ -108,7 +107,10 @@ describe('useInventarioData', () => {
     const hook = renderHook(() => useInventarioData({ showMessage }));
 
     await flushPromises();
-
+    await act(async () => {
+      await hook.result.loadMovimientos();
+      await hook.result.loadBajas();
+    });
     expect(hook.result.articulosPagination).toEqual({
       page: 1,
       pageSize: 25,

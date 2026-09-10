@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import useRequestGuard from '../../../hooks/useRequestGuard';
 import clientesService from '../../../services/clientesService';
 import inventarioService from '../../../services/inventarioService';
 
@@ -23,6 +24,7 @@ const useInventarioData = ({ showMessage }) => {
   const [bajasLoading, setBajasLoading] = useState(false);
   const [movimientosLoaded, setMovimientosLoaded] = useState(false);
   const [bajasLoaded, setBajasLoaded] = useState(false);
+  const articulosGuard = useRequestGuard();
 
   const loadInitialData = useCallback(async () => {
     setLoading(true);
@@ -60,6 +62,7 @@ const useInventarioData = ({ showMessage }) => {
 
   const fetchArticulos = useCallback(
     async (params = {}, refreshCatalog = false, options = {}) => {
+      const token = articulosGuard.start();
       if (options.showLoading) setLoading(true);
       const shouldFetchCatalog = refreshCatalog;
       try {
@@ -67,6 +70,7 @@ const useInventarioData = ({ showMessage }) => {
           inventarioService.getArticulos(params),
           shouldFetchCatalog ? loadArticulosCatalogo() : Promise.resolve(null),
         ]);
+        if (!articulosGuard.isCurrent(token)) return;
         if (res.success) {
           setArticulos(res.data);
           setArticulosPagination(res.pagination);
@@ -81,10 +85,10 @@ const useInventarioData = ({ showMessage }) => {
           }
         }
       } finally {
-        if (options.showLoading) setLoading(false);
+        if (options.showLoading && articulosGuard.isCurrent(token)) setLoading(false);
       }
     },
-    [showMessage]
+    [articulosGuard, showMessage]
   );
 
   const loadMovimientos = useCallback(
@@ -148,9 +152,7 @@ const useInventarioData = ({ showMessage }) => {
 
   useEffect(() => {
     loadInitialData();
-    loadMovimientos();
-    loadBajas();
-  }, [loadInitialData, loadMovimientos, loadBajas]);
+  }, [loadInitialData]);
 
   return {
     articulos,

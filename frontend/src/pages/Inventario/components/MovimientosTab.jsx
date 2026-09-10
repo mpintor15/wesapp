@@ -3,9 +3,8 @@ import {
   getEstadoOperativoClass,
   getEstadoOperativoLabel,
   getMovimientoActionState,
-  getReversalStatus,
-  REVERSAL_STATUS_LABELS,
 } from '../utils/inventarioHelpers';
+import CollapsibleFilters from '../../../components/CollapsibleFilters';
 import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import SortHeader from './SortHeader';
@@ -25,7 +24,6 @@ const MovimientosTab = ({
   onPageChange,
   onRegeneratePdf,
   onSort,
-  onVoidMovimiento,
   paginatedMovimientos,
   permissions,
   regeneratingPdfId,
@@ -45,83 +43,85 @@ const MovimientosTab = ({
           hasRows={sortedMovimientos.length > 0}
           refreshMessage="Actualizando movimientos…"
         />
-        <div className="ff-filter-row inventario-movimientos-filter-row">
-          <div className="ff-filter-card inventario-movimientos-filter-card">
-            <div className="ff-controls">
-              <div className="ff-search">
-                <svg
-                  className="ff-search-icon"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
-                <input
-                  type="text"
-                  name="search"
-                  value={movimientosFiltersDraft.search}
-                  onChange={onDraftChange}
-                  onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
-                  placeholder="Buscar en artículos, origen o usuario..."
-                />
-              </div>
-              <div className="ff-state movimientos-destino-filter">
-                <span className="ff-state-label">Destino</span>
-                <select
-                  name="destino_id"
-                  value={movimientosFiltersDraft.destino_id}
-                  onChange={onDraftChange}
-                >
-                  <option value="">Todos</option>
-                  {ubicaciones.map((ub) => (
-                    <option key={ub.id} value={ub.id}>
-                      {ub.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ff-dates">
-                <div className="ff-date-field">
-                  <span className="ff-date-label">Desde</span>
-                  <FilterDateInput
-                    ariaLabel="Desde"
-                    id="movimientos-desde"
-                    name="from"
-                    value={movimientosFiltersDraft.from}
+        <CollapsibleFilters>
+          <div className="ff-filter-row inventario-movimientos-filter-row">
+            <div className="ff-filter-card inventario-movimientos-filter-card">
+              <div className="ff-controls">
+                <div className="ff-search">
+                  <svg
+                    className="ff-search-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    name="search"
+                    value={movimientosFiltersDraft.search}
                     onChange={onDraftChange}
                     onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
+                    placeholder="Buscar en artículos, origen o usuario..."
                   />
                 </div>
-                <div className="ff-date-field">
-                  <span className="ff-date-label">Hasta</span>
-                  <FilterDateInput
-                    ariaLabel="Hasta"
-                    id="movimientos-hasta"
-                    name="to"
-                    value={movimientosFiltersDraft.to}
+                <div className="ff-state movimientos-destino-filter">
+                  <span className="ff-state-label">Destino</span>
+                  <select
+                    name="destino_id"
+                    value={movimientosFiltersDraft.destino_id}
                     onChange={onDraftChange}
-                    onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
-                  />
+                  >
+                    <option value="">Todos</option>
+                    {ubicaciones.map((ub) => (
+                      <option key={ub.id} value={ub.id}>
+                        {ub.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ff-dates">
+                  <div className="ff-date-field">
+                    <span className="ff-date-label">Desde</span>
+                    <FilterDateInput
+                      ariaLabel="Desde"
+                      id="movimientos-desde"
+                      name="from"
+                      value={movimientosFiltersDraft.from}
+                      onChange={onDraftChange}
+                      onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
+                    />
+                  </div>
+                  <div className="ff-date-field">
+                    <span className="ff-date-label">Hasta</span>
+                    <FilterDateInput
+                      ariaLabel="Hasta"
+                      id="movimientos-hasta"
+                      name="to"
+                      value={movimientosFiltersDraft.to}
+                      onChange={onDraftChange}
+                      onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-          <div className="ff-filter-actions-card inventario-movimientos-filter-actions-card">
-            <div className="ff-actions">
-              <button className="btn btn-primary btn-sm" onClick={onApplyFilters} type="button">
-                Aplicar
-              </button>
-              <button className="ff-clear-btn" onClick={onClearFilters} type="button">
-                Limpiar
-              </button>
+            <div className="ff-filter-actions-card inventario-movimientos-filter-actions-card">
+              <div className="ff-actions">
+                <button className="btn btn-primary btn-sm" onClick={onApplyFilters} type="button">
+                  Aplicar
+                </button>
+                <button className="ff-clear-btn" onClick={onClearFilters} type="button">
+                  Limpiar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </CollapsibleFilters>
 
         <div className="table-result-count">
           Mostrando {paginatedMovimientos.length} de {sortedMovimientos.length} movimiento(s)
@@ -137,12 +137,7 @@ const MovimientosTab = ({
                   sort={movimientosSort}
                   onSort={onSort}
                 />
-                <SortHeader
-                  field="items"
-                  label="Cant. Artículos"
-                  sort={movimientosSort}
-                  onSort={onSort}
-                />
+                <SortHeader field="items" label="Cant." sort={movimientosSort} onSort={onSort} />
                 <SortHeader
                   field="articulos_movidos"
                   label="Artículos"
@@ -168,7 +163,6 @@ const MovimientosTab = ({
                   onSort={onSort}
                 />
                 <th>Estado</th>
-                <th>Reversión</th>
                 <th className="col-actions app-col-actions app-col-actions--triple"></th>
               </tr>
             </thead>
@@ -176,7 +170,6 @@ const MovimientosTab = ({
               {sortedMovimientos.length > 0 ? (
                 paginatedMovimientos.map((mov, idx) => {
                   const actions = getMovimientoActionState(mov, permissions);
-                  const reversalStatus = getReversalStatus(mov);
                   return (
                     <tr key={mov.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
                       <td className="app-cell-date">{formatDate(mov.fecha_movimiento)}</td>
@@ -191,11 +184,6 @@ const MovimientosTab = ({
                           aria-label={`Estado: ${getEstadoOperativoLabel(mov.estado)}`}
                         >
                           {getEstadoOperativoLabel(mov.estado)}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="status-badge status-badge--neutral">
-                          {REVERSAL_STATUS_LABELS[reversalStatus] || reversalStatus}
                         </span>
                       </td>
                       <td className="col-actions app-col-actions app-col-actions--triple">
@@ -251,53 +239,6 @@ const MovimientosTab = ({
                                 </svg>
                               </button>
                             )}
-                            {actions.canVoid && (
-                              <button
-                                className="action-btn action-btn-baja"
-                                type="button"
-                                title="Anular movimiento"
-                                onClick={() => onVoidMovimiento(mov)}
-                              >
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  aria-hidden="true"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  width="13"
-                                  height="13"
-                                >
-                                  <circle cx="12" cy="12" r="8" />
-                                  <path d="M8 12h8" />
-                                </svg>
-                              </button>
-                            )}
-                            {actions.showDisabledVoid && (
-                              <button
-                                className="action-btn action-btn-baja"
-                                type="button"
-                                title={actions.disabledVoidReason}
-                                disabled
-                                aria-label={actions.disabledVoidReason}
-                              >
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  aria-hidden="true"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  width="13"
-                                  height="13"
-                                >
-                                  <circle cx="12" cy="12" r="8" />
-                                  <path d="M8 12h8" />
-                                </svg>
-                              </button>
-                            )}
                             {actions.canDelete && (
                               <button
                                 className="action-btn action-btn-del"
@@ -333,7 +274,7 @@ const MovimientosTab = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan="9" className="text-center">
+                  <td colSpan="8" className="text-center">
                     No hay movimientos registrados.
                   </td>
                 </tr>

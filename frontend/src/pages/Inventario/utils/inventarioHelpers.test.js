@@ -187,7 +187,7 @@ describe('inventarioHelpers', () => {
     expect(validateMotivoAdministrativo('Motivo suficiente')).toBe('');
   });
 
-  test('calcula estados operativos y acciones de movimientos', () => {
+  test('calcula acciones de movimientos sin exponer reversión', () => {
     const permissions = {
       can: (action) =>
         [
@@ -213,7 +213,6 @@ describe('inventarioHelpers', () => {
       expect.objectContaining({
         canDownloadPdf: true,
         canRegeneratePdf: true,
-        canVoid: true,
         canDelete: false,
       })
     );
@@ -223,7 +222,9 @@ describe('inventarioHelpers', () => {
         { estado: 'ACTIVO', reversible: false, reversal_status: 'INCOMPLETE' },
         permissions
       )
-    ).toEqual(expect.objectContaining({ canVoid: false, showDisabledVoid: true }));
+    ).toEqual(
+      expect.objectContaining({ canDownloadPdf: true, canRegeneratePdf: true, canDelete: false })
+    );
 
     expect(getMovimientoActionState({ estado: 'ELIMINADO' }, permissions)).toEqual(
       expect.objectContaining({ hasAnyAction: false })
