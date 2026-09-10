@@ -19,7 +19,7 @@
     "performance:baseline": "npm --prefix backend run performance:baseline",
     "smoke:production": "./scripts/smoke-production.sh",
     "verify": "npm run lint && npm run format:check && npm run dead-code && npm run test:all && npm run build",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "engines": {
     "node": ">=20.0.0",
