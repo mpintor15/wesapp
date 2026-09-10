@@ -1744,17 +1744,6 @@ describe('database migrations', () => {
     await withTempDatabase('wesapp_migration_wes_security_039', async (pool) => {
       const schemaSql = await fs.readFile(schemaPath, 'utf8');
       await pool.query(schemaSql);
-      const migrations = await listMigrations();
-      for (const migration of migrations) {
-        if (migration.version < 29 || migration.version > 38) {
-          continue;
-        }
-        const migrationSql = await fs.readFile(
-          path.join(migrationsDir, migration.fileName),
-          'utf8'
-        );
-        await pool.query(migrationSql);
-      }
 
       const cliente = await pool.query(
         'INSERT INTO clientes (nombre, estado) VALUES ($1, $2) RETURNING id',
@@ -1832,17 +1821,6 @@ describe('database migrations', () => {
     await withTempDatabase('wesapp_migration_colaborador_inactivo_040', async (pool) => {
       const schemaSql = await fs.readFile(schemaPath, 'utf8');
       await pool.query(schemaSql);
-      const migrations = await listMigrations();
-      for (const migration of migrations) {
-        if (migration.version < 29 || migration.version > 39) {
-          continue;
-        }
-        const migrationSql = await fs.readFile(
-          path.join(migrationsDir, migration.fileName),
-          'utf8'
-        );
-        await pool.query(migrationSql);
-      }
 
       await applyMigrationInTransaction(pool, 40);
 
@@ -1858,19 +1836,23 @@ describe('database migrations', () => {
         [colaboradorId]
       );
 
-      await pool.query('UPDATE colaboradores SET estado = $1 WHERE id = $2', [
-        'inactivo',
-        colaboradorId,
-      ]);
+      await pool.query(
+        `UPDATE colaboradores
+         SET estado = $1, fecha_salida = CURRENT_DATE, salida_voluntaria = FALSE
+         WHERE id = $2`,
+        ['inactivo', colaboradorId]
+      );
       const revoked = await pool.query('SELECT activo FROM usuarios WHERE colaborador_id = $1', [
         colaboradorId,
       ]);
       expect(revoked.rows[0].activo).toBe(false);
 
-      await pool.query('UPDATE colaboradores SET estado = $1 WHERE id = $2', [
-        'activo',
-        colaboradorId,
-      ]);
+      await pool.query(
+        `UPDATE colaboradores
+         SET estado = $1, fecha_salida = NULL, salida_voluntaria = NULL
+         WHERE id = $2`,
+        ['activo', colaboradorId]
+      );
       const stillRevoked = await pool.query(
         'SELECT activo FROM usuarios WHERE colaborador_id = $1',
         [colaboradorId]
@@ -1879,6 +1861,67 @@ describe('database migrations', () => {
 
       const version = await pool.query('SELECT 1 FROM schema_version WHERE version = 40');
       expect(version.rowCount).toBe(1);
+    });
+  });
+
+  test('fresh schema includes visit and collaborator integrity through version 44', async () => {
+    await withTempDatabase('wesapp_schema_integrity_044', async (pool) => {
+      await pool.query(await fs.readFile(schemaPath, 'utf8'));
+
+      const columns = await pool.query(`
+        SELECT table_name, column_name, is_nullable
+        FROM information_schema.columns
+        WHERE (table_name = 'bitacora_visitas' AND column_name IN ('manzana_texto', 'villa_texto', 'placa'))
+           OR (table_name = 'colaboradores' AND column_name IN ('fecha_salida', 'salida_voluntaria'))
+        ORDER BY table_name, column_name
+      `);
+      expect(columns.rows).toEqual([
+        { table_name: 'bitacora_visitas', column_name: 'manzana_texto', is_nullable: 'YES' },
+        { table_name: 'bitacora_visitas', column_name: 'placa', is_nullable: 'YES' },
+        { table_name: 'bitacora_visitas', column_name: 'villa_texto', is_nullable: 'YES' },
+        { table_name: 'colaboradores', column_name: 'fecha_salida', is_nullable: 'YES' },
+        { table_name: 'colaboradores', column_name: 'salida_voluntaria', is_nullable: 'YES' },
+      ]);
+
+      const fieldTypeConstraint = await pool.query(`
+        SELECT pg_get_constraintdef(oid) AS definition
+        FROM pg_constraint
+        WHERE conname = 'bitacora_visit_form_fields_type_check'
+      `);
+      expect(fieldTypeConstraint.rows[0].definition).toContain(String.raw`'photo'`);
+
+      const houseColumn = await pool.query(`
+        SELECT column_default, is_nullable
+        FROM information_schema.columns
+        WHERE table_name = 'bitacora_visit_form_versions' AND column_name = 'mostrar_casa'
+      `);
+      expect(houseColumn.rows).toEqual([{ column_default: 'true', is_nullable: 'NO' }]);
+
+      const legacyTrigger = await pool.query(`
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'enforce_bitacora_visita_titular_activo_trigger'
+          AND NOT tgisinternal
+      `);
+      expect(legacyTrigger.rowCount).toBe(0);
+
+      await expect(
+        pool.query(`
+          INSERT INTO colaboradores
+            (nombres_completos, cedula, fecha_nacimiento, cargo, estado)
+          VALUES ('Salida inválida', 'SCHEMA-043-A', '1990-01-01', 'Guardia', 'inactivo')
+        `)
+      ).rejects.toMatchObject({ code: '23514' });
+
+      await expect(
+        pool.query(`
+          INSERT INTO colaboradores
+            (nombres_completos, cedula, fecha_nacimiento, cargo, estado, fecha_salida, salida_voluntaria)
+          VALUES ('Salida válida', 'SCHEMA-043-B', '1990-01-01', 'Guardia', 'inactivo', CURRENT_DATE, FALSE)
+        `)
+      ).resolves.toMatchObject({ rowCount: 1 });
+
+      const version = await pool.query('SELECT MAX(version)::int AS version FROM schema_version');
+      expect(version.rows[0].version).toBe(44);
     });
   });
 });

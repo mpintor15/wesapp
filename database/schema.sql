@@ -271,6 +271,8 @@ CREATE TABLE colaboradores (
     numero_cuenta VARCHAR(50),
     sueldo NUMERIC(10,2),
     estado VARCHAR(20) DEFAULT 'activo' CHECK (estado IN ('activo', 'inactivo')),
+    fecha_salida DATE,
+    salida_voluntaria BOOLEAN,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -760,3 +762,914 @@ INSERT INTO schema_version (version, description) VALUES
 -- ============================================
 -- FINALIZADO
 -- ============================================
+-- Módulo de visitas y ajustes acumulados posteriores a la bitácora base.
+CREATE TABLE IF NOT EXISTS bitacora_visit_form_versions (
+  id SERIAL PRIMARY KEY,
+  ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  version INTEGER NOT NULL,
+  titulo VARCHAR(150) NOT NULL DEFAULT 'Formulario de visitas',
+  estado VARCHAR(12) NOT NULL DEFAULT 'ACTIVE' CHECK (estado IN ('ACTIVE', 'ARCHIVED')),
+  created_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  published_by INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  published_at TIMESTAMP NULL,
+  CONSTRAINT bitacora_visit_form_versions_unique_version UNIQUE (ubicacion_id, version),
+  CONSTRAINT bitacora_visit_form_versions_id_ubicacion_unique UNIQUE (id, ubicacion_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_bitacora_visit_form_versions_one_active
+  ON bitacora_visit_form_versions (ubicacion_id)
+  WHERE estado = 'ACTIVE';
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visit_form_versions_ubicacion
+  ON bitacora_visit_form_versions (ubicacion_id);
+
+CREATE TABLE IF NOT EXISTS bitacora_visit_form_fields (
+  id SERIAL PRIMARY KEY,
+  form_version_id INTEGER NOT NULL REFERENCES bitacora_visit_form_versions(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  field_key VARCHAR(80) NOT NULL,
+  label VARCHAR(120) NOT NULL,
+  type VARCHAR(12) NOT NULL CHECK (type IN ('text', 'textarea', 'number', 'select', 'checkbox', 'cedula', 'placa')),
+  required BOOLEAN NOT NULL DEFAULT FALSE,
+  options JSONB NOT NULL DEFAULT '[]'::jsonb,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  CONSTRAINT bitacora_visit_form_fields_unique_key UNIQUE (form_version_id, field_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visit_form_fields_version
+  ON bitacora_visit_form_fields (form_version_id, sort_order, id);
+
+ALTER TABLE residentes
+  ADD CONSTRAINT residentes_id_villa_unique UNIQUE (id, villa_id);
+
+CREATE TABLE IF NOT EXISTS bitacora_visitas (
+  id SERIAL PRIMARY KEY,
+  ubicacion_id INTEGER NOT NULL REFERENCES ubicaciones(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  manzana_id INTEGER NOT NULL,
+  villa_id INTEGER NOT NULL,
+  residente_principal_id INTEGER NOT NULL,
+  form_version_id INTEGER NOT NULL,
+  visitante_nombre VARCHAR(150) NOT NULL,
+  visitante_documento VARCHAR(80) NOT NULL,
+  visitante_telefono VARCHAR(80) NOT NULL,
+  tipo_ingreso VARCHAR(10) NOT NULL CHECK (tipo_ingreso IN ('PEATONAL', 'VEHICULO')),
+  placa VARCHAR(30) NULL,
+  estado VARCHAR(12) NOT NULL DEFAULT 'ABIERTA' CHECK (estado IN ('ABIERTA', 'CERRADA', 'ANULADA')),
+  entrada_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  salida_at TIMESTAMP NULL,
+  registrado_por_usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  registrado_por_colaborador_id INTEGER NOT NULL REFERENCES colaboradores(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  cerrado_por_usuario_id INTEGER REFERENCES usuarios(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  cerrado_por_colaborador_id INTEGER REFERENCES colaboradores(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  entrada_bitacora_registro_id INTEGER REFERENCES bitacora_registros(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  salida_bitacora_registro_id INTEGER REFERENCES bitacora_registros(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT bitacora_visitas_manzana_ubicacion_fkey
+    FOREIGN KEY (manzana_id, ubicacion_id) REFERENCES manzanas(id, ubicacion_id) ON DELETE RESTRICT,
+  CONSTRAINT bitacora_visitas_villa_manzana_fkey
+    FOREIGN KEY (villa_id, manzana_id) REFERENCES villas(id, manzana_id) ON DELETE RESTRICT,
+  CONSTRAINT bitacora_visitas_residente_villa_fkey
+    FOREIGN KEY (residente_principal_id, villa_id) REFERENCES residentes(id, villa_id)
+      ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT bitacora_visitas_form_ubicacion_fkey
+    FOREIGN KEY (form_version_id, ubicacion_id) REFERENCES bitacora_visit_form_versions(id, ubicacion_id)
+      ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT bitacora_visitas_placa_por_tipo_check
+    CHECK (tipo_ingreso = 'PEATONAL' OR (placa IS NOT NULL AND BTRIM(placa) <> '')),
+  CONSTRAINT bitacora_visitas_cedula_check
+    CHECK (visitante_documento ~ '^[0-9]{10}$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visitas_ubicacion_estado
+  ON bitacora_visitas (ubicacion_id, estado, entrada_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visitas_casa
+  ON bitacora_visitas (manzana_id, villa_id);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visitas_placa
+  ON bitacora_visitas (LOWER(placa));
+
+CREATE TABLE IF NOT EXISTS bitacora_visita_respuestas (
+  id SERIAL PRIMARY KEY,
+  visita_id INTEGER NOT NULL REFERENCES bitacora_visitas(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  form_field_id INTEGER NOT NULL REFERENCES bitacora_visit_form_fields(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  field_key_snapshot VARCHAR(80) NOT NULL,
+  label_snapshot VARCHAR(120) NOT NULL,
+  type_snapshot VARCHAR(12) NOT NULL,
+  value_text TEXT NULL,
+  value_json JSONB NULL,
+  CONSTRAINT bitacora_visita_respuestas_unique_field UNIQUE (visita_id, form_field_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visita_respuestas_visita
+  ON bitacora_visita_respuestas (visita_id);
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_urbanizacion()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM ubicaciones
+    WHERE id = NEW.ubicacion_id AND tipo_punto = 'URBANIZACION'
+  ) THEN
+    RAISE EXCEPTION 'Los formularios de visita solo pertenecen a ubicaciones URBANIZACION'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visit_form_urbanizacion_trigger ON bitacora_visit_form_versions;
+CREATE TRIGGER enforce_bitacora_visit_form_urbanizacion_trigger
+  BEFORE INSERT OR UPDATE OF ubicacion_id ON bitacora_visit_form_versions
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visit_form_urbanizacion();
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_version_lifecycle()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Los formularios de visita publicados no se pueden eliminar'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF OLD.estado = 'ACTIVE' AND NEW.estado = 'ARCHIVED'
+     AND NEW.id = OLD.id
+     AND NEW.ubicacion_id = OLD.ubicacion_id
+     AND NEW.version = OLD.version
+     AND NEW.titulo = OLD.titulo
+     AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+     AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+     AND NEW.created_at = OLD.created_at
+     AND NEW.published_at IS NOT DISTINCT FROM OLD.published_at THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.estado = 'ACTIVE' AND NEW.estado = 'ACTIVE'
+     AND OLD.published_at IS NULL AND NEW.published_at IS NOT NULL
+     AND NEW.id = OLD.id
+     AND NEW.ubicacion_id = OLD.ubicacion_id
+     AND NEW.version = OLD.version
+     AND NEW.titulo = OLD.titulo
+     AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+     AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+     AND NEW.created_at = OLD.created_at THEN
+    RETURN NEW;
+  END IF;
+
+  RAISE EXCEPTION 'Los formularios de visita publicados son inmutables'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visit_form_version_lifecycle_trigger ON bitacora_visit_form_versions;
+CREATE TRIGGER enforce_bitacora_visit_form_version_lifecycle_trigger
+  BEFORE UPDATE OR DELETE ON bitacora_visit_form_versions
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visit_form_version_lifecycle();
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_field_immutability()
+RETURNS TRIGGER AS $$
+DECLARE
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1
+      FROM bitacora_visit_form_versions
+      WHERE id = NEW.form_version_id AND published_at IS NULL
+    ) THEN
+      RETURN NEW;
+    END IF;
+
+    RAISE EXCEPTION 'No se pueden agregar campos a un formulario de visita publicado'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RAISE EXCEPTION 'Los campos de formularios de visita publicados son inmutables'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visit_form_field_immutability_trigger ON bitacora_visit_form_fields;
+CREATE TRIGGER enforce_bitacora_visit_form_field_immutability_trigger
+  BEFORE INSERT OR UPDATE OR DELETE ON bitacora_visit_form_fields
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visit_form_field_immutability();
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visita_titular_activo()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM residentes
+    WHERE id = NEW.residente_principal_id
+      AND villa_id = NEW.villa_id
+      AND es_principal = TRUE
+      AND activo = TRUE
+  ) THEN
+    RAISE EXCEPTION 'La visita debe apuntar al titular activo de la Villa'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visita_titular_activo_trigger ON bitacora_visitas;
+CREATE TRIGGER enforce_bitacora_visita_titular_activo_trigger
+  BEFORE INSERT OR UPDATE OF residente_principal_id, villa_id ON bitacora_visitas
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visita_titular_activo();
+
+DROP TRIGGER IF EXISTS update_bitacora_visitas_updated_at ON bitacora_visitas;
+CREATE TRIGGER update_bitacora_visitas_updated_at BEFORE UPDATE ON bitacora_visitas
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+INSERT INTO schema_version (version, description)
+VALUES (29, 'Add versioned urbanization visit forms and visits')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_visit_form_versions
+  ADD COLUMN IF NOT EXISTS mostrar_fecha_hora BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE bitacora_visit_form_fields
+  ADD COLUMN IF NOT EXISTS aplica_a VARCHAR(10) NOT NULL DEFAULT 'TODOS';
+
+ALTER TABLE bitacora_visit_form_fields
+  DROP CONSTRAINT IF EXISTS bitacora_visit_form_fields_aplica_a_check;
+
+ALTER TABLE bitacora_visit_form_fields
+  ADD CONSTRAINT bitacora_visit_form_fields_aplica_a_check
+  CHECK (aplica_a IN ('TODOS', 'PEATON', 'VEHICULO'));
+
+ALTER TABLE bitacora_visitas
+  ADD COLUMN IF NOT EXISTS tipo_ingreso VARCHAR(10);
+
+ALTER TABLE bitacora_visitas
+  DROP CONSTRAINT IF EXISTS bitacora_visitas_tipo_ingreso_check;
+
+ALTER TABLE bitacora_visitas
+  DROP CONSTRAINT IF EXISTS bitacora_visitas_placa_por_tipo_check;
+
+UPDATE bitacora_visitas
+SET tipo_ingreso = 'PEATON'
+WHERE tipo_ingreso = 'PEATONAL';
+
+UPDATE bitacora_visitas
+SET tipo_ingreso = CASE
+  WHEN placa IS NOT NULL AND BTRIM(placa) <> '' THEN 'VEHICULO'
+  ELSE 'PEATON'
+END
+WHERE tipo_ingreso IS NULL;
+
+ALTER TABLE bitacora_visitas
+  ALTER COLUMN tipo_ingreso SET NOT NULL;
+
+ALTER TABLE bitacora_visitas
+  ADD CONSTRAINT bitacora_visitas_tipo_ingreso_check
+  CHECK (tipo_ingreso IN ('PEATON', 'VEHICULO'));
+
+ALTER TABLE bitacora_visitas
+  ADD CONSTRAINT bitacora_visitas_placa_por_tipo_check
+  CHECK (tipo_ingreso = 'PEATON' OR (placa IS NOT NULL AND BTRIM(placa) <> ''));
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_version_lifecycle()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Los formularios de visita publicados no se pueden eliminar'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF OLD.estado = 'ACTIVE' AND NEW.estado = 'ARCHIVED'
+     AND NEW.id = OLD.id
+     AND NEW.ubicacion_id = OLD.ubicacion_id
+     AND NEW.version = OLD.version
+     AND NEW.titulo = OLD.titulo
+     AND NEW.mostrar_fecha_hora = OLD.mostrar_fecha_hora
+     AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+     AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+     AND NEW.created_at = OLD.created_at
+     AND NEW.published_at IS NOT DISTINCT FROM OLD.published_at THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.estado = 'ACTIVE' AND NEW.estado = 'ACTIVE'
+     AND OLD.published_at IS NULL AND NEW.published_at IS NOT NULL
+     AND NEW.id = OLD.id
+     AND NEW.ubicacion_id = OLD.ubicacion_id
+     AND NEW.version = OLD.version
+     AND NEW.titulo = OLD.titulo
+     AND NEW.mostrar_fecha_hora = OLD.mostrar_fecha_hora
+     AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+     AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+     AND NEW.created_at = OLD.created_at THEN
+    RETURN NEW;
+  END IF;
+
+  RAISE EXCEPTION 'Los formularios de visita publicados son inmutables'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+INSERT INTO schema_version (version, description)
+VALUES (30, 'Add visit form applicability and display configuration')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_visitas
+  ADD COLUMN IF NOT EXISTS motivo_anulacion TEXT NULL;
+
+INSERT INTO schema_version (version, description)
+VALUES (31, 'Persist visita cancellation reason')
+ON CONFLICT (version) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS bitacora_visit_form_tipos (
+  id SERIAL PRIMARY KEY,
+  form_version_id INTEGER NOT NULL REFERENCES bitacora_visit_form_versions(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  nombre VARCHAR(60) NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  CONSTRAINT bitacora_visit_form_tipos_unique_nombre UNIQUE (form_version_id, nombre),
+  CONSTRAINT bitacora_visit_form_tipos_id_version_unique UNIQUE (id, form_version_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visit_form_tipos_version
+  ON bitacora_visit_form_tipos (form_version_id, sort_order, id);
+
+ALTER TABLE bitacora_visit_form_fields
+  ADD CONSTRAINT bitacora_visit_form_fields_id_version_unique UNIQUE (id, form_version_id);
+
+CREATE TABLE IF NOT EXISTS bitacora_visit_form_field_tipos (
+  form_field_id INTEGER NOT NULL,
+  form_version_id INTEGER NOT NULL,
+  tipo_id INTEGER NOT NULL,
+  PRIMARY KEY (form_field_id, tipo_id),
+  CONSTRAINT bitacora_visit_form_field_tipos_field_fkey
+    FOREIGN KEY (form_field_id, form_version_id)
+    REFERENCES bitacora_visit_form_fields (id, form_version_id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT bitacora_visit_form_field_tipos_tipo_fkey
+    FOREIGN KEY (tipo_id, form_version_id)
+    REFERENCES bitacora_visit_form_tipos (id, form_version_id)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visit_form_field_tipos_tipo
+  ON bitacora_visit_form_field_tipos (tipo_id);
+
+INSERT INTO bitacora_visit_form_tipos (form_version_id, nombre, sort_order)
+SELECT id, 'Peatón', 1 FROM bitacora_visit_form_versions;
+
+INSERT INTO bitacora_visit_form_tipos (form_version_id, nombre, sort_order)
+SELECT id, 'Vehículo', 2 FROM bitacora_visit_form_versions;
+
+ALTER TABLE bitacora_visit_form_fields
+  ADD COLUMN IF NOT EXISTS aplica_a_nuevo VARCHAR(20);
+
+ALTER TABLE bitacora_visit_form_fields
+  DISABLE TRIGGER enforce_bitacora_visit_form_field_immutability_trigger;
+
+UPDATE bitacora_visit_form_fields
+SET aplica_a_nuevo = CASE WHEN aplica_a = 'TODOS' THEN 'TODOS' ELSE 'SELECCIONADOS' END;
+
+ALTER TABLE bitacora_visit_form_fields
+  ENABLE TRIGGER enforce_bitacora_visit_form_field_immutability_trigger;
+
+INSERT INTO bitacora_visit_form_field_tipos (form_field_id, form_version_id, tipo_id)
+SELECT f.id, f.form_version_id, t.id
+FROM bitacora_visit_form_fields f
+JOIN bitacora_visit_form_tipos t
+  ON t.form_version_id = f.form_version_id
+ AND t.nombre = (CASE f.aplica_a WHEN 'PEATON' THEN 'Peatón' WHEN 'VEHICULO' THEN 'Vehículo' END)
+WHERE f.aplica_a IN ('PEATON', 'VEHICULO');
+
+ALTER TABLE bitacora_visit_form_fields
+  DROP CONSTRAINT IF EXISTS bitacora_visit_form_fields_aplica_a_check;
+
+ALTER TABLE bitacora_visit_form_fields
+  DROP COLUMN aplica_a;
+
+ALTER TABLE bitacora_visit_form_fields
+  RENAME COLUMN aplica_a_nuevo TO aplica_a;
+
+ALTER TABLE bitacora_visit_form_fields
+  ALTER COLUMN aplica_a SET NOT NULL,
+  ALTER COLUMN aplica_a SET DEFAULT 'TODOS';
+
+ALTER TABLE bitacora_visit_form_fields
+  ADD CONSTRAINT bitacora_visit_form_fields_aplica_a_check
+  CHECK (aplica_a IN ('TODOS', 'SELECCIONADOS'));
+
+ALTER TABLE bitacora_visitas
+  ADD COLUMN IF NOT EXISTS tipo_visita_id INTEGER;
+
+UPDATE bitacora_visitas bv
+SET tipo_visita_id = t.id
+FROM bitacora_visit_form_tipos t
+WHERE t.form_version_id = bv.form_version_id
+  AND t.nombre = (CASE bv.tipo_ingreso WHEN 'PEATON' THEN 'Peatón' WHEN 'VEHICULO' THEN 'Vehículo' END);
+
+ALTER TABLE bitacora_visitas
+  ALTER COLUMN tipo_visita_id SET NOT NULL;
+
+ALTER TABLE bitacora_visitas
+  DROP CONSTRAINT IF EXISTS bitacora_visitas_tipo_ingreso_check;
+
+ALTER TABLE bitacora_visitas
+  DROP CONSTRAINT IF EXISTS bitacora_visitas_placa_por_tipo_check;
+
+ALTER TABLE bitacora_visitas
+  DROP COLUMN tipo_ingreso;
+
+ALTER TABLE bitacora_visitas
+  ADD CONSTRAINT bitacora_visitas_tipo_visita_fkey
+  FOREIGN KEY (tipo_visita_id, form_version_id)
+  REFERENCES bitacora_visit_form_tipos (id, form_version_id)
+  ON UPDATE CASCADE ON DELETE RESTRICT;
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visitas_tipo_visita
+  ON bitacora_visitas (tipo_visita_id);
+
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_tipo_immutability()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1
+      FROM bitacora_visit_form_versions
+      WHERE id = NEW.form_version_id AND published_at IS NULL
+    ) THEN
+      RETURN NEW;
+    END IF;
+
+    RAISE EXCEPTION 'No se pueden agregar tipos de visita a un formulario publicado'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RAISE EXCEPTION 'Los tipos de visita de formularios publicados son inmutables'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visit_form_tipo_immutability_trigger ON bitacora_visit_form_tipos;
+CREATE TRIGGER enforce_bitacora_visit_form_tipo_immutability_trigger
+  BEFORE INSERT OR UPDATE OR DELETE ON bitacora_visit_form_tipos
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visit_form_tipo_immutability();
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_field_tipo_immutability()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1
+      FROM bitacora_visit_form_versions
+      WHERE id = NEW.form_version_id AND published_at IS NULL
+    ) THEN
+      RETURN NEW;
+    END IF;
+
+    RAISE EXCEPTION 'No se pueden asignar tipos de visita a preguntas de un formulario publicado'
+      USING ERRCODE = '23514';
+  END IF;
+
+  RAISE EXCEPTION 'La asignación de tipos de visita a preguntas publicadas es inmutable'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visit_form_field_tipo_immutability_trigger ON bitacora_visit_form_field_tipos;
+CREATE TRIGGER enforce_bitacora_visit_form_field_tipo_immutability_trigger
+  BEFORE INSERT OR UPDATE OR DELETE ON bitacora_visit_form_field_tipos
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visit_form_field_tipo_immutability();
+
+INSERT INTO schema_version (version, description)
+VALUES (32, 'Add per-form-version configurable visit types, replacing PEATON/VEHICULO')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_visitas
+  ALTER COLUMN visitante_nombre DROP NOT NULL,
+  ALTER COLUMN visitante_documento DROP NOT NULL,
+  ALTER COLUMN visitante_telefono DROP NOT NULL;
+
+ALTER TABLE bitacora_visitas
+  DROP CONSTRAINT IF EXISTS bitacora_visitas_cedula_check;
+
+ALTER TABLE bitacora_visitas
+  ADD CONSTRAINT bitacora_visitas_cedula_check
+  CHECK (visitante_documento IS NULL OR visitante_documento ~ '^[0-9]{10}$');
+
+INSERT INTO schema_version (version, description)
+VALUES (33, 'Make bitacora_visitas visitor name/document/phone optional, matching placa')
+ON CONFLICT (version) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS bitacora_visit_form_groups (
+  id SERIAL PRIMARY KEY,
+  form_version_id INTEGER NOT NULL REFERENCES bitacora_visit_form_versions(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  group_key VARCHAR(80) NOT NULL,
+  label VARCHAR(120) NOT NULL,
+  min_count SMALLINT NOT NULL DEFAULT 0 CHECK (min_count IN (0, 1)),
+  aplica_a VARCHAR(20) NOT NULL DEFAULT 'TODOS' CHECK (aplica_a IN ('TODOS', 'SELECCIONADOS')),
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  CONSTRAINT bitacora_visit_form_groups_unique_key UNIQUE (form_version_id, group_key),
+  CONSTRAINT bitacora_visit_form_groups_id_version_unique UNIQUE (id, form_version_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visit_form_groups_version
+  ON bitacora_visit_form_groups (form_version_id, sort_order, id);
+
+CREATE TABLE IF NOT EXISTS bitacora_visit_form_group_fields (
+  id SERIAL PRIMARY KEY,
+  group_id INTEGER NOT NULL,
+  form_version_id INTEGER NOT NULL,
+  field_key VARCHAR(80) NOT NULL,
+  label VARCHAR(120) NOT NULL,
+  type VARCHAR(12) NOT NULL CHECK (type IN ('text', 'textarea', 'number', 'select', 'checkbox', 'cedula', 'placa')),
+  required BOOLEAN NOT NULL DEFAULT FALSE,
+  options JSONB NOT NULL DEFAULT '[]'::jsonb,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  CONSTRAINT bitacora_visit_form_group_fields_unique_key UNIQUE (group_id, field_key),
+  CONSTRAINT bitacora_visit_form_group_fields_group_fkey
+    FOREIGN KEY (group_id, form_version_id)
+    REFERENCES bitacora_visit_form_groups (id, form_version_id)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visit_form_group_fields_group
+  ON bitacora_visit_form_group_fields (group_id, sort_order, id);
+
+CREATE TABLE IF NOT EXISTS bitacora_visit_form_group_tipos (
+  group_id INTEGER NOT NULL,
+  form_version_id INTEGER NOT NULL,
+  tipo_id INTEGER NOT NULL,
+  PRIMARY KEY (group_id, tipo_id),
+  CONSTRAINT bitacora_visit_form_group_tipos_group_fkey
+    FOREIGN KEY (group_id, form_version_id)
+    REFERENCES bitacora_visit_form_groups (id, form_version_id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT bitacora_visit_form_group_tipos_tipo_fkey
+    FOREIGN KEY (tipo_id, form_version_id)
+    REFERENCES bitacora_visit_form_tipos (id, form_version_id)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visit_form_group_tipos_tipo
+  ON bitacora_visit_form_group_tipos (tipo_id);
+
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_group_immutability()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1 FROM bitacora_visit_form_versions
+      WHERE id = NEW.form_version_id AND published_at IS NULL
+    ) THEN
+      RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'No se pueden agregar grupos a un formulario de visita publicado'
+      USING ERRCODE = '23514';
+  END IF;
+  RAISE EXCEPTION 'Los grupos de formularios de visita publicados son inmutables'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visit_form_group_immutability_trigger ON bitacora_visit_form_groups;
+CREATE TRIGGER enforce_bitacora_visit_form_group_immutability_trigger
+  BEFORE INSERT OR UPDATE OR DELETE ON bitacora_visit_form_groups
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visit_form_group_immutability();
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_group_field_immutability()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1 FROM bitacora_visit_form_versions
+      WHERE id = NEW.form_version_id AND published_at IS NULL
+    ) THEN
+      RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'No se pueden agregar campos a un grupo de un formulario publicado'
+      USING ERRCODE = '23514';
+  END IF;
+  RAISE EXCEPTION 'Los campos de grupos de formularios de visita publicados son inmutables'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visit_form_group_field_immutability_trigger ON bitacora_visit_form_group_fields;
+CREATE TRIGGER enforce_bitacora_visit_form_group_field_immutability_trigger
+  BEFORE INSERT OR UPDATE OR DELETE ON bitacora_visit_form_group_fields
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visit_form_group_field_immutability();
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_group_tipo_immutability()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF EXISTS (
+      SELECT 1 FROM bitacora_visit_form_versions
+      WHERE id = NEW.form_version_id AND published_at IS NULL
+    ) THEN
+      RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'No se pueden asignar tipos de visita a grupos de un formulario publicado'
+      USING ERRCODE = '23514';
+  END IF;
+  RAISE EXCEPTION 'La asignación de tipos de visita a grupos publicados es inmutable'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS enforce_bitacora_visit_form_group_tipo_immutability_trigger ON bitacora_visit_form_group_tipos;
+CREATE TRIGGER enforce_bitacora_visit_form_group_tipo_immutability_trigger
+  BEFORE INSERT OR UPDATE OR DELETE ON bitacora_visit_form_group_tipos
+  FOR EACH ROW EXECUTE FUNCTION enforce_bitacora_visit_form_group_tipo_immutability();
+
+
+CREATE TABLE IF NOT EXISTS bitacora_visita_grupo_registros (
+  id SERIAL PRIMARY KEY,
+  visita_id INTEGER NOT NULL REFERENCES bitacora_visitas(id)
+    ON UPDATE CASCADE ON DELETE RESTRICT,
+  group_id INTEGER NOT NULL,
+  form_version_id INTEGER NOT NULL,
+  group_key_snapshot VARCHAR(80) NOT NULL,
+  label_snapshot VARCHAR(120) NOT NULL,
+  entry_index INTEGER NOT NULL CHECK (entry_index >= 1),
+  respuestas JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT bitacora_visita_grupo_registros_unique_entry UNIQUE (visita_id, group_id, entry_index),
+  CONSTRAINT bitacora_visita_grupo_registros_group_fkey
+    FOREIGN KEY (group_id, form_version_id)
+    REFERENCES bitacora_visit_form_groups (id, form_version_id)
+    ON UPDATE CASCADE ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visita_grupo_registros_visita
+  ON bitacora_visita_grupo_registros (visita_id, group_id, entry_index);
+
+INSERT INTO schema_version (version, description)
+VALUES (34, 'Add repeatable person groups to visit forms (grupos)')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_visit_form_tipos
+  ADD COLUMN IF NOT EXISTS requiere_salida BOOLEAN NOT NULL DEFAULT TRUE;
+
+INSERT INTO schema_version (version, description)
+VALUES (35, 'Add requiere_salida to bitacora_visit_form_tipos (per-tipo auto-close)')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_registros
+  ADD COLUMN IF NOT EXISTS origen VARCHAR(10) NOT NULL DEFAULT 'MANUAL'
+    CHECK (origen IN ('MANUAL', 'VISITA'));
+
+UPDATE bitacora_registros br
+SET origen = 'VISITA'
+WHERE EXISTS (
+  SELECT 1 FROM bitacora_visitas bv
+  WHERE bv.entrada_bitacora_registro_id = br.id
+     OR bv.salida_bitacora_registro_id = br.id
+);
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_registros_origen
+  ON bitacora_registros (origen);
+
+INSERT INTO schema_version (version, description)
+VALUES (36, 'Add origen to bitacora_registros to separate manual Registro from visit audit trail')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_visitas
+  DROP CONSTRAINT IF EXISTS bitacora_visitas_estado_check;
+
+ALTER TABLE bitacora_visitas
+  ALTER COLUMN estado TYPE VARCHAR(20);
+
+ALTER TABLE bitacora_visitas
+  ADD CONSTRAINT bitacora_visitas_estado_check
+  CHECK (estado IN ('ABIERTA', 'CERRADA', 'ANULADA', 'NO_AUTORIZADA'));
+
+ALTER TABLE bitacora_visitas
+  ADD COLUMN IF NOT EXISTS motivo_no_autorizacion TEXT NULL;
+
+ALTER TABLE bitacora_visitas
+  DROP CONSTRAINT IF EXISTS bitacora_visitas_no_autorizacion_coherente_check;
+
+ALTER TABLE bitacora_visitas
+  ADD CONSTRAINT bitacora_visitas_no_autorizacion_coherente_check
+  CHECK (
+    (estado = 'NO_AUTORIZADA' AND motivo_no_autorizacion IS NOT NULL AND BTRIM(motivo_no_autorizacion) <> '')
+    OR (estado <> 'NO_AUTORIZADA' AND motivo_no_autorizacion IS NULL)
+  );
+
+INSERT INTO schema_version (version, description)
+VALUES (37, 'Add NO_AUTORIZADA visita state with its own motivo, distinct from anulacion')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_visit_form_versions
+  ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_bitacora_visit_form_versions_visible
+  ON bitacora_visit_form_versions (ubicacion_id, published_at DESC, id DESC)
+  WHERE deleted_at IS NULL;
+
+CREATE OR REPLACE FUNCTION enforce_bitacora_visit_form_version_lifecycle()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'Los formularios de visita publicados no se pueden eliminar'
+      USING ERRCODE = '23514';
+  END IF;
+
+  IF OLD.estado = 'ACTIVE' AND NEW.estado = 'ARCHIVED'
+     AND NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at
+     AND NEW.id = OLD.id
+     AND NEW.ubicacion_id = OLD.ubicacion_id
+     AND NEW.version = OLD.version
+     AND NEW.titulo = OLD.titulo
+     AND NEW.mostrar_fecha_hora = OLD.mostrar_fecha_hora
+     AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+     AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+     AND NEW.created_at = OLD.created_at
+     AND NEW.published_at IS NOT DISTINCT FROM OLD.published_at THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.estado = 'ACTIVE' AND NEW.estado = 'ACTIVE'
+     AND OLD.published_at IS NULL AND NEW.published_at IS NOT NULL
+     AND NEW.deleted_at IS NOT DISTINCT FROM OLD.deleted_at
+     AND NEW.id = OLD.id
+     AND NEW.ubicacion_id = OLD.ubicacion_id
+     AND NEW.version = OLD.version
+     AND NEW.titulo = OLD.titulo
+     AND NEW.mostrar_fecha_hora = OLD.mostrar_fecha_hora
+     AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+     AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+     AND NEW.created_at = OLD.created_at THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.estado = 'ARCHIVED' AND NEW.estado = 'ARCHIVED'
+     AND OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL
+     AND NEW.id = OLD.id
+     AND NEW.ubicacion_id = OLD.ubicacion_id
+     AND NEW.version = OLD.version
+     AND NEW.titulo = OLD.titulo
+     AND NEW.mostrar_fecha_hora = OLD.mostrar_fecha_hora
+     AND NEW.created_by IS NOT DISTINCT FROM OLD.created_by
+     AND NEW.published_by IS NOT DISTINCT FROM OLD.published_by
+     AND NEW.created_at = OLD.created_at
+     AND NEW.published_at IS NOT DISTINCT FROM OLD.published_at THEN
+    RETURN NEW;
+  END IF;
+
+  RAISE EXCEPTION 'Los formularios de visita publicados son inmutables'
+    USING ERRCODE = '23514';
+END;
+$$ LANGUAGE plpgsql;
+
+INSERT INTO schema_version (version, description)
+VALUES (38, 'Eliminación lógica de formularios de visita archivados')
+ON CONFLICT (version) DO NOTHING;
+
+BEGIN;
+
+DO $$
+DECLARE
+  wes_id INTEGER;
+BEGIN
+  SELECT id INTO wes_id
+  FROM clientes
+  WHERE LOWER(TRIM(nombre)) = LOWER(TRIM('WES Security'))
+  ORDER BY id ASC
+  LIMIT 1;
+
+  IF wes_id IS NULL THEN
+    INSERT INTO clientes (nombre, estado)
+    VALUES ('WES Security', 'activo')
+    RETURNING id INTO wes_id;
+  END IF;
+
+  UPDATE ubicaciones u
+  SET cliente_id = wes_id
+  WHERE u.cliente_id IS NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM ubicaciones existing
+      WHERE existing.id <> u.id
+        AND LOWER(TRIM(existing.nombre)) = LOWER(TRIM(u.nombre))
+        AND (existing.cliente_id = wes_id OR existing.cliente_id IS NULL)
+    );
+END
+$$;
+
+INSERT INTO schema_version (version, description)
+VALUES (39, 'Crea el cliente WES Security y reasigna ubicaciones históricas sin cliente')
+ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
+
+CREATE OR REPLACE FUNCTION revoke_usuario_access_on_colaborador_inactivo()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.estado = 'inactivo' AND OLD.estado IS DISTINCT FROM 'inactivo' THEN
+    UPDATE usuarios
+    SET activo = FALSE
+    WHERE colaborador_id = NEW.id AND activo = TRUE;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'colaboradores' AND column_name = 'estado'
+  ) THEN
+    EXECUTE 'DROP TRIGGER IF EXISTS trg_revoke_usuario_access_on_colaborador_inactivo ON colaboradores';
+    EXECUTE '
+      CREATE TRIGGER trg_revoke_usuario_access_on_colaborador_inactivo
+        AFTER UPDATE OF estado ON colaboradores
+        FOR EACH ROW
+        EXECUTE FUNCTION revoke_usuario_access_on_colaborador_inactivo()';
+  END IF;
+END $$;
+
+INSERT INTO schema_version (version, description)
+VALUES (40, 'Revoke system user access automatically when their colaborador becomes inactive')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_visit_form_fields
+  DROP CONSTRAINT IF EXISTS bitacora_visit_form_fields_type_check;
+ALTER TABLE bitacora_visit_form_fields
+  ADD CONSTRAINT bitacora_visit_form_fields_type_check
+  CHECK (type IN ('text', 'textarea', 'number', 'select', 'checkbox', 'cedula', 'placa', 'photo'));
+
+ALTER TABLE bitacora_visita_respuestas
+  DROP CONSTRAINT IF EXISTS bitacora_visita_respuestas_type_snapshot_check;
+
+ALTER TABLE bitacora_visitas
+  ADD COLUMN IF NOT EXISTS manzana_texto VARCHAR(100),
+  ADD COLUMN IF NOT EXISTS villa_texto VARCHAR(100),
+  ALTER COLUMN manzana_id DROP NOT NULL,
+  ALTER COLUMN villa_id DROP NOT NULL,
+  ALTER COLUMN residente_principal_id DROP NOT NULL;
+
+UPDATE bitacora_visitas bv
+SET manzana_texto = COALESCE(bv.manzana_texto, m.nombre),
+    villa_texto = COALESCE(bv.villa_texto, v.identificador)
+FROM manzanas m, villas v
+WHERE bv.manzana_id = m.id AND bv.villa_id = v.id;
+
+ALTER TABLE bitacora_visitas
+  ADD CONSTRAINT bitacora_visitas_manzana_texto_check
+    CHECK (manzana_texto IS NULL OR BTRIM(manzana_texto) <> ''),
+  ADD CONSTRAINT bitacora_visitas_villa_texto_check
+    CHECK (villa_texto IS NULL OR BTRIM(villa_texto) <> '');
+
+ALTER TABLE colaboradores
+  ADD COLUMN IF NOT EXISTS fecha_salida DATE,
+  ADD COLUMN IF NOT EXISTS salida_voluntaria BOOLEAN;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'colaboradores' AND column_name = 'estado'
+  ) THEN
+    UPDATE colaboradores
+    SET fecha_salida = COALESCE(fecha_salida, CURRENT_DATE),
+        salida_voluntaria = COALESCE(salida_voluntaria, FALSE)
+    WHERE estado = 'inactivo';
+
+    ALTER TABLE colaboradores
+      DROP CONSTRAINT IF EXISTS colaboradores_salida_inactivo_check;
+    ALTER TABLE colaboradores
+      ADD CONSTRAINT colaboradores_salida_inactivo_check CHECK (
+        (estado = 'activo' AND fecha_salida IS NULL AND salida_voluntaria IS NULL)
+        OR
+        (estado = 'inactivo' AND fecha_salida IS NOT NULL AND salida_voluntaria IS NOT NULL)
+      ) NOT VALID;
+  END IF;
+END $$;
+
+INSERT INTO schema_version (version, description)
+VALUES (41, 'Visitas manuales, fotos en formularios y datos de salida de colaboradores')
+ON CONFLICT (version) DO NOTHING;
+DROP TRIGGER IF EXISTS enforce_bitacora_visita_titular_activo_trigger ON bitacora_visitas;
+DROP FUNCTION IF EXISTS enforce_bitacora_visita_titular_activo();
+
+INSERT INTO schema_version (version, description)
+VALUES (42, 'Retira validación legacy de titular, Manzana y Villa en visitas manuales')
+ON CONFLICT (version) DO NOTHING;
+ALTER TABLE bitacora_visitas ALTER COLUMN placa DROP NOT NULL;
+
+INSERT INTO schema_version (version, description)
+VALUES (43, 'Hace opcional la placa legacy en visitas con formularios dinámicos')
+ON CONFLICT (version) DO NOTHING;
+
+ALTER TABLE bitacora_visit_form_versions
+  ADD COLUMN IF NOT EXISTS mostrar_casa BOOLEAN NOT NULL DEFAULT TRUE;
+
+INSERT INTO schema_version (version, description)
+VALUES (44, 'Permite configurar la pregunta Casa por formulario de visitas')
+ON CONFLICT (version) DO NOTHING;
