@@ -1,4 +1,5 @@
 const db = require('../config/database');
+const urbanizacionMastersRepository = require('../repositories/urbanizacionMastersRepository');
 const logger = require('../config/logger');
 const { sanitizeError } = require('../utils/logSanitizer');
 const { parseStrictPositiveInteger } = require('../utils/inputValidation');
@@ -216,17 +217,7 @@ const listManzanas = async (req, res) => {
   try {
     const ubicacionId = parseId(req.params.ubicacionId, 'La ubicación es inválida');
     await getUrbanizacion(db, ubicacionId);
-    const result = await db.query(
-      `SELECT m.id, m.ubicacion_id, m.nombre, m.estado, m.created_at, m.updated_at,
-              COUNT(v.id) FILTER (WHERE v.estado = 'activo')::int AS villas_activas,
-              COUNT(v.id)::int AS villas_totales
-       FROM manzanas m
-       LEFT JOIN villas v ON v.manzana_id = m.id
-       WHERE m.ubicacion_id = $1
-       GROUP BY m.id
-       ORDER BY CASE WHEN m.estado = 'activo' THEN 0 ELSE 1 END, m.nombre, m.id`,
-      [ubicacionId]
-    );
+    const result = await urbanizacionMastersRepository.findManzanasByUbicacion(ubicacionId);
     return res.json({ success: true, data: result.rows });
   } catch (error) {
     return sendError(res, error, 'Error al listar Manzanas');
@@ -326,12 +317,7 @@ const listVillas = async (req, res) => {
   try {
     const manzanaId = parseId(req.params.manzanaId, 'La Manzana es inválida');
     await getManzana(db, manzanaId);
-    const result = await db.query(
-      `SELECT id, manzana_id, identificador, estado, created_at, updated_at
-       FROM villas WHERE manzana_id = $1
-       ORDER BY CASE WHEN estado = 'activo' THEN 0 ELSE 1 END, identificador, id`,
-      [manzanaId]
-    );
+    const result = await urbanizacionMastersRepository.findVillasByManzana(manzanaId);
     return res.json({ success: true, data: result.rows });
   } catch (error) {
     return sendError(res, error, 'Error al listar Villas');
@@ -457,12 +443,7 @@ const getResidentePrincipal = async (req, res) => {
   try {
     const villaId = parseId(req.params.villaId, 'La Villa es inválida');
     await getVilla(db, villaId);
-    const result = await db.query(
-      `SELECT id, villa_id, nombre, contacto, es_principal, activo, created_at, updated_at
-       FROM residentes WHERE villa_id = $1 AND es_principal = TRUE
-       ORDER BY activo DESC, created_at DESC, id DESC LIMIT 1`,
-      [villaId]
-    );
+    const result = await urbanizacionMastersRepository.findResidentePrincipalByVilla(villaId);
     return res.json({ success: true, data: result.rows[0] || null });
   } catch (error) {
     return sendError(res, error, 'Error al consultar Residente principal');
@@ -551,6 +532,4 @@ module.exports = {
   getResidentePrincipal,
   createResidentePrincipal,
   updateResidentePrincipal,
-  lockVillaChainForUpdate: getVillaForUpdate,
-  lockResidentChainForUpdate: getResidentePrincipalForUpdate,
 };

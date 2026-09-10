@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AppModal from '../../components/AppModal';
+import CollapsibleFilters from '../../components/CollapsibleFilters';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PageHeader from '../../components/PageHeader';
 import PaginationControls from '../../components/PaginationControls';
@@ -430,6 +431,8 @@ const Configuracion = () => {
   const canCreate = permissions.canCreateUbicacion;
   const canEdit = permissions.canEditUbicacion;
   const canDelete = permissions.canDeleteUbicacion;
+  // Manzanas y Villas ahora se capturan libremente al registrar la visita.
+  const canManageUrbanizacion = false;
   const isUbicacionesActive = activeCatalog === 'ubicaciones';
   const isClientesActive = activeCatalog === 'clientes';
   const hasAnyAllowedCatalog = permissions.canViewClientes || permissions.canViewUbicaciones;
@@ -468,8 +471,7 @@ const Configuracion = () => {
   }, [clientes, contextualClienteFilter, ubicacionFilters.cliente]);
 
   const ubicacionesTotal = ubicacionesMeta.totalLocations || allUbicaciones.length;
-  const canManageAnyUbicacion =
-    canCreate || canEdit || canDelete || permissions.canManageUrbanizacion;
+  const canManageAnyUbicacion = canCreate || canEdit || canDelete || canManageUrbanizacion;
 
   const loadUbicacionesCatalogo = useCallback(async () => {
     if (!permissions.canViewUbicaciones) return false;
@@ -549,9 +551,22 @@ const Configuracion = () => {
   }, [authLoading, permissions.canViewClientes, permissions.canViewUbicaciones]);
 
   useEffect(() => {
-    if (authLoading || hasLoadedUbicaciones || !permissions.canViewUbicaciones) return;
+    if (
+      authLoading ||
+      !isUbicacionesActive ||
+      hasLoadedUbicaciones ||
+      !permissions.canViewUbicaciones
+    ) {
+      return;
+    }
     void loadUbicaciones();
-  }, [authLoading, hasLoadedUbicaciones, loadUbicaciones, permissions.canViewUbicaciones]);
+  }, [
+    authLoading,
+    hasLoadedUbicaciones,
+    isUbicacionesActive,
+    loadUbicaciones,
+    permissions.canViewUbicaciones,
+  ]);
 
   useEffect(() => {
     if (!isUbicacionesActive || hasLoadedUbicacionesCatalogo || !permissions.canViewUbicaciones) {
@@ -916,41 +931,43 @@ const Configuracion = () => {
               >
                 {isUbicacionesActive && (
                   <>
-                    <div className="ff-filter-row configuracion-ubicaciones-filter-row">
-                      <div className="ff-filter-card configuracion-ubicaciones-filter-card">
-                        <div className="ff-controls">
-                          <div className="configuracion-ubicaciones-search-field">
-                            <label className="ff-state-label" htmlFor="ubicaciones-search">
-                              Buscar
-                            </label>
-                            <div className="ff-search configuracion-ubicaciones-search">
-                              <svg
-                                className="ff-search-icon"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <circle cx="11" cy="11" r="8" />
-                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                              </svg>
-                              <input
-                                id="ubicaciones-search"
-                                type="search"
-                                value={ubicacionFiltersDraft.search}
-                                onChange={(event) =>
-                                  handleUbicacionesSearchChange(event.target.value)
-                                }
-                                placeholder="Cliente o ubicación"
-                                aria-label="Buscar ubicación o cliente"
-                              />
+                    <CollapsibleFilters>
+                      <div className="ff-filter-row configuracion-ubicaciones-filter-row">
+                        <div className="ff-filter-card configuracion-ubicaciones-filter-card">
+                          <div className="ff-controls">
+                            <div className="configuracion-ubicaciones-search-field">
+                              <label className="ff-state-label" htmlFor="ubicaciones-search">
+                                Buscar
+                              </label>
+                              <div className="ff-search configuracion-ubicaciones-search">
+                                <svg
+                                  className="ff-search-icon"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <circle cx="11" cy="11" r="8" />
+                                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                </svg>
+                                <input
+                                  id="ubicaciones-search"
+                                  type="search"
+                                  value={ubicacionFiltersDraft.search}
+                                  onChange={(event) =>
+                                    handleUbicacionesSearchChange(event.target.value)
+                                  }
+                                  placeholder="Cliente o ubicación"
+                                  aria-label="Buscar ubicación o cliente"
+                                />
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </CollapsibleFilters>
 
                     {ubicacionesLoadError && (
                       <div className="error-message configuracion-load-error" role="alert">
@@ -1187,7 +1204,7 @@ const Configuracion = () => {
                                                   )}
                                                   {ubicacion &&
                                                     ubicacion.tipo_punto === 'URBANIZACION' &&
-                                                    permissions.canManageUrbanizacion && (
+                                                    canManageUrbanizacion && (
                                                       <button
                                                         className="action-btn action-btn-view"
                                                         type="button"
@@ -1379,7 +1396,7 @@ const Configuracion = () => {
                                               </div>
                                               {(canEdit ||
                                                 canDelete ||
-                                                (permissions.canManageUrbanizacion &&
+                                                (canManageUrbanizacion &&
                                                   ubicacion.tipo_punto === 'URBANIZACION')) && (
                                                 <div
                                                   className="record-card-actions configuracion-ubicacion-card-actions"
@@ -1403,7 +1420,7 @@ const Configuracion = () => {
                                                       Editar
                                                     </button>
                                                   )}
-                                                  {permissions.canManageUrbanizacion &&
+                                                  {canManageUrbanizacion &&
                                                     ubicacion.tipo_punto === 'URBANIZACION' && (
                                                       <button
                                                         className="action-btn action-btn-view"
@@ -1505,6 +1522,7 @@ const Configuracion = () => {
                 hidden={!isClientesActive}
               >
                 <ClientesCatalog
+                  active={isClientesActive}
                   ubicaciones={allUbicaciones}
                   createRequestToken={clienteCreateRequest}
                   refreshToken={clienteRefreshToken}

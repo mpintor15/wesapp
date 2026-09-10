@@ -412,11 +412,8 @@ describe('Configuracion ubicaciones', () => {
     expect(page.container.querySelector('.configuracion-tabs .tab-badge').textContent).toContain(
       '3'
     );
-    expect(page.button('Ubicaciones').textContent).toContain('9');
-    expect(inventarioService.getUbicacionesAgrupadas).toHaveBeenCalledTimes(1);
-    expect(inventarioService.getUbicacionesAgrupadas).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1, pageSize: 25 })
-    );
+    expect(page.button('Ubicaciones').textContent).not.toContain('9');
+    expect(inventarioService.getUbicacionesAgrupadas).not.toHaveBeenCalled();
     expect(page.button('Crear cliente')).toBeTruthy();
     expect(page.button('Crear ubicación')).toBeFalsy();
 
@@ -424,6 +421,9 @@ describe('Configuracion ubicaciones', () => {
     const tabBadges = Array.from(page.container.querySelectorAll('.configuracion-tabs .tab-badge'));
     expect(tabBadges[1].textContent).toContain('9');
     expect(inventarioService.getUbicacionesAgrupadas).toHaveBeenCalledTimes(1);
+    expect(inventarioService.getUbicacionesAgrupadas).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, pageSize: 25 })
+    );
 
     page.unmount();
   });

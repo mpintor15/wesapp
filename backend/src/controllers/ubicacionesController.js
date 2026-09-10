@@ -5,7 +5,11 @@ const { parseStrictPositiveInteger } = require('../utils/inputValidation');
 const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const { sanitizeError } = require('../utils/logSanitizer');
 const { assertClienteActivoForOperation } = require('../services/clientesStateService');
-const { findGroupedLocations, toBoolean } = require('../repositories/ubicacionesGroupedRepository');
+const {
+  findGroupedLocations,
+  findUbicacionesConFiltro,
+  toBoolean,
+} = require('../repositories/ubicacionesGroupedRepository');
 const { PERMISSIONS, hasPermission } = require('../config/permissions');
 
 const normalizeName = (value) =>
@@ -175,27 +179,7 @@ const getUbicaciones = async (req, res) => {
       conditions.push(`(u.nombre ILIKE $${params.length} OR c.nombre ILIKE $${params.length})`);
     }
 
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const result = await db.query(
-      `
-      SELECT
-        u.id,
-        u.nombre,
-        u.tipo_punto,
-        u.cliente_id,
-        c.nombre AS cliente_nombre,
-        c.estado AS cliente_estado,
-        COUNT(a.id) FILTER (WHERE a.activo = TRUE)::int AS articulos_activos,
-        COUNT(a.id)::int AS articulos_totales
-      FROM ubicaciones u
-      LEFT JOIN clientes c ON c.id = u.cliente_id
-      LEFT JOIN articulos a ON a.ubicacion_id = u.id
-      ${where}
-      GROUP BY u.id, u.nombre, u.tipo_punto, u.cliente_id, c.nombre, c.estado
-      ORDER BY c.nombre ASC NULLS LAST, u.nombre ASC
-    `,
-      params
-    );
+    const result = await findUbicacionesConFiltro({ conditions, params });
 
     return res.json({ success: true, data: result.rows });
   } catch (error) {

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AppModal from '../../components/AppModal';
+import CollapsibleFilters from '../../components/CollapsibleFilters';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import LoadingState from '../../components/LoadingState';
 import PaginationControls from '../../components/PaginationControls';
@@ -301,6 +302,7 @@ const getDisplayValue = (value) => {
 };
 
 const ClientesCatalog = ({
+  active = true,
   ubicaciones = [],
   createRequestToken = 0,
   refreshToken = 0,
@@ -413,9 +415,12 @@ const ClientesCatalog = ({
     setLoading(false);
   }, [currentPage, filters, onClientesLoaded]);
 
+  const fetchedLoaderRef = useRef(null);
   useEffect(() => {
+    if (!active || fetchedLoaderRef.current === loadClientes) return;
+    fetchedLoaderRef.current = loadClientes;
     void loadClientes();
-  }, [loadClientes]);
+  }, [active, loadClientes]);
 
   useEffect(() => {
     if (refreshToken > 0) {
@@ -567,80 +572,82 @@ const ClientesCatalog = ({
   return (
     <>
       <section className="tab-content configuracion-content tabular-workspace" aria-busy={loading}>
-        <div className="ff-filter-row configuracion-clientes-filter-row">
-          <div className="ff-filter-card configuracion-clientes-filter-card">
-            <div className="ff-controls">
-              <div className="configuracion-clientes-search-field">
-                <label className="ff-state-label" htmlFor="clientes-search">
-                  Buscar
-                </label>
-                <div className="ff-search configuracion-clientes-search">
-                  <svg
-                    className="ff-search-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+        <CollapsibleFilters>
+          <div className="ff-filter-row configuracion-clientes-filter-row">
+            <div className="ff-filter-card configuracion-clientes-filter-card">
+              <div className="ff-controls">
+                <div className="configuracion-clientes-search-field">
+                  <label className="ff-state-label" htmlFor="clientes-search">
+                    Buscar
+                  </label>
+                  <div className="ff-search configuracion-clientes-search">
+                    <svg
+                      className="ff-search-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="11" cy="11" r="8" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      id="clientes-search"
+                      type="search"
+                      value={filtersDraft.search}
+                      onChange={handleSearchChange}
+                      onKeyDown={(event) => event.key === 'Enter' && applyFilters()}
+                      placeholder="Buscar por nombre, identificación, correo o teléfono."
+                    />
+                  </div>
+                </div>
+                <div className="ff-state configuracion-clientes-state">
+                  <label className="ff-state-label" htmlFor="clientes-ubicaciones">
+                    Ubicaciones
+                  </label>
+                  <select
+                    id="clientes-ubicaciones"
+                    value={filtersDraft.ubicacionId}
+                    onChange={handleUbicacionesFilterChange}
                   >
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                  <input
-                    id="clientes-search"
-                    type="search"
-                    value={filtersDraft.search}
-                    onChange={handleSearchChange}
-                    onKeyDown={(event) => event.key === 'Enter' && applyFilters()}
-                    placeholder="Buscar por nombre, identificación, correo o teléfono."
-                  />
+                    <option value="">Todas las ubicaciones</option>
+                    {sortedUbicaciones.map((ubicacion) => (
+                      <option key={ubicacion.id} value={ubicacion.id}>
+                        {ubicacion.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="ff-state configuracion-clientes-relation">
+                  <label className="ff-state-label" htmlFor="clientes-estado-ubicaciones">
+                    Relación
+                  </label>
+                  <select
+                    id="clientes-estado-ubicaciones"
+                    value={filtersDraft.estadoUbicaciones}
+                    onChange={handleEstadoUbicacionesChange}
+                  >
+                    <option value="todas">Todos los clientes</option>
+                    <option value="con_ubicaciones">Con ubicaciones</option>
+                    <option value="sin_ubicaciones">Sin ubicaciones</option>
+                  </select>
                 </div>
               </div>
-              <div className="ff-state configuracion-clientes-state">
-                <label className="ff-state-label" htmlFor="clientes-ubicaciones">
-                  Ubicaciones
-                </label>
-                <select
-                  id="clientes-ubicaciones"
-                  value={filtersDraft.ubicacionId}
-                  onChange={handleUbicacionesFilterChange}
-                >
-                  <option value="">Todas las ubicaciones</option>
-                  {sortedUbicaciones.map((ubicacion) => (
-                    <option key={ubicacion.id} value={ubicacion.id}>
-                      {ubicacion.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="ff-state configuracion-clientes-relation">
-                <label className="ff-state-label" htmlFor="clientes-estado-ubicaciones">
-                  Relación
-                </label>
-                <select
-                  id="clientes-estado-ubicaciones"
-                  value={filtersDraft.estadoUbicaciones}
-                  onChange={handleEstadoUbicacionesChange}
-                >
-                  <option value="todas">Todos los clientes</option>
-                  <option value="con_ubicaciones">Con ubicaciones</option>
-                  <option value="sin_ubicaciones">Sin ubicaciones</option>
-                </select>
+            </div>
+            <div className="ff-filter-actions-card configuracion-filter-actions-card">
+              <div className="ff-actions">
+                <button className="btn btn-primary btn-sm" type="button" onClick={applyFilters}>
+                  Aplicar
+                </button>
+                <button className="ff-clear-btn" type="button" onClick={clearFilters}>
+                  Limpiar
+                </button>
               </div>
             </div>
           </div>
-          <div className="ff-filter-actions-card configuracion-filter-actions-card">
-            <div className="ff-actions">
-              <button className="btn btn-primary btn-sm" type="button" onClick={applyFilters}>
-                Aplicar
-              </button>
-              <button className="ff-clear-btn" type="button" onClick={clearFilters}>
-                Limpiar
-              </button>
-            </div>
-          </div>
-        </div>
+        </CollapsibleFilters>
 
         {filters.estadoUbicaciones === 'sin_ubicaciones' && canCreateUbicacion && (
           <div className="configuracion-filter-context">

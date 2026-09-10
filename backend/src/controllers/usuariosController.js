@@ -7,6 +7,7 @@ const { hasPermission, PERMISSIONS } = require('../config/permissions');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { assertUsuarioWithoutActivity } = require('../services/usuariosDeletionService');
 const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
+const usuariosRepository = require('../repositories/usuariosRepository');
 
 const ALLOWED_TYPES = new Set([
   'gerente',
@@ -74,21 +75,9 @@ const generateTempPassword = () => {
   return chars.join('');
 };
 
-const getUsuarioSummaryById = async (id) => {
-  const result = await db.query(
-    'SELECT id, tipo_usuario, activo, colaborador_id FROM usuarios WHERE id = $1 LIMIT 1',
-    [id]
-  );
-  return result.rows[0] || null;
-};
+const getUsuarioSummaryById = (id) => usuariosRepository.findUsuarioSummaryById(id);
 
-const getActiveGerentesCount = async () => {
-  const result = await db.query(
-    'SELECT COUNT(*)::int AS total FROM usuarios WHERE tipo_usuario = $1 AND activo = TRUE',
-    [ROLE_GERENTE]
-  );
-  return Number(result.rows[0]?.total || 0);
-};
+const getActiveGerentesCount = () => usuariosRepository.countActiveGerentes(ROLE_GERENTE);
 
 // ============================================
 // USUARIOS
@@ -98,67 +87,31 @@ const getUsuarios = async (req, res) => {
   try {
     const { search, tipo_usuario, activo, colaborador_id: colaboradorIdRaw } = req.query;
     const pagination = normalizePaginationQuery(req.query);
-    let query = `
-      SELECT u.id, u.usuario, u.nombre, u.apellido, u.tipo_usuario, u.primer_login, u.activo,
-             u.created_at, u.colaborador_id, c.nombres_completos AS colaborador_nombre,
-             c.estado AS colaborador_estado,
-             COALESCE(ARRAY_AGG(uu.ubicacion_id) FILTER (WHERE uu.ubicacion_id IS NOT NULL), '{}') AS ubicacion_ids
-      FROM usuarios u
-      LEFT JOIN colaboradores c ON c.id = u.colaborador_id
-      LEFT JOIN usuario_ubicaciones uu ON uu.usuario_id = u.id
-    `;
-    const params = [];
-    const conditions = [];
 
-    if (search) {
-      params.push(`%${search}%`);
-      conditions.push(
-        `(u.usuario ILIKE $${params.length} OR u.nombre ILIKE $${params.length} OR u.apellido ILIKE $${params.length})`
-      );
-    }
-
+    let tipoUsuario;
     if (tipo_usuario) {
-      const normalizedTipo = String(tipo_usuario).trim().toLowerCase();
-      if (!ALLOWED_TYPES.has(normalizedTipo)) {
+      tipoUsuario = String(tipo_usuario).trim().toLowerCase();
+      if (!ALLOWED_TYPES.has(tipoUsuario)) {
         throw createHttpError(400, 'Filtro tipo_usuario inválido');
       }
-      params.push(normalizedTipo);
-      conditions.push(`u.tipo_usuario = $${params.length}`);
     }
 
+    let colaboradorId;
     if (colaboradorIdRaw !== undefined) {
-      const colaboradorId = parsePositiveInteger(
+      colaboradorId = parsePositiveInteger(
         colaboradorIdRaw,
         'El filtro colaborador_id es inválido'
       );
-      params.push(colaboradorId);
-      conditions.push(`u.colaborador_id = $${params.length}`);
     }
 
-    if (activo === 'pendiente' || activo === 'pending') {
-      conditions.push('u.primer_login = TRUE');
-    } else if (activo === 'true') {
-      params.push(true);
-      conditions.push(`u.activo = $${params.length} AND u.primer_login = FALSE`);
-    } else if (activo === 'false') {
-      params.push(activo === 'true');
-      conditions.push(`u.activo = $${params.length}`);
-    } else if (activo !== undefined) {
+    if (!['pendiente', 'pending', 'true', 'false', undefined].includes(activo)) {
       throw createHttpError(400, 'Filtro activo inválido. Usa true, false o pendiente');
     }
 
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
-    query += ' GROUP BY u.id, c.nombres_completos, c.estado';
-
-    params.push(pagination.pageSize, pagination.offset);
-    query = `SELECT filtered.*, COUNT(*) OVER()::int AS total_count
-      FROM (${query}) filtered
-      ORDER BY filtered.apellido ASC, filtered.nombre ASC, filtered.usuario ASC
-      LIMIT $${params.length - 1} OFFSET $${params.length}`;
-
-    const result = await db.query(query, params);
+    const result = await usuariosRepository.findUsuarios({
+      filters: { search, tipoUsuario, colaboradorId, activo },
+      pagination,
+    });
     const totalItems = Number(result.rows[0]?.total_count || 0);
     const data = result.rows.map(({ total_count: _totalCount, ...usuario }) => usuario);
     res.json({
@@ -177,11 +130,7 @@ const getUsuarios = async (req, res) => {
 
 const getUbicacionesAsignables = async (_req, res) => {
   try {
-    const result = await db.query(
-      `SELECT u.id, u.nombre, c.direccion, u.cliente_id, c.nombre AS cliente_nombre
-       FROM ubicaciones u LEFT JOIN clientes c ON c.id = u.cliente_id
-       ORDER BY COALESCE(c.nombre, ''), u.nombre`
-    );
+    const result = await usuariosRepository.findUbicacionesAsignables();
     res.json({ success: true, data: result.rows });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener ubicaciones asignables:');
@@ -194,15 +143,7 @@ const getColaboradoresElegibles = async (req, res) => {
       req.query.usuario_id === undefined
         ? null
         : parsePositiveInteger(req.query.usuario_id, 'El id de usuario es inválido');
-    const result = await db.query(
-      `SELECT c.id, c.nombres_completos, c.cedula, c.cargo, c.estado
-       FROM colaboradores c
-       LEFT JOIN usuarios u ON u.colaborador_id = c.id
-       WHERE (c.estado = 'activo' AND u.id IS NULL)
-          OR ($1::integer IS NOT NULL AND u.id = $1)
-       ORDER BY c.nombres_completos ASC`,
-      [usuarioId]
-    );
+    const result = await usuariosRepository.findColaboradoresElegibles(usuarioId);
     res.json({ success: true, data: result.rows });
   } catch (error) {
     return handleControllerError(res, error, 'Error al obtener colaboradores elegibles:');
@@ -455,14 +396,7 @@ const reenviarInvitacion = async (req, res) => {
   try {
     const id = parsePositiveInteger(req.params.id, 'El id de usuario es inválido');
 
-    const currentUser = await db.query(
-      `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo
-       FROM usuarios
-       WHERE id = $1
-       LIMIT 1`,
-      [id]
-    );
-    const user = currentUser.rows[0];
+    const user = await usuariosRepository.findUsuarioParaReenvio(id);
     if (!user) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
@@ -472,13 +406,7 @@ const reenviarInvitacion = async (req, res) => {
 
     const tempPassword = generateTempPassword();
     const passwordHash = await bcrypt.hash(tempPassword, 10);
-    const result = await db.query(
-      `UPDATE usuarios
-       SET password_hash = $1, primer_login = TRUE
-       WHERE id = $2
-       RETURNING id, usuario, nombre, apellido, tipo_usuario, primer_login, activo`,
-      [passwordHash, id]
-    );
+    const result = await usuariosRepository.updatePasswordReenvio(id, passwordHash);
 
     await logAudit(db, {
       tabla: 'usuarios',
