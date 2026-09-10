@@ -211,19 +211,109 @@ describe('personalController.createColaborador', () => {
 
 describe('personalController.updateColaborador', () => {
   test('actualiza colaborador válido', async () => {
-    db.query.mockResolvedValue({
-      rows: [{ id: 3, nombres_completos: 'Ana Torres', estado: 'inactivo' }],
-      rowCount: 1,
-    });
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ estado: 'activo', fecha_salida: null, salida_voluntaria: null }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 3, nombres_completos: 'Ana Torres', estado: 'inactivo' }],
+        rowCount: 1,
+      });
     const res = mockRes();
 
     await updateColaborador(
-      mockReq({ params: { id: '3' }, body: { estado: 'inactivo', sueldo: '750.50' } }),
+      mockReq({
+        params: { id: '3' },
+        body: {
+          estado: 'inactivo',
+          fecha_salida: '2026-08-21',
+          salida_voluntaria: true,
+          sueldo: '750.50',
+        },
+      }),
       res
     );
 
     expect(res.json.mock.calls[0][0]).toEqual(expect.objectContaining({ success: true }));
     expect(logAudit).toHaveBeenCalledWith(db, expect.objectContaining({ operacion: 'UPDATE' }));
+  });
+
+  test('regresión: el middleware de validación no descarta fecha_salida/salida_voluntaria', () => {
+    // El bug real ocurría en validateRequest(colaboradorUpdateSchema), no en el
+    // controlador: Zod descartaba estas claves por no estar declaradas en el
+    // schema, así que updateColaborador nunca las recibía aunque el cliente
+    // las enviara. Este test ejercita el middleware real (no un mock) para
+    // que una futura regresión del schema falle aquí, no solo en el navegador.
+    const { validateRequest } = require('../middleware/validation');
+    const { colaboradorUpdateSchema } = require('../utils/validationSchemas');
+    const req = mockReq({
+      body: { estado: 'inactivo', fecha_salida: '2026-08-21', salida_voluntaria: true },
+    });
+    const res = mockRes();
+    const next = jest.fn();
+
+    validateRequest(colaboradorUpdateSchema)(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.body).toEqual(
+      expect.objectContaining({
+        estado: 'inactivo',
+        fecha_salida: '2026-08-21',
+        salida_voluntaria: true,
+      })
+    );
+  });
+
+  test('regresión: el schema acepta fecha_salida/salida_voluntaria nulos al reactivar', () => {
+    const { validateRequest } = require('../middleware/validation');
+    const { colaboradorUpdateSchema } = require('../utils/validationSchemas');
+    const req = mockReq({
+      body: { estado: 'activo', fecha_salida: null, salida_voluntaria: null },
+    });
+    const res = mockRes();
+    const next = jest.fn();
+
+    validateRequest(colaboradorUpdateSchema)(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(req.body).toEqual(
+      expect.objectContaining({ estado: 'activo', fecha_salida: null, salida_voluntaria: null })
+    );
+  });
+
+  test('exige datos de salida al inactivar', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ estado: 'activo', fecha_salida: null, salida_voluntaria: null }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await updateColaborador(mockReq({ params: { id: '3' }, body: { estado: 'inactivo' } }), res);
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/Fecha de salida/);
+    expect(db.query).toHaveBeenCalledTimes(1);
+  });
+
+  test('rechaza datos de salida en un colaborador activo', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ estado: 'activo', fecha_salida: null, salida_voluntaria: null }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await updateColaborador(
+      mockReq({
+        params: { id: '3' },
+        body: { fecha_salida: '2026-08-21', salida_voluntaria: false },
+      }),
+      res
+    );
+
+    const body = expectStatus(res, 400);
+    expect(body.message).toMatch(/activo no puede tener datos de salida/);
+    expect(db.query).toHaveBeenCalledTimes(1);
   });
 
   test('rechaza update sin campos', async () => {

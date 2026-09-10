@@ -133,7 +133,7 @@ const PersonalFormModal = ({
             <label htmlFor="p-estado">Estado</label>
             <select id="p-estado" name="estado" value={formData.estado} onChange={onChange}>
               <option value="activo">Activo</option>
-              <option value="inactivo">Inactivo</option>
+              {editingColaborador ? <option value="inactivo">Inactivo</option> : null}
             </select>
           </div>
         </AppModal.Body>

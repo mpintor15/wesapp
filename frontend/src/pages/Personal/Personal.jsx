@@ -6,6 +6,7 @@ import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { useToast } from '../../context/ToastContext';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
+import useRequestGuard from '../../hooks/useRequestGuard';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import LoadingState from '../../components/LoadingState';
 import PaginationControls from '../../components/PaginationControls';
@@ -17,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import PersonalExportModal from './components/PersonalExportModal';
 import PersonalFilters from './components/PersonalFilters';
 import PersonalFormModal from './components/PersonalFormModal';
+import SalidaColaboradorModal from './components/SalidaColaboradorModal';
 import PersonalMobileCards from './components/PersonalMobileCards';
 import PersonalPageHeader from './components/PersonalPageHeader';
 import PersonalTable from './components/PersonalTable';
@@ -69,6 +71,7 @@ const Personal = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [formErrors, setFormErrors] = useState({});
   const [formData, setFormData] = useState(EMPTY_COLABORADOR_FORM);
+  const [salidaModal, setSalidaModal] = useState(null);
 
   const [filtersDraft, setFiltersDraft] = useState(EMPTY_PERSONAL_FILTERS);
   const [tableSort, setTableSort] = useState({ field: 'nombres_completos', direction: 'asc' });
@@ -95,10 +98,13 @@ const Personal = () => {
   const { isSubmitting: isCreatingAcceso, withSubmit: withCreateAccesoSubmit } = useSubmitState();
   const { isSubmitting: isSavingAcceso, withSubmit: withSaveAccesoSubmit } = useSubmitState();
 
+  const colaboradoresGuard = useRequestGuard();
   const loadColaboradores = useCallback(
     async (params = {}) => {
+      const token = colaboradoresGuard.start();
       setLoading(true);
       const res = await personalService.getColaboradores(params);
+      if (!colaboradoresGuard.isCurrent(token)) return;
       if (res.success) {
         setColaboradores(res.data);
         setPagination(res.pagination);
@@ -107,7 +113,7 @@ const Personal = () => {
       }
       setLoading(false);
     },
-    [showToast]
+    [colaboradoresGuard, showToast]
   );
 
   const loadCargos = useCallback(async () => {
@@ -221,6 +227,7 @@ const Personal = () => {
     setExportFilters({
       estado: filters.estado,
       cargo: filters.cargo,
+      tiene_usuario: '',
     });
     setShowExportModal(true);
   };
@@ -238,6 +245,10 @@ const Personal = () => {
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'estado' && value === 'inactivo' && editingColaborador?.estado !== 'inactivo') {
+      setSalidaModal({ editable: true, colaborador: editingColaborador });
+      return;
+    }
     setFormData((prev) => ({ ...prev, [name]: value }));
     setFormErrors((prev) => ({ ...prev, [name]: '' }));
   };
@@ -537,6 +548,7 @@ const Personal = () => {
               onDelete={setConfirmTarget}
               onEdit={openEdit}
               onManageAcceso={openManageAcceso}
+              onViewSalida={(colaborador) => setSalidaModal({ editable: false, colaborador })}
               onSort={handleTableSort}
               paginatedColaboradores={sortedColaboradores}
               tableSort={tableSort}
@@ -551,6 +563,7 @@ const Personal = () => {
                 onDelete={setConfirmTarget}
                 onEdit={openEdit}
                 onManageAcceso={openManageAcceso}
+                onViewSalida={(colaborador) => setSalidaModal({ editable: false, colaborador })}
               />
             )}
           </>
@@ -568,6 +581,24 @@ const Personal = () => {
           onCancel={() => setShowModal(false)}
           onChange={handleFormChange}
           onSubmit={handleSave}
+        />
+      )}
+
+      {salidaModal && (
+        <SalidaColaboradorModal
+          key={`${salidaModal.colaborador?.id || 'nuevo'}-${salidaModal.editable}`}
+          colaborador={salidaModal.colaborador}
+          editable={salidaModal.editable}
+          onCancel={() => setSalidaModal(null)}
+          onConfirm={({ fecha_salida, salida_voluntaria }) => {
+            setFormData((current) => ({
+              ...current,
+              estado: 'inactivo',
+              fecha_salida,
+              salida_voluntaria,
+            }));
+            setSalidaModal(null);
+          }}
         />
       )}
 

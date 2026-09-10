@@ -576,6 +576,8 @@ const colaboradorCreateSchema = z.object({
   numero_cuenta: optionalTrimmedString(100, 'Número de cuenta'),
   sueldo: optionalPositiveNumber('Sueldo').nullable(),
   estado: z.enum(['activo', 'inactivo']).optional().default('activo'),
+  fecha_salida: optionalDateString('Fecha de salida').nullable(),
+  salida_voluntaria: optionalBooleanFromForm.nullable(),
 });
 
 const colaboradorUpdateSchema = colaboradorCreateSchema.partial();

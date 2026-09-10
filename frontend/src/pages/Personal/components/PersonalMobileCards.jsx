@@ -9,17 +9,25 @@ const PersonalMobileCards = ({
   onDelete,
   onEdit,
   onManageAcceso,
+  onViewSalida,
 }) => (
   <div className="records-mobile">
     {colaboradores.map((colaborador) => (
       <article key={colaborador.id} className="record-card">
         <div className="record-card-header">
           <h3>{colaborador.nombres_completos}</h3>
-          <span
-            className={`badge badge-${colaborador.estado === 'activo' ? 'active' : 'inactive'}`}
-          >
-            {colaborador.estado}
-          </span>
+          {colaborador.estado === 'inactivo' ? (
+            <button
+              type="button"
+              onClick={() => onViewSalida(colaborador)}
+              className="badge badge-inactive"
+              title="Ver información de salida"
+            >
+              {colaborador.estado}
+            </button>
+          ) : (
+            <span className="badge badge-active">{colaborador.estado}</span>
+          )}
         </div>
         <dl className="record-card-details">
           <div>

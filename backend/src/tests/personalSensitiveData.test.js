@@ -144,10 +144,17 @@ describe('personalController — acceso a datos sensibles por rol', () => {
     });
 
     test(`updateColaborador ${canAccessSensitive ? 'permite' : 'bloquea'} modificar banco, numero_cuenta y sueldo`, async () => {
-      db.query.mockResolvedValueOnce({
-        rows: [{ id: 1, nombres_completos: 'Ana Torres' }],
-        rowCount: 1,
-      });
+      if (canAccessSensitive) {
+        db.query
+          .mockResolvedValueOnce({
+            rows: [{ estado: 'activo', fecha_salida: null, salida_voluntaria: null }],
+            rowCount: 1,
+          })
+          .mockResolvedValueOnce({
+            rows: [{ id: 1, nombres_completos: 'Ana Torres' }],
+            rowCount: 1,
+          });
+      }
       const res = mockRes();
 
       await updateColaborador(
@@ -161,7 +168,7 @@ describe('personalController — acceso a datos sensibles por rol', () => {
 
       if (canAccessSensitive) {
         expect(res.status).not.toHaveBeenCalledWith(400);
-        const [sql, values] = db.query.mock.calls[0];
+        const [sql, values] = db.query.mock.calls[1];
         expect(sql).toContain('banco');
         expect(sql).toContain('numero_cuenta');
         expect(sql).toContain('sueldo');

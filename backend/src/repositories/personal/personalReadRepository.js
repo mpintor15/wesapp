@@ -16,7 +16,13 @@ const COLABORADORES_JOIN_COLUMNS = `
     u.primer_login AS usuario_primer_login
 `;
 
-const buildColaboradoresWhere = ({ search, estado, cargo, canAccessSensitive = true } = {}) => {
+const buildColaboradoresWhere = ({
+  search,
+  estado,
+  cargo,
+  tieneUsuario,
+  canAccessSensitive = true,
+} = {}) => {
   const params = [];
   const conditions = [];
 
@@ -46,6 +52,10 @@ const buildColaboradoresWhere = ({ search, estado, cargo, canAccessSensitive = t
   if (cargo) {
     params.push(cargo);
     conditions.push(`c.cargo ILIKE $${params.length}`);
+  }
+
+  if (typeof tieneUsuario === 'boolean') {
+    conditions.push(tieneUsuario ? 'u.id IS NOT NULL' : 'u.id IS NULL');
   }
 
   const clause = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';

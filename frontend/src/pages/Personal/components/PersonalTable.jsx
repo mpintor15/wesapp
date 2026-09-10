@@ -19,6 +19,7 @@ const PersonalTable = ({
   onDelete,
   onEdit,
   onManageAcceso,
+  onViewSalida,
   onSort,
   paginatedColaboradores,
   tableSort,
@@ -70,9 +71,18 @@ const PersonalTable = ({
                 <td className="cell-nowrap">{c.cedula}</td>
                 <td>{c.cargo}</td>
                 <td className="cell-status">
-                  <span className={`badge badge-${c.estado === 'activo' ? 'active' : 'inactive'}`}>
-                    {c.estado}
-                  </span>
+                  {c.estado === 'inactivo' ? (
+                    <button
+                      type="button"
+                      className="badge badge-inactive"
+                      onClick={() => onViewSalida(c)}
+                      title="Ver información de salida"
+                    >
+                      {c.estado}
+                    </button>
+                  ) : (
+                    <span className="badge badge-active">{c.estado}</span>
+                  )}
                 </td>
                 <td className="cell-nowrap">{c.celular || '—'}</td>
                 {canViewSensitive ? (

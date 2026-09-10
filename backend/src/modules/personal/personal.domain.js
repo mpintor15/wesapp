@@ -69,10 +69,17 @@ const normalizeEstadoColaborador = (estado) => (estado ? String(estado).trim().t
 
 const isValidEstadoColaborador = (estado) => ESTADOS_COLABORADOR_SET.has(estado);
 
-const buildColaboradoresFilters = ({ search, estado, cargo, canAccessSensitive = true } = {}) => ({
+const buildColaboradoresFilters = ({
+  search,
+  estado,
+  cargo,
+  tieneUsuario,
+  canAccessSensitive = true,
+} = {}) => ({
   search,
   estado: estado ? normalizeEstadoColaborador(estado) : undefined,
   cargo,
+  tieneUsuario,
   canAccessSensitive,
 });
 

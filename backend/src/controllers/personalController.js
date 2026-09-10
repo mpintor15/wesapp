@@ -35,6 +35,7 @@ const {
   stripSensitivePayloadFields,
 } = require('../modules/personal/personal.domain');
 const personalReadRepository = require('../repositories/personal/personalReadRepository');
+const personalCommandRepository = require('../repositories/personal/personalCommandRepository');
 
 // ============================================
 // COLABORADORES
@@ -133,31 +134,17 @@ const createColaborador = async (req, res) => {
       throw createHttpError(sueldoNormalizado.status, sueldoNormalizado.message);
     }
 
-    const result = await db.query(
-      `INSERT INTO colaboradores (
-        nombres_completos,
-        cedula,
-        fecha_nacimiento,
-        cargo,
-        celular,
-        banco,
-        numero_cuenta,
-        sueldo,
-        estado
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      RETURNING *`,
-      [
-        nombres_completos.trim(),
-        cedula.trim(),
-        fecha_nacimiento,
-        cargo.trim(),
-        celularNormalizado,
-        bancoNormalizado || null,
-        numeroCuentaNormalizado || null,
-        sueldoNormalizado ? sueldoNormalizado.value : null,
-        estadoNormalizado,
-      ]
-    );
+    const result = await personalCommandRepository.insertColaborador({
+      nombresCompletos: nombres_completos.trim(),
+      cedula: cedula.trim(),
+      fechaNacimiento: fecha_nacimiento,
+      cargo: cargo.trim(),
+      celular: celularNormalizado,
+      banco: bancoNormalizado || null,
+      numeroCuenta: numeroCuentaNormalizado || null,
+      sueldo: sueldoNormalizado ? sueldoNormalizado.value : null,
+      estado: estadoNormalizado,
+    });
 
     await logAudit(db, {
       tabla: 'colaboradores',
@@ -195,6 +182,8 @@ const updateColaborador = async (req, res) => {
       'cargo',
       'celular',
       'estado',
+      'fecha_salida',
+      'salida_voluntaria',
       ...(canAccessSensitive ? ['banco', 'numero_cuenta', 'sueldo'] : []),
     ];
 
@@ -214,6 +203,9 @@ const updateColaborador = async (req, res) => {
         if (typeof value === 'string') {
           value = value.trim();
         }
+        if ((field === 'fecha_salida' || field === 'salida_voluntaria') && value === '') {
+          value = null;
+        }
         if (field === 'estado' && value !== null && value !== undefined && value !== '') {
           value = String(value).toLowerCase();
           if (!isValidEstadoColaborador(value)) {
@@ -224,6 +216,15 @@ const updateColaborador = async (req, res) => {
           const fechaValidation = validateRequiredDateString(
             value,
             'La fecha de nacimiento no es válida'
+          );
+          if (!fechaValidation.valid) {
+            throw createHttpError(fechaValidation.status, fechaValidation.message);
+          }
+        }
+        if (field === 'fecha_salida' && value !== null && value !== undefined && value !== '') {
+          const fechaValidation = validateRequiredDateString(
+            value,
+            'La fecha de salida no es válida'
           );
           if (!fechaValidation.valid) {
             throw createHttpError(fechaValidation.status, fechaValidation.message);
@@ -241,14 +242,35 @@ const updateColaborador = async (req, res) => {
       });
     }
 
-    values.push(id);
+    const currentResult = await personalCommandRepository.findColaboradorEstadoSalida(id);
+    if (currentResult.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Colaborador no encontrado' });
+    }
+    const next = { ...currentResult.rows[0], ...req.body };
+    if (String(next.estado).toLowerCase() === 'inactivo') {
+      if (!next.fecha_salida || typeof next.salida_voluntaria !== 'boolean') {
+        throw createHttpError(
+          400,
+          'Fecha de salida y salida voluntaria son requeridas al inactivar'
+        );
+      }
+    } else {
+      if (req.body.fecha_salida || typeof req.body.salida_voluntaria === 'boolean') {
+        throw createHttpError(400, 'Un colaborador activo no puede tener datos de salida');
+      }
+      if (!Object.prototype.hasOwnProperty.call(req.body, 'fecha_salida')) {
+        updates.push('fecha_salida = NULL');
+      }
+      if (!Object.prototype.hasOwnProperty.call(req.body, 'salida_voluntaria')) {
+        updates.push('salida_voluntaria = NULL');
+      }
+    }
 
-    const result = await db.query(
-      `UPDATE colaboradores SET ${updates.join(', ')}
-       WHERE id = $${values.length}
-       RETURNING *`,
-      values
-    );
+    const result = await personalCommandRepository.updateColaboradorFields({
+      updates,
+      values,
+      id,
+    });
 
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Colaborador no encontrado' });
@@ -282,7 +304,7 @@ const deleteColaborador = async (req, res) => {
   try {
     const id = parsePositiveInteger(req.params.id, 'El id del colaborador es inválido');
 
-    const result = await db.query('DELETE FROM colaboradores WHERE id = $1 RETURNING *', [id]);
+    const result = await personalCommandRepository.deleteColaborador(id);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, message: 'Colaborador no encontrado' });
@@ -319,16 +341,25 @@ const deleteColaborador = async (req, res) => {
 
 const exportColaboradoresExcel = async (req, res) => {
   try {
-    const { search, estado, cargo } = req.query;
+    const { search, estado, cargo, tiene_usuario: tieneUsuarioRaw } = req.query;
     const estadoNormalizado = normalizeEstadoColaborador(estado);
     if (estado && !isValidEstadoColaborador(estadoNormalizado)) {
       throw createHttpError(400, 'El filtro estado debe ser activo o inactivo');
+    }
+    let tieneUsuario;
+    if (tieneUsuarioRaw === 'true') {
+      tieneUsuario = true;
+    } else if (tieneUsuarioRaw === 'false') {
+      tieneUsuario = false;
+    } else if (tieneUsuarioRaw !== undefined) {
+      throw createHttpError(400, 'El filtro tiene_usuario debe ser true o false');
     }
     const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
     const filters = buildColaboradoresFilters({
       search,
       estado,
       cargo,
+      tieneUsuario,
       canAccessSensitive,
     });
 

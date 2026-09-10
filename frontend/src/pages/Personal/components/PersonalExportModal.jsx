@@ -45,6 +45,18 @@ const PersonalExportModal = ({
             ))}
           </select>
         </div>
+        <div className="form-group">
+          <label htmlFor="exp-credenciales">Credenciales</label>
+          <select
+            id="exp-credenciales"
+            value={exportFilters.tiene_usuario}
+            onChange={(e) => onFilterChange((prev) => ({ ...prev, tiene_usuario: e.target.value }))}
+          >
+            <option value="">Todos</option>
+            <option value="true">Con credenciales</option>
+            <option value="false">Sin credenciales</option>
+          </select>
+        </div>
       </div>
     </AppModal.Body>
     <AppModal.Footer className="personal-modal-actions">

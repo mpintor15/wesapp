@@ -2,7 +2,7 @@ export const ROWS_PER_PAGE = 25;
 
 export const EMPTY_PERSONAL_FILTERS = { search: '', estado: '', cargo: '' };
 
-export const EMPTY_PERSONAL_EXPORT_FILTERS = { estado: '', cargo: '' };
+export const EMPTY_PERSONAL_EXPORT_FILTERS = { estado: '', cargo: '', tiene_usuario: '' };
 
 export const EMPTY_COLABORADOR_FORM = {
   nombres_completos: '',
@@ -14,6 +14,8 @@ export const EMPTY_COLABORADOR_FORM = {
   numero_cuenta: '',
   sueldo: '',
   estado: 'activo',
+  fecha_salida: '',
+  salida_voluntaria: '',
 };
 
 export const buildPersonalFilterParams = (currentFilters) => {
@@ -28,6 +30,7 @@ export const buildPersonalExportParams = (exportFilters) => {
   const params = {};
   if (exportFilters.estado) params.estado = exportFilters.estado;
   if (exportFilters.cargo) params.cargo = exportFilters.cargo;
+  if (exportFilters.tiene_usuario) params.tiene_usuario = exportFilters.tiene_usuario;
   return params;
 };
 
@@ -47,6 +50,9 @@ export const getColaboradorFormData = (colaborador) => ({
   numero_cuenta: colaborador.numero_cuenta || '',
   sueldo: colaborador.sueldo ?? '',
   estado: colaborador.estado || 'activo',
+  fecha_salida: colaborador.fecha_salida ? colaborador.fecha_salida.split('T')[0] : '',
+  salida_voluntaria:
+    typeof colaborador.salida_voluntaria === 'boolean' ? String(colaborador.salida_voluntaria) : '',
 });
 
 // Celular, banco, número de cuenta y sueldo son obligatorios solo al CREAR
@@ -63,6 +69,12 @@ export const validateColaboradorForm = (
   if (!formData.cedula.trim()) errors.cedula = 'Ingresa la cédula';
   if (!formData.fecha_nacimiento) errors.fecha_nacimiento = 'Selecciona la fecha de nacimiento';
   if (!formData.cargo.trim()) errors.cargo = 'Ingresa el cargo';
+  if (formData.estado === 'inactivo') {
+    if (!formData.fecha_salida) errors.fecha_salida = 'Selecciona la fecha de salida';
+    if (!['true', 'false'].includes(String(formData.salida_voluntaria))) {
+      errors.salida_voluntaria = 'Indica si la salida fue voluntaria';
+    }
+  }
 
   if (!isEditing) {
     if (!formData.celular.trim()) errors.celular = 'Ingresa el celular';
@@ -85,6 +97,8 @@ export const validateColaboradorForm = (
 export const buildColaboradorPayload = (formData) => ({
   ...formData,
   sueldo: formData.sueldo ? Number.parseFloat(formData.sueldo) : null,
+  fecha_salida: formData.estado === 'inactivo' ? formData.fecha_salida : null,
+  salida_voluntaria: formData.estado === 'inactivo' ? formData.salida_voluntaria === 'true' : null,
 });
 
 export const getNextSortState = (currentSort, field) => {

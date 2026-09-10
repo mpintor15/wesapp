@@ -106,6 +106,16 @@
   box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 
+/* .ff-date-input is sized for compact filter toolbars (124px); inside the
+   "Información de salida" modal that clips the year (dd/mm/yy). Widen it to
+   match the rest of the form's fields. */
+.ff-date-input.salida-fecha-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 13px;
+  font-size: 0.95rem;
+}
+
 .personal-table-shell {
   width: 100%;
   overflow-x: auto;
