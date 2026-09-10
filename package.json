@@ -4,7 +4,7 @@
   "description": "WESApp - Sistema de gestión para WES Security (monorepo)",
   "author": "WES Security",
   "scripts": {
-    "build": "cd frontend && npm install && npm run build",
+    "build": "npm --prefix frontend run build",
     "install:all": "cd frontend && npm install && cd ../backend && npm install",
     "start": "node backend/src/server.js",
     "dev": "sh -c 'cd backend && npm run dev & BACKEND_PID=$! && cd frontend && npm start; kill $BACKEND_PID'",
@@ -14,6 +14,11 @@
     "format": "cd backend && npm run format && cd ../frontend && npm run format",
     "format:check": "cd backend && npm run format:check && cd ../frontend && npm run format:check",
     "test": "cd backend && npm test",
+    "test:all": "NODE_ENV=test DB_NAME=wesapp_test npm --prefix backend test && npm --prefix frontend run test:unit -- --runInBand",
+    "dead-code": "knip --include files,dependencies,unlisted",
+    "performance:baseline": "npm --prefix backend run performance:baseline",
+    "smoke:production": "./scripts/smoke-production.sh",
+    "verify": "npm run lint && npm run format:check && npm run dead-code && npm run test:all && npm run build",
     "prepare": "husky"
   },
   "engines": {
@@ -22,6 +27,7 @@
   },
   "devDependencies": {
     "eslint": "^8.57.1",
-    "husky": "^9.1.7"
+    "husky": "^9.1.7",
+    "knip": "^6.35.0"
   }
 }

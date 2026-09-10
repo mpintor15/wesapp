@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    "backend": {
+      "entry": ["src/tests/**/*.test.js", "scripts/**/*.js"],
+      "project": ["src/**/*.js", "scripts/**/*.js"]
+    },
+    "frontend": {
+      "entry": [
+        "src/index.jsx",
+        "src/**/*.test.{js,jsx}",
+        "e2e/**/*.js",
+        "scripts/**/*.js",
+        "playwright*.config.js"
+      ],
+      "project": ["src/**/*.{js,jsx}", "e2e/**/*.js", "scripts/**/*.js"]
+    }
+  },
+  "ignore": ["frontend/src/setupTests.js"],
+  "ignoreDependencies": ["eslint"]
+}

@@ -208,6 +208,12 @@ NODE_ENV=production
 
 **Backups y PDFs persistentes:** Revisar `docs/BACKUP_RESTORE.md` antes de cada release. En producción, `PDF_STORAGE_PATH` debe apuntar a un volumen persistente.
 
+**Liberación:** seguir obligatoriamente la [checklist mínima de producción](docs/PRODUCTION_RELEASE_CHECKLIST.md). Al finalizar el deploy, ejecutar un smoke check de solo lectura:
+
+```bash
+PRODUCTION_URL=https://your-domain.com npm run smoke:production
+```
+
 **Sourcemaps y logs:** Los builds productivos usan `GENERATE_SOURCEMAP=false` y
 el guard del bundle bloquea sourcemaps públicos. La política operativa de logs
 sanitizados está documentada en `docs/BACKUP_RESTORE.md`.
