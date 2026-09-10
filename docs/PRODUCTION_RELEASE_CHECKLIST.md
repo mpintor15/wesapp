@@ -42,6 +42,11 @@ proveedor de infraestructura:
 - Backup automático cifrado de PostgreSQL y del volumen de PDFs, con retención
   definida y una restauración de prueba al menos trimestral.
 - Acceso restringido a logs, backups y variables de producción.
+- El trigger de auto-deploy GitHub → Railway está activo: un push a `main`
+  con CI verde debe iniciar un build sin intervención manual (`railway
+  deployment list --json` debe mostrar un deployment nuevo poco después del
+  push). Si no aparece, reconectar con `railway service source connect
+  --repo mpintor15/wesapp --branch main --service efficient-warmth`.
 
 Si falla un punto P0, se detiene la liberación o se activa el rollback descrito
 en `docs/BACKUP_RESTORE.md`.
