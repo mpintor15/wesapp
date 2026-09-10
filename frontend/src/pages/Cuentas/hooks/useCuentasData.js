@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import useRequestGuard from '../../../hooks/useRequestGuard';
 import cuentasService from '../../../services/cuentasService';
 
 const loadFacturasCatalogoFromService = () =>
@@ -16,14 +17,19 @@ const useCuentasData = ({ showToast }) => {
   const [loading, setLoading] = useState(true);
   const [clientesLoading, setClientesLoading] = useState(false);
   const [clientesLoaded, setClientesLoaded] = useState(false);
+  const [facturasCatalogoLoaded, setFacturasCatalogoLoaded] = useState(false);
   const [pagosLoading, setPagosLoading] = useState(false);
   const [pagosLoaded, setPagosLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const pagosGuard = useRequestGuard();
+  const reporteGuard = useRequestGuard();
 
   const loadPagos = useCallback(
     async (params = {}) => {
+      const token = pagosGuard.start();
       setPagosLoading(true);
       const pagosRes = await cuentasService.getPagos(params);
+      if (!pagosGuard.isCurrent(token)) return pagosRes.success;
 
       if (pagosRes.success) {
         setPagos(pagosRes.data);
@@ -37,13 +43,14 @@ const useCuentasData = ({ showToast }) => {
       setPagosLoading(false);
       return pagosRes.success;
     },
-    [showToast]
+    [pagosGuard, showToast]
   );
 
   const loadFacturasCatalogo = useCallback(async () => {
     const facturasRes = (await loadFacturasCatalogoFromService()) || { success: true, data: [] };
     if (facturasRes.success) {
       setFacturasCatalogo(facturasRes.data);
+      setFacturasCatalogoLoaded(true);
     } else {
       const message = facturasRes.message || 'Error al cargar catálogo de facturas';
       setLoadError(message);
@@ -70,9 +77,12 @@ const useCuentasData = ({ showToast }) => {
 
   const loadReporte = useCallback(
     async (params = {}) => {
+      const token = reporteGuard.start();
       setLoading(true);
       setLoadError('');
       const reporteRes = await cuentasService.getReporte(params);
+      if (!reporteGuard.isCurrent(token)) return reporteRes.success;
+
       if (reporteRes.success) {
         setReporte(reporteRes.data);
         setReportePagination(reporteRes.pagination);
@@ -85,29 +95,18 @@ const useCuentasData = ({ showToast }) => {
       setLoading(false);
       return reporteRes.success;
     },
-    [showToast]
+    [reporteGuard, showToast]
   );
 
   const refreshFinancialData = useCallback(
     async (reporteParams = {}, pagosParams = {}) => {
-      const requests = [loadReporte(reporteParams), loadFacturasCatalogo()];
+      const requests = [loadReporte(reporteParams)];
+      if (facturasCatalogoLoaded) requests.push(loadFacturasCatalogo());
       if (pagosLoaded) requests.push(loadPagos(pagosParams));
       await Promise.all(requests);
     },
-    [loadFacturasCatalogo, loadPagos, loadReporte, pagosLoaded]
+    [facturasCatalogoLoaded, loadFacturasCatalogo, loadPagos, loadReporte, pagosLoaded]
   );
-
-  // Preload clientes and the facturas catalog on entry — neither depends on
-  // filters, and nothing else fetches them. Reporte and pagos are NOT
-  // fetched here: the caller (Cuentas.jsx) owns the filtered `params` for
-  // both and fetches them itself. Fetching them here too, with no params,
-  // used to race that filtered fetch — whichever response landed last won,
-  // so the default filters sometimes looked applied in the UI but weren't
-  // actually reflected in the loaded data.
-  useEffect(() => {
-    loadClientes();
-    loadFacturasCatalogo();
-  }, [loadClientes, loadFacturasCatalogo]);
 
   return {
     clientes,
@@ -119,6 +118,7 @@ const useCuentasData = ({ showToast }) => {
     loading,
     clientesLoading,
     clientesLoaded,
+    facturasCatalogoLoaded,
     pagosLoading,
     pagosLoaded,
     loadError,

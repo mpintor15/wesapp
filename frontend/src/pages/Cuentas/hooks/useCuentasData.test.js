@@ -25,24 +25,20 @@ describe('useCuentasData', () => {
     mockSuccessResponses();
   });
 
-  test('carga clientes y catálogo de facturas al iniciar, sin reporte ni pagos', async () => {
+  test('no carga catálogos ni pestañas antes de que se necesiten', async () => {
     const showToast = jest.fn();
     const hook = renderHook(() => useCuentasData({ showToast }));
 
     await flushPromises();
 
-    // Reporte y pagos dependen de filtros que solo el caller (Cuentas.jsx)
-    // conoce; auto-cargarlos aquí sin filtros duplicaba y competía con el
-    // fetch filtrado del caller (ver useCuentasData.js). Clientes y el
-    // catálogo de facturas no dependen de filtros, por eso sí se precargan.
     expect(cuentasService.getReporte).not.toHaveBeenCalled();
     expect(cuentasService.getPagos).not.toHaveBeenCalled();
-    expect(cuentasService.getClientes).toHaveBeenCalledTimes(1);
+    expect(cuentasService.getClientes).not.toHaveBeenCalled();
     expect(hook.result.reporte).toEqual([]);
     expect(hook.result.pagos).toEqual([]);
-    expect(hook.result.clientes).toEqual([{ id: 3, nombre: 'Ana Torres' }]);
+    expect(hook.result.clientes).toEqual([]);
     expect(hook.result.pagosLoaded).toBe(false);
-    expect(hook.result.clientesLoaded).toBe(true);
+    expect(hook.result.clientesLoaded).toBe(false);
 
     hook.unmount();
   });
@@ -86,6 +82,7 @@ describe('useCuentasData', () => {
     await act(async () => {
       await hook.result.loadReporte();
       await hook.result.loadPagos();
+      await hook.result.loadFacturasCatalogo();
     });
 
     expect(hook.result.reportePagination).toEqual(reportePagination);
@@ -123,6 +120,7 @@ describe('useCuentasData', () => {
     await flushPromises();
     await act(async () => {
       await hook.result.loadPagos();
+      await hook.result.loadFacturasCatalogo();
     });
     jest.clearAllMocks();
     mockSuccessResponses();
@@ -144,6 +142,7 @@ describe('useCuentasData', () => {
     await flushPromises();
     await act(async () => {
       await hook.result.loadPagos();
+      await hook.result.loadFacturasCatalogo();
     });
     jest.clearAllMocks();
     mockSuccessResponses();

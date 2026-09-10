@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -40,11 +40,14 @@ const Cuentas = () => {
     pagosPagination,
     loading,
     clientesLoaded,
+    facturasCatalogoLoaded,
     pagosLoading,
+    pagosLoaded,
     loadError,
     loadClientes,
     loadPagos,
     loadReporte,
+    loadFacturasCatalogo,
     refreshFinancialData,
   } = useCuentasData({ showToast });
 
@@ -93,13 +96,14 @@ const Cuentas = () => {
     loadReporte(facturasTable.params);
   }, [facturasTable.params, loadReporte]);
 
-  // Loads on mount (with the default filters already baked into
-  // pagosTable.params) so the Pagos tab badge/count is correct from the
-  // start, then re-fetches whenever filters/pagination change — same
-  // pattern as the facturas effect above.
+  const pagosParamsRef = useRef(pagosTable.params);
   useEffect(() => {
+    const paramsChanged = pagosParamsRef.current !== pagosTable.params;
+    pagosParamsRef.current = pagosTable.params;
+    if (activeTab !== 'pagos') return;
+    if (pagosLoaded && !paramsChanged) return;
     loadPagos(pagosTable.params);
-  }, [loadPagos, pagosTable.params]);
+  }, [activeTab, pagosLoaded, loadPagos, pagosTable.params]);
 
   const openCreateFacturaModal = useCallback(async () => {
     if (!permissions.canCreateFactura) {
@@ -115,9 +119,21 @@ const Cuentas = () => {
       showToast('No tienes permisos para registrar pagos', 'error');
       return;
     }
-    if (!clientesLoaded && !(await loadClientes())) return;
+    const [clientesReady, facturasReady] = await Promise.all([
+      clientesLoaded ? true : loadClientes(),
+      facturasCatalogoLoaded ? true : loadFacturasCatalogo(),
+    ]);
+    if (!clientesReady || !facturasReady) return;
     batchPayment.open();
-  }, [batchPayment, clientesLoaded, loadClientes, permissions.canCreatePago, showToast]);
+  }, [
+    batchPayment,
+    clientesLoaded,
+    facturasCatalogoLoaded,
+    loadClientes,
+    loadFacturasCatalogo,
+    permissions.canCreatePago,
+    showToast,
+  ]);
 
   return (
     <div className="cuentas-container tabular-page">
