@@ -1,0 +1,56 @@
+# WESApp en local con Docker:
+#   docker compose up --build
+#   → http://localhost:3001
+# La primera vez la base se crea desde database/schema.sql (incluye usuarios demo).
+# Para empezar de cero: docker compose down -v
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: docker/db.Dockerfile
+    image: wesapp-db:local
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-wesapp}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "${DB_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: .
+    image: wesapp:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-wesapp}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_SSL: "false"
+      JWT_SECRET: ${JWT_SECRET:-local_docker_secret_change_me}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-24h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001}
+      PDF_STORAGE_PATH: /data/pdfs
+      DISABLE_HTTPS_REDIRECT: "true"
+    volumes:
+      - pdf-data:/data/pdfs
+    ports:
+      - "${APP_PORT:-3001}:3001"
+
+volumes:
+  db-data:
+  pdf-data:
