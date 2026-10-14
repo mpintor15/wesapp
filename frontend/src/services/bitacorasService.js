@@ -180,6 +180,7 @@ const bitacorasService = {
       'grupos',
       'autorizada',
       'motivo_no_autorizacion',
+      'observacion',
     ]);
     try {
       const response = await api.post('/bitacoras/visitas', payload);
@@ -208,9 +209,10 @@ const bitacorasService = {
     );
   },
 
-  async closeVisita(visitaId) {
+  async closeVisita(visitaId, data = {}) {
+    const payload = pickDefined(data, ['observacion']);
     try {
-      const response = await api.post(`/bitacoras/visitas/${visitaId}/cerrar`, {});
+      const response = await api.post(`/bitacoras/visitas/${visitaId}/cerrar`, payload);
       return response.data;
     } catch (error) {
       return buildServiceFailure(error, 'Error al cerrar visita');

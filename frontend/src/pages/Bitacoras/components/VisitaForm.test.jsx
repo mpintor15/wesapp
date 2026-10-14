@@ -419,6 +419,13 @@ describe('VisitaForm', () => {
       await flush();
     });
     expect(view.container.querySelector('#visita-grupo-visitantes-1-nombre')).not.toBeNull();
+    // El grupo predefinido siempre muestra "Nombre y apellido", aunque la versión guarde "Nombre".
+    const headerRow = view.container.querySelector('.bitacoras-visitantes-row--header');
+    expect(headerRow.textContent).toContain('Nombre y apellido');
+    // Observaciones: sección propia, sin "(opcional)".
+    const observacionLabel = view.container.querySelector('label[for="visita-observacion"]');
+    expect(observacionLabel.textContent).toBe('Observaciones');
+    expect(observacionLabel.closest('.bitacoras-registro-section')).not.toBeNull();
 
     // Persona 1 completa, Persona 2 sin cédula (requerida) -> bloquea.
     await act(async () => {

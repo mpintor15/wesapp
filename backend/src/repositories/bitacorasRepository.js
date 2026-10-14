@@ -664,19 +664,21 @@ const createVisit = async ({
   entryLogId,
   estado = 'ABIERTA',
   motivoNoAutorizacion = null,
+  observacionIngreso = null,
 }) => {
   const result = await client.query(
     `INSERT INTO bitacora_visitas
       (ubicacion_id, manzana_id, villa_id, manzana_texto, villa_texto, residente_principal_id, form_version_id,
        visitante_nombre, visitante_documento, visitante_telefono, tipo_visita_id, placa,
        registrado_por_usuario_id, registrado_por_colaborador_id, entrada_bitacora_registro_id,
-       estado, motivo_no_autorizacion)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       estado, motivo_no_autorizacion, observacion_ingreso)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      RETURNING id, ubicacion_id, manzana_id, villa_id, residente_principal_id, form_version_id,
        visitante_nombre, visitante_documento, visitante_telefono, tipo_visita_id, placa, estado, entrada_at,
        salida_at, registrado_por_usuario_id, registrado_por_colaborador_id,
        cerrado_por_usuario_id, cerrado_por_colaborador_id, entrada_bitacora_registro_id,
-       salida_bitacora_registro_id, motivo_no_autorizacion, created_at, updated_at`,
+       salida_bitacora_registro_id, motivo_no_autorizacion, observacion_ingreso, observacion_salida,
+       created_at, updated_at`,
     [
       locationId,
       blockId,
@@ -695,6 +697,7 @@ const createVisit = async ({
       entryLogId,
       estado,
       motivoNoAutorizacion,
+      observacionIngreso,
     ]
   );
   return result.rows[0];
@@ -805,6 +808,8 @@ const buildVisitFilters = ({ filters, hasGlobalScope, userId }) => {
         OR regexp_replace(COALESCE(bv.manzana_texto, m.nombre, '') || COALESCE(bv.villa_texto, v.identificador, ''), '\\s+', '', 'g')
           ILIKE regexp_replace($${searchIndex}, '\\s+', '', 'g')
         OR r.nombre ILIKE $${searchIndex}
+        OR bv.observacion_ingreso ILIKE $${searchIndex}
+        OR bv.observacion_salida ILIKE $${searchIndex}
         OR EXISTS (
           SELECT 1
           FROM bitacora_visita_grupo_registros search_group
@@ -838,6 +843,7 @@ const findVisits = async ({ filters, hasGlobalScope, userId, pagination, executo
        LEFT JOIN manzanas m ON m.id = bv.manzana_id
        LEFT JOIN villas v ON v.id = bv.villa_id
        LEFT JOIN residentes r ON r.id = bv.residente_principal_id
+       INNER JOIN bitacora_visit_form_tipos tv ON tv.id = bv.tipo_visita_id
        INNER JOIN usuarios u ON u.id = bv.registrado_por_usuario_id
        INNER JOIN colaboradores c ON c.id = bv.registrado_por_colaborador_id
        ${where}
@@ -855,6 +861,7 @@ const findVisits = async ({ filters, hasGlobalScope, userId, pagination, executo
        bv.visitante_nombre, bv.visitante_documento, bv.visitante_telefono,
        bv.tipo_visita_id, tv.nombre AS tipo_visita_nombre, tv.requiere_salida, bv.placa,
        bv.estado, bv.entrada_at, bv.salida_at, bv.motivo_no_autorizacion,
+       bv.observacion_ingreso, bv.observacion_salida,
        bv.registrado_por_usuario_id, u.usuario AS registrado_por_usuario,
        bv.registrado_por_colaborador_id, c.nombres_completos AS registrado_por_colaborador_nombre,
        bv.cerrado_por_usuario_id, cu.usuario AS cerrado_por_usuario,
@@ -956,21 +963,29 @@ const findLockedVisit = async ({ client, visitId }) => {
   return result.rows[0] || null;
 };
 
-const closeVisit = async ({ client, visitId, actorUserId, actorCollaboratorId, exitLogId }) => {
+const closeVisit = async ({
+  client,
+  visitId,
+  actorUserId,
+  actorCollaboratorId,
+  exitLogId,
+  observacionSalida = null,
+}) => {
   const result = await client.query(
     `UPDATE bitacora_visitas
      SET estado = 'CERRADA',
          salida_at = CURRENT_TIMESTAMP,
          cerrado_por_usuario_id = $2,
          cerrado_por_colaborador_id = $3,
-         salida_bitacora_registro_id = $4
+         salida_bitacora_registro_id = $4,
+         observacion_salida = $5
      WHERE id = $1
      RETURNING id, ubicacion_id, manzana_id, villa_id, residente_principal_id, form_version_id,
        visitante_nombre, visitante_documento, visitante_telefono, tipo_visita_id, placa, estado, entrada_at,
        salida_at, registrado_por_usuario_id, registrado_por_colaborador_id,
        cerrado_por_usuario_id, cerrado_por_colaborador_id, entrada_bitacora_registro_id,
-       salida_bitacora_registro_id, created_at, updated_at`,
-    [visitId, actorUserId, actorCollaboratorId, exitLogId]
+       salida_bitacora_registro_id, observacion_ingreso, observacion_salida, created_at, updated_at`,
+    [visitId, actorUserId, actorCollaboratorId, exitLogId, observacionSalida]
   );
   return result.rows[0];
 };

@@ -402,6 +402,13 @@ const exportVisitas = async (req, res) => {
         titular: item.residente_principal_nombre,
         creador: item.registrado_por_colaborador_nombre || item.registrado_por_usuario,
         estado: item.estado,
+        observaciones: [
+          item.motivo_no_autorizacion,
+          item.observacion_ingreso && `Ingreso: ${item.observacion_ingreso}`,
+          item.observacion_salida && `Salida: ${item.observacion_salida}`,
+        ]
+          .filter(Boolean)
+          .join(' | '),
       })),
       sheetName: 'Visitas',
       columns: [
@@ -416,6 +423,7 @@ const exportVisitas = async (req, res) => {
         { header: 'Titular', key: 'titular', width: 28 },
         { header: 'Creador', key: 'creador', width: 28 },
         { header: 'Estado', key: 'estado', width: 14 },
+        { header: 'Observaciones', key: 'observaciones', width: 40 },
       ],
       filename: 'reporte_visitas.xlsx',
       res,
@@ -824,6 +832,7 @@ const createVisita = async (req, res) => {
         entryLogId: registro.id,
         estado: autorizada ? 'ABIERTA' : 'NO_AUTORIZADA',
         motivoNoAutorizacion: autorizada ? null : req.body.motivo_no_autorizacion,
+        observacionIngreso: req.body.observacion || null,
       });
       await insertVisitResponses({ client, visitId: visita.id, fields: form.fields, responses });
       await insertVisitGroupResponses({
@@ -976,6 +985,7 @@ const closeVisita = async (req, res) => {
         actorUserId: actor.id,
         actorCollaboratorId: actor.colaborador_id,
         exitLogId: registro.id,
+        observacionSalida: req.body.observacion || null,
       });
       await logAuditStrict(client, {
         tabla: 'bitacora_visitas',

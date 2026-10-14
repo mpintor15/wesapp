@@ -189,7 +189,7 @@ const VISITANTES_GROUP_KEY = 'visitantes';
 const VISITANTES_GROUP_LABEL = 'Visitantes';
 const VISITANTES_FIELD_KEYS = ['nombre', 'cedula'];
 const VISITANTES_FIELD_TYPES = { nombre: 'text', cedula: 'cedula' };
-const VISITANTES_FIELD_LABELS = { nombre: 'Nombre', cedula: 'Cédula' };
+const VISITANTES_FIELD_LABELS = { nombre: 'Nombre y apellido', cedula: 'Cédula' };
 
 const visitFormGroupFieldSchema = z
   .object({
@@ -366,6 +366,7 @@ const bitacoraVisitCreateSchema = z
     grupos: visitGroupResponsesSchema,
     autorizada: z.boolean().optional().default(true),
     motivo_no_autorizacion: optionalTrimmedString(200, 'Motivo de no autorización'),
+    observacion: optionalTrimmedString(500, 'Observación'),
   })
   .strict()
   .superRefine((data, ctx) => {
@@ -385,7 +386,11 @@ const bitacoraVisitCreateSchema = z
     }
   });
 
-const bitacoraVisitCloseSchema = z.object({}).strict();
+const bitacoraVisitCloseSchema = z
+  .object({
+    observacion: optionalTrimmedString(500, 'Observación'),
+  })
+  .strict();
 
 const bitacoraVisitFormArchiveSchema = z.object({}).strict();
 

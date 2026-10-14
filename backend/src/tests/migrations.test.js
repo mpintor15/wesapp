@@ -1921,7 +1921,7 @@ describe('database migrations', () => {
       ).resolves.toMatchObject({ rowCount: 1 });
 
       const version = await pool.query('SELECT MAX(version)::int AS version FROM schema_version');
-      expect(version.rows[0].version).toBe(103);
+      expect(version.rows[0].version).toBe(104);
     });
   });
 

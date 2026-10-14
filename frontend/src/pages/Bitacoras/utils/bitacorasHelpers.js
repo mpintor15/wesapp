@@ -53,3 +53,10 @@ export const formatLocalTimestamp = (value, { timeZone } = {}) => {
   );
   return getFormattedParts(date, timeZone);
 };
+
+// "Visitantes" es una estructura predefinida: sus etiquetas son fijas, así que
+// se muestran siempre con este texto aunque la versión publicada guarde otro.
+export const VISITANTES_FIELD_LABELS = { nombre: 'Nombre y apellido', cedula: 'Cédula' };
+
+export const visitanteFieldLabel = (fieldKey, fallback) =>
+  VISITANTES_FIELD_LABELS[fieldKey] || fallback;

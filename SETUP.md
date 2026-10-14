@@ -148,6 +148,24 @@ Esto puede tomar 3-5 minutos la primera vez.
 
 ---
 
+## 🧪 Base de desarrollo lista en un comando
+
+Si quieres una base local sin pasos manuales, apunta `DB_NAME` en `backend/.env.development`
+(por ejemplo `wesapp_dev`) y ejecuta desde `backend/`:
+
+```bash
+npm run db:setup-dev
+```
+
+El comando crea la base si falta, aplica `database/schema.sql` si está vacía, corre las migraciones
+pendientes y carga datos de prueba: una urbanización con formulario de visitas activo y los usuarios
+`visitas_gerente` y `visitas_guardia` (esta última con cambio de contraseña pendiente). Se puede
+repetir sin riesgo: restablece esos usuarios a su estado inicial. La contraseña de prueba está en
+`backend/scripts/setup-dev-db.js` (o define `DEV_SEED_PASSWORD`). Solo corre contra `localhost` y
+nunca con `NODE_ENV=production`.
+
+---
+
 ## 🔄 Paso 5: Ejecutar Migraciones de Base de Datos
 
 Las migraciones se ejecutan **automáticamente** al iniciar el backend:

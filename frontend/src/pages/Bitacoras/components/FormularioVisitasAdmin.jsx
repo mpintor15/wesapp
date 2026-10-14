@@ -7,7 +7,7 @@ import TabularWorkspace from '../../../components/TabularWorkspace';
 import bitacorasService from '../../../services/bitacorasService';
 import { getVisibleErrorMessage } from '../../../services/serviceUtils';
 import SortHeader from '../../Cuentas/components/SortHeader';
-import { formatLocalTimestamp } from '../utils/bitacorasHelpers';
+import { formatLocalTimestamp, VISITANTES_FIELD_LABELS } from '../utils/bitacorasHelpers';
 
 const FIELD_TYPES = [
   ['text', 'Texto', 'Respuesta corta en una sola línea.'],
@@ -82,7 +82,7 @@ const VISITANTES_GROUP_LABEL = 'Visitantes';
 const VISITANTES_FIELD_TEMPLATES = [
   {
     field_key: 'nombre',
-    label: 'Nombre',
+    label: VISITANTES_FIELD_LABELS.nombre,
     type: 'text',
     hint: 'Respuesta corta en una sola línea.',
   },
@@ -693,7 +693,7 @@ const FormularioVisitasAdmin = ({
                       sort={sort}
                       onSort={handleSort}
                     />
-                    <th className="app-col-actions app-col-actions--double" aria-label="Acciones" />
+                    <th className="app-col-actions app-col-actions--single" aria-label="Acciones" />
                   </tr>
                 </thead>
                 <tbody>
@@ -708,7 +708,7 @@ const FormularioVisitasAdmin = ({
                         </td>
                         <td>{form.creador || '—'}</td>
                         <td>{form.published_at ? formatLocalTimestamp(form.published_at) : '—'}</td>
-                        <td className="app-col-actions app-col-actions--double">
+                        <td className="app-col-actions app-col-actions--single">
                           <FormActions form={form} onPreview={handlePreviewRequest} />
                         </td>
                       </tr>
@@ -811,26 +811,6 @@ const FormularioVisitasAdmin = ({
                 Mostrar fecha y hora en el formulario
               </label>
             </div>
-            <section
-              className="bitacoras-builder-section bitacoras-builder-section--house"
-              aria-labelledby="casa-section-title"
-            >
-              <h4 id="casa-section-title" className="bitacoras-groups-title">
-                Casa
-              </h4>
-              <p className="bitacoras-field-hint">
-                Solicita Manzana y Villa al registrar una visita.
-              </p>
-              <label className="bitacoras-checkbox-field bitacoras-group-toggle">
-                <input
-                  type="checkbox"
-                  checked={showHouse}
-                  onChange={(event) => setShowHouse(event.target.checked)}
-                  disabled={saving || loadingTemplate}
-                />
-                Solicitar Manzana y Villa
-              </label>
-            </section>
             <section className="bitacoras-builder-section bitacoras-visit-types">
               <h4 className="bitacoras-groups-title">Tipos de visita</h4>
               <p className="bitacoras-field-hint">
@@ -896,13 +876,6 @@ const FormularioVisitasAdmin = ({
                 </p>
               )}
             </section>
-            {loadingTemplate ? <p className="bitacoras-field-hint">Cargando versión...</p> : null}
-            {templateError ? <p className="bitacoras-filter-error">{templateError}</p> : null}
-            {activeForm ? (
-              <p className="bitacoras-field-hint">
-                La nueva publicación reemplazará la versión activa {activeForm.version}.
-              </p>
-            ) : null}
             <section
               className="bitacoras-builder-section bitacoras-builder-section--visitors"
               aria-labelledby="visitantes-section-title"
@@ -1009,6 +982,33 @@ const FormularioVisitasAdmin = ({
                   ))
                 : null}
             </section>
+            <section
+              className="bitacoras-builder-section bitacoras-builder-section--house"
+              aria-labelledby="casa-section-title"
+            >
+              <h4 id="casa-section-title" className="bitacoras-groups-title">
+                Casa
+              </h4>
+              <p className="bitacoras-field-hint">
+                Solicita Manzana y Villa al registrar una visita.
+              </p>
+              <label className="bitacoras-checkbox-field bitacoras-group-toggle">
+                <input
+                  type="checkbox"
+                  checked={showHouse}
+                  onChange={(event) => setShowHouse(event.target.checked)}
+                  disabled={saving || loadingTemplate}
+                />
+                Solicitar Manzana y Villa
+              </label>
+            </section>
+            {loadingTemplate ? <p className="bitacoras-field-hint">Cargando versión...</p> : null}
+            {templateError ? <p className="bitacoras-filter-error">{templateError}</p> : null}
+            {activeForm ? (
+              <p className="bitacoras-field-hint">
+                La nueva publicación reemplazará la versión activa {activeForm.version}.
+              </p>
+            ) : null}
 
             <section
               className="bitacoras-builder-section bitacoras-builder-section--questions"

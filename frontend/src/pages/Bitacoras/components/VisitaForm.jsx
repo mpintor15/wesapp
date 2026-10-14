@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AppModal from '../../../components/AppModal';
 import { getVisibleErrorMessage } from '../../../services/serviceUtils';
 import bitacorasService from '../../../services/bitacorasService';
+import { visitanteFieldLabel } from '../utils/bitacorasHelpers';
 
 const EMPTY_FIXED = {
   ubicacion_id: '',
@@ -72,6 +73,7 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
   const [noActiveForm, setNoActiveForm] = useState(false);
   const [errors, setErrors] = useState({});
   const [motivoNoAutorizacion, setMotivoNoAutorizacion] = useState('');
+  const [observacion, setObservacion] = useState('');
   const [showMotivoNoAutorizacion, setShowMotivoNoAutorizacion] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const locationRef = useRef(null);
@@ -238,6 +240,7 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
       grupos: normalizeGroupEntries(formVersion.groups || [], groupEntries, fixed.tipo_visita_id),
       autorizada,
       motivo_no_autorizacion: autorizada ? undefined : motivoNoAutorizacion.trim(),
+      observacion: observacion.trim() || undefined,
     });
     setIsSubmitting(false);
     if (result.success) {
@@ -371,7 +374,7 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
                         >
                           {group.fields.map((field) => (
                             <span key={field.field_key}>
-                              {field.label}
+                              {visitanteFieldLabel(field.field_key, field.label)}
                               {field.required ? <span className="required"> *</span> : null}
                             </span>
                           ))}
@@ -388,7 +391,8 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
                               return (
                                 <div className="bitacoras-visitantes-cell" key={field.field_key}>
                                   <label className="bitacoras-sr-only" htmlFor={inputId}>
-                                    {field.label} {entryIndex + 1}
+                                    {visitanteFieldLabel(field.field_key, field.label)}{' '}
+                                    {entryIndex + 1}
                                   </label>
                                   {field.type === 'textarea' ? (
                                     <textarea
@@ -601,6 +605,22 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
                     ) : null}
                   </div>
                 ))}
+              </div>
+            </section>
+          ) : null}
+          {formVersion ? (
+            <section className="bitacoras-registro-section">
+              <div className="form-group">
+                <label htmlFor="visita-observacion">Observaciones</label>
+                <textarea
+                  id="visita-observacion"
+                  value={observacion}
+                  onChange={(event) => setObservacion(event.target.value)}
+                  placeholder="Agrega una observación sobre la visita..."
+                  rows={3}
+                  maxLength={500}
+                  disabled={isSubmitting}
+                />
               </div>
             </section>
           ) : null}

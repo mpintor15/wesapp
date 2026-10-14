@@ -48,29 +48,27 @@ const casaLabel = (visit) =>
 
 // La placa puede venir del campo fijo legacy (bv.placa) o, en formularios
 // dinámicos, como una respuesta de tipo 'placa'.
-// Lista de visitantes: prioriza los registros del grupo "Visitantes"
-// (Nombre + Cédula, capturados en bitacora_visita_grupo_registros); si la
-// visita no usa el grupo, cae a los campos fijos legacy de bitacora_visitas.
-const visitantesList = (visit) => {
+// Visitantes como { nombre, cedula }: prioriza los registros del grupo
+// "Visitantes" (capturados en bitacora_visita_grupo_registros); si la visita
+// no usa el grupo, cae a los campos fijos legacy de bitacora_visitas.
+const visitantesEntries = (visit) => {
   const entries = Array.isArray(visit.visitantes) ? visit.visitantes : [];
   if (entries.length > 0) {
     const findValue = (entry, key) =>
       Array.isArray(entry) ? entry.find((item) => item.field_key === key)?.value : undefined;
-    return entries.map((entry) => {
-      const nombre = findValue(entry, 'nombre') || '';
-      const cedula = findValue(entry, 'cedula');
-      return cedula ? `${nombre} · ${cedula}` : nombre;
-    });
+    return entries.map((entry) => ({
+      nombre: findValue(entry, 'nombre') || '',
+      cedula: findValue(entry, 'cedula') || '',
+    }));
   }
   if (visit.visitante_nombre) {
-    return [
-      visit.visitante_documento
-        ? `${visit.visitante_nombre} · ${visit.visitante_documento}`
-        : visit.visitante_nombre,
-    ];
+    return [{ nombre: visit.visitante_nombre, cedula: visit.visitante_documento || '' }];
   }
   return [];
 };
+
+const visitantesList = (visit) =>
+  visitantesEntries(visit).map(({ nombre, cedula }) => (cedula ? `${nombre} · ${cedula}` : nombre));
 
 const visitantesSummary = (visit) => visitantesList(visit).join(', ');
 
@@ -101,7 +99,8 @@ const responseValue = (response, onPreviewPhoto) => {
 const buildDynamicColumns = (visits) => {
   const columns = [];
   if (visits.some((visit) => visitantesList(visit).length > 0)) {
-    columns.push({ key: 'visitantes', label: 'Visitantes' });
+    columns.push({ key: 'visitante_nombre', label: 'Nombre' });
+    columns.push({ key: 'visitante_cedula', label: 'Cédula' });
   }
   if (visits.some((visit) => visit.tipo_visita_nombre)) {
     columns.push({ key: 'tipo_visita', label: 'Tipo de visita' });
@@ -124,13 +123,12 @@ const buildDynamicColumns = (visits) => {
 };
 
 const dynamicCell = (visit, column, onPreviewPhoto) => {
-  if (column.key === 'visitantes') {
+  if (column.key === 'visitante_nombre' || column.key === 'visitante_cedula') {
+    const field = column.key === 'visitante_nombre' ? 'nombre' : 'cedula';
     return (
       <div className="bitacoras-visitantes-list">
-        {visitantesList(visit).map((line, index) => (
-          <span className="bitacoras-cell-primary" key={`${visit.id}-visitante-${index}`}>
-            {line}
-          </span>
+        {visitantesEntries(visit).map((entry, index) => (
+          <span key={`${visit.id}-${field}-${index}`}>{entry[field]}</span>
         ))}
       </div>
     );
@@ -162,10 +160,20 @@ const salidaLabel = (visit) => {
   return formatLocalTimestamp(visit.salida_at) || '';
 };
 
-// Observación: solo NO AUTORIZADO tiene algo que mostrar (el motivo de
-// rechazo); el resto de estados no tiene un dato equivalente.
-const observacionLabel = (visit) =>
-  visitEstadoLabel(visit) === 'NO AUTORIZADO' ? visit.motivo_no_autorizacion || '' : '';
+// Observaciones: motivo de rechazo (NO AUTORIZADO) y/o las observaciones
+// opcionales capturadas al registrar el ingreso y la salida.
+const observacionLines = (visit) =>
+  [
+    visit.estado === 'NO_AUTORIZADA' ? visit.motivo_no_autorizacion || '' : '',
+    visit.observacion_ingreso ? `Ingreso: ${visit.observacion_ingreso}` : '',
+    visit.observacion_salida ? `Salida: ${visit.observacion_salida}` : '',
+  ].filter(Boolean);
+
+const ObservacionCell = ({ visit }) =>
+  observacionLines(visit).map((line, index) => <div key={`${visit.id}-obs-${index}`}>{line}</div>);
+
+const creadorLabel = (visit) =>
+  visit.registrado_por_colaborador_nombre || visit.registrado_por_usuario || '';
 
 // Mismo patrón visual que FormStatus (Formularios): badge-active/badge-
 // inactive, sin inventar variantes nuevas.
@@ -175,10 +183,13 @@ const VisitStatusBadge = ({ label }) => (
   </span>
 );
 
-const VisitActions = ({ visit, closingId, onExitRequest, canCancel, onCancelRequest }) => {
+const visitActionFlags = (visit, canCancel) => {
   const isAbierta = visit.estado === 'ABIERTA';
-  const canRegisterExit = isAbierta && visit.requiere_salida;
-  const canAnular = isAbierta && canCancel;
+  return { canRegisterExit: isAbierta && visit.requiere_salida, canAnular: isAbierta && canCancel };
+};
+
+const VisitActions = ({ visit, closingId, onExitRequest, canCancel, onCancelRequest }) => {
+  const { canRegisterExit, canAnular } = visitActionFlags(visit, canCancel);
   if (!canRegisterExit && !canAnular) return '';
   const disabled = closingId === visit.id;
   return (
@@ -257,11 +268,18 @@ const HistorialVisitas = ({
   const [closingId, setClosingId] = useState(null);
   const [exitTarget, setExitTarget] = useState(null);
   const [exitAt, setExitAt] = useState(null);
+  const [exitObservacion, setExitObservacion] = useState('');
   const [error, setError] = useState('');
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelMotivo, setCancelMotivo] = useState('');
   const [previewPhoto, setPreviewPhoto] = useState(null);
   const dynamicColumns = useMemo(() => buildDynamicColumns(visits), [visits]);
+  // El ancho de la columna de acciones sigue la fila con más botones visibles.
+  const maxVisitActions = visits.reduce((max, visit) => {
+    const { canRegisterExit, canAnular } = visitActionFlags(visit, canCancelVisita);
+    return Math.max(max, Number(Boolean(canRegisterExit)) + Number(Boolean(canAnular)));
+  }, 0);
+  const actionsClass = maxVisitActions >= 2 ? 'app-col-actions--double' : 'app-col-actions--single';
   const [isCancelling, setIsCancelling] = useState(false);
   const [creators, setCreators] = useState([]);
   const requestSequenceRef = useRef(0);
@@ -351,6 +369,7 @@ const HistorialVisitas = ({
   const openExitModal = (visit) => {
     setExitTarget(visit);
     setExitAt(new Date());
+    setExitObservacion('');
   };
 
   const closeExitModal = () => {
@@ -364,7 +383,9 @@ const HistorialVisitas = ({
     isClosingRef.current = true;
     const visitId = exitTarget.id;
     setClosingId(visitId);
-    const result = await bitacorasService.closeVisita(visitId);
+    const result = await bitacorasService.closeVisita(visitId, {
+      observacion: exitObservacion.trim() || undefined,
+    });
     isClosingRef.current = false;
     setClosingId(null);
     if (result.success) {
@@ -594,13 +615,19 @@ const HistorialVisitas = ({
                     />
                     <SortHeader field="salida_at" label="Salida" sort={sort} onSort={handleSort} />
                     <SortHeader
-                      className="bitacoras-cell-observacion"
-                      field="observacion"
-                      label="Observación"
+                      field="registrado_por"
+                      label="Creado por"
                       sort={sort}
                       onSort={handleSort}
                     />
-                    <th className="app-col-actions app-col-actions--double" aria-label="Acciones" />
+                    <SortHeader
+                      className="bitacoras-cell-observacion"
+                      field="observacion"
+                      label="Observaciones"
+                      sort={sort}
+                      onSort={handleSort}
+                    />
+                    <th className={`app-col-actions ${actionsClass}`} aria-label="Acciones" />
                   </tr>
                 </thead>
                 <tbody>
@@ -614,8 +641,11 @@ const HistorialVisitas = ({
                         <VisitStatusBadge label={visitEstadoLabel(visit)} />
                       </td>
                       <td className="bitacoras-cell-salida">{salidaLabel(visit)}</td>
-                      <td className="bitacoras-cell-observacion">{observacionLabel(visit)}</td>
-                      <td className="app-col-actions app-col-actions--double">
+                      <td>{creadorLabel(visit)}</td>
+                      <td className="bitacoras-cell-observacion">
+                        <ObservacionCell visit={visit} />
+                      </td>
+                      <td className={`app-col-actions ${actionsClass}`}>
                         <VisitActions
                           visit={visit}
                           closingId={closingId}
@@ -658,10 +688,16 @@ const HistorialVisitas = ({
                       <dt>Salida</dt>
                       <dd>{salidaLabel(visit)}</dd>
                     </div>
-                    {observacionLabel(visit) ? (
+                    <div>
+                      <dt>Creado por</dt>
+                      <dd>{creadorLabel(visit)}</dd>
+                    </div>
+                    {observacionLines(visit).length > 0 ? (
                       <div>
-                        <dt>Observación</dt>
-                        <dd>{observacionLabel(visit)}</dd>
+                        <dt>Observaciones</dt>
+                        <dd>
+                          <ObservacionCell visit={visit} />
+                        </dd>
                       </div>
                     ) : null}
                     <div>
@@ -738,6 +774,19 @@ const HistorialVisitas = ({
               <span>
                 Fecha/hora: <strong>{formatLocalTimestamp(exitAt?.toISOString()) || '—'}</strong>
               </span>
+            </div>
+            <div className="form-group">
+              <label htmlFor="exit-visita-observacion">Observaciones</label>
+              <textarea
+                id="exit-visita-observacion"
+                value={exitObservacion}
+                onChange={(event) => setExitObservacion(event.target.value)}
+                placeholder="Agrega una observación sobre la salida..."
+                rows={3}
+                maxLength={500}
+                disabled={Boolean(closingId)}
+              />
+              <span className="field-help">{exitObservacion.length}/500</span>
             </div>
           </AppModal.Body>
           <AppModal.Footer className="modal-buttons">

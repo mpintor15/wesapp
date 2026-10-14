@@ -1639,8 +1639,23 @@ describe('bitacorasController visitas urbanas', () => {
       actorUserId: 7,
       actorCollaboratorId: 21,
       exitLogId: 71,
+      observacionSalida: null,
     });
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Visita cerrada' }));
+  });
+
+  test('guarda la observación opcional al registrar la salida', async () => {
+    const client = transactionForCreate({ locationType: 'URBANIZACION' });
+    const res = makeResponse();
+
+    await controller.closeVisita(
+      makeRequest({ params: { visitaId: '81' }, body: { observacion: 'Salió con paquete' } }),
+      res
+    );
+
+    expect(repository.closeVisit).toHaveBeenCalledWith(
+      expect.objectContaining({ client, visitId: 81, observacionSalida: 'Salió con paquete' })
+    );
   });
 
   test('propaga rollback si falla auditoría durante check-out', async () => {
@@ -1884,7 +1899,8 @@ describe('bitacorasController visitas urbanas', () => {
       registrado_por: 'u.usuario',
       salida_at: 'bv.salida_at',
       estado: 'bv.estado',
-      observacion: 'bv.motivo_no_autorizacion',
+      observacion:
+        'COALESCE(bv.motivo_no_autorizacion, bv.observacion_ingreso, bv.observacion_salida)',
       entrada_at: 'bv.entrada_at',
     };
     for (const [field, expression] of Object.entries(expectedExpressions)) {

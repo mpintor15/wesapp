@@ -534,6 +534,26 @@ describe('bitacoras routes', () => {
     expect(repository.publishVisitFormForLocation).not.toHaveBeenCalled();
   });
 
+  test('valida la observación opcional de ingreso y salida de visitas', async () => {
+    const tooLong = 'x'.repeat(501);
+
+    const close = await authRequest('post', '/api/bitacoras/visitas/80/cerrar').send({
+      observacion: tooLong,
+    });
+    expect(close.status).toBe(400);
+
+    const create = await authRequest('post', '/api/bitacoras/visitas').send({
+      ubicacion_id: 1,
+      tipo_visita_id: 901,
+      respuestas: {},
+      observacion: tooLong,
+    });
+    expect(create.status).toBe(400);
+    expect(repository.closeVisit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ observacionSalida: tooLong })
+    );
+  });
+
   test('Guardia registra y cierra visitas, pero no anula', async () => {
     const create = await authRequest('post', '/api/bitacoras/visitas').send({
       ubicacion_id: 1,

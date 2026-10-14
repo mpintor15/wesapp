@@ -650,6 +650,11 @@ describe('bitacorasRepository', () => {
     expect(dataSql).toContain('jsonb_agg');
     expect(dataSql).toContain('bvr.label_snapshot');
     expect(dataSql).toContain('tv.requiere_salida');
+    // El CTE que pagina y ordena debe unir tv: ordenar por tipo de visita lo referencia.
+    expect(dataSql).toMatch(
+      /WITH page_visits AS[\s\S]*JOIN bitacora_visit_form_tipos tv[\s\S]*ORDER BY/
+    );
+    expect(dataSql).toContain('bv.observacion_ingreso, bv.observacion_salida');
     expect(dataSql).toContain('bitacora_visita_grupo_registros');
     expect(dataSql).toContain('AS visitantes');
     expect(dataSql).toMatch(/ORDER BY bv\.placa ASC NULLS LAST,\s+bv\.id ASC/);
@@ -692,13 +697,15 @@ describe('bitacorasRepository', () => {
       actorUserId: 7,
       actorCollaboratorId: 4,
       exitLogId: 99,
+      observacionSalida: 'Salió con paquete',
     });
 
     expect(client.query.mock.calls[0][0]).toContain('FOR UPDATE OF bv');
     expect(client.query.mock.calls[0][0]).toContain('tv.requiere_salida');
     expect(client.query.mock.calls[1][0]).toContain(String.raw`SET estado = 'CERRADA'`);
     expect(client.query.mock.calls[1][0]).toContain('salida_bitacora_registro_id = $4');
-    expect(client.query.mock.calls[1][1]).toEqual([8, 7, 4, 99]);
+    expect(client.query.mock.calls[1][0]).toContain('observacion_salida = $5');
+    expect(client.query.mock.calls[1][1]).toEqual([8, 7, 4, 99, 'Salió con paquete']);
   });
 
   test('anulación bloquea visita, persiste motivo y no borra', async () => {

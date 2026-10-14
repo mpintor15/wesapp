@@ -104,7 +104,9 @@ describe('HistorialVisitas', () => {
     expect(headers[0]).toContain('Ingreso');
     expect(headerIndex('Estado')).toBeGreaterThan(headerIndex('Casa'));
     expect(headerIndex('Salida')).toBeGreaterThan(headerIndex('Estado'));
-    expect(headerIndex('Observación')).toBeGreaterThan(headerIndex('Salida'));
+    expect(headerIndex('Creado por')).toBeGreaterThan(headerIndex('Salida'));
+    expect(headerIndex('Observaciones')).toBeGreaterThan(headerIndex('Creado por'));
+    expect(container.textContent).toContain('qa_guardia');
     expect(container.querySelector('.records-mobile')).not.toBeNull();
     expect(container.querySelector('[aria-label="Anular visita"]')).toBeNull();
     await act(async () => {
@@ -121,9 +123,71 @@ describe('HistorialVisitas', () => {
       await flush();
     });
 
-    expect(bitacorasService.closeVisita).toHaveBeenCalledWith(8);
+    expect(bitacorasService.closeVisita).toHaveBeenCalledWith(8, { observacion: undefined });
     expect(onChanged).toHaveBeenCalled();
     expect(showToast).toHaveBeenCalledWith('Cerrada', 'success');
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  test('registra la salida con observación opcional y la muestra junto a la de ingreso', async () => {
+    const meta = { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 };
+    bitacorasService.getVisitas
+      .mockResolvedValueOnce({
+        success: true,
+        data: [visitRow({ observacion_ingreso: 'Viene a entregar pedido' })],
+        meta,
+      })
+      .mockResolvedValue({
+        success: true,
+        data: [
+          visitRow({
+            estado: 'CERRADA',
+            salida_at: '2026-08-20T12:30:00',
+            observacion_ingreso: 'Viene a entregar pedido',
+            observacion_salida: 'Salió con paquete',
+          }),
+        ],
+        meta,
+      });
+    bitacorasService.closeVisita.mockResolvedValue({
+      success: true,
+      message: 'Cerrada',
+      data: {
+        id: 8,
+        estado: 'CERRADA',
+        salida_at: '2026-08-20T12:30:00',
+        observacion_salida: 'Salió con paquete',
+      },
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () =>
+      root.render(<HistorialVisitas refreshKey={0} onChanged={jest.fn()} showToast={jest.fn()} />)
+    );
+    await act(async () => flush());
+    expect(container.textContent).toContain('Ingreso: Viene a entregar pedido');
+
+    await act(async () => {
+      container.querySelector('[aria-label="Registrar salida"]').click();
+      await flush();
+    });
+    await act(async () => {
+      setValue(container.querySelector('#exit-visita-observacion'), '  Salió con paquete  ');
+      await flush();
+    });
+    await act(async () => {
+      findButtonByText(container, 'Confirmar').click();
+      await flush();
+    });
+
+    expect(bitacorasService.closeVisita).toHaveBeenCalledWith(8, {
+      observacion: 'Salió con paquete',
+    });
+    expect(container.textContent).toContain('SALIÓ');
+    expect(container.textContent).toContain('20/08/2026 12:30');
+    expect(container.textContent).toContain('Salida: Salió con paquete');
     act(() => root.unmount());
     container.remove();
   });
@@ -163,7 +227,7 @@ describe('HistorialVisitas', () => {
       findButtonByText(container, 'Confirmar').click();
       await flush();
     });
-    expect(bitacorasService.closeVisita).toHaveBeenCalledWith(8);
+    expect(bitacorasService.closeVisita).toHaveBeenCalledWith(8, { observacion: undefined });
     expect(onTotalChange).toHaveBeenLastCalledWith(0);
 
     act(() => root.unmount());
@@ -525,10 +589,24 @@ describe('HistorialVisitas', () => {
     );
     await act(async () => flush());
 
-    const list = container.querySelector('.bitacoras-visitantes-list');
-    expect(list).not.toBeNull();
-    const lines = Array.from(list.children).map((node) => node.textContent);
-    expect(lines).toEqual(['Juan Pérez · 0701234567', 'María López · 0709876543']);
+    // Nombre y Cédula van en columnas separadas, una línea por visitante y sin negrita.
+    const headers = Array.from(container.querySelectorAll('.bitacoras-visits-table th')).map(
+      (header) => header.textContent.trim()
+    );
+    expect(headers).toEqual(expect.arrayContaining(['Nombre', 'Cédula']));
+    expect(headers).not.toContain('Visitantes');
+    const [nombres, cedulas] = Array.from(
+      container.querySelectorAll('.bitacoras-visits-table .bitacoras-visitantes-list')
+    );
+    expect(Array.from(nombres.children).map((node) => node.textContent)).toEqual([
+      'Juan Pérez',
+      'María López',
+    ]);
+    expect(Array.from(cedulas.children).map((node) => node.textContent)).toEqual([
+      '0701234567',
+      '0709876543',
+    ]);
+    expect(container.querySelector('.bitacoras-visits-table .bitacoras-cell-primary')).toBeNull();
     expect(container.textContent).not.toContain('+1');
     expect(container.textContent).toContain('Juan Pérez · 0701234567, María López · 0709876543');
 
@@ -741,7 +819,7 @@ describe('HistorialVisitas', () => {
       await flush();
     });
 
-    expect(bitacorasService.closeVisita).toHaveBeenCalledWith(8);
+    expect(bitacorasService.closeVisita).toHaveBeenCalledWith(8, { observacion: undefined });
     expect(container.textContent).toContain('Carlos Ruiz');
     expect(container.textContent).toContain('SALIÓ');
     expect(container.textContent).toContain('20/08/2026 12:30');
