@@ -60,10 +60,10 @@
     "readdir-glob": {
       "minimatch": {
         ".": "5.1.8",
-        "brace-expansion": "2.1.4"
+        "brace-expansion": "2.1.7"
       }
     },
-    "brace-expansion": "1.1.18",
+    "brace-expansion": "1.1.21",
     "qs": "6.16.0"
   },
   "devDependencies": {
