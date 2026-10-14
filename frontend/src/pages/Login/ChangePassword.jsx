@@ -24,6 +24,10 @@ const ChangePassword = () => {
       showToast('La contraseña debe tener al menos 8 caracteres', 'error');
       return;
     }
+    if (!/[A-Za-z]/.test(nuevaPassword) || !/\d/.test(nuevaPassword)) {
+      showToast('La contraseña debe incluir letras y números', 'error');
+      return;
+    }
     if (nuevaPassword !== confirmarPassword) {
       showToast('Las contraseñas no coinciden', 'error');
       return;
