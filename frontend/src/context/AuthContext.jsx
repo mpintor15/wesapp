@@ -25,13 +25,16 @@ const parseStoredUser = () => {
   }
 };
 
+// La sesión real es una cookie HttpOnly que el JS no puede leer: el usuario
+// guardado solo indica que hubo un login previo, y initAuth lo confirma con el
+// backend. Se descarta el token que versiones anteriores guardaban en localStorage.
 const getInitialAuthState = () => {
-  const token = localStorage.getItem('token');
+  localStorage.removeItem('token');
   const storedUser = parseStoredUser();
   return {
     user: storedUser,
-    isAuthenticated: Boolean(token),
-    loading: Boolean(token && !storedUser),
+    isAuthenticated: Boolean(storedUser),
+    loading: false,
   };
 };
 
@@ -50,8 +53,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = localStorage.getItem('token');
-      if (token) {
+      if (parseStoredUser()) {
         try {
           const result = await authService.verifyToken();
           if (result.success) {
@@ -110,7 +112,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const handlePermissionsChanged = () => {
-      if (!localStorage.getItem('token')) return;
+      if (!parseStoredUser()) return;
       void resyncAuthenticatedUser();
     };
 

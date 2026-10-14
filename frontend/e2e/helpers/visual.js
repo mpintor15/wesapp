@@ -66,13 +66,16 @@ const createRouteDiagnostics = (page) => {
   };
 };
 
-const getLocalAuthState = async (page) =>
-  page
-    .evaluate(() => ({
-      hasToken: Boolean(localStorage.getItem('token')),
-      hasUser: Boolean(localStorage.getItem('user')),
-    }))
-    .catch(() => ({ hasToken: false, hasUser: false }));
+const getLocalAuthState = async (page) => {
+  const cookies = await page
+    .context()
+    .cookies()
+    .catch(() => []);
+  const hasUser = await page
+    .evaluate(() => Boolean(localStorage.getItem('user')))
+    .catch(() => false);
+  return { hasToken: cookies.some((cookie) => cookie.name === 'wes_session'), hasUser };
+};
 
 const buildAuthDiagnosticMessage = async (page, routePath, diagnostics = []) => {
   const pathname = new URL(page.url()).pathname;
@@ -104,7 +107,7 @@ const buildAuthDiagnosticMessage = async (page, routePath, diagnostics = []) => 
   }
 
   if (!authState.hasToken) {
-    return `Navigation to ${routePath} reached ${pathname} and localStorage has no token. Run npm run test:e2e:auth.`;
+    return `Navigation to ${routePath} reached ${pathname} and has no session cookie. Run npm run test:e2e:auth.`;
   }
 
   return `Navigation to ${routePath} reached ${pathname}. No 401/429 auth API evidence was captured; inspect trace for redirect cause.`;

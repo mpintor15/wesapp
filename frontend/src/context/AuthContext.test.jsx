@@ -75,7 +75,6 @@ const renderAuth = () => {
 };
 
 const setStoredSession = (user = gerente) => {
-  localStorage.setItem('token', 'token');
   localStorage.setItem('user', JSON.stringify(user));
 };
 

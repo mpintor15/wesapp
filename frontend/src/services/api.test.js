@@ -44,6 +44,17 @@ describe('api configuration', () => {
   });
 });
 
+describe('api session transport', () => {
+  test('usa cookie de sesión con el header anti-CSRF y no envía Bearer desde localStorage', async () => {
+    const { default: api } = await loadApiModule(undefined);
+    localStorage.setItem('token', 'legacy-token');
+
+    expect(api.defaults.withCredentials).toBe(true);
+    expect(api.defaults.headers['X-Requested-With']).toBe('XMLHttpRequest');
+    expect(api.interceptors.request.handlers).toHaveLength(0);
+  });
+});
+
 describe('api permission resync detection', () => {
   test('AUTHENTICATION_REQUIRED y USER_DISABLED emiten expiración sin resincronizar', async () => {
     const { AUTH_ERROR_CODES, AUTH_EXPIRED_EVENT, default: api } = await loadApiModule(undefined);

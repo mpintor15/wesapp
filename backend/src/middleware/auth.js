@@ -10,8 +10,10 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config/config');
 const db = require('../config/database');
+const { hasCsrfHeader, isSafeMethod, readSessionToken } = require('../utils/sessionCookie');
 const {
   sendAuthenticationRequired,
+  sendCsrfRejected,
   sendPasswordChangeRequired,
   sendUserDisabled,
 } = require('../utils/authErrorCodes');
@@ -23,12 +25,30 @@ const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/auth/change-password', '/ap
 /**
  * Middleware para verificar token JWT
  */
-const verifyToken = async (req, res, next) => {
+const extractToken = (req) => {
   const authHeader = req.headers.authorization || '';
-  const [scheme, token] = authHeader.split(' ');
+  if (authHeader) {
+    const [scheme, bearerToken] = authHeader.split(' ');
+    return scheme === 'Bearer' && bearerToken ? { token: bearerToken, fromCookie: false } : null;
+  }
 
-  if (scheme !== 'Bearer' || !token) {
+  const cookieToken = readSessionToken(req);
+  return cookieToken ? { token: cookieToken, fromCookie: true } : null;
+};
+
+const verifyToken = async (req, res, next) => {
+  const extracted = extractToken(req);
+
+  if (!extracted) {
     return sendAuthenticationRequired(res);
+  }
+
+  const { token, fromCookie } = extracted;
+
+  // Un token enviado por cookie viaja solo en el navegador: exige el header
+  // anti-CSRF en peticiones que modifican estado.
+  if (fromCookie && !isSafeMethod(req) && !hasCsrfHeader(req)) {
+    return sendCsrfRejected(res);
   }
 
   let decoded;

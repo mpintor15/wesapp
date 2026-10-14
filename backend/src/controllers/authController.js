@@ -21,6 +21,7 @@ const {
   sendUserDisabled,
 } = require('../utils/authErrorCodes');
 const authRepository = require('../repositories/authRepository');
+const { clearSessionCookie, setSessionCookie } = require('../utils/sessionCookie');
 
 /**
  * Login de usuario
@@ -78,7 +79,9 @@ const login = async (req, res) => {
       { expiresIn: config.jwt.expiration, algorithm: config.jwt.algorithm }
     );
 
-    // Responder con token y datos del usuario
+    // La sesión del navegador viaja en una cookie HttpOnly. El token también se
+    // devuelve en el cuerpo para clientes no-navegador (scripts, pruebas e2e).
+    setSessionCookie(res, token);
     res.json({
       success: true,
       message: 'Login exitoso',
@@ -98,6 +101,14 @@ const login = async (req, res) => {
   } catch (error) {
     return handleControllerError(res, error, 'Error en login:');
   }
+};
+
+/**
+ * Logout: elimina la cookie de sesión
+ */
+const logout = (req, res) => {
+  clearSessionCookie(res);
+  res.json({ success: true, message: 'Sesión cerrada' });
 };
 
 /**
@@ -214,6 +225,7 @@ const verifyToken = async (req, res) => {
 
 module.exports = {
   login,
+  logout,
   changePassword,
   verifyToken,
 };

@@ -378,3 +378,83 @@ describe('política de contraseñas', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('sesión por cookie HttpOnly', () => {
+  const cookieFor = (token) => `wes_session=${encodeURIComponent(token)}`;
+
+  test('login establece la cookie HttpOnly, SameSite=Strict y limitada a /api', async () => {
+    mockAuthQuery({ loginUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ usuario: 'admin', password: 'correct-password' });
+
+    expect(res.status).toBe(200);
+    const setCookie = res.headers['set-cookie']?.find((c) => c.startsWith('wes_session='));
+    expect(setCookie).toBeDefined();
+    expect(setCookie).toMatch(/HttpOnly/i);
+    expect(setCookie).toMatch(/SameSite=Strict/i);
+    expect(setCookie).toMatch(/Path=\/api/i);
+    expect(setCookie).toMatch(/Max-Age=\d+/i);
+  });
+
+  test('autentica una petición GET solo con la cookie', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app).get('/api/auth/verify').set('Cookie', cookieFor(signToken()));
+
+    expect(res.status).toBe(200);
+  });
+
+  test('rechaza con CSRF_REJECTED una escritura por cookie sin el header anti-CSRF', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Cookie', cookieFor(signToken()))
+      .send({ nueva_password: 'nueva-clave-segura-1', confirmar_password: 'nueva-clave-segura-1' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe(AUTH_ERROR_CODES.CSRF_REJECTED);
+  });
+
+  test('acepta una escritura por cookie con el header anti-CSRF', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Cookie', cookieFor(signToken()))
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ nueva_password: 'nueva-clave-segura-1', confirmar_password: 'nueva-clave-segura-1' });
+
+    expect(res.status).toBe(200);
+  });
+
+  test('una escritura con Bearer no requiere el header anti-CSRF', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ nueva_password: 'nueva-clave-segura-1', confirmar_password: 'nueva-clave-segura-1' });
+
+    expect(res.status).toBe(200);
+  });
+
+  test('una cookie con token inválido responde 401', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app).get('/api/auth/verify').set('Cookie', 'wes_session=basura');
+
+    expectAuthRequired(res);
+  });
+
+  test('logout expira la cookie de sesión', async () => {
+    const res = await request(app).post('/api/auth/logout');
+
+    expect(res.status).toBe(200);
+    const setCookie = res.headers['set-cookie']?.find((c) => c.startsWith('wes_session='));
+    expect(setCookie).toMatch(/Expires=Thu, 01 Jan 1970/i);
+    expect(setCookie).toMatch(/HttpOnly/i);
+  });
+});

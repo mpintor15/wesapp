@@ -64,3 +64,43 @@ describe('authService login connectivity handling', () => {
     });
   });
 });
+
+describe('authService sesión por cookie', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+  });
+
+  test('login guarda solo el usuario en localStorage y nunca el token', async () => {
+    const user = { id: 1, usuario: 'ana', tipo_usuario: 'supervisor' };
+    api.post.mockResolvedValueOnce({
+      data: { success: true, data: { token: 'jwt-secreto', user } },
+    });
+
+    const result = await authService.login('ana', 'password');
+
+    expect(result.success).toBe(true);
+    expect(JSON.parse(localStorage.getItem('user'))).toEqual(user);
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(JSON.stringify({ ...localStorage })).not.toContain('jwt-secreto');
+  });
+
+  test('logout limpia el localStorage y pide al backend expirar la cookie', () => {
+    localStorage.setItem('token', 'legacy');
+    localStorage.setItem('user', JSON.stringify({ id: 1 }));
+    api.post.mockResolvedValueOnce({ data: { success: true } });
+
+    authService.logout();
+
+    expect(localStorage.getItem('token')).toBeNull();
+    expect(localStorage.getItem('user')).toBeNull();
+    expect(api.post).toHaveBeenCalledWith('/auth/logout');
+  });
+
+  test('logout no falla si el backend no responde', async () => {
+    api.post.mockRejectedValueOnce(new Error('Network Error'));
+
+    expect(() => authService.logout()).not.toThrow();
+    await Promise.resolve();
+  });
+});

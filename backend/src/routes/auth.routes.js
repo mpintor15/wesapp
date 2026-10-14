@@ -29,6 +29,13 @@ const loginLimiter = rateLimit({
 router.post('/login', loginLimiter, validateRequest(loginSchema), authController.login);
 
 /**
+ * @route   POST /api/auth/logout
+ * @desc    Cerrar sesión (elimina la cookie HttpOnly)
+ * @access  Public
+ */
+router.post('/logout', authController.logout);
+
+/**
  * @route   POST /api/auth/change-password
  * @desc    Cambiar contraseña (obligatorio en primer login)
  * @access  Private

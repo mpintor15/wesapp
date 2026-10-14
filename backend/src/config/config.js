@@ -124,6 +124,12 @@ module.exports = {
     expiration: process.env.JWT_EXPIRATION || '24h',
   },
 
+  // Cookie de sesión. Secure se desactiva solo cuando el build de producción
+  // corre sobre http local (DISABLE_HTTPS_REDIRECT=true, p. ej. docker compose).
+  cookies: {
+    secure: nodeEnv === 'production' && process.env.DISABLE_HTTPS_REDIRECT !== 'true',
+  },
+
   // Configuración de CORS
   cors: {
     origin: parseCorsOrigin(process.env.CORS_ORIGIN),
