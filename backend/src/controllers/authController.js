@@ -15,7 +15,11 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const config = require('../config/config');
 const { createHttpError, handleControllerError } = require('../utils/http');
-const { sendAuthenticationRequired, sendUserDisabled } = require('../utils/authErrorCodes');
+const {
+  sendAccountLocked,
+  sendAuthenticationRequired,
+  sendUserDisabled,
+} = require('../utils/authErrorCodes');
 const authRepository = require('../repositories/authRepository');
 
 /**
@@ -45,12 +49,23 @@ const login = async (req, res) => {
       return sendUserDisabled(res);
     }
 
+    // Cuenta bloqueada temporalmente por intentos fallidos
+    if (user.bloqueado_hasta && new Date(user.bloqueado_hasta) > new Date()) {
+      return sendAccountLocked(res);
+    }
+
     // Verificar contraseña
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
+      const failure = await authRepository.registerFailedLogin(user.id, config.loginLockout);
+      if (failure?.bloqueado_hasta && new Date(failure.bloqueado_hasta) > new Date()) {
+        return sendAccountLocked(res);
+      }
       return sendAuthenticationRequired(res);
     }
+
+    await authRepository.resetFailedLogins(user.id);
 
     // Generar token JWT
     const token = jwt.sign(

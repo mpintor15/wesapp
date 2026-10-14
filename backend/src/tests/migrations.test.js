@@ -1921,7 +1921,26 @@ describe('database migrations', () => {
       ).resolves.toMatchObject({ rowCount: 1 });
 
       const version = await pool.query('SELECT MAX(version)::int AS version FROM schema_version');
-      expect(version.rows[0].version).toBe(44);
+      expect(version.rows[0].version).toBe(45);
+    });
+  });
+
+  test('fresh schema includes login lockout columns from version 45', async () => {
+    await withTempDatabase('wesapp_schema_lockout_045', async (pool) => {
+      await pool.query(await fs.readFile(schemaPath, 'utf8'));
+
+      const columns = await pool.query(`
+        SELECT column_name, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_name = 'usuarios'
+          AND column_name IN ('intentos_fallidos', 'bloqueado_hasta')
+        ORDER BY column_name
+      `);
+
+      expect(columns.rows).toEqual([
+        { column_name: 'bloqueado_hasta', is_nullable: 'YES', column_default: null },
+        { column_name: 'intentos_fallidos', is_nullable: 'NO', column_default: '0' },
+      ]);
     });
   });
 });

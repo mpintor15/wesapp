@@ -111,6 +111,12 @@ module.exports = {
     },
   },
 
+  // Bloqueo de cuenta tras intentos de login fallidos consecutivos (por usuario).
+  loginLockout: {
+    maxAttempts: 5,
+    lockMinutes: 15,
+  },
+
   // Configuración de JWT
   jwt: {
     secret: process.env.JWT_SECRET || 'default_secret_change_this',

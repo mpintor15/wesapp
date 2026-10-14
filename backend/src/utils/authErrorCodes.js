@@ -3,12 +3,15 @@ const AUTH_ERROR_CODES = {
   USER_DISABLED: 'USER_DISABLED',
   INSUFFICIENT_PERMISSIONS: 'INSUFFICIENT_PERMISSIONS',
   PASSWORD_CHANGE_REQUIRED: 'PASSWORD_CHANGE_REQUIRED',
+  ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',
 };
 
 const AUTH_ERROR_MESSAGES = {
   [AUTH_ERROR_CODES.AUTHENTICATION_REQUIRED]: 'La sesión no es válida o ha expirado.',
   [AUTH_ERROR_CODES.USER_DISABLED]: 'El usuario está desactivado.',
   [AUTH_ERROR_CODES.INSUFFICIENT_PERMISSIONS]: 'No tiene permisos para realizar esta acción.',
+  [AUTH_ERROR_CODES.ACCOUNT_LOCKED]:
+    'Demasiados intentos fallidos. Intenta nuevamente en unos minutos.',
   [AUTH_ERROR_CODES.PASSWORD_CHANGE_REQUIRED]:
     'Debe cambiar su contraseña temporal antes de continuar.',
 };
@@ -31,7 +34,10 @@ const sendInsufficientPermissions = (res) =>
 const sendPasswordChangeRequired = (res) =>
   sendAuthError(res, 403, AUTH_ERROR_CODES.PASSWORD_CHANGE_REQUIRED);
 
+const sendAccountLocked = (res) => sendAuthError(res, 429, AUTH_ERROR_CODES.ACCOUNT_LOCKED);
+
 module.exports = {
+  sendAccountLocked,
   AUTH_ERROR_CODES,
   AUTH_ERROR_MESSAGES,
   sendAuthenticationRequired,
