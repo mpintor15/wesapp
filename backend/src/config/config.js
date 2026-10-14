@@ -114,6 +114,7 @@ module.exports = {
   // Configuración de JWT
   jwt: {
     secret: process.env.JWT_SECRET || 'default_secret_change_this',
+    algorithm: 'HS256',
     expiration: process.env.JWT_EXPIRATION || '24h',
   },
 

@@ -243,3 +243,47 @@ describe('auth routes', () => {
     ).toBe(true);
   });
 });
+
+describe('contraseña temporal (primer_login) y algoritmo JWT', () => {
+  test('con primer_login bloquea el resto del API con PASSWORD_CHANGE_REQUIRED', async () => {
+    mockAuthQuery({ verifyUser: await userRow({ primer_login: true }) });
+
+    const res = await request(app)
+      .get('/api/usuarios')
+      .set('Authorization', `Bearer ${signToken()}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe(AUTH_ERROR_CODES.PASSWORD_CHANGE_REQUIRED);
+  });
+
+  test('con primer_login permite /auth/verify', async () => {
+    mockAuthQuery({ verifyUser: await userRow({ primer_login: true }) });
+
+    const res = await request(app)
+      .get('/api/auth/verify')
+      .set('Authorization', `Bearer ${signToken()}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('con primer_login permite /auth/change-password', async () => {
+    const verifyUser = await userRow({ primer_login: true });
+    mockAuthQuery({ verifyUser });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ nueva_password: 'nueva-clave-segura', confirmar_password: 'nueva-clave-segura' });
+
+    expect(res.status).toBe(200);
+  });
+
+  test('rechaza tokens firmados con un algoritmo distinto de HS256', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+    const token = jwt.sign({ id: 7 }, config.jwt.secret, { algorithm: 'HS512' });
+
+    const res = await request(app).get('/api/auth/verify').set('Authorization', `Bearer ${token}`);
+
+    expectAuthRequired(res);
+  });
+});

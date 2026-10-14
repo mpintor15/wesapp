@@ -10,7 +10,15 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config/config');
 const db = require('../config/database');
-const { sendAuthenticationRequired, sendUserDisabled } = require('../utils/authErrorCodes');
+const {
+  sendAuthenticationRequired,
+  sendPasswordChangeRequired,
+  sendUserDisabled,
+} = require('../utils/authErrorCodes');
+
+// Con contraseña temporal (primer_login) solo se puede cambiar la contraseña
+// o restaurar la sesión; el resto del API queda bloqueado en el servidor.
+const PASSWORD_CHANGE_ALLOWED_PATHS = new Set(['/api/auth/change-password', '/api/auth/verify']);
 
 /**
  * Middleware para verificar token JWT
@@ -25,7 +33,7 @@ const verifyToken = async (req, res, next) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(token, config.jwt.secret);
+    decoded = jwt.verify(token, config.jwt.secret, { algorithms: [config.jwt.algorithm] });
   } catch (error) {
     void error;
     return sendAuthenticationRequired(res);
@@ -63,6 +71,9 @@ const verifyToken = async (req, res, next) => {
       primer_login: user.primer_login,
       activo: user.activo,
     };
+    if (user.primer_login && !PASSWORD_CHANGE_ALLOWED_PATHS.has(req.originalUrl.split('?')[0])) {
+      return sendPasswordChangeRequired(res);
+    }
     next();
   } catch (error) {
     void error;

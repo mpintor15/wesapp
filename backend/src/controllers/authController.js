@@ -60,7 +60,7 @@ const login = async (req, res) => {
         tipo_usuario: user.tipo_usuario,
       },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiration }
+      { expiresIn: config.jwt.expiration, algorithm: config.jwt.algorithm }
     );
 
     // Responder con token y datos del usuario
