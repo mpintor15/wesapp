@@ -1921,12 +1921,12 @@ describe('database migrations', () => {
       ).resolves.toMatchObject({ rowCount: 1 });
 
       const version = await pool.query('SELECT MAX(version)::int AS version FROM schema_version');
-      expect(version.rows[0].version).toBe(45);
+      expect(version.rows[0].version).toBe(103);
     });
   });
 
-  test('fresh schema includes login lockout columns from version 45', async () => {
-    await withTempDatabase('wesapp_schema_lockout_045', async (pool) => {
+  test('fresh schema includes login lockout columns from version 103', async () => {
+    await withTempDatabase('wesapp_schema_lockout_103', async (pool) => {
       await pool.query(await fs.readFile(schemaPath, 'utf8'));
 
       const columns = await pool.query(`
