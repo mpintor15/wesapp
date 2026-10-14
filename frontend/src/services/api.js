@@ -4,9 +4,10 @@
  * Configura una instancia de Axios con la URL base del API.
  *
  * Interceptores:
- *  - Request  : Agrega automáticamente el header Authorization: Bearer <token>
- *               leyendo el token del localStorage antes de cada petición.
- *  - Response : Si el backend responde 401 (token expirado o inválido), limpia
+ *  - Sesión   : El JWT viaja en una cookie HttpOnly (withCredentials), que el
+ *               JavaScript de la página no puede leer. Cada petición envía el
+ *               header X-Requested-With, exigido por el backend contra CSRF.
+ *  - Response : Si el backend responde 401 (sesión expirada o inválida), limpia
  *               el localStorage y redirige al usuario a /login.
  *
  * Todos los servicios del frontend importan esta instancia para realizar
@@ -44,24 +45,12 @@ const API_URL = process.env.REACT_APP_API_URL || '/api';
 const api = axios.create({
   baseURL: API_URL,
   timeout: 12000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
   },
 });
-
-// Interceptor para agregar token a todas las peticiones
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
 
 // Interceptor para manejar errores de respuesta
 api.interceptors.response.use(

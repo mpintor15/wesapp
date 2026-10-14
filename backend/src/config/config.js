@@ -111,10 +111,23 @@ module.exports = {
     },
   },
 
+  // Bloqueo de cuenta tras intentos de login fallidos consecutivos (por usuario).
+  loginLockout: {
+    maxAttempts: 5,
+    lockMinutes: 15,
+  },
+
   // Configuración de JWT
   jwt: {
     secret: process.env.JWT_SECRET || 'default_secret_change_this',
+    algorithm: 'HS256',
     expiration: process.env.JWT_EXPIRATION || '24h',
+  },
+
+  // Cookie de sesión. Secure se desactiva solo cuando el build de producción
+  // corre sobre http local (DISABLE_HTTPS_REDIRECT=true, p. ej. docker compose).
+  cookies: {
+    secure: nodeEnv === 'production' && process.env.DISABLE_HTTPS_REDIRECT !== 'true',
   },
 
   // Configuración de CORS

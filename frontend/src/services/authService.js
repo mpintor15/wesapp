@@ -2,15 +2,17 @@
  * authService.js — Servicio de autenticación del frontend
  *
  * Encapsula las llamadas al API de autenticación y la gestión del
- * token/usuario en localStorage. Es consumido por AuthContext.jsx.
+ * datos del usuario en localStorage. El token de sesión vive en una cookie
+ * HttpOnly que gestiona el backend. Es consumido por AuthContext.jsx.
  *
  *  - login(usuario, password)               : POST /auth/login. Si tiene éxito
- *                                             guarda token y datos del usuario.
+ *                                             guarda los datos del usuario.
  *  - changePassword(nueva, confirmar)       : POST /auth/change-password. Actualiza
  *                                             el campo primer_login en localStorage.
  *  - verifyToken()                          : GET /auth/verify. Refresca los datos
- *                                             del usuario con el token actual.
- *  - logout()                               : Elimina token y usuario del localStorage.
+ *                                             del usuario con la sesión actual.
+ *  - logout()                               : Cierra la sesión en el backend (borra
+ *                                             la cookie) y limpia el localStorage.
  */
 import api from './api';
 import { extractError } from './serviceUtils';
@@ -27,10 +29,9 @@ const authService = {
       });
 
       if (response.data.success) {
-        const { token, user } = response.data.data;
+        const { user } = response.data.data;
 
-        // Guardar token y usuario en localStorage
-        localStorage.setItem('token', token);
+        // El token viaja en la cookie HttpOnly; aquí solo se guarda el usuario.
         localStorage.setItem('user', JSON.stringify(user));
 
         return { success: true, data: response.data.data };
@@ -116,6 +117,14 @@ const authService = {
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    // Mejor esfuerzo: pide al backend expirar la cookie de sesión.
+    (async () => {
+      try {
+        await api.post('/auth/logout');
+      } catch {
+        // Sin conexión: la cookie expira sola al vencer el token.
+      }
+    })();
   },
 };
 

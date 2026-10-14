@@ -108,7 +108,7 @@ const findUsuarioParaReenvio = async (id, executor = db) => {
 const updatePasswordReenvio = (id, passwordHash, executor = db) =>
   executor.query(
     `UPDATE usuarios
-     SET password_hash = $1, primer_login = TRUE
+     SET password_hash = $1, primer_login = TRUE, intentos_fallidos = 0, bloqueado_hasta = NULL
      WHERE id = $2
      RETURNING id, usuario, nombre, apellido, tipo_usuario, primer_login, activo`,
     [passwordHash, id]

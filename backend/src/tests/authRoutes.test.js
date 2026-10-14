@@ -40,7 +40,7 @@ const mockAuthQuery = ({ loginUser, verifyUser, updateOk = true }) => {
         ? { rows: [{ password_hash: verifyUser.password_hash }], rowCount: 1 }
         : { rows: [], rowCount: 0 };
     }
-    if (query.includes('UPDATE usuarios SET password_hash')) {
+    if (/UPDATE usuarios\s+SET password_hash/.test(query)) {
       return { rows: [], rowCount: updateOk ? 1 : 0 };
     }
     if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
@@ -239,7 +239,222 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(200);
     expect(
-      db.query.mock.calls.some(([sql]) => String(sql).includes('UPDATE usuarios SET password_hash'))
+      db.query.mock.calls.some(([sql]) => /UPDATE usuarios\s+SET password_hash/.test(String(sql)))
     ).toBe(true);
+  });
+});
+
+describe('contraseña temporal (primer_login) y algoritmo JWT', () => {
+  test('con primer_login bloquea el resto del API con PASSWORD_CHANGE_REQUIRED', async () => {
+    mockAuthQuery({ verifyUser: await userRow({ primer_login: true }) });
+
+    const res = await request(app)
+      .get('/api/usuarios')
+      .set('Authorization', `Bearer ${signToken()}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe(AUTH_ERROR_CODES.PASSWORD_CHANGE_REQUIRED);
+  });
+
+  test('con primer_login permite /auth/verify', async () => {
+    mockAuthQuery({ verifyUser: await userRow({ primer_login: true }) });
+
+    const res = await request(app)
+      .get('/api/auth/verify')
+      .set('Authorization', `Bearer ${signToken()}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('con primer_login permite /auth/change-password', async () => {
+    const verifyUser = await userRow({ primer_login: true });
+    mockAuthQuery({ verifyUser });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ nueva_password: 'nueva-clave-segura-1', confirmar_password: 'nueva-clave-segura-1' });
+
+    expect(res.status).toBe(200);
+  });
+
+  test('rechaza tokens firmados con un algoritmo distinto de HS256', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+    const token = jwt.sign({ id: 7 }, config.jwt.secret, { algorithm: 'HS512' });
+
+    const res = await request(app).get('/api/auth/verify').set('Authorization', `Bearer ${token}`);
+
+    expectAuthRequired(res);
+  });
+});
+
+describe('bloqueo de cuenta por intentos fallidos', () => {
+  const failedLoginUpdates = () =>
+    db.query.mock.calls.filter(([sql]) => String(sql).includes('intentos_fallidos + 1'));
+
+  test('un login con contraseña incorrecta registra el intento fallido', async () => {
+    const loginUser = await userRow();
+    mockAuthQuery({ loginUser });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ usuario: 'admin', password: 'incorrecta' });
+
+    expectAuthRequired(res);
+    expect(failedLoginUpdates()).toHaveLength(1);
+    expect(failedLoginUpdates()[0][1]).toEqual([7, 5, 15]);
+  });
+
+  test('el intento que alcanza el máximo responde 429 ACCOUNT_LOCKED', async () => {
+    const loginUser = await userRow();
+    const lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
+    db.query.mockImplementation(async (sql) => {
+      const query = String(sql);
+      if (query.includes('information_schema.columns')) {
+        return { rows: [{ column_name: 'nombre' }], rowCount: 1 };
+      }
+      if (query.includes('WHERE usuario = $1')) {
+        return { rows: [loginUser], rowCount: 1 };
+      }
+      if (query.includes('intentos_fallidos + 1')) {
+        return { rows: [{ intentos_fallidos: 5, bloqueado_hasta: lockedUntil }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ usuario: 'admin', password: 'incorrecta' });
+
+    expect(res.status).toBe(429);
+    expect(res.body.code).toBe(AUTH_ERROR_CODES.ACCOUNT_LOCKED);
+  });
+
+  test('una cuenta bloqueada rechaza incluso la contraseña correcta sin contar el intento', async () => {
+    const loginUser = await userRow({ bloqueado_hasta: new Date(Date.now() + 60 * 1000) });
+    mockAuthQuery({ loginUser });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ usuario: 'admin', password: 'correct-password' });
+
+    expect(res.status).toBe(429);
+    expect(res.body).not.toHaveProperty('data');
+    expect(failedLoginUpdates()).toHaveLength(0);
+  });
+
+  test('un bloqueo vencido permite entrar y reinicia el contador', async () => {
+    const loginUser = await userRow({
+      bloqueado_hasta: new Date(Date.now() - 60 * 1000),
+      intentos_fallidos: 5,
+    });
+    mockAuthQuery({ loginUser });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ usuario: 'admin', password: 'correct-password' });
+
+    expect(res.status).toBe(200);
+    const resets = db.query.mock.calls.filter(([sql]) =>
+      String(sql).includes('SET intentos_fallidos = 0')
+    );
+    expect(resets).toHaveLength(1);
+  });
+});
+
+describe('política de contraseñas', () => {
+  test.each([
+    ['solo letras', 'solamenteletras'],
+    ['solo números', '1234567890'],
+    ['contraseña común', 'Password1'],
+  ])('rechaza %s', async (_label, nueva_password) => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ nueva_password, confirmar_password: nueva_password });
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('sesión por cookie HttpOnly', () => {
+  const cookieFor = (token) => `wes_session=${encodeURIComponent(token)}`;
+
+  test('login establece la cookie HttpOnly, SameSite=Strict y limitada a /api', async () => {
+    mockAuthQuery({ loginUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ usuario: 'admin', password: 'correct-password' });
+
+    expect(res.status).toBe(200);
+    const setCookie = res.headers['set-cookie']?.find((c) => c.startsWith('wes_session='));
+    expect(setCookie).toBeDefined();
+    expect(setCookie).toMatch(/HttpOnly/i);
+    expect(setCookie).toMatch(/SameSite=Strict/i);
+    expect(setCookie).toMatch(/Path=\/api/i);
+    expect(setCookie).toMatch(/Max-Age=\d+/i);
+  });
+
+  test('autentica una petición GET solo con la cookie', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app).get('/api/auth/verify').set('Cookie', cookieFor(signToken()));
+
+    expect(res.status).toBe(200);
+  });
+
+  test('rechaza con CSRF_REJECTED una escritura por cookie sin el header anti-CSRF', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Cookie', cookieFor(signToken()))
+      .send({ nueva_password: 'nueva-clave-segura-1', confirmar_password: 'nueva-clave-segura-1' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe(AUTH_ERROR_CODES.CSRF_REJECTED);
+  });
+
+  test('acepta una escritura por cookie con el header anti-CSRF', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Cookie', cookieFor(signToken()))
+      .set('X-Requested-With', 'XMLHttpRequest')
+      .send({ nueva_password: 'nueva-clave-segura-1', confirmar_password: 'nueva-clave-segura-1' });
+
+    expect(res.status).toBe(200);
+  });
+
+  test('una escritura con Bearer no requiere el header anti-CSRF', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${signToken()}`)
+      .send({ nueva_password: 'nueva-clave-segura-1', confirmar_password: 'nueva-clave-segura-1' });
+
+    expect(res.status).toBe(200);
+  });
+
+  test('una cookie con token inválido responde 401', async () => {
+    mockAuthQuery({ verifyUser: await userRow() });
+
+    const res = await request(app).get('/api/auth/verify').set('Cookie', 'wes_session=basura');
+
+    expectAuthRequired(res);
+  });
+
+  test('logout expira la cookie de sesión', async () => {
+    const res = await request(app).post('/api/auth/logout');
+
+    expect(res.status).toBe(200);
+    const setCookie = res.headers['set-cookie']?.find((c) => c.startsWith('wes_session='));
+    expect(setCookie).toMatch(/Expires=Thu, 01 Jan 1970/i);
+    expect(setCookie).toMatch(/HttpOnly/i);
   });
 });

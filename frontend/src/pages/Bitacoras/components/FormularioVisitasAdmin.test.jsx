@@ -131,7 +131,7 @@ describe('FormularioVisitasAdmin', () => {
     const actionsHeader = view.container.querySelector('th[aria-label="Acciones"]');
     expect(actionsHeader).not.toBeNull();
     expect(actionsHeader.textContent).toBe('');
-    expect(actionsHeader.classList.contains('app-col-actions--double')).toBe(true);
+    expect(actionsHeader.classList.contains('app-col-actions--single')).toBe(true);
 
     await openBuilder(view.container);
     expect(view.container.querySelector('.app-modal--xl')).not.toBeNull();
@@ -341,7 +341,7 @@ describe('FormularioVisitasAdmin', () => {
             min_count: 1,
             aplica_a: 'TODOS',
             fields: [
-              { field_key: 'nombre', label: 'Nombre', type: 'text', required: true },
+              { field_key: 'nombre', label: 'Nombre y apellido', type: 'text', required: true },
               { field_key: 'cedula', label: 'Cédula', type: 'cedula', required: true },
             ],
           },

@@ -39,7 +39,9 @@ const loginWithRole = async ({ request, page, role = 'gerente' }) => {
     throw new Error(`Unknown E2E role: ${role}`);
   }
 
-  const response = await request.post(`${getApiURL()}/auth/login`, {
+  // page.request comparte el almacén de cookies del contexto del navegador, así
+  // la cookie HttpOnly de sesión que fija el login queda disponible para la página.
+  const response = await (page?.request ?? request).post(`${getApiURL()}/auth/login`, {
     data: {
       usuario: credentials.username,
       password: credentials.password,
@@ -52,8 +54,7 @@ const loginWithRole = async ({ request, page, role = 'gerente' }) => {
   expect(body.data?.token).toBeTruthy();
   expect(body.data?.user?.tipo_usuario).toBe(role);
 
-  await page.addInitScript(({ token, user }) => {
-    window.localStorage.setItem('token', token);
+  await page.addInitScript(({ user }) => {
     window.localStorage.setItem('user', JSON.stringify(user));
   }, body.data);
 

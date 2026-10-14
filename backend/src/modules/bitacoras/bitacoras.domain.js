@@ -58,7 +58,7 @@ const VISIT_SORTS = {
   registrado_por: 'u.usuario',
   salida_at: 'bv.salida_at',
   estado: 'bv.estado',
-  observacion: 'bv.motivo_no_autorizacion',
+  observacion: 'COALESCE(bv.motivo_no_autorizacion, bv.observacion_ingreso, bv.observacion_salida)',
   entrada_at: 'bv.entrada_at',
 };
 const VISIT_FORM_SORTS = {

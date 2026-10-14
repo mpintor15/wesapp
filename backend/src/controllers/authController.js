@@ -15,8 +15,13 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const config = require('../config/config');
 const { createHttpError, handleControllerError } = require('../utils/http');
-const { sendAuthenticationRequired, sendUserDisabled } = require('../utils/authErrorCodes');
+const {
+  sendAccountLocked,
+  sendAuthenticationRequired,
+  sendUserDisabled,
+} = require('../utils/authErrorCodes');
 const authRepository = require('../repositories/authRepository');
+const { clearSessionCookie, setSessionCookie } = require('../utils/sessionCookie');
 
 /**
  * Login de usuario
@@ -45,12 +50,23 @@ const login = async (req, res) => {
       return sendUserDisabled(res);
     }
 
+    // Cuenta bloqueada temporalmente por intentos fallidos
+    if (user.bloqueado_hasta && new Date(user.bloqueado_hasta) > new Date()) {
+      return sendAccountLocked(res);
+    }
+
     // Verificar contraseña
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordMatch) {
+      const failure = await authRepository.registerFailedLogin(user.id, config.loginLockout);
+      if (failure?.bloqueado_hasta && new Date(failure.bloqueado_hasta) > new Date()) {
+        return sendAccountLocked(res);
+      }
       return sendAuthenticationRequired(res);
     }
+
+    await authRepository.resetFailedLogins(user.id);
 
     // Generar token JWT
     const token = jwt.sign(
@@ -60,10 +76,12 @@ const login = async (req, res) => {
         tipo_usuario: user.tipo_usuario,
       },
       config.jwt.secret,
-      { expiresIn: config.jwt.expiration }
+      { expiresIn: config.jwt.expiration, algorithm: config.jwt.algorithm }
     );
 
-    // Responder con token y datos del usuario
+    // La sesión del navegador viaja en una cookie HttpOnly. El token también se
+    // devuelve en el cuerpo para clientes no-navegador (scripts, pruebas e2e).
+    setSessionCookie(res, token);
     res.json({
       success: true,
       message: 'Login exitoso',
@@ -83,6 +101,14 @@ const login = async (req, res) => {
   } catch (error) {
     return handleControllerError(res, error, 'Error en login:');
   }
+};
+
+/**
+ * Logout: elimina la cookie de sesión
+ */
+const logout = (req, res) => {
+  clearSessionCookie(res);
+  res.json({ success: true, message: 'Sesión cerrada' });
 };
 
 /**
@@ -199,6 +225,7 @@ const verifyToken = async (req, res) => {
 
 module.exports = {
   login,
+  logout,
   changePassword,
   verifyToken,
 };

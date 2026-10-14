@@ -189,7 +189,7 @@ const VISITANTES_GROUP_KEY = 'visitantes';
 const VISITANTES_GROUP_LABEL = 'Visitantes';
 const VISITANTES_FIELD_KEYS = ['nombre', 'cedula'];
 const VISITANTES_FIELD_TYPES = { nombre: 'text', cedula: 'cedula' };
-const VISITANTES_FIELD_LABELS = { nombre: 'Nombre', cedula: 'Cédula' };
+const VISITANTES_FIELD_LABELS = { nombre: 'Nombre y apellido', cedula: 'Cédula' };
 
 const visitFormGroupFieldSchema = z
   .object({
@@ -366,6 +366,7 @@ const bitacoraVisitCreateSchema = z
     grupos: visitGroupResponsesSchema,
     autorizada: z.boolean().optional().default(true),
     motivo_no_autorizacion: optionalTrimmedString(200, 'Motivo de no autorización'),
+    observacion: optionalTrimmedString(500, 'Observación'),
   })
   .strict()
   .superRefine((data, ctx) => {
@@ -385,7 +386,11 @@ const bitacoraVisitCreateSchema = z
     }
   });
 
-const bitacoraVisitCloseSchema = z.object({}).strict();
+const bitacoraVisitCloseSchema = z
+  .object({
+    observacion: optionalTrimmedString(500, 'Observación'),
+  })
+  .strict();
 
 const bitacoraVisitFormArchiveSchema = z.object({}).strict();
 
@@ -395,11 +400,36 @@ const bitacoraVisitCancelSchema = z
   })
   .strict();
 
+const COMMON_PASSWORDS = new Set([
+  '12345678',
+  '123456789',
+  '1234567890',
+  'password',
+  'password1',
+  'contrasena',
+  'contraseña',
+  'qwertyui',
+  'qwerty123',
+  'abc12345',
+  'iloveyou',
+  'admin123',
+  'wessecurity',
+]);
+
+const newPasswordSchema = z
+  .string({ required_error: 'Nueva contraseña es requerida' })
+  .min(8, 'Nueva contraseña debe tener al menos 8 caracteres')
+  .max(72, 'Nueva contraseña no puede exceder 72 caracteres')
+  .refine((value) => /[A-Za-z]/.test(value) && /\d/.test(value), {
+    message: 'Nueva contraseña debe incluir letras y números',
+  })
+  .refine((value) => !COMMON_PASSWORDS.has(value.toLowerCase()), {
+    message: 'Nueva contraseña es demasiado común',
+  });
+
 const changePasswordSchema = z
   .object({
-    nueva_password: z
-      .string({ required_error: 'Nueva contraseña es requerida' })
-      .min(8, 'Nueva contraseña debe tener al menos 8 caracteres'),
+    nueva_password: newPasswordSchema,
     confirmar_password: z
       .string({ required_error: 'Confirmación de contraseña es requerida' })
       .min(8, 'Confirmación debe tener al menos 8 caracteres'),

@@ -73,7 +73,7 @@
 
 .bitacoras-registro-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(230px, 0.85fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -451,15 +451,6 @@
   width: 100%;
 }
 
-.bitacoras-admin-form > .bitacoras-form-basics {
-  order: 1;
-}
-
-.bitacoras-admin-form > .bitacoras-field-hint,
-.bitacoras-admin-form > .bitacoras-filter-error {
-  order: 5;
-}
-
 .bitacoras-admin-form .form-group {
   display: grid;
   gap: 6px;
@@ -723,22 +714,6 @@
   border: 1px solid var(--color-border);
   border-radius: 12px;
   background: var(--color-surface-subtle);
-}
-
-.bitacoras-builder-section--visitors {
-  order: 2;
-}
-
-.bitacoras-visit-types {
-  order: 3;
-}
-
-.bitacoras-builder-section--house {
-  order: 4;
-}
-
-.bitacoras-builder-section--questions {
-  order: 6;
 }
 
 .bitacoras-builder-section > .bitacoras-field-hint {
