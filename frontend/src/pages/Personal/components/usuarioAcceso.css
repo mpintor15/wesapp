@@ -32,19 +32,22 @@
 }
 
 /* ── Modal action buttons ─────────────────────────────────── */
+.usuarios-modal-actions {
+  flex-wrap: wrap;
+}
+
 .usuarios-modal-actions .btn {
   flex: 0 0 auto;
-  width: 170px;
-  max-width: 170px;
+  width: auto;
+  min-width: 130px;
+  max-width: 100%;
   min-height: 40px;
-  padding: 8px 10px;
+  padding: 8px 16px;
   border-radius: 10px;
   font-size: 0.9em;
 }
 
 .usuarios-modal-actions .btn-modal-clear {
-  width: 130px;
-  max-width: 130px;
   background: var(--color-surface);
   border: 1.5px solid var(--color-neutral-300);
   color: var(--color-neutral-700);

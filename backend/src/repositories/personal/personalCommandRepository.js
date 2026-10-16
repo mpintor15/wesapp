@@ -7,6 +7,7 @@ const insertColaborador = (
     fechaNacimiento,
     cargo,
     celular,
+    metodoPago,
     banco,
     numeroCuenta,
     sueldo,
@@ -21,13 +22,25 @@ const insertColaborador = (
       fecha_nacimiento,
       cargo,
       celular,
+      metodo_pago,
       banco,
       numero_cuenta,
       sueldo,
       estado
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     RETURNING *`,
-    [nombresCompletos, cedula, fechaNacimiento, cargo, celular, banco, numeroCuenta, sueldo, estado]
+    [
+      nombresCompletos,
+      cedula,
+      fechaNacimiento,
+      cargo,
+      celular,
+      metodoPago,
+      banco,
+      numeroCuenta,
+      sueldo,
+      estado,
+    ]
   );
 
 const findColaboradorEstadoSalida = (id, executor = db) =>

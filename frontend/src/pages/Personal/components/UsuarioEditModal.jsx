@@ -19,7 +19,6 @@ const UsuarioEditModal = ({
   isSaving,
   lockColaborador = false,
   onReenviarInvitacion,
-  onRevoke,
   ubicaciones,
   ubicacionesError,
   ubicacionesLoading,
@@ -160,16 +159,6 @@ const UsuarioEditModal = ({
             disabled={isSaving}
           >
             Reenviar invitación
-          </button>
-        ) : null}
-        {onRevoke ? (
-          <button
-            className="btn btn-destructive"
-            type="button"
-            onClick={onRevoke}
-            disabled={isSaving}
-          >
-            Revocar acceso
           </button>
         ) : null}
       </AppModal.Footer>

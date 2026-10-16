@@ -30,6 +30,7 @@ const {
   buildColaboradoresFilters,
   canAccessPersonalSensitiveFields,
   isValidEstadoColaborador,
+  isValidMetodoPago,
   normalizeEstadoColaborador,
   redactColaboradorSensitiveFields,
   stripSensitivePayloadFields,
@@ -82,15 +83,24 @@ const createColaborador = async (req, res) => {
     const canAccessSensitive = canAccessPersonalSensitiveFields(req.user.tipo_usuario);
     const { nombres_completos, cedula, fecha_nacimiento, cargo, celular, estado, ...rest } =
       req.body;
-    const { banco, numero_cuenta, sueldo } = stripSensitivePayloadFields(rest, canAccessSensitive);
+    const { metodo_pago, banco, numero_cuenta, sueldo } = stripSensitivePayloadFields(
+      rest,
+      canAccessSensitive
+    );
     const estadoNormalizado = estado ? String(estado).trim().toLowerCase() : 'activo';
     // Celular es obligatorio para cualquier rol autorizado a crear. Banco,
     // numero_cuenta y sueldo solo son obligatorios para quien puede verlos
     // y escribirlos (gerente/secretario) — un supervisor puede crear un
     // colaborador sin esos 3 campos, ya que nunca podría llenarlos.
     const celularNormalizado = typeof celular === 'string' ? celular.trim() : '';
-    const bancoNormalizado = typeof banco === 'string' ? banco.trim() : '';
-    const numeroCuentaNormalizado = typeof numero_cuenta === 'string' ? numero_cuenta.trim() : '';
+    const metodoPagoNormalizado = metodo_pago
+      ? String(metodo_pago).trim().toLowerCase()
+      : 'transferencia';
+    const esCheque = metodoPagoNormalizado === 'cheque';
+    // Con cheque no hay banco ni cuenta: se guardan vacíos aunque lleguen en el payload.
+    const bancoNormalizado = !esCheque && typeof banco === 'string' ? banco.trim() : '';
+    const numeroCuentaNormalizado =
+      !esCheque && typeof numero_cuenta === 'string' ? numero_cuenta.trim() : '';
 
     if (!nombres_completos || !cedula || !fecha_nacimiento || !cargo || !celularNormalizado) {
       return res.status(400).json({
@@ -99,17 +109,22 @@ const createColaborador = async (req, res) => {
       });
     }
 
+    if (!isValidMetodoPago(metodoPagoNormalizado)) {
+      throw createHttpError(400, 'El método de pago debe ser transferencia o cheque');
+    }
+
     if (
       canAccessSensitive &&
-      (!bancoNormalizado ||
-        !numeroCuentaNormalizado ||
+      ((!esCheque && (!bancoNormalizado || !numeroCuentaNormalizado)) ||
         sueldo === undefined ||
         sueldo === null ||
         sueldo === '')
     ) {
       return res.status(400).json({
         success: false,
-        message: 'Campos requeridos: banco, numero_cuenta, sueldo',
+        message: esCheque
+          ? 'Campos requeridos: sueldo'
+          : 'Campos requeridos: banco, numero_cuenta, sueldo',
       });
     }
 
@@ -140,6 +155,7 @@ const createColaborador = async (req, res) => {
       fechaNacimiento: fecha_nacimiento,
       cargo: cargo.trim(),
       celular: celularNormalizado,
+      metodoPago: canAccessSensitive ? metodoPagoNormalizado : 'transferencia',
       banco: bancoNormalizado || null,
       numeroCuenta: numeroCuentaNormalizado || null,
       sueldo: sueldoNormalizado ? sueldoNormalizado.value : null,
@@ -184,13 +200,19 @@ const updateColaborador = async (req, res) => {
       'estado',
       'fecha_salida',
       'salida_voluntaria',
-      ...(canAccessSensitive ? ['banco', 'numero_cuenta', 'sueldo'] : []),
+      ...(canAccessSensitive ? ['metodo_pago', 'banco', 'numero_cuenta', 'sueldo'] : []),
     ];
 
     const updates = [];
     const values = [];
 
+    const pasaACheque =
+      canAccessSensitive && String(req.body?.metodo_pago ?? '').toLowerCase() === 'cheque';
+
     allowedFields.forEach((field) => {
+      if (pasaACheque && (field === 'banco' || field === 'numero_cuenta')) {
+        return;
+      }
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         let value = req.body[field];
         if (field === 'sueldo' && value !== null && value !== undefined && value !== '') {
@@ -205,6 +227,12 @@ const updateColaborador = async (req, res) => {
         }
         if ((field === 'fecha_salida' || field === 'salida_voluntaria') && value === '') {
           value = null;
+        }
+        if (field === 'metodo_pago') {
+          value = String(value ?? '').toLowerCase();
+          if (!isValidMetodoPago(value)) {
+            throw createHttpError(400, 'El método de pago debe ser transferencia o cheque');
+          }
         }
         if (field === 'estado' && value !== null && value !== undefined && value !== '') {
           value = String(value).toLowerCase();
@@ -235,6 +263,10 @@ const updateColaborador = async (req, res) => {
       }
     });
 
+    // Pasar a cheque limpia banco y cuenta, para no dejar datos bancarios obsoletos.
+    if (pasaACheque) {
+      updates.push('banco = NULL', 'numero_cuenta = NULL');
+    }
     if (updates.length === 0) {
       return res.status(400).json({
         success: false,

@@ -1,7 +1,14 @@
-const { ESTADOS_COLABORADOR, PERSONAL_SENSITIVE_FIELDS } = require('./personal.constants');
+const {
+  ESTADOS_COLABORADOR,
+  METODOS_PAGO,
+  PERSONAL_SENSITIVE_FIELDS,
+} = require('./personal.constants');
 const { ROLES } = require('../../config/permissions');
 
 const ESTADOS_COLABORADOR_SET = new Set(ESTADOS_COLABORADOR);
+const METODOS_PAGO_SET = new Set(METODOS_PAGO);
+
+const isValidMetodoPago = (value) => METODOS_PAGO_SET.has(value);
 
 // Banco, número de cuenta y sueldo son datos sensibles de nómina: solo
 // gerente y secretario pueden verlos o modificarlos. El resto de roles con
@@ -99,6 +106,7 @@ const buildColaboradorExcelRow = (row, canAccessSensitive = true) => {
   }
   return {
     ...base,
+    metodo_pago: row.metodo_pago === 'cheque' ? 'Cheque' : 'Transferencia',
     banco: row.banco || '',
     numero_cuenta: row.numero_cuenta || '',
     sueldo: row.sueldo ? Number.parseFloat(row.sueldo) : '',
@@ -112,6 +120,7 @@ module.exports = {
   buildColaboradoresFilters,
   canAccessPersonalSensitiveFields,
   isValidEstadoColaborador,
+  isValidMetodoPago,
   normalizeEstadoColaborador,
   redactColaboradorSensitiveFields,
   stripSensitivePayloadFields,

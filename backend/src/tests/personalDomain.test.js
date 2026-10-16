@@ -56,6 +56,7 @@ describe('personal domain helpers', () => {
       fecha_nacimiento: '',
       cargo: 'Analista',
       celular: '',
+      metodo_pago: 'Transferencia',
       banco: '',
       numero_cuenta: '',
       sueldo: '',

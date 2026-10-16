@@ -155,7 +155,7 @@ const assertEligibleColaborador = async (executor, colaboradorId, currentUsuario
     throw createHttpError(400, 'El colaborador es requerido');
   }
   const result = await executor.query(
-    `SELECT c.id, c.estado, u.id AS usuario_id
+    `SELECT c.id, c.estado, c.nombres_completos, u.id AS usuario_id
      FROM colaboradores c
      LEFT JOIN usuarios u ON u.colaborador_id = c.id
      WHERE c.id = $1
@@ -175,23 +175,30 @@ const assertEligibleColaborador = async (executor, colaboradorId, currentUsuario
   ) {
     throw createHttpError(400, 'No se puede vincular un colaborador inactivo');
   }
+  return colaborador;
+};
+
+// El usuario hereda su nombre del colaborador vinculado: primera palabra = nombre, resto = apellido.
+const splitNombreCompleto = (nombresCompletos) => {
+  const [nombre, ...resto] = String(nombresCompletos || '')
+    .trim()
+    .split(/\s+/);
+  return { nombre, apellido: resto.join(' ') || nombre };
 };
 
 const createUsuario = async (req, res) => {
   try {
     const usuario = typeof req.body?.usuario === 'string' ? req.body.usuario.trim() : '';
-    const nombre = typeof req.body?.nombre === 'string' ? req.body.nombre.trim() : '';
-    const apellido = typeof req.body?.apellido === 'string' ? req.body.apellido.trim() : '';
     const tipoUsuario =
       typeof req.body?.tipo_usuario === 'string' ? req.body.tipo_usuario.trim().toLowerCase() : '';
     const colaboradorId = req.body?.colaborador_id;
     const hasAssignments = Object.prototype.hasOwnProperty.call(req.body || {}, 'ubicacion_ids');
     const ubicacionIds = req.body?.ubicacion_ids || [];
 
-    if (!usuario || !tipoUsuario || !nombre || !apellido || !colaboradorId) {
+    if (!usuario || !tipoUsuario || !colaboradorId) {
       return res.status(400).json({
         success: false,
-        message: 'Usuario, nombre, apellido, tipo de usuario y colaborador son requeridos',
+        message: 'Usuario, tipo de usuario y colaborador son requeridos',
       });
     }
 
@@ -207,7 +214,8 @@ const createUsuario = async (req, res) => {
 
     let createdUsuario;
     await db.transaction(async (client) => {
-      await assertEligibleColaborador(client, colaboradorId);
+      const colaborador = await assertEligibleColaborador(client, colaboradorId);
+      const { nombre, apellido } = splitNombreCompleto(colaborador.nombres_completos);
       const result = await client.query(
         `INSERT INTO usuarios
            (usuario, password_hash, nombre, apellido, tipo_usuario, colaborador_id, primer_login, activo)

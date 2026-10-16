@@ -10,6 +10,7 @@ export const EMPTY_COLABORADOR_FORM = {
   fecha_nacimiento: '',
   cargo: '',
   celular: '',
+  metodo_pago: 'transferencia',
   banco: '',
   numero_cuenta: '',
   sueldo: '',
@@ -46,6 +47,7 @@ export const getColaboradorFormData = (colaborador) => ({
   fecha_nacimiento: colaborador.fecha_nacimiento ? colaborador.fecha_nacimiento.split('T')[0] : '',
   cargo: colaborador.cargo || '',
   celular: colaborador.celular || '',
+  metodo_pago: colaborador.metodo_pago || 'transferencia',
   banco: colaborador.banco || '',
   numero_cuenta: colaborador.numero_cuenta || '',
   sueldo: colaborador.sueldo ?? '',
@@ -80,8 +82,10 @@ export const validateColaboradorForm = (
     if (!formData.celular.trim()) errors.celular = 'Ingresa el celular';
 
     if (canAccessSensitive) {
-      if (!formData.banco.trim()) errors.banco = 'Ingresa el banco';
-      if (!formData.numero_cuenta.trim()) errors.numero_cuenta = 'Ingresa el número de cuenta';
+      if (formData.metodo_pago !== 'cheque') {
+        if (!formData.banco.trim()) errors.banco = 'Ingresa el banco';
+        if (!formData.numero_cuenta.trim()) errors.numero_cuenta = 'Ingresa el número de cuenta';
+      }
       const sueldoValue = Number(formData.sueldo);
       if (formData.sueldo === '' || formData.sueldo === null || formData.sueldo === undefined) {
         errors.sueldo = 'Ingresa el sueldo';
@@ -94,8 +98,14 @@ export const validateColaboradorForm = (
   return errors;
 };
 
+export const METODOS_PAGO = [
+  { value: 'transferencia', label: 'Transferencia bancaria' },
+  { value: 'cheque', label: 'Cheque' },
+];
+
 export const buildColaboradorPayload = (formData) => ({
   ...formData,
+  ...(formData.metodo_pago === 'cheque' ? { banco: '', numero_cuenta: '' } : {}),
   sueldo: formData.sueldo ? Number.parseFloat(formData.sueldo) : null,
   fecha_salida: formData.estado === 'inactivo' ? formData.fecha_salida : null,
   salida_voluntaria: formData.estado === 'inactivo' ? formData.salida_voluntaria === 'true' : null,

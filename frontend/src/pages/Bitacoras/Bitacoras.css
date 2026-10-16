@@ -876,13 +876,23 @@
 
 .bitacoras-visits-table {
   width: 100%;
-  min-width: 900px;
+  min-width: 760px;
   table-layout: auto;
 }
 
+/* Sin ancho mínimo por columna: la tabla se ajusta al contenedor (el texto
+   largo baja de línea) para que las acciones queden visibles sin scroll. */
 .bitacoras-visits-table th,
 .bitacoras-visits-table td {
-  min-width: 125px;
+  min-width: 0;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.bitacoras-visits-table th {
+  letter-spacing: 0.04em;
+  white-space: normal;
+  overflow-wrap: normal;
 }
 
 .bitacoras-visits-table th:last-child,
@@ -899,9 +909,8 @@
   text-overflow: clip !important;
 }
 
-.bitacoras-visits-table th,
 .bitacoras-visits-table td {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .bitacoras-visits-table .bitacoras-visit-state {
@@ -909,8 +918,8 @@
 }
 
 .bitacoras-visits-table .bitacoras-cell-observacion {
-  width: 220px;
-  min-width: 220px;
+  width: 200px;
+  min-width: 110px;
 }
 
 .bitacoras-visits-table td.bitacoras-visit-state .badge {

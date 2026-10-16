@@ -53,7 +53,7 @@ const PersonalTable = ({
             </th>
             <th>Estado</th>
             <th>Contacto</th>
-            {canViewSensitive ? <th>Banco / Cuenta</th> : null}
+            {canViewSensitive ? <th>Pago</th> : null}
             {canViewSensitive ? (
               <th>
                 <SortButton field="sueldo" label="Sueldo" onSort={onSort} tableSort={tableSort} />
@@ -88,7 +88,7 @@ const PersonalTable = ({
                 {canViewSensitive ? (
                   <td>
                     <div className="bank-cell">
-                      <span>{c.banco || '—'}</span>
+                      <span>{c.metodo_pago === 'cheque' ? 'Cheque' : c.banco || '—'}</span>
                       {c.numero_cuenta ? <small>{c.numero_cuenta}</small> : null}
                     </div>
                   </td>
