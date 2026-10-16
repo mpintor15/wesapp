@@ -194,7 +194,20 @@ if (config.nodeEnv === 'production') {
   const buildPath = path.join(__dirname, '../../frontend/build');
 
   // Servir archivos estáticos del build (JS, CSS, imágenes, etc.)
-  app.use(express.static(buildPath));
+  // Los archivos de /static llevan hash en el nombre (CRA), así que pueden
+  // cachearse un año sin revalidar; index.html debe revalidarse siempre para
+  // apuntar al bundle más reciente tras un despliegue.
+  app.use(
+    express.static(buildPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.includes(`${path.sep}static${path.sep}`)) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else if (filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      },
+    })
+  );
 
   // Cualquier ruta no-API devuelve index.html para que React Router la maneje
   app.get('*', (req, res) => {
