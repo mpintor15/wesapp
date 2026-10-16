@@ -35,34 +35,6 @@ const UsuarioCreateModal = ({
     <AppModal.Header />
     <form onSubmit={onSubmit}>
       <AppModal.Body className="usuarios-form-grid">
-        <div className="form-group">
-          <label htmlFor="u-nombre">
-            Nombre <span className="required">*</span>
-          </label>
-          <input
-            id="u-nombre"
-            value={formData.nombre}
-            onChange={(e) => onChange('nombre', e.target.value)}
-            autoComplete="off"
-            required
-          />
-          {createErrors.nombre ? <span className="field-error">{createErrors.nombre}</span> : null}
-        </div>
-        <div className="form-group">
-          <label htmlFor="u-apellido">
-            Apellido <span className="required">*</span>
-          </label>
-          <input
-            id="u-apellido"
-            value={formData.apellido}
-            onChange={(e) => onChange('apellido', e.target.value)}
-            autoComplete="off"
-            required
-          />
-          {createErrors.apellido ? (
-            <span className="field-error">{createErrors.apellido}</span>
-          ) : null}
-        </div>
         <div className="form-group usuarios-form-grid__full">
           <label htmlFor="u-colaborador">
             Colaborador <span className="required">*</span>

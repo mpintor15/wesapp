@@ -130,8 +130,8 @@ describe('personalController — acceso a datos sensibles por rol', () => {
 
       expect(res.status).not.toHaveBeenCalledWith(400);
       const [, values] = db.query.mock.calls[0];
-      // Orden del INSERT: [..., celular, banco, numero_cuenta, sueldo, estado]
-      const [banco, numeroCuenta, sueldo] = values.slice(5, 8);
+      // Orden del INSERT: [..., celular, metodo_pago, banco, numero_cuenta, sueldo, estado]
+      const [banco, numeroCuenta, sueldo] = values.slice(6, 9);
       if (canAccessSensitive) {
         expect(banco).toBe('Banco del Pacífico');
         expect(numeroCuenta).toBe('999999');
@@ -281,7 +281,7 @@ describe('personalController.createColaborador — campos obligatorios por rol',
 
     expect(res.status).not.toHaveBeenCalledWith(400);
     const [, values] = db.query.mock.calls[0];
-    const [celular, banco, numeroCuenta, sueldo] = values.slice(4, 8);
+    const [celular, , banco, numeroCuenta, sueldo] = values.slice(4, 9);
     expect(celular).toBe('0987654321');
     expect(banco).toBeNull();
     expect(numeroCuenta).toBeNull();
@@ -311,9 +311,68 @@ describe('personalController.createColaborador — campos obligatorios por rol',
 
     expect(res.status).not.toHaveBeenCalledWith(400);
     const [, values] = db.query.mock.calls[0];
-    const [banco, numeroCuenta, sueldo] = values.slice(5, 8);
+    const [banco, numeroCuenta, sueldo] = values.slice(6, 9);
     expect(banco).toBeNull();
     expect(numeroCuenta).toBeNull();
     expect(sueldo).toBeNull();
+  });
+
+  test('gerente: con cheque no exige banco ni cuenta y los guarda vacíos', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 8, nombres_completos: 'Nuevo Colaborador' }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await createColaborador(
+      mockReq({
+        body: {
+          ...baseBody,
+          celular: '0987654321',
+          metodo_pago: 'cheque',
+          banco: 'Banco ignorado',
+          numero_cuenta: '123',
+          sueldo: 500,
+        },
+        user: { id: 9, tipo_usuario: 'gerente' },
+      }),
+      res
+    );
+
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    const [, values] = db.query.mock.calls[0];
+    const [metodoPago, banco, numeroCuenta, sueldo] = values.slice(5, 9);
+    expect(metodoPago).toBe('cheque');
+    expect(banco).toBeNull();
+    expect(numeroCuenta).toBeNull();
+    expect(sueldo).toBe(500);
+  });
+
+  test('gerente: con transferencia sigue exigiendo banco y cuenta', async () => {
+    const res = mockRes();
+
+    await createColaborador(
+      mockReq({
+        body: { ...baseBody, celular: '0987654321', metodo_pago: 'transferencia', sueldo: 500 },
+        user: { id: 9, tipo_usuario: 'gerente' },
+      }),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  test('gerente: rechaza un método de pago inválido', async () => {
+    const res = mockRes();
+
+    await createColaborador(
+      mockReq({
+        body: { ...baseBody, celular: '0987654321', metodo_pago: 'efectivo', sueldo: 500 },
+        user: { id: 9, tipo_usuario: 'gerente' },
+      }),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 });

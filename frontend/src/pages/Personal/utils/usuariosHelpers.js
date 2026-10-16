@@ -10,8 +10,6 @@ export const TIPOS_USUARIO = [
 export const EMPTY_USUARIOS_FILTERS = { search: '', tipo_usuario: '', activo: '' };
 
 export const EMPTY_CREATE_USER_FORM = {
-  nombre: '',
-  apellido: '',
   usuario: '',
   tipo_usuario: '',
   colaborador_id: '',
@@ -44,12 +42,25 @@ export const fullName = (usuario) =>
 
 export const validateCreateForm = (data) => {
   const errors = {};
-  if (!data.nombre.trim()) errors.nombre = 'Ingresa el nombre';
-  if (!data.apellido.trim()) errors.apellido = 'Ingresa el apellido';
   if (!data.usuario.trim()) errors.usuario = 'Ingresa el usuario';
   if (!data.tipo_usuario) errors.tipo_usuario = 'Selecciona el tipo de usuario';
   if (!data.colaborador_id) errors.colaborador_id = 'Selecciona un colaborador';
   return errors;
+};
+
+// "Martín Pinto" -> "MPinto". Con 4+ palabras (nombres + apellidos) toma la 1.ª y la 3.ª.
+export const suggestUsuario = (nombresCompletos) => {
+  const clean = (word) => word.normalize('NFD').replace(/[^A-Za-z0-9]/g, '');
+  const words = String(nombresCompletos || '')
+    .trim()
+    .split(/\s+/)
+    .map(clean)
+    .filter(Boolean);
+  if (words.length === 0) return '';
+  const nombre = words[0];
+  const apellido = words.length >= 4 ? words[2] : words[1];
+  if (!apellido) return nombre;
+  return `${nombre[0].toUpperCase()}${apellido[0].toUpperCase()}${apellido.slice(1).toLowerCase()}`;
 };
 
 export const sortByField = (rows, field, direction) => {

@@ -450,14 +450,6 @@ const usuarioCreateSchema = z.object({
     .string({ required_error: 'Usuario es requerido' })
     .min(3, 'Usuario debe tener al menos 3 caracteres')
     .max(50, 'Usuario no puede exceder 50 caracteres'),
-  nombre: z
-    .string({ required_error: 'Nombre es requerido' })
-    .min(1, 'Nombre no puede estar vacío')
-    .max(100, 'Nombre no puede exceder 100 caracteres'),
-  apellido: z
-    .string({ required_error: 'Apellido es requerido' })
-    .min(1, 'Apellido no puede estar vacío')
-    .max(100, 'Apellido no puede exceder 100 caracteres'),
   tipo_usuario: z.enum(ALLOWED_ROLES, {
     errorMap: () => ({ message: `Tipo debe ser uno de: ${ALLOWED_ROLES.join(', ')}` }),
   }),
@@ -610,6 +602,7 @@ const colaboradorCreateSchema = z.object({
     .max(100, 'Cargo no puede exceder 100 caracteres'),
   fecha_nacimiento: dateString('Fecha de nacimiento'),
   celular: optionalTrimmedString(20, 'Celular'),
+  metodo_pago: z.enum(['transferencia', 'cheque']).optional(),
   banco: optionalTrimmedString(100, 'Banco'),
   numero_cuenta: optionalTrimmedString(100, 'Número de cuenta'),
   sueldo: optionalPositiveNumber('Sueldo').nullable(),

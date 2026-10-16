@@ -43,6 +43,7 @@ import {
   buildUsuarioPayload,
   buildInvitationMessage,
   EMPTY_CREATE_USER_FORM,
+  suggestUsuario,
   EMPTY_EDIT_USER_FORM,
   getEditUserFormData,
   validateCreateForm,
@@ -93,8 +94,6 @@ const Personal = () => {
   const [accesoUsuarioId, setAccesoUsuarioId] = useState(null);
   const [invitationData, setInvitationData] = useState(null);
   const [invitationCopied, setInvitationCopied] = useState(false);
-  const [revokeAccesoTarget, setRevokeAccesoTarget] = useState(null);
-  const [isRevokingAcceso, setIsRevokingAcceso] = useState(false);
   const { isSubmitting: isCreatingAcceso, withSubmit: withCreateAccesoSubmit } = useSubmitState();
   const { isSubmitting: isSavingAcceso, withSubmit: withSaveAccesoSubmit } = useSubmitState();
 
@@ -199,7 +198,6 @@ const Personal = () => {
       canViewSensitive: [ROLES.GERENTE, ROLES.SECRETARIO].includes(user?.tipo_usuario),
       canCreateAcceso: can(user, PERMISSIONS.USUARIOS_CREAR),
       canEditAcceso: can(user, PERMISSIONS.USUARIOS_EDITAR),
-      canDeleteAcceso: can(user, PERMISSIONS.USUARIOS_ELIMINAR),
       canManageAssignments: can(user, PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR),
     }),
     [user]
@@ -351,6 +349,7 @@ const Personal = () => {
       setAccesoCreateData({
         ...EMPTY_CREATE_USER_FORM,
         colaborador_id: String(colaborador.id),
+        usuario: suggestUsuario(colaborador.nombres_completos),
       });
       setAccesoCreateErrors({});
       setShowAccesoCreateModal(true);
@@ -423,29 +422,6 @@ const Personal = () => {
       showToast(result.message, 'error');
     }
   });
-
-  const handleRevokeAccesoConfirmed = async () => {
-    if (!revokeAccesoTarget || isRevokingAcceso) return;
-    if (!permissions.canDeleteAcceso) {
-      showToast('No tienes permisos para revocar accesos', 'error');
-      setRevokeAccesoTarget(null);
-      return;
-    }
-    setIsRevokingAcceso(true);
-    try {
-      const result = await usuariosService.deleteUsuario(revokeAccesoTarget.usuarioId);
-      if (result.success) {
-        showToast('Acceso revocado', 'success');
-        setRevokeAccesoTarget(null);
-        setShowAccesoEditModal(false);
-        refreshColaboradores();
-      } else {
-        showToast(getVisibleErrorMessage(result, 'Error al revocar el acceso'), 'error');
-      }
-    } finally {
-      setIsRevokingAcceso(false);
-    }
-  };
 
   const handleReenviarInvitacionAcceso = async () => {
     if (!accesoUsuarioId) return;
@@ -643,15 +619,6 @@ const Personal = () => {
               ? handleReenviarInvitacionAcceso
               : undefined
           }
-          onRevoke={
-            permissions.canDeleteAcceso
-              ? () =>
-                  setRevokeAccesoTarget({
-                    usuarioId: accesoUsuarioId,
-                    nombreCompleto: accesoColaborador.nombres_completos,
-                  })
-              : undefined
-          }
           selectedUsuario={{ nombre: accesoEditData.nombre, apellido: accesoEditData.apellido }}
         />
       )}
@@ -665,24 +632,6 @@ const Personal = () => {
           onCopy={handleCopyInvitation}
         />
       )}
-
-      {/* Revocar acceso */}
-      <ConfirmDialog
-        isOpen={!!revokeAccesoTarget}
-        title="Revocar acceso"
-        message={
-          revokeAccesoTarget
-            ? `Se revocará el acceso al sistema de "${revokeAccesoTarget.nombreCompleto}". El colaborador se conserva; solo se elimina su usuario.`
-            : ''
-        }
-        confirmText="Revocar acceso"
-        processingText="Revocando..."
-        cancelText="Cancelar"
-        variant="danger"
-        isSubmitting={isRevokingAcceso}
-        onConfirm={handleRevokeAccesoConfirmed}
-        onCancel={() => setRevokeAccesoTarget(null)}
-      />
 
       {/* Export modal */}
       {showExportModal && (

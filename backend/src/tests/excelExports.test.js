@@ -266,15 +266,17 @@ describe('excel export controllers', () => {
       'Fecha Nacimiento',
       'Cargo',
       'Celular',
+      'Método de pago',
       'Banco',
       'Cuenta',
       'Sueldo',
       'Estado',
     ]);
     expect(worksheet.getCell('A2').value).toBe('María José Núñez');
-    expect(worksheet.getCell('F2').value).toBe('Banco Pichincha');
-    expect(worksheet.getCell('H2').value).toBe(789.45);
-    expect(worksheet.getCell('H2').numFmt).toBe('$#,##0.00');
+    expect(worksheet.getCell('F2').value).toBe('Transferencia');
+    expect(worksheet.getCell('G2').value).toBe('Banco Pichincha');
+    expect(worksheet.getCell('I2').value).toBe(789.45);
+    expect(worksheet.getCell('I2').numFmt).toBe('$#,##0.00');
   });
 
   test('exportColaboradoresExcel oculta banco, cuenta y sueldo para roles sin acceso a datos sensibles', async () => {

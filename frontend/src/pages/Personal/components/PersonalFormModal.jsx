@@ -1,5 +1,6 @@
 import AppModal from '../../../components/AppModal';
 import FilterDateInput from '../../../components/FilterDateInput';
+import { METODOS_PAGO } from '../utils/personalHelpers';
 
 const PersonalFormModal = ({
   canViewSensitive = true,
@@ -87,6 +88,25 @@ const PersonalFormModal = ({
           </div>
           {canViewSensitive ? (
             <div className="form-group">
+              <label htmlFor="p-metodo-pago">
+                Método de pago <span className="required">*</span>
+              </label>
+              <select
+                id="p-metodo-pago"
+                name="metodo_pago"
+                value={formData.metodo_pago}
+                onChange={onChange}
+              >
+                {METODOS_PAGO.map((metodo) => (
+                  <option key={metodo.value} value={metodo.value}>
+                    {metodo.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          {canViewSensitive && formData.metodo_pago !== 'cheque' ? (
+            <div className="form-group">
               <label htmlFor="p-banco">
                 Banco <span className="required">*</span>
               </label>
@@ -94,7 +114,7 @@ const PersonalFormModal = ({
               {formErrors.banco ? <span className="field-error">{formErrors.banco}</span> : null}
             </div>
           ) : null}
-          {canViewSensitive ? (
+          {canViewSensitive && formData.metodo_pago !== 'cheque' ? (
             <div className="form-group">
               <label htmlFor="p-cuenta">
                 Número de cuenta <span className="required">*</span>

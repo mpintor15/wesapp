@@ -172,7 +172,7 @@ describe('Personal — gestión de acceso e integración con Usuarios', () => {
     });
 
     expect(usuariosService.getUsuarioByColaborador).toHaveBeenCalledWith(2);
-    expect(container.textContent).toContain('Revocar acceso');
+    expect(container.textContent).not.toContain('Revocar acceso');
   });
 
   test('un rol sin acceso a datos sensibles no ve columnas de Banco/Cuenta ni Sueldo', async () => {
@@ -185,7 +185,7 @@ describe('Personal — gestión de acceso e integración con Usuarios', () => {
 
     const { container } = await render();
 
-    expect(container.textContent).not.toContain('Banco / Cuenta');
+    expect(container.textContent).not.toContain('Pago');
     expect(container.textContent).not.toContain('Banco Pichincha');
     expect(container.textContent).not.toContain('2200123456');
   });

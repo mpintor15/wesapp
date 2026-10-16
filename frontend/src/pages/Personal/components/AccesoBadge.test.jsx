@@ -19,15 +19,15 @@ describe('AccesoBadge', () => {
     expect(container.querySelector('.badge-inactive')).toBeTruthy();
   });
 
-  test('usuario pendiente de primer login muestra "Con acceso"', () => {
+  test('usuario pendiente de primer login muestra "Pendiente"', () => {
     const container = renderBadge({
       tiene_usuario: true,
       pendiente: true,
       activo: true,
       tipo_usuario: 'guardia',
     });
-    expect(container.textContent).toBe('Con acceso');
-    expect(container.querySelector('.badge-active')).toBeTruthy();
+    expect(container.textContent).toBe('Pendiente');
+    expect(container.querySelector('.badge-pending')).toBeTruthy();
   });
 
   test('usuario activo muestra "Con acceso" sin importar el rol', () => {

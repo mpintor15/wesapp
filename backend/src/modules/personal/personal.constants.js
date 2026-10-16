@@ -1,8 +1,14 @@
 const ESTADOS_COLABORADOR = Object.freeze(['activo', 'inactivo']);
+const METODOS_PAGO = Object.freeze(['transferencia', 'cheque']);
 
 // Solo gerente y secretario pueden ver o modificar estos datos de nómina
 // (ver personal.domain.js#canAccessPersonalSensitiveFields).
-const PERSONAL_SENSITIVE_FIELDS = Object.freeze(['banco', 'numero_cuenta', 'sueldo']);
+const PERSONAL_SENSITIVE_FIELDS = Object.freeze([
+  'metodo_pago',
+  'banco',
+  'numero_cuenta',
+  'sueldo',
+]);
 
 const COLABORADORES_EXCEL_COLUMNS_BASE = Object.freeze([
   { header: 'Nombres', key: 'nombres_completos', width: 30 },
@@ -13,6 +19,7 @@ const COLABORADORES_EXCEL_COLUMNS_BASE = Object.freeze([
 ]);
 
 const COLABORADORES_EXCEL_COLUMNS_SENSITIVE = Object.freeze([
+  { header: 'Método de pago', key: 'metodo_pago', width: 16 },
   { header: 'Banco', key: 'banco', width: 20 },
   { header: 'Cuenta', key: 'numero_cuenta', width: 20 },
   { header: 'Sueldo', key: 'sueldo', width: 14, numFmt: '$#,##0.00' },
@@ -36,6 +43,7 @@ const getColaboradoresExcelColumns = (canAccessSensitive) =>
 module.exports = {
   COLABORADORES_EXCEL_COLUMNS,
   ESTADOS_COLABORADOR,
+  METODOS_PAGO,
   getColaboradoresExcelColumns,
   PERSONAL_SENSITIVE_FIELDS,
 };
