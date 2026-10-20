@@ -7,11 +7,11 @@ import {
   getColaboradorSearchText,
   getUbicacionLabel,
   getUbicacionSearchText,
-  TIPOS_USUARIO,
 } from '../utils/usuariosHelpers';
 
 const UsuarioEditModal = ({
   canManageAssignments,
+  tipoOptions = [],
   colaboradores,
   colaboradoresError,
   colaboradoresLoading,
@@ -91,7 +91,7 @@ const UsuarioEditModal = ({
             onChange={(e) => onChange('tipo_usuario', e.target.value)}
             required
           >
-            {TIPOS_USUARIO.map((tipo) => (
+            {tipoOptions.map((tipo) => (
               <option key={tipo.value} value={tipo.value}>
                 {tipo.label}
               </option>

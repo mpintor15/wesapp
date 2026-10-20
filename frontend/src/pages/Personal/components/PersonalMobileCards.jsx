@@ -4,6 +4,7 @@ const PersonalMobileCards = ({
   canDelete,
   canEdit,
   canManageAcceso,
+  canManageAccesoOf = () => true,
   canViewSensitive,
   colaboradores,
   onDelete,
@@ -58,7 +59,7 @@ const PersonalMobileCards = ({
           </div>
         </dl>
         <div className="record-card-actions">
-          {canManageAcceso ? (
+          {canManageAcceso && canManageAccesoOf(colaborador) ? (
             <button
               className="btn btn-neutral btn-sm"
               onClick={() => onManageAcceso(colaborador)}

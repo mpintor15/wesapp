@@ -18,7 +18,9 @@ const countActiveGerentes = async (roleGerente, executor = db) => {
 
 const buildUsuariosFilters = ({ search, tipoUsuario, colaboradorId, activo }) => {
   const params = [];
-  const conditions = [];
+  // Los usuarios de portal se administran desde Clientes, no desde Personal.
+  // eslint-disable-next-line quotes -- prettier prefers double quotes here to avoid escaping
+  const conditions = ["u.tipo_usuario <> 'cliente'"];
 
   if (search) {
     params.push(`%${search}%`);

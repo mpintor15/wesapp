@@ -52,6 +52,51 @@ const clientesService = {
     }
   },
 
+  async getAccesoPortal(id) {
+    try {
+      const response = await api.get(`/clientes/${id}/acceso-portal`);
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener el acceso del cliente');
+    }
+  },
+
+  async createAccesoPortal(id, usuario) {
+    try {
+      const response = await api.post(`/clientes/${id}/acceso-portal`, { usuario });
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al crear el acceso del cliente');
+    }
+  },
+
+  async setAccesoPortalActivo(id, activo) {
+    try {
+      const response = await api.patch(`/clientes/${id}/acceso-portal`, { activo });
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al actualizar el acceso del cliente');
+    }
+  },
+
+  async resetAccesoPortal(id) {
+    try {
+      const response = await api.post(`/clientes/${id}/acceso-portal/restablecer`, {});
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al restablecer la contraseña del cliente');
+    }
+  },
+
+  async deleteAccesoPortal(id) {
+    try {
+      const response = await api.delete(`/clientes/${id}/acceso-portal`);
+      return response.data;
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al eliminar el acceso del cliente');
+    }
+  },
+
   async deleteCliente(id) {
     try {
       const response = await api.delete(`/clientes/${id}`);

@@ -40,9 +40,22 @@ const findVisibleLocation = async ({ locationId, hasGlobalScope, userId, executo
 const buildScopeCondition = ({
   hasGlobalScope,
   userId,
+  clienteId,
   params,
   locationExpression = 'br.ubicacion_id',
 }) => {
+  // Portal de clientes: solo las urbanizaciones que pertenecen a su cliente.
+  if (clienteId) {
+    params.push(clienteId);
+    return `EXISTS (
+    SELECT 1
+    FROM ubicaciones scope_ub
+    WHERE scope_ub.id = ${locationExpression}
+      AND scope_ub.cliente_id = $${params.length}
+      AND scope_ub.tipo_punto = 'URBANIZACION'
+  )`;
+  }
+
   if (hasGlobalScope) {
     return undefined;
   }
@@ -762,12 +775,13 @@ const insertVisitGroupResponses = async ({ client, visitId, formVersionId, group
   }
 };
 
-const buildVisitFilters = ({ filters, hasGlobalScope, userId }) => {
+const buildVisitFilters = ({ filters, hasGlobalScope, userId, clienteId }) => {
   const params = [];
   const conditions = [];
   const scopeCondition = buildScopeCondition({
     hasGlobalScope,
     userId,
+    clienteId,
     params,
     locationExpression: 'bv.ubicacion_id',
   });
@@ -831,8 +845,15 @@ const buildVisitFilters = ({ filters, hasGlobalScope, userId }) => {
   };
 };
 
-const findVisits = async ({ filters, hasGlobalScope, userId, pagination, executor = db }) => {
-  const { params, where } = buildVisitFilters({ filters, hasGlobalScope, userId });
+const findVisits = async ({
+  filters,
+  hasGlobalScope,
+  userId,
+  clienteId,
+  pagination,
+  executor = db,
+}) => {
+  const { params, where } = buildVisitFilters({ filters, hasGlobalScope, userId, clienteId });
   const dataParams = [...params, pagination.pageSize, pagination.offset];
   const limitIndex = dataParams.length - 1;
   const offsetIndex = dataParams.length;
@@ -925,11 +946,12 @@ const findHistoryAutores = async ({ hasGlobalScope, userId, executor = db }) => 
   return result.rows;
 };
 
-const findVisitCreators = async ({ hasGlobalScope, userId, executor = db }) => {
+const findVisitCreators = async ({ hasGlobalScope, userId, clienteId, executor = db }) => {
   const params = [];
   const scopeCondition = buildScopeCondition({
     hasGlobalScope,
     userId,
+    clienteId,
     params,
     locationExpression: 'bv.ubicacion_id',
   });
@@ -1017,12 +1039,13 @@ const cancelVisit = async ({
   return result.rows[0];
 };
 
-const findVisibleLocations = async ({ hasGlobalScope, userId, executor = db }) => {
+const findVisibleLocations = async ({ hasGlobalScope, userId, clienteId, executor = db }) => {
   const params = [];
   const conditions = [];
   const scopeCondition = buildScopeCondition({
     hasGlobalScope,
     userId,
+    clienteId,
     params,
     locationExpression: 'u.id',
   });

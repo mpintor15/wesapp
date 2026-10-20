@@ -31,6 +31,7 @@ const bitacorasRoutes = require('./routes/bitacoras.routes');
 const cuentasRoutes = require('./routes/cuentas.routes');
 const clientesRoutes = require('./routes/clientes.routes');
 const inventarioRoutes = require('./routes/inventario.routes');
+const portalRoutes = require('./routes/portal.routes');
 const personalRoutes = require('./routes/personal.routes');
 const usuariosRoutes = require('./routes/usuarios.routes');
 
@@ -172,6 +173,9 @@ app.use('/api/inventario', inventarioRoutes);
 app.use('/api/personal', personalRoutes);
 
 // Rutas de usuarios
+
+// Rutas del portal de clientes (solo lectura)
+app.use('/api/portal', portalRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 
 // ======================

@@ -6,11 +6,11 @@ import {
   getColaboradorSearchText,
   getUbicacionLabel,
   getUbicacionSearchText,
-  TIPOS_USUARIO,
 } from '../utils/usuariosHelpers';
 
 const UsuarioCreateModal = ({
   canManageAssignments,
+  tipoOptions = [],
   colaboradores,
   colaboradoresError,
   colaboradoresLoading,
@@ -88,7 +88,7 @@ const UsuarioCreateModal = ({
             <option value="" disabled>
               Seleccionar tipo de usuario
             </option>
-            {TIPOS_USUARIO.map((tipo) => (
+            {tipoOptions.map((tipo) => (
               <option key={tipo.value} value={tipo.value}>
                 {tipo.label}
               </option>

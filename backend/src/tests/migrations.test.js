@@ -1943,4 +1943,48 @@ describe('database migrations', () => {
       ]);
     });
   });
+  test('migration 106 permite usuarios cliente sin colaborador y con un solo usuario por cliente', async () => {
+    await withTempDatabase('wesapp_cliente_portal_106', async (pool) => {
+      await pool.query(await fs.readFile(schemaPath, 'utf8'));
+      await pool.query(
+        await fs.readFile(path.join(migrationsDir, '106_usuarios_cliente_portal.sql'), 'utf8')
+      );
+      const cliente = await pool.query(
+        // eslint-disable-next-line quotes -- prettier prefers double quotes here to avoid escaping
+        "INSERT INTO clientes (nombre) VALUES ('Cliente portal') RETURNING id"
+      );
+      const clienteId = cliente.rows[0].id;
+      const insertCliente = (usuario, id = clienteId) =>
+        pool.query(
+          `INSERT INTO usuarios (usuario, password_hash, tipo_usuario, cliente_id)
+           VALUES ($1, 'hash', 'cliente', $2)`,
+          [usuario, id]
+        );
+
+      await expect(insertCliente('portal1')).resolves.toMatchObject({ rowCount: 1 });
+      // Un solo usuario por cliente.
+      await expect(insertCliente('portal2')).rejects.toMatchObject({ code: '23505' });
+      // El rol cliente exige cliente_id.
+      await expect(insertCliente('portal3', null)).rejects.toMatchObject({ code: '23514' });
+      // Los demás roles no pueden tener cliente_id ni se vuelve obligatorio el colaborador para cliente.
+      const otro = await pool.query(
+        // eslint-disable-next-line quotes -- prettier prefers double quotes here to avoid escaping
+        "INSERT INTO clientes (nombre) VALUES ('Otro cliente') RETURNING id"
+      );
+      await expect(
+        pool.query(
+          `INSERT INTO usuarios (usuario, password_hash, tipo_usuario, cliente_id)
+           VALUES ('guardia-x', 'hash', 'guardia', $1)`,
+          [otro.rows[0].id]
+        )
+      ).rejects.toMatchObject({ code: '23514' });
+      // Un usuario de personal sigue necesitando colaborador.
+      await expect(
+        pool.query(
+          // eslint-disable-next-line quotes -- prettier prefers double quotes here to avoid escaping
+          "INSERT INTO usuarios (usuario, password_hash, tipo_usuario) VALUES ('sin-colab', 'hash', 'guardia')"
+        )
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
 });

@@ -153,11 +153,41 @@ describe('permission matrix', () => {
   });
 });
 
+describe('Personal, usuarios y acceso de clientes por rol', () => {
+  test('solo gerente y secretario crean colaboradores', () => {
+    expect(hasPermission('gerente', PERMISSIONS.PERSONAL_CREAR)).toBe(true);
+    expect(hasPermission('secretario', PERMISSIONS.PERSONAL_CREAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.PERSONAL_CREAR)).toBe(false);
+    expect(hasPermission('contador', PERMISSIONS.PERSONAL_CREAR)).toBe(false);
+  });
+
+  test('gerente, secretario y supervisor crean usuarios; solo gerente y secretario los editan', () => {
+    for (const role of ['gerente', 'secretario', 'supervisor']) {
+      expect(hasPermission(role, PERMISSIONS.USUARIOS_VER)).toBe(true);
+      expect(hasPermission(role, PERMISSIONS.USUARIOS_CREAR)).toBe(true);
+      expect(hasPermission(role, PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)).toBe(true);
+    }
+    expect(hasPermission('secretario', PERMISSIONS.USUARIOS_EDITAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.USUARIOS_EDITAR)).toBe(false);
+    expect(hasPermission('secretario', PERMISSIONS.USUARIOS_ELIMINAR)).toBe(false);
+    expect(hasPermission('supervisor', PERMISSIONS.USUARIOS_ELIMINAR)).toBe(false);
+  });
+
+  test('acceso de clientes al portal: crean los tres roles, gestionan gerente y secretario', () => {
+    for (const role of ['gerente', 'secretario', 'supervisor']) {
+      expect(hasPermission(role, PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(true);
+    }
+    expect(hasPermission('secretario', PERMISSIONS.CLIENTES_ACCESO_PORTAL_ADMINISTRAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.CLIENTES_ACCESO_PORTAL_ADMINISTRAR)).toBe(false);
+    expect(hasPermission('contador', PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(false);
+  });
+});
+
 describe('requirePermission', () => {
   test('permite acción concedida por rol actual', () => {
     const middleware = requirePermission(PERMISSIONS.PERSONAL_CREAR);
 
-    middleware(mockReq('supervisor'), mockRes(), next);
+    middleware(mockReq('secretario'), mockRes(), next);
 
     expect(next).toHaveBeenCalled();
   });
@@ -166,7 +196,7 @@ describe('requirePermission', () => {
     const middleware = requirePermission(PERMISSIONS.USUARIOS_VER);
     const res = mockRes();
 
-    middleware(mockReq('secretario'), res, next);
+    middleware(mockReq('contador'), res, next);
 
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json.mock.calls[0][0]).toEqual({
@@ -174,7 +204,7 @@ describe('requirePermission', () => {
       code: AUTH_ERROR_CODES.INSUFFICIENT_PERMISSIONS,
       message: AUTH_ERROR_MESSAGES[AUTH_ERROR_CODES.INSUFFICIENT_PERMISSIONS],
     });
-    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/USUARIOS_VER|secretario|stack/i);
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/USUARIOS_VER|contador|stack/i);
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -210,7 +240,7 @@ describe('requirePermission', () => {
   test('no depende de una propiedad permisos en el usuario', () => {
     const middleware = requirePermission(PERMISSIONS.PERSONAL_CREAR);
 
-    middleware(mockReq('supervisor', { permisos: undefined }), mockRes(), next);
+    middleware(mockReq('secretario', { permisos: undefined }), mockRes(), next);
 
     expect(next).toHaveBeenCalled();
   });

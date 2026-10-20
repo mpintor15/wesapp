@@ -175,6 +175,22 @@ describe('Personal — gestión de acceso e integración con Usuarios', () => {
     expect(container.textContent).not.toContain('Revocar acceso');
   });
 
+  test('supervisor puede crear accesos pero no ve el botón en colaboradores que ya tienen usuario', async () => {
+    useAuth.mockReturnValue({ user: { id: 4, tipo_usuario: 'supervisor', activo: true } });
+    personalService.getColaboradores.mockResolvedValue({
+      success: true,
+      data: [sinAcceso, conAcceso],
+      pagination: pagination({ totalItems: 2 }),
+    });
+
+    const { container } = await render();
+
+    expect(container.querySelector('[aria-label="Gestionar acceso de Ana Torres"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="Gestionar acceso de Beto Ruiz"]')).toBeNull();
+    // Tampoco puede crear colaboradores.
+    expect(container.textContent).not.toContain('Crear nuevo colaborador');
+  });
+
   test('un rol sin acceso a datos sensibles no ve columnas de Banco/Cuenta ni Sueldo', async () => {
     useAuth.mockReturnValue({ user: { id: 3, tipo_usuario: 'contador', activo: true } });
     personalService.getColaboradores.mockResolvedValue({

@@ -47,12 +47,16 @@ const renderProtectedRoute = (authState, options = {}) => {
       >
         <Routes>
           <Route path="/login" element={<LoginProbe />} />
+          <Route path="/" element={<div data-testid="home-page" />} />
           <Route path="/change-password" element={<div data-testid="change-password-page" />} />
           <Route path="/anterior" element={<div data-testid="previous-page" />} />
           <Route
             path="/protegida"
             element={
-              <ProtectedRoute requiredPermission={options.requiredPermission}>
+              <ProtectedRoute
+                requiredPermission={options.requiredPermission}
+                requiredRole={options.requiredRole}
+              >
                 <div data-testid="protected-content">Contenido protegido</div>
               </ProtectedRoute>
             }
@@ -198,5 +202,22 @@ describe('ProtectedRoute', () => {
     expect(view.get('protected-content')).toBeNull();
 
     view.unmount();
+  });
+
+  test('una vista exclusiva de un rol redirige al inicio a los demás roles', () => {
+    const wrongRole = renderProtectedRoute(
+      { isAuthenticated: true, user: { id: 1, tipo_usuario: 'gerente', primer_login: false } },
+      { requiredRole: 'cliente' }
+    );
+    expect(wrongRole.get('home-page')).not.toBeNull();
+    expect(wrongRole.get('protected-content')).toBeNull();
+    wrongRole.unmount();
+
+    const rightRole = renderProtectedRoute(
+      { isAuthenticated: true, user: { id: 2, tipo_usuario: 'cliente', primer_login: false } },
+      { requiredRole: 'cliente' }
+    );
+    expect(rightRole.get('protected-content')).not.toBeNull();
+    rightRole.unmount();
   });
 });

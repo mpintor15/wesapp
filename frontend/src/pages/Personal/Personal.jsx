@@ -45,6 +45,7 @@ import {
   EMPTY_CREATE_USER_FORM,
   suggestUsuario,
   EMPTY_EDIT_USER_FORM,
+  getAssignableTipos,
   getEditUserFormData,
   validateCreateForm,
 } from './utils/usuariosHelpers';
@@ -203,6 +204,13 @@ const Personal = () => {
     [user]
   );
   const canManageAcceso = permissions.canCreateAcceso || permissions.canEditAcceso;
+  // Crear un acceso y editar uno existente son permisos distintos (el supervisor solo crea).
+  const canManageAccesoOf = useCallback(
+    (colaborador) =>
+      colaborador.acceso?.tiene_usuario ? permissions.canEditAcceso : permissions.canCreateAcceso,
+    [permissions.canCreateAcceso, permissions.canEditAcceso]
+  );
+  const tipoOptions = useMemo(() => getAssignableTipos(user?.tipo_usuario), [user?.tipo_usuario]);
 
   const resetForm = () => setFormData(EMPTY_COLABORADOR_FORM);
 
@@ -367,6 +375,10 @@ const Personal = () => {
       showToast(result.message || 'No se pudo cargar el usuario del colaborador', 'error');
       return;
     }
+    if (!tipoOptions.some((tipo) => tipo.value === result.data.tipo_usuario)) {
+      showToast('No tienes permisos para editar este tipo de usuario', 'error');
+      return;
+    }
     setAccesoEditData(getEditUserFormData(result.data));
     setAccesoUsuarioId(result.data.id);
     setShowAccesoEditModal(true);
@@ -518,6 +530,7 @@ const Personal = () => {
               canDelete={permissions.canDelete}
               canEdit={permissions.canEdit}
               canManageAcceso={canManageAcceso}
+              canManageAccesoOf={canManageAccesoOf}
               canViewSensitive={permissions.canViewSensitive}
               colaboradores={sortedColaboradores}
               emptyMessage={emptyMessage}
@@ -534,6 +547,7 @@ const Personal = () => {
                 canDelete={permissions.canDelete}
                 canEdit={permissions.canEdit}
                 canManageAcceso={canManageAcceso}
+                canManageAccesoOf={canManageAccesoOf}
                 canViewSensitive={permissions.canViewSensitive}
                 colaboradores={sortedColaboradores}
                 onDelete={setConfirmTarget}
@@ -588,6 +602,7 @@ const Personal = () => {
           formData={accesoCreateData}
           isCreating={isCreatingAcceso}
           canManageAssignments={permissions.canManageAssignments}
+          tipoOptions={tipoOptions}
           lockColaborador
           ubicaciones={accesoUbicaciones}
           ubicacionesError={accesoUbicacionesError}
@@ -607,6 +622,7 @@ const Personal = () => {
           colaboradoresLoading={accesoColaboradoresLoading}
           isSaving={isSavingAcceso}
           canManageAssignments={permissions.canManageAssignments}
+          tipoOptions={tipoOptions}
           lockColaborador
           ubicaciones={accesoUbicaciones}
           ubicacionesError={accesoUbicacionesError}

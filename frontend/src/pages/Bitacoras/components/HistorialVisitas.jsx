@@ -28,6 +28,9 @@ const EMPTY_META = {
   hasPreviousPage: false,
 };
 
+// Referencia estable: loadVisits depende de ella y no debe recrearse en cada render.
+const fetchBitacorasVisitas = (params) => bitacorasService.getVisitas(params);
+
 const buildParams = (page, filters, sort) => ({
   ...(page ? { page } : {}),
   pageSize: PAGE_SIZE,
@@ -243,6 +246,9 @@ const HistorialVisitas = ({
   onFiltersChange,
   canCancelVisita = false,
   onTotalChange,
+  // Modo portal de clientes: misma tabla, sin acciones de escritura y con otra fuente de datos.
+  readOnly = false,
+  fetchVisitas = fetchBitacorasVisitas,
 }) => {
   const urbanizaciones = ubicaciones.filter((ubicacion) => ubicacion.tipo_punto === 'URBANIZACION');
   const [draftFilters, setDraftFilters] = useState({ ...EMPTY_FILTERS });
@@ -276,6 +282,7 @@ const HistorialVisitas = ({
   const dynamicColumns = useMemo(() => buildDynamicColumns(visits), [visits]);
   // El ancho de la columna de acciones sigue la fila con más botones visibles.
   const maxVisitActions = visits.reduce((max, visit) => {
+    if (readOnly) return 0;
     const { canRegisterExit, canAnular } = visitActionFlags(visit, canCancelVisita);
     return Math.max(max, Number(Boolean(canRegisterExit)) + Number(Boolean(canAnular)));
   }, 0);
@@ -298,7 +305,7 @@ const HistorialVisitas = ({
     requestSequenceRef.current = requestId;
     setLoading(true);
     setError('');
-    const result = await bitacorasService.getVisitas(buildParams(page, appliedFilters, sort));
+    const result = await fetchVisitas(buildParams(page, appliedFilters, sort));
     if (requestId !== requestSequenceRef.current) return;
     if (!result.success) {
       setError(getVisibleErrorMessage(result, 'No se pudo cargar el historial de visitas.'));
@@ -314,7 +321,7 @@ const HistorialVisitas = ({
     setMeta({ ...EMPTY_META, ...result.meta });
     setCreators(Array.isArray(result.filters?.creators) ? result.filters.creators : []);
     setLoading(false);
-  }, [appliedFilters, page, sort]);
+  }, [appliedFilters, fetchVisitas, page, sort]);
 
   const handleSort = (field) => {
     pinnedVisitRef.current = null;
@@ -627,7 +634,9 @@ const HistorialVisitas = ({
                       sort={sort}
                       onSort={handleSort}
                     />
-                    <th className={`app-col-actions ${actionsClass}`} aria-label="Acciones" />
+                    {readOnly ? null : (
+                      <th className={`app-col-actions ${actionsClass}`} aria-label="Acciones" />
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -645,15 +654,17 @@ const HistorialVisitas = ({
                       <td className="bitacoras-cell-observacion">
                         <ObservacionCell visit={visit} />
                       </td>
-                      <td className={`app-col-actions ${actionsClass}`}>
-                        <VisitActions
-                          visit={visit}
-                          closingId={closingId}
-                          onExitRequest={openExitModal}
-                          canCancel={canCancelVisita}
-                          onCancelRequest={openCancelModal}
-                        />
-                      </td>
+                      {readOnly ? null : (
+                        <td className={`app-col-actions ${actionsClass}`}>
+                          <VisitActions
+                            visit={visit}
+                            closingId={closingId}
+                            onExitRequest={openExitModal}
+                            canCancel={canCancelVisita}
+                            onCancelRequest={openCancelModal}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -700,18 +711,20 @@ const HistorialVisitas = ({
                         </dd>
                       </div>
                     ) : null}
-                    <div>
-                      <dt>Acciones</dt>
-                      <dd>
-                        <VisitActions
-                          visit={visit}
-                          closingId={closingId}
-                          onExitRequest={openExitModal}
-                          canCancel={canCancelVisita}
-                          onCancelRequest={openCancelModal}
-                        />
-                      </dd>
-                    </div>
+                    {readOnly ? null : (
+                      <div>
+                        <dt>Acciones</dt>
+                        <dd>
+                          <VisitActions
+                            visit={visit}
+                            closingId={closingId}
+                            onExitRequest={openExitModal}
+                            canCancel={canCancelVisita}
+                            onCancelRequest={openCancelModal}
+                          />
+                        </dd>
+                      </div>
+                    )}
                   </dl>
                 </article>
               ))}

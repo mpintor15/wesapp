@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AppModal from '../../components/AppModal';
 import CollapsibleFilters from '../../components/CollapsibleFilters';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import AccesoPortalModal from './components/AccesoPortalModal';
 import LoadingState from '../../components/LoadingState';
 import PaginationControls from '../../components/PaginationControls';
 import { useToast } from '../../context/ToastContext';
@@ -316,6 +317,8 @@ const ClientesCatalog = ({
     canCreateCliente = false,
     canEditCliente = false,
     canDeleteCliente = false,
+    canCreateAccesoPortal = false,
+    canManageAccesoPortal = false,
     canViewUbicaciones = false,
     canCreateUbicacion = false,
   } = permissions;
@@ -343,6 +346,7 @@ const ClientesCatalog = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [accesoPortalCliente, setAccesoPortalCliente] = useState(null);
 
   const sortedUbicaciones = useMemo(
     () =>
@@ -362,7 +366,20 @@ const ClientesCatalog = ({
       ),
     [filters]
   );
-  const hasActionsColumn = canEditCliente || canDeleteCliente;
+  // Solo los clientes con ubicaciones tipo urbanización pueden tener acceso al portal de visitas.
+  const urbanizacionClienteIds = useMemo(
+    () =>
+      new Set(
+        ubicaciones
+          .filter((ubicacion) => ubicacion.tipo_punto === 'URBANIZACION' && ubicacion.cliente_id)
+          .map((ubicacion) => Number(ubicacion.cliente_id))
+      ),
+    [ubicaciones]
+  );
+  const canViewAccesoPortal = canCreateAccesoPortal || canManageAccesoPortal;
+  const canShowAccesoPortal = (cliente) =>
+    canViewAccesoPortal && urbanizacionClienteIds.has(Number(cliente.id));
+  const hasActionsColumn = canEditCliente || canDeleteCliente || canViewAccesoPortal;
   const tableColSpan = 7 + (canViewUbicaciones ? 1 : 0) + (hasActionsColumn ? 1 : 0);
   const isGlobalEmpty = pagination.totalItems === 0 && !hasAppliedFilters;
   const emptyMessage = useMemo(() => {
@@ -779,6 +796,32 @@ const ClientesCatalog = ({
                         {hasActionsColumn && (
                           <td className="app-col-actions app-col-actions--double">
                             <div className="action-buttons app-table-actions">
+                              {canShowAccesoPortal(cliente) && (
+                                <button
+                                  className="action-btn action-btn-edit"
+                                  type="button"
+                                  onClick={() => setAccesoPortalCliente(cliente)}
+                                  title="Acceso al portal de visitas"
+                                  aria-label={`Acceso al portal de ${cliente.nombre}`}
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    width="14"
+                                    height="14"
+                                    aria-hidden="true"
+                                  >
+                                    <circle cx="7.5" cy="15.5" r="3.5" />
+                                    <path d="M10 13l9-9" />
+                                    <path d="M16 7l3 3" />
+                                    <path d="M14 9l2 2" />
+                                  </svg>
+                                </button>
+                              )}
                               {canEditCliente && (
                                 <button
                                   className="action-btn action-btn-edit"
@@ -876,6 +919,32 @@ const ClientesCatalog = ({
                     </dl>
                     {hasActionsColumn && (
                       <div className="record-card-actions configuracion-cliente-card-actions">
+                        {canShowAccesoPortal(cliente) && (
+                          <button
+                            className="action-btn action-btn-edit"
+                            type="button"
+                            onClick={() => setAccesoPortalCliente(cliente)}
+                            title="Acceso al portal de visitas"
+                            aria-label={`Acceso al portal de ${cliente.nombre}`}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              width="14"
+                              height="14"
+                              aria-hidden="true"
+                            >
+                              <circle cx="7.5" cy="15.5" r="3.5" />
+                              <path d="M10 13l9-9" />
+                              <path d="M16 7l3 3" />
+                              <path d="M14 9l2 2" />
+                            </svg>
+                          </button>
+                        )}
                         {canEditCliente && (
                           <button
                             className="action-btn action-btn-edit"
@@ -961,6 +1030,15 @@ const ClientesCatalog = ({
         onClose={closeModal}
         onSubmit={handleSubmit}
       />
+
+      {accesoPortalCliente ? (
+        <AccesoPortalModal
+          cliente={accesoPortalCliente}
+          canCreate={canCreateAccesoPortal}
+          canManage={canManageAccesoPortal}
+          onClose={() => setAccesoPortalCliente(null)}
+        />
+      ) : null}
 
       <ConfirmDialog
         isOpen={Boolean(deleteTarget)}

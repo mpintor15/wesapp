@@ -96,4 +96,28 @@ describe('authorization', () => {
       ])
     ).toBe(false);
   });
+
+  test('cliente solo puede consultar el portal de visitas', () => {
+    expect(can(user('cliente'), PERMISSIONS.PORTAL_VISITAS_VER)).toBe(true);
+    expect(can(user('cliente'), PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
+    expect(can(user('cliente'), PERMISSIONS.BITACORAS_REGISTRO_CREAR)).toBe(false);
+    expect(can(user('cliente'), PERMISSIONS.CLIENTES_VER)).toBe(false);
+    expect(can(user('cliente'), PERMISSIONS.CUENTAS_FACTURAS_VER)).toBe(false);
+    expect(can(user('cliente'), PERMISSIONS.USUARIOS_VER)).toBe(false);
+  });
+
+  test('personal, usuarios y acceso de clientes según el rol', () => {
+    expect(can(user('secretario'), PERMISSIONS.PERSONAL_CREAR)).toBe(true);
+    expect(can(user('supervisor'), PERMISSIONS.PERSONAL_CREAR)).toBe(false);
+
+    for (const role of ['gerente', 'secretario', 'supervisor']) {
+      expect(can(user(role), PERMISSIONS.USUARIOS_CREAR)).toBe(true);
+      expect(can(user(role), PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(true);
+    }
+    expect(can(user('secretario'), PERMISSIONS.USUARIOS_EDITAR)).toBe(true);
+    expect(can(user('supervisor'), PERMISSIONS.USUARIOS_EDITAR)).toBe(false);
+    expect(can(user('secretario'), PERMISSIONS.CLIENTES_ACCESO_PORTAL_ADMINISTRAR)).toBe(true);
+    expect(can(user('supervisor'), PERMISSIONS.CLIENTES_ACCESO_PORTAL_ADMINISTRAR)).toBe(false);
+    expect(can(user('contador'), PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(false);
+  });
 });

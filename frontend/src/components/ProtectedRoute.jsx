@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import logo from '../assets/branding/logo_hexagono.png';
 import './ProtectedRoute.css';
 
-const ProtectedRoute = ({ children, requiredPermission = undefined }) => {
+const ProtectedRoute = ({ children, requiredPermission = undefined, requiredRole = undefined }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, user, loading, hasPermission } = useAuth();
@@ -38,6 +38,11 @@ const ProtectedRoute = ({ children, requiredPermission = undefined }) => {
     return <Navigate to="/change-password" replace />;
   }
 
+  // Vistas exclusivas de un rol (p. ej. portal de clientes): los demás vuelven al inicio.
+  if (requiredRole && user?.tipo_usuario !== requiredRole) {
+    return <Navigate to="/" replace />;
+  }
+
   // Si requiere permiso específico o lista any y no lo tiene, mostrar error
   if (requiredPermission && !hasPermission(requiredPermission)) {
     return (
@@ -55,6 +60,7 @@ const ProtectedRoute = ({ children, requiredPermission = undefined }) => {
 ProtectedRoute.propTypes = {
   children: PropTypes.node.isRequired,
   requiredPermission: PropTypes.oneOfType([PropTypes.string, PropTypes.arrayOf(PropTypes.string)]),
+  requiredRole: PropTypes.string,
 };
 
 export default ProtectedRoute;

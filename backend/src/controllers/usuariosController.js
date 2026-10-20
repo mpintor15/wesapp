@@ -1,5 +1,4 @@
 const bcrypt = require('bcrypt');
-const crypto = require('node:crypto');
 const db = require('../config/database');
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { clearActiveCache } = require('../middleware/permissions');
@@ -8,6 +7,7 @@ const { logAudit, auditFromReq } = require('../utils/audit');
 const { assertUsuarioWithoutActivity } = require('../services/usuariosDeletionService');
 const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const usuariosRepository = require('../repositories/usuariosRepository');
+const { generateTempPassword } = require('../utils/tempPassword');
 
 const ALLOWED_TYPES = new Set([
   'gerente',
@@ -18,8 +18,22 @@ const ALLOWED_TYPES = new Set([
   'monitorista',
 ]);
 const ROLE_GERENTE = 'gerente';
+const ROLE_SECRETARIO = 'secretario';
+const ROLE_SUPERVISOR = 'supervisor';
+// Roles que cada tipo de usuario puede asignar (al crear) o gestionar (al editar).
+const MANAGEABLE_ROLES = {
+  [ROLE_GERENTE]: ALLOWED_TYPES,
+  [ROLE_SECRETARIO]: new Set([...ALLOWED_TYPES].filter((tipo) => tipo !== ROLE_GERENTE)),
+  [ROLE_SUPERVISOR]: new Set(['guardia']),
+};
 const COLABORADOR_CONFLICT_MESSAGE = 'El colaborador ya está vinculado a otro usuario';
 const ROLE_GUARDIA = 'guardia';
+
+const assertCanManageRole = (req, tipoUsuario) => {
+  if (!MANAGEABLE_ROLES[req.user?.tipo_usuario]?.has(tipoUsuario)) {
+    throw createHttpError(403, 'No tienes permiso para gestionar usuarios con ese rol');
+  }
+};
 
 const normalizeUbicacionIds = (value) => [...new Set((value || []).map(Number))];
 
@@ -50,29 +64,6 @@ const replaceAssignments = async (client, usuarioId, tipoUsuario, ubicacionIds, 
     );
   }
   return ids;
-};
-
-const generateTempPassword = () => {
-  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lower = 'abcdefghjkmnpqrstuvwxyz';
-  const digits = '23456789';
-  const all = upper + lower + digits;
-  const buf = crypto.randomBytes(16);
-
-  const chars = [
-    upper[buf[0] % upper.length],
-    lower[buf[1] % lower.length],
-    digits[buf[2] % digits.length],
-  ];
-  for (let i = 3; i < 10; i++) {
-    chars.push(all[buf[i] % all.length]);
-  }
-
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = buf[i] % (i + 1);
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  return chars.join('');
 };
 
 const getUsuarioSummaryById = (id) => usuariosRepository.findUsuarioSummaryById(id);
@@ -205,6 +196,7 @@ const createUsuario = async (req, res) => {
     if (!ALLOWED_TYPES.has(tipoUsuario)) {
       return res.status(400).json({ success: false, message: 'Tipo de usuario inválido' });
     }
+    assertCanManageRole(req, tipoUsuario);
     if (hasAssignments) {
       assertCanManageAssignments(req);
     }
@@ -325,9 +317,16 @@ const updateUsuario = async (req, res) => {
     if (!currentUser) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
+    if (currentUser.tipo_usuario === 'cliente') {
+      throw createHttpError(400, 'El acceso de un cliente se administra desde Clientes');
+    }
 
     const { updates, values, tipoUsuario, activo, colaboradorId, hasColaboradorId } =
       buildUpdateFields(req.body, req.user?.id, id);
+    assertCanManageRole(req, currentUser.tipo_usuario);
+    if (tipoUsuario) {
+      assertCanManageRole(req, tipoUsuario);
+    }
     const hasAssignments = Object.prototype.hasOwnProperty.call(req.body || {}, 'ubicacion_ids');
     const ubicacionIds = req.body?.ubicacion_ids || [];
     if (hasAssignments) {
@@ -408,6 +407,7 @@ const reenviarInvitacion = async (req, res) => {
     if (!user) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
+    assertCanManageRole(req, user.tipo_usuario);
     if (!user.primer_login) {
       throw createHttpError(400, 'Este usuario ya completó su primer acceso');
     }
