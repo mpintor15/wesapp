@@ -63,7 +63,10 @@ function App() {
               <Route
                 path="/portal/visitas"
                 element={
-                  <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.portalVisitas}>
+                  <ProtectedRoute
+                    requiredRole="cliente"
+                    requiredPermission={MODULE_ACCESS_PERMISSIONS.portalVisitas}
+                  >
                     <PortalVisitas />
                   </ProtectedRoute>
                 }

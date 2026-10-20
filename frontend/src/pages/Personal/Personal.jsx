@@ -204,6 +204,12 @@ const Personal = () => {
     [user]
   );
   const canManageAcceso = permissions.canCreateAcceso || permissions.canEditAcceso;
+  // Crear un acceso y editar uno existente son permisos distintos (el supervisor solo crea).
+  const canManageAccesoOf = useCallback(
+    (colaborador) =>
+      colaborador.acceso?.tiene_usuario ? permissions.canEditAcceso : permissions.canCreateAcceso,
+    [permissions.canCreateAcceso, permissions.canEditAcceso]
+  );
   const tipoOptions = useMemo(() => getAssignableTipos(user?.tipo_usuario), [user?.tipo_usuario]);
 
   const resetForm = () => setFormData(EMPTY_COLABORADOR_FORM);
@@ -524,6 +530,7 @@ const Personal = () => {
               canDelete={permissions.canDelete}
               canEdit={permissions.canEdit}
               canManageAcceso={canManageAcceso}
+              canManageAccesoOf={canManageAccesoOf}
               canViewSensitive={permissions.canViewSensitive}
               colaboradores={sortedColaboradores}
               emptyMessage={emptyMessage}
@@ -540,6 +547,7 @@ const Personal = () => {
                 canDelete={permissions.canDelete}
                 canEdit={permissions.canEdit}
                 canManageAcceso={canManageAcceso}
+                canManageAccesoOf={canManageAccesoOf}
                 canViewSensitive={permissions.canViewSensitive}
                 colaboradores={sortedColaboradores}
                 onDelete={setConfirmTarget}

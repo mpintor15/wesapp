@@ -13,6 +13,7 @@ const PersonalTable = ({
   canDelete,
   canEdit,
   canManageAcceso,
+  canManageAccesoOf = () => true,
   canViewSensitive,
   colaboradores,
   emptyMessage = 'No hay colaboradores registrados',
@@ -103,7 +104,7 @@ const PersonalTable = ({
                 </td>
                 <td className={`center col-actions app-col-actions ${actionsWidthClass}`}>
                   <div className="action-buttons app-table-actions">
-                    {canManageAcceso ? (
+                    {canManageAcceso && canManageAccesoOf(c) ? (
                       <button
                         className="action-btn action-btn-neutral"
                         onClick={() => onManageAcceso(c)}
