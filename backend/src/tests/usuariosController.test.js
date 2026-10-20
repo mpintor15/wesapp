@@ -25,7 +25,12 @@ const {
   deleteUsuario,
 } = require('../controllers/usuariosController');
 
-const mockReq = ({ body = {}, params = {}, query = {}, user = { id: 1 } } = {}) => ({
+const mockReq = ({
+  body = {},
+  params = {},
+  query = {},
+  user = { id: 1, tipo_usuario: 'gerente' },
+} = {}) => ({
   body,
   params,
   query,
@@ -208,7 +213,7 @@ describe('usuariosController.createUsuario', () => {
     db.query
       .mockResolvedValueOnce({ rows: [{ id: 7, estado: 'activo', usuario_id: null }], rowCount: 1 })
       .mockResolvedValueOnce({
-        rows: [{ id: 2, usuario: 'nuevo', tipo_usuario: 'secretario', colaborador_id: 7 }],
+        rows: [{ id: 2, usuario: 'nuevo', tipo_usuario: 'guardia', colaborador_id: 7 }],
         rowCount: 1,
       });
     const res = mockRes();
@@ -219,7 +224,7 @@ describe('usuariosController.createUsuario', () => {
           usuario: 'nuevo',
           nombre: 'Nuevo',
           apellido: 'Usuario',
-          tipo_usuario: 'secretario',
+          tipo_usuario: 'guardia',
           colaborador_id: 7,
         },
         user: { id: 9, tipo_usuario: 'supervisor' },
@@ -228,6 +233,49 @@ describe('usuariosController.createUsuario', () => {
     );
 
     expectStatus(res, 201);
+  });
+
+  test.each([
+    ['supervisor', 'secretario'],
+    ['supervisor', 'supervisor'],
+    ['supervisor', 'gerente'],
+    ['secretario', 'gerente'],
+  ])('%s no puede crear un usuario %s', async (actor, tipo) => {
+    const res = mockRes();
+
+    await createUsuario(
+      mockReq({
+        body: { usuario: 'nuevo', tipo_usuario: tipo, colaborador_id: 7 },
+        user: { id: 9, tipo_usuario: actor },
+      }),
+      res
+    );
+
+    expectStatus(res, 403);
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  test('secretario puede crear usuarios de cualquier rol excepto gerente', async () => {
+    for (const tipo of ['secretario', 'supervisor', 'contador', 'guardia', 'monitorista']) {
+      db.query.mockReset();
+      db.query
+        .mockResolvedValueOnce({
+          rows: [{ id: 7, estado: 'activo', usuario_id: null }],
+          rowCount: 1,
+        })
+        .mockResolvedValueOnce({ rows: [{ id: 2, tipo_usuario: tipo }], rowCount: 1 });
+      const res = mockRes();
+
+      await createUsuario(
+        mockReq({
+          body: { usuario: 'nuevo', tipo_usuario: tipo, colaborador_id: 7 },
+          user: { id: 9, tipo_usuario: 'secretario' },
+        }),
+        res
+      );
+
+      expectStatus(res, 201);
+    }
   });
 
   test('crea usuario con colaborador activo elegible', async () => {
@@ -478,7 +526,7 @@ describe('usuariosController.updateUsuario', () => {
       mockReq({
         params: { id: '2' },
         body: { nombre: 'Actualizado' },
-        user: { id: 9, tipo_usuario: 'supervisor' },
+        user: { id: 9, tipo_usuario: 'secretario' },
       }),
       res
     );
@@ -621,21 +669,36 @@ describe('usuariosController.updateUsuario', () => {
     expectStatus(roleRes, 400);
   });
 
-  test('rechaza modificar asignaciones sin permiso', async () => {
-    db.query.mockResolvedValueOnce({
-      rows: [{ id: 2, tipo_usuario: 'guardia', activo: true }],
+  test('secretario no puede editar un gerente ni asignar el rol gerente', async () => {
+    db.query.mockResolvedValue({
+      rows: [{ id: 2, tipo_usuario: 'gerente', activo: true, colaborador_id: 7 }],
       rowCount: 1,
     });
-    const res = mockRes();
+    const editGerente = mockRes();
     await updateUsuario(
       mockReq({
         params: { id: '2' },
-        body: { ubicacion_ids: [4] },
+        body: { nombre: 'Otro' },
         user: { id: 9, tipo_usuario: 'secretario' },
       }),
-      res
+      editGerente
     );
-    expectStatus(res, 403);
+    expectStatus(editGerente, 403);
+
+    db.query.mockResolvedValue({
+      rows: [{ id: 3, tipo_usuario: 'guardia', activo: true, colaborador_id: 8 }],
+      rowCount: 1,
+    });
+    const promote = mockRes();
+    await updateUsuario(
+      mockReq({
+        params: { id: '3' },
+        body: { tipo_usuario: 'gerente' },
+        user: { id: 9, tipo_usuario: 'secretario' },
+      }),
+      promote
+    );
+    expectStatus(promote, 403);
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
@@ -821,7 +884,11 @@ describe('usuariosController.updateUsuario', () => {
     const res = mockRes();
 
     await updateUsuario(
-      mockReq({ params: { id: '2' }, body: { tipo_usuario: 'secretario' }, user: { id: 1 } }),
+      mockReq({
+        params: { id: '2' },
+        body: { tipo_usuario: 'secretario' },
+        user: { id: 1, tipo_usuario: 'gerente' },
+      }),
       res
     );
 
@@ -937,7 +1004,9 @@ describe('usuariosController.getUbicacionesAsignables', () => {
 describe('usuariosController.reenviarInvitacion', () => {
   test('rechaza reenvío si el usuario ya completó primer acceso', async () => {
     db.query.mockResolvedValue({
-      rows: [{ id: 2, usuario: 'activo', primer_login: false, activo: true }],
+      rows: [
+        { id: 2, usuario: 'activo', tipo_usuario: 'guardia', primer_login: false, activo: true },
+      ],
       rowCount: 1,
     });
     const res = mockRes();

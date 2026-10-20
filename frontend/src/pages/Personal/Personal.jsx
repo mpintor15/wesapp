@@ -45,6 +45,7 @@ import {
   EMPTY_CREATE_USER_FORM,
   suggestUsuario,
   EMPTY_EDIT_USER_FORM,
+  getAssignableTipos,
   getEditUserFormData,
   validateCreateForm,
 } from './utils/usuariosHelpers';
@@ -203,6 +204,7 @@ const Personal = () => {
     [user]
   );
   const canManageAcceso = permissions.canCreateAcceso || permissions.canEditAcceso;
+  const tipoOptions = useMemo(() => getAssignableTipos(user?.tipo_usuario), [user?.tipo_usuario]);
 
   const resetForm = () => setFormData(EMPTY_COLABORADOR_FORM);
 
@@ -365,6 +367,10 @@ const Personal = () => {
     const result = await usuariosService.getUsuarioByColaborador(colaborador.id);
     if (!result.success || !result.data) {
       showToast(result.message || 'No se pudo cargar el usuario del colaborador', 'error');
+      return;
+    }
+    if (!tipoOptions.some((tipo) => tipo.value === result.data.tipo_usuario)) {
+      showToast('No tienes permisos para editar este tipo de usuario', 'error');
       return;
     }
     setAccesoEditData(getEditUserFormData(result.data));
@@ -588,6 +594,7 @@ const Personal = () => {
           formData={accesoCreateData}
           isCreating={isCreatingAcceso}
           canManageAssignments={permissions.canManageAssignments}
+          tipoOptions={tipoOptions}
           lockColaborador
           ubicaciones={accesoUbicaciones}
           ubicacionesError={accesoUbicacionesError}
@@ -607,6 +614,7 @@ const Personal = () => {
           colaboradoresLoading={accesoColaboradoresLoading}
           isSaving={isSavingAcceso}
           canManageAssignments={permissions.canManageAssignments}
+          tipoOptions={tipoOptions}
           lockColaborador
           ubicaciones={accesoUbicaciones}
           ubicacionesError={accesoUbicacionesError}

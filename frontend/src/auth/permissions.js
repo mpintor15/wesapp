@@ -3,6 +3,10 @@ export const PERMISSIONS = {
   CLIENTES_CREAR: 'clientes.crear',
   CLIENTES_EDITAR: 'clientes.editar',
   CLIENTES_ELIMINAR: 'clientes.eliminar',
+  CLIENTES_ACCESO_PORTAL_CREAR: 'clientes.acceso_portal.crear',
+  CLIENTES_ACCESO_PORTAL_ADMINISTRAR: 'clientes.acceso_portal.administrar',
+
+  PORTAL_VISITAS_VER: 'portal.visitas.ver',
 
   CUENTAS_CLIENTES_VER: 'cuentas.clientes.ver',
   CUENTAS_CLIENTES_CREAR: 'cuentas.clientes.crear',

@@ -649,7 +649,7 @@ describe('personal permissions', () => {
     expect(create.status).toBe(403);
   });
 
-  test('supervisor puede ver y crear, pero no editar ni eliminar', async () => {
+  test('supervisor solo puede ver colaboradores: no crea, edita ni elimina', async () => {
     mockCurrentUser(userFromDb('supervisor'));
 
     const list = await request(app)
@@ -668,7 +668,7 @@ describe('personal permissions', () => {
       .set('Authorization', `Bearer ${tokenFor('supervisor')}`);
 
     expectAllowedPastAuthorization(list);
-    expectAllowedPastAuthorization(create);
+    expect(create.status).toBe(403);
     expect(update.status).toBe(403);
     expect(remove.status).toBe(403);
   });
@@ -705,7 +705,7 @@ describe('usuarios permissions', () => {
     expectAllowedPastAuthorization(res);
   });
 
-  test.each(['secretario', 'contador', 'supervisor'])('%s recibe 403', async (role) => {
+  test.each(['contador', 'guardia', 'monitorista'])('%s recibe 403', async (role) => {
     mockCurrentUser(userFromDb(role));
 
     const res = await request(app)
@@ -713,6 +713,33 @@ describe('usuarios permissions', () => {
       .set('Authorization', `Bearer ${tokenFor(role)}`);
 
     expect(res.status).toBe(403);
+  });
+
+  test.each(['secretario', 'supervisor'])('%s puede crear usuarios', async (role) => {
+    mockCurrentUser(userFromDb(role));
+
+    const res = await request(app)
+      .post('/api/usuarios')
+      .set('Authorization', `Bearer ${tokenFor(role)}`)
+      .send({});
+
+    // Pasa la autorización; la validación del cuerpo lo rechaza después con 400.
+    expect(res.status).toBe(400);
+  });
+
+  test('solo gerente y secretario editan usuarios; solo gerente los elimina', async () => {
+    const attempt = async (role, method, url) => {
+      mockCurrentUser(userFromDb(role));
+      return request(app)
+        [method](url)
+        .set('Authorization', `Bearer ${tokenFor(role)}`)
+        .send({});
+    };
+
+    expect((await attempt('supervisor', 'put', '/api/usuarios/9')).status).toBe(403);
+    expect((await attempt('secretario', 'put', '/api/usuarios/9')).status).not.toBe(403);
+    expect((await attempt('secretario', 'delete', '/api/usuarios/9')).status).toBe(403);
+    expect((await attempt('supervisor', 'delete', '/api/usuarios/9')).status).toBe(403);
   });
 });
 

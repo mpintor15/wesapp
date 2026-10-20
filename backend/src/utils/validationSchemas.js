@@ -457,6 +457,18 @@ const usuarioCreateSchema = z.object({
   ubicacion_ids: z.array(positiveInt('Ubicación ID')).optional(),
 });
 
+const clientePortalAccessCreateSchema = z.object({
+  usuario: z
+    .string({ required_error: 'Usuario es requerido' })
+    .trim()
+    .min(3, 'Usuario debe tener al menos 3 caracteres')
+    .max(50, 'Usuario no puede exceder 50 caracteres'),
+});
+
+const clientePortalAccessUpdateSchema = z.object({
+  activo: z.boolean({ required_error: 'Activo es requerido' }),
+});
+
 const usuarioUpdateSchema = z.object({
   nombre: z
     .string()
@@ -629,6 +641,8 @@ module.exports = {
   // Usuarios
   usuarioCreateSchema,
   usuarioUpdateSchema,
+  clientePortalAccessCreateSchema,
+  clientePortalAccessUpdateSchema,
 
   // Clientes
   clienteCreateSchema,

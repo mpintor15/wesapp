@@ -297,6 +297,38 @@ describe('HistorialVisitas', () => {
     container.remove();
   });
 
+  test('en modo solo lectura usa la fuente indicada y no muestra acciones', async () => {
+    const fetchVisitas = jest.fn().mockResolvedValue({
+      success: true,
+      data: [visitRow()],
+      meta: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <HistorialVisitas
+          refreshKey={0}
+          showToast={jest.fn()}
+          readOnly
+          canCancelVisita
+          fetchVisitas={fetchVisitas}
+        />
+      )
+    );
+    await act(async () => flush());
+
+    expect(fetchVisitas).toHaveBeenCalled();
+    expect(bitacorasService.getVisitas).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Carlos Ruiz');
+    expect(container.querySelector('[aria-label="Registrar salida"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Anular visita"]')).toBeNull();
+    expect(container.querySelector('[aria-label="Acciones"]')).toBeNull();
+    act(() => root.unmount());
+    container.remove();
+  });
+
   test('respuestas obsoletas no sobrescriben el historial más reciente', async () => {
     let resolveStale;
     const staleResponse = new Promise((resolve) => {

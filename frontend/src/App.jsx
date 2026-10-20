@@ -15,6 +15,7 @@ const Cuentas = lazy(() => import('./pages/Cuentas/Cuentas'));
 const Inventario = lazy(() => import('./pages/Inventario/Inventario'));
 const Personal = lazy(() => import('./pages/Personal/Personal'));
 const Bitacoras = lazy(() => import('./pages/Bitacoras/Bitacoras'));
+const PortalVisitas = lazy(() => import('./pages/PortalVisitas/PortalVisitas'));
 
 const ScrollToTop = () => {
   const { pathname } = useLocation();
@@ -56,6 +57,14 @@ function App() {
                 element={
                   <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.bitacoras}>
                     <Bitacoras />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/portal/visitas"
+                element={
+                  <ProtectedRoute requiredPermission={MODULE_ACCESS_PERMISSIONS.portalVisitas}>
+                    <PortalVisitas />
                   </ProtectedRoute>
                 }
               />

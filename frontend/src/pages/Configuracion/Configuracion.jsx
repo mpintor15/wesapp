@@ -1530,6 +1530,8 @@ const Configuracion = () => {
                     canCreateCliente: permissions.canCreateCliente,
                     canEditCliente: permissions.canEditCliente,
                     canDeleteCliente: permissions.canDeleteCliente,
+                    canCreateAccesoPortal: permissions.canCreateAccesoPortal,
+                    canManageAccesoPortal: permissions.canManageAccesoPortal,
                     canViewUbicaciones: permissions.canViewUbicaciones,
                     canCreateUbicacion: permissions.canCreateUbicacion,
                   }}

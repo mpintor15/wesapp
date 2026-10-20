@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Boxes, Building2, ClipboardList, Receipt, UserRound } from 'lucide-react';
+import { Boxes, Building2, ClipboardList, Eye, Receipt, UserRound } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
@@ -16,6 +16,7 @@ const MODULE_META = {
   },
   inventario: { description: 'Artículos, equipos y movimientos de bodega' },
   personal: { description: 'Colaboradores, cargos, nómina y accesos al sistema' },
+  portalVisitas: { description: 'Consulta las visitas de tus urbanizaciones' },
 };
 
 const DASHBOARD_MODULES = [
@@ -54,6 +55,15 @@ const DASHBOARD_MODULES = [
     Icon: UserRound,
     path: '/personal',
   },
+  {
+    key: 'portalVisitas',
+    permission: MODULE_ACCESS_PERMISSIONS.portalVisitas,
+    // Solo clientes: el gerente tiene todos los permisos pero no un cliente asociado.
+    role: 'cliente',
+    label: 'Visitas',
+    Icon: Eye,
+    path: '/portal/visitas',
+  },
 ];
 
 const Dashboard = () => {
@@ -77,7 +87,9 @@ const Dashboard = () => {
     navigate(module.path);
   };
 
-  const modules = DASHBOARD_MODULES.filter((m) => hasPermission(m.permission));
+  const modules = DASHBOARD_MODULES.filter(
+    (m) => (!m.role || m.role === user?.tipo_usuario) && hasPermission(m.permission)
+  );
 
   const roleLabel =
     {
@@ -87,12 +99,15 @@ const Dashboard = () => {
       contador: 'Contador',
       guardia: 'Guardia',
       monitorista: 'Monitorista',
+      cliente: 'Cliente',
     }[user?.tipo_usuario] ??
     user?.tipo_usuario ??
     '';
 
   const displayName =
-    user?.nombre && user?.apellido ? `${user.nombre} ${user.apellido}` : (user?.usuario ?? '');
+    user?.nombre && user?.apellido
+      ? `${user.nombre} ${user.apellido}`
+      : user?.nombre || user?.usuario || '';
 
   return (
     <div className="dashboard-container">

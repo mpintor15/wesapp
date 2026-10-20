@@ -67,7 +67,7 @@ const verifyToken = async (req, res, next) => {
 
   try {
     const result = await db.query(
-      `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo
+      `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo, cliente_id
        FROM usuarios
        WHERE id = $1`,
       [userId]
@@ -90,6 +90,7 @@ const verifyToken = async (req, res, next) => {
       tipo_usuario: user.tipo_usuario,
       primer_login: user.primer_login,
       activo: user.activo,
+      cliente_id: user.cliente_id,
     };
     if (user.primer_login && !PASSWORD_CHANGE_ALLOWED_PATHS.has(req.originalUrl.split('?')[0])) {
       return sendPasswordChangeRequired(res);

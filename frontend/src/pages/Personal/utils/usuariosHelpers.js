@@ -7,6 +7,14 @@ export const TIPOS_USUARIO = [
   { value: 'monitorista', label: 'Monitorista' },
 ];
 
+// Roles que cada tipo de usuario puede asignar o gestionar (el backend aplica la misma regla).
+export const getAssignableTipos = (actorRole) => {
+  if (actorRole === 'gerente') return TIPOS_USUARIO;
+  if (actorRole === 'secretario') return TIPOS_USUARIO.filter((tipo) => tipo.value !== 'gerente');
+  if (actorRole === 'supervisor') return TIPOS_USUARIO.filter((tipo) => tipo.value === 'guardia');
+  return [];
+};
+
 export const EMPTY_USUARIOS_FILTERS = { search: '', tipo_usuario: '', activo: '' };
 
 export const EMPTY_CREATE_USER_FORM = {
