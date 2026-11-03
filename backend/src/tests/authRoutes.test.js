@@ -136,6 +136,16 @@ describe('auth routes', () => {
     expectUserDisabled(res);
   });
 
+  test('usuario inactivo con contraseña errónea responde como credenciales inválidas', async () => {
+    mockAuthQuery({ loginUser: await userRow({ activo: false }) });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ usuario: 'admin', password: 'wrong-password' });
+
+    expectAuthRequired(res);
+  });
+
   test('verify rechaza token ausente', async () => {
     const res = await request(app).get('/api/auth/verify');
 
@@ -305,7 +315,7 @@ describe('bloqueo de cuenta por intentos fallidos', () => {
     expect(failedLoginUpdates()[0][1]).toEqual([7, 5, 15]);
   });
 
-  test('el intento que alcanza el máximo responde 429 ACCOUNT_LOCKED', async () => {
+  test('el intento que alcanza el máximo responde igual que una contraseña errónea', async () => {
     const loginUser = await userRow();
     const lockedUntil = new Date(Date.now() + 15 * 60 * 1000);
     db.query.mockImplementation(async (sql) => {
@@ -326,11 +336,10 @@ describe('bloqueo de cuenta por intentos fallidos', () => {
       .post('/api/auth/login')
       .send({ usuario: 'admin', password: 'incorrecta' });
 
-    expect(res.status).toBe(429);
-    expect(res.body.code).toBe(AUTH_ERROR_CODES.ACCOUNT_LOCKED);
+    expectAuthRequired(res);
   });
 
-  test('una cuenta bloqueada rechaza incluso la contraseña correcta sin contar el intento', async () => {
+  test('una cuenta bloqueada rechaza incluso la contraseña correcta sin delatar el bloqueo', async () => {
     const loginUser = await userRow({ bloqueado_hasta: new Date(Date.now() + 60 * 1000) });
     mockAuthQuery({ loginUser });
 
@@ -338,7 +347,7 @@ describe('bloqueo de cuenta por intentos fallidos', () => {
       .post('/api/auth/login')
       .send({ usuario: 'admin', password: 'correct-password' });
 
-    expect(res.status).toBe(429);
+    expectAuthRequired(res);
     expect(res.body).not.toHaveProperty('data');
     expect(failedLoginUpdates()).toHaveLength(0);
   });
@@ -456,5 +465,112 @@ describe('sesión por cookie HttpOnly', () => {
     const setCookie = res.headers['set-cookie']?.find((c) => c.startsWith('wes_session='));
     expect(setCookie).toMatch(/Expires=Thu, 01 Jan 1970/i);
     expect(setCookie).toMatch(/HttpOnly/i);
+  });
+});
+
+describe('revocación de sesiones', () => {
+  const tokenWithJti = (payload = {}, jti = 'jti-1') =>
+    jwt.sign({ id: 7, usuario: 'admin', tipo_usuario: 'gerente', ...payload }, config.jwt.secret, {
+      expiresIn: '1h',
+      jwtid: jti,
+    });
+
+  beforeEach(() => {
+    db.query.mockReset();
+    db.getClient.mockReset();
+  });
+
+  test('un token cuyo jti fue revocado se rechaza', async () => {
+    mockAuthQuery({ verifyUser: { ...(await userRow()), sesion_revocada: true } });
+
+    const res = await request(app)
+      .get('/api/auth/verify')
+      .set('Authorization', `Bearer ${tokenWithJti()}`);
+
+    expectAuthRequired(res);
+  });
+
+  test('un token emitido antes de sesiones_validas_desde se rechaza', async () => {
+    const validFrom = new Date(Date.now() + 60 * 1000);
+    mockAuthQuery({
+      verifyUser: { ...(await userRow()), sesiones_validas_desde: validFrom },
+    });
+
+    const res = await request(app)
+      .get('/api/auth/verify')
+      .set('Authorization', `Bearer ${tokenWithJti()}`);
+
+    expectAuthRequired(res);
+  });
+
+  test('un token emitido después de sesiones_validas_desde se acepta', async () => {
+    const validFrom = new Date(Date.now() - 60 * 1000);
+    mockAuthQuery({
+      verifyUser: { ...(await userRow()), sesiones_validas_desde: validFrom },
+    });
+
+    const res = await request(app)
+      .get('/api/auth/verify')
+      .set('Authorization', `Bearer ${tokenWithJti()}`);
+
+    expect(res.status).toBe(200);
+  });
+
+  test('logout revoca el jti del token presentado', async () => {
+    mockAuthQuery({});
+
+    const res = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', `Bearer ${tokenWithJti({}, 'jti-logout')}`);
+
+    expect(res.status).toBe(200);
+    const insert = db.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO sesiones_revocadas')
+    );
+    expect(insert).toBeDefined();
+    expect(insert[1][0]).toBe('jti-logout');
+    expect(insert[1][1]).toBe(7);
+  });
+
+  test('logout sin token o con token inválido responde 200 sin revocar', async () => {
+    mockAuthQuery({});
+
+    const sinToken = await request(app).post('/api/auth/logout');
+    const invalido = await request(app)
+      .post('/api/auth/logout')
+      .set('Authorization', 'Bearer basura');
+
+    expect(sinToken.status).toBe(200);
+    expect(invalido.status).toBe(200);
+    expect(
+      db.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO sesiones_revocadas'))
+    ).toBe(false);
+  });
+
+  test('change-password invalida sesiones previas y emite un token nuevo', async () => {
+    const user = await userRow({ primer_login: true });
+    mockAuthQuery({ verifyUser: user });
+
+    const res = await request(app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${tokenWithJti()}`)
+      .send({ nueva_password: 'NuevaClave2026', confirmar_password: 'NuevaClave2026' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.token).toEqual(expect.any(String));
+    const update = db.query.mock.calls.find(([sql]) =>
+      /sesiones_validas_desde = \$3/.test(String(sql))
+    );
+    expect(update).toBeDefined();
+    expect(update[1][2]).toBeInstanceOf(Date);
+    expect(res.headers['set-cookie'].join(';')).toContain('wes_session=');
+  });
+});
+
+describe('cabeceras de caché', () => {
+  test('las respuestas del API llevan Cache-Control: no-store', async () => {
+    const res = await request(app).get('/api/auth/verify');
+
+    expect(res.headers['cache-control']).toBe('no-store');
   });
 });

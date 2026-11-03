@@ -12,16 +12,47 @@
  *                    utilizado al recargar la app para restaurar la sesión.
  */
 const bcrypt = require('bcrypt');
+const crypto = require('node:crypto');
 const jwt = require('jsonwebtoken');
 const config = require('../config/config');
 const { createHttpError, handleControllerError } = require('../utils/http');
-const {
-  sendAccountLocked,
-  sendAuthenticationRequired,
-  sendUserDisabled,
-} = require('../utils/authErrorCodes');
+const { sendAuthenticationRequired, sendUserDisabled } = require('../utils/authErrorCodes');
 const authRepository = require('../repositories/authRepository');
-const { clearSessionCookie, setSessionCookie } = require('../utils/sessionCookie');
+const logger = require('../config/logger');
+const { sanitizeError } = require('../utils/logSanitizer');
+const {
+  clearSessionCookie,
+  readSessionToken,
+  setSessionCookie,
+} = require('../utils/sessionCookie');
+
+const BCRYPT_ROUNDS = 10;
+// Hash falso para gastar el mismo tiempo de bcrypt cuando el usuario no existe o está
+// bloqueado, de modo que la latencia no delate qué usuarios existen.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(crypto.randomUUID(), BCRYPT_ROUNDS);
+
+const signSessionToken = (user) =>
+  jwt.sign(
+    {
+      id: user.id,
+      usuario: user.usuario,
+      tipo_usuario: user.tipo_usuario,
+    },
+    config.jwt.secret,
+    {
+      expiresIn: config.jwt.expiration,
+      algorithm: config.jwt.algorithm,
+      jwtid: crypto.randomUUID(),
+    }
+  );
+
+const extractRawToken = (req) => {
+  const [scheme, bearerToken] = (req.headers.authorization || '').split(' ');
+  if (scheme === 'Bearer' && bearerToken) {
+    return bearerToken;
+  }
+  return readSessionToken(req);
+};
 
 /**
  * Login de usuario
@@ -41,43 +72,33 @@ const login = async (req, res) => {
 
     const user = await authRepository.findUserForLogin(usuario);
 
+    // Todas las fallas previas a validar la contraseña (usuario inexistente o
+    // cuenta bloqueada) responden igual que una contraseña errónea y tardan lo mismo.
     if (!user) {
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
       return sendAuthenticationRequired(res);
     }
 
-    // Verificar si el usuario está activo
+    if (user.bloqueado_hasta && new Date(user.bloqueado_hasta) > new Date()) {
+      await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+      return sendAuthenticationRequired(res);
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      await authRepository.registerFailedLogin(user.id, config.loginLockout);
+      return sendAuthenticationRequired(res);
+    }
+
+    // Solo quien demuestra conocer la contraseña se entera de que está desactivado.
     if (!user.activo) {
       return sendUserDisabled(res);
     }
 
-    // Cuenta bloqueada temporalmente por intentos fallidos
-    if (user.bloqueado_hasta && new Date(user.bloqueado_hasta) > new Date()) {
-      return sendAccountLocked(res);
-    }
-
-    // Verificar contraseña
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
-
-    if (!passwordMatch) {
-      const failure = await authRepository.registerFailedLogin(user.id, config.loginLockout);
-      if (failure?.bloqueado_hasta && new Date(failure.bloqueado_hasta) > new Date()) {
-        return sendAccountLocked(res);
-      }
-      return sendAuthenticationRequired(res);
-    }
-
     await authRepository.resetFailedLogins(user.id);
 
-    // Generar token JWT
-    const token = jwt.sign(
-      {
-        id: user.id,
-        usuario: user.usuario,
-        tipo_usuario: user.tipo_usuario,
-      },
-      config.jwt.secret,
-      { expiresIn: config.jwt.expiration, algorithm: config.jwt.algorithm }
-    );
+    const token = signSessionToken(user);
 
     // La sesión del navegador viaja en una cookie HttpOnly. El token también se
     // devuelve en el cuerpo para clientes no-navegador (scripts, pruebas e2e).
@@ -106,7 +127,29 @@ const login = async (req, res) => {
 /**
  * Logout: elimina la cookie de sesión
  */
-const logout = (req, res) => {
+const logout = async (req, res) => {
+  // Revoca el token para que no siga sirviendo si ya fue copiado (cookie o Bearer).
+  // Un token ausente, inválido o vencido no necesita revocación.
+  try {
+    const rawToken = extractRawToken(req);
+    if (rawToken) {
+      const decoded = jwt.verify(rawToken, config.jwt.secret, {
+        algorithms: [config.jwt.algorithm],
+      });
+      if (decoded.jti && Number.isInteger(Number(decoded.id)) && decoded.exp) {
+        await authRepository.revokeSession({
+          jti: decoded.jti,
+          userId: Number(decoded.id),
+          expiresAt: new Date(decoded.exp * 1000),
+        });
+      }
+    }
+  } catch (error) {
+    if (!(error instanceof jwt.JsonWebTokenError)) {
+      logger.warn('No se pudo revocar la sesión al cerrar sesión', sanitizeError(error));
+    }
+  }
+
   clearSessionCookie(res);
   res.json({ success: true, message: 'Sesión cerrada' });
 };
@@ -162,19 +205,27 @@ const changePassword = async (req, res) => {
     }
 
     // Hashear nueva contraseña
-    const saltRounds = 10;
-    const password_hash = await bcrypt.hash(nuevaPassword, saltRounds);
+    const password_hash = await bcrypt.hash(nuevaPassword, BCRYPT_ROUNDS);
 
-    // Actualizar contraseña y marcar primer_login como false
-    const updated = await authRepository.updatePasswordAndClearFirstLogin(userId, password_hash);
+    // Actualizar contraseña, marcar primer_login como false e invalidar las demás
+    // sesiones. La marca usa el reloj de la app (igual que el iat del nuevo token).
+    const updated = await authRepository.updatePasswordAndClearFirstLogin(
+      userId,
+      password_hash,
+      new Date()
+    );
 
     if (!updated) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
 
+    // La sesión actual quedó invalidada junto con las demás: se emite una nueva.
+    const token = signSessionToken(req.user);
+    setSessionCookie(res, token);
     res.json({
       success: true,
       message: 'Contraseña actualizada exitosamente',
+      data: { token },
     });
   } catch (error) {
     return handleControllerError(res, error, 'Error al cambiar contraseña:');

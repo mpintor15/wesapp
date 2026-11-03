@@ -49,7 +49,9 @@ app.set('trust proxy', 1);
 // sin pasar por el borde HTTPS que agrega ese header, así que /health/live y
 // /health/ready deben quedar exentos o el healthcheck nunca ve un 200.
 const HTTPS_REDIRECT_BYPASS_PATHS = new Set(['/health/live', '/health/ready']);
-if (config.nodeEnv === 'production') {
+// DISABLE_HTTPS_REDIRECT=true solo para correr el build de producción en local
+// (p. ej. docker compose en http://localhost), donde no hay borde HTTPS.
+if (config.nodeEnv === 'production' && process.env.DISABLE_HTTPS_REDIRECT !== 'true') {
   app.use((req, res, next) => {
     if (
       req.headers['x-forwarded-proto'] !== 'https' &&
@@ -86,6 +88,13 @@ const limiter = rateLimit({
 });
 
 app.use('/api/', limiter);
+
+// Las respuestas del API (contraseñas temporales, datos personales) no deben
+// quedar en cachés del navegador ni de proxies intermedios.
+app.use('/api/', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 
 // ======================
 // Middlewares de parsing
@@ -172,10 +181,10 @@ app.use('/api/inventario', inventarioRoutes);
 // Rutas de personal
 app.use('/api/personal', personalRoutes);
 
-// Rutas de usuarios
-
 // Rutas del portal de clientes (solo lectura)
 app.use('/api/portal', portalRoutes);
+
+// Rutas de usuarios
 app.use('/api/usuarios', usuariosRoutes);
 
 // ======================
