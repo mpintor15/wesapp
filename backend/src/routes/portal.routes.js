@@ -13,5 +13,6 @@ router.use(requirePermission(PERMISSIONS.PORTAL_VISITAS_VER));
 
 router.get('/ubicaciones', portalController.getUbicaciones);
 router.get('/visitas', portalController.getVisitas);
+router.get('/visitas/excel', portalController.exportVisitas);
 
 module.exports = router;

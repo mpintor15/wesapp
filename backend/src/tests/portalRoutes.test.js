@@ -105,6 +105,44 @@ describe('portal de clientes', () => {
     );
   });
 
+  test('exporta el reporte Excel solo con las visitas del cliente', async () => {
+    mockSession(clienteUser);
+    repository.findVisits.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          entrada_at: new Date('2026-11-01T10:00:00Z'),
+          visitante_nombre: 'Ana',
+          visitante_documento: '123',
+          estado: 'ABIERTA',
+        },
+      ],
+      total: 1,
+    });
+
+    const res = await request(app)
+      .get('/api/portal/visitas/excel?estado=ABIERTA')
+      .set('Authorization', `Bearer ${tokenFor(90, 'cliente')}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('spreadsheetml');
+    expect(res.headers['content-disposition']).toContain('reporte_visitas.xlsx');
+    expect(repository.findVisits).toHaveBeenCalledWith(
+      expect.objectContaining({ clienteId: 7, hasGlobalScope: false })
+    );
+  });
+
+  test('el reporte del portal no está disponible para otros roles', async () => {
+    mockSession(gerenteUser);
+
+    const res = await request(app)
+      .get('/api/portal/visitas/excel')
+      .set('Authorization', `Bearer ${tokenFor(1, 'gerente')}`);
+
+    expect(res.status).toBe(403);
+    expect(repository.findVisits).not.toHaveBeenCalled();
+  });
+
   test('lista solo las urbanizaciones del cliente', async () => {
     mockSession(clienteUser);
 

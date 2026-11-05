@@ -329,6 +329,44 @@ describe('HistorialVisitas', () => {
     container.remove();
   });
 
+  test('en modo solo lectura oculta el filtro de urbanización si solo hay una', async () => {
+    const fetchVisitas = jest.fn().mockResolvedValue({
+      success: true,
+      data: [visitRow()],
+      meta: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
+    });
+    const renderWith = async (ubicaciones) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      act(() =>
+        root.render(
+          <HistorialVisitas
+            ubicaciones={ubicaciones}
+            refreshKey={0}
+            showToast={jest.fn()}
+            readOnly
+            fetchVisitas={fetchVisitas}
+          />
+        )
+      );
+      await act(async () => flush());
+      return { container, root };
+    };
+    const urb = (id) => ({ id, nombre: `Urb ${id}`, tipo_punto: 'URBANIZACION' });
+
+    const single = await renderWith([urb(1)]);
+    expect(single.container.querySelector('#visitas-filter-ubicacion')).toBeNull();
+    expect(fetchVisitas).toHaveBeenLastCalledWith(expect.objectContaining({ ubicacion_id: 1 }));
+    act(() => single.root.unmount());
+    single.container.remove();
+
+    const several = await renderWith([urb(1), urb(2)]);
+    expect(several.container.querySelector('#visitas-filter-ubicacion')).not.toBeNull();
+    act(() => several.root.unmount());
+    several.container.remove();
+  });
+
   describe('actualización automática', () => {
     const renderAuto = async (fetchVisitas, props = {}) => {
       const container = document.createElement('div');

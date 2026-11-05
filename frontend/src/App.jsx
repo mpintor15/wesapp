@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import RouteLoading from './components/RouteLoading';
@@ -27,6 +27,13 @@ const ScrollToTop = () => {
   return null;
 };
 
+// Los usuarios cliente no tienen inicio: su única pantalla es el portal de visitas.
+const HomeRoute = () => {
+  const { user } = useAuth();
+  if (user?.tipo_usuario === 'cliente') return <Navigate to="/portal/visitas" replace />;
+  return <Dashboard />;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -48,7 +55,7 @@ function App() {
                 path="/"
                 element={
                   <ProtectedRoute>
-                    <Dashboard />
+                    <HomeRoute />
                   </ProtectedRoute>
                 }
               />

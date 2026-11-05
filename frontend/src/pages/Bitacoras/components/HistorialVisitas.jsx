@@ -265,6 +265,8 @@ const HistorialVisitas = ({
   autoRefreshMs = 0,
 }) => {
   const urbanizaciones = ubicaciones.filter((ubicacion) => ubicacion.tipo_punto === 'URBANIZACION');
+  // En el portal, con una sola urbanización asignada el filtro no aporta nada: se aplica solo.
+  const hideUrbanizacionFilter = readOnly && urbanizaciones.length === 1;
   const [draftFilters, setDraftFilters] = useState({ ...EMPTY_FILTERS });
   const [appliedFilters, setAppliedFilters] = useState({ ...EMPTY_FILTERS });
   const hasAutoSelectedRef = useRef(false);
@@ -505,24 +507,28 @@ const HistorialVisitas = ({
                 placeholder="Visitante, placa, casa o titular..."
               />
             </div>
-            <div className="ff-state bitacoras-status-filter bitacoras-urbanizacion-filter">
-              <label className="ff-state-label" htmlFor="visitas-filter-ubicacion">
-                Urbanización
-              </label>
-              <select
-                id="visitas-filter-ubicacion"
-                name="ubicacion_id"
-                value={draftFilters.ubicacion_id}
-                onChange={updateFilter}
-              >
-                {urbanizaciones.length === 0 ? <option value="">Sin urbanizaciones</option> : null}
-                {urbanizaciones.map((urbanizacion) => (
-                  <option key={urbanizacion.id} value={urbanizacion.id}>
-                    {urbanizacion.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {hideUrbanizacionFilter ? null : (
+              <div className="ff-state bitacoras-status-filter bitacoras-urbanizacion-filter">
+                <label className="ff-state-label" htmlFor="visitas-filter-ubicacion">
+                  Urbanización
+                </label>
+                <select
+                  id="visitas-filter-ubicacion"
+                  name="ubicacion_id"
+                  value={draftFilters.ubicacion_id}
+                  onChange={updateFilter}
+                >
+                  {urbanizaciones.length === 0 ? (
+                    <option value="">Sin urbanizaciones</option>
+                  ) : null}
+                  {urbanizaciones.map((urbanizacion) => (
+                    <option key={urbanizacion.id} value={urbanizacion.id}>
+                      {urbanizacion.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="ff-state bitacoras-status-filter">
               <label className="ff-state-label" htmlFor="visitas-filter-creator">
                 Creador

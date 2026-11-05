@@ -381,6 +381,52 @@ const exportRegistros = async (req, res) => {
   }
 };
 
+// Hoja de Excel de visitas; la comparten el reporte interno y el del portal de clientes.
+const sendVisitasExcel = (res, items) =>
+  addRowsAndSend({
+    rows: items.map((item) => ({
+      entrada: item.entrada_at,
+      salida: item.salida_at,
+      visitante: visitorsFromVisit(item)
+        .map((visitor) => visitor.nombre)
+        .join('\n'),
+      cedula: visitorsFromVisit(item)
+        .map((visitor) => visitor.cedula)
+        .join('\n'),
+      tipo: item.tipo_visita_nombre,
+      placa: item.placa || '',
+      ubicacion: item.ubicacion_nombre,
+      casa: `${item.manzana_nombre} - ${item.villa_identificador}`,
+      titular: item.residente_principal_nombre,
+      creador: item.registrado_por_colaborador_nombre || item.registrado_por_usuario,
+      estado: item.estado,
+      observaciones: [
+        item.motivo_no_autorizacion,
+        item.observacion_ingreso && `Ingreso: ${item.observacion_ingreso}`,
+        item.observacion_salida && `Salida: ${item.observacion_salida}`,
+      ]
+        .filter(Boolean)
+        .join(' | '),
+    })),
+    sheetName: 'Visitas',
+    columns: [
+      { header: 'Ingreso', key: 'entrada', width: 22 },
+      { header: 'Salida', key: 'salida', width: 22 },
+      { header: 'Visitante', key: 'visitante', width: 28 },
+      { header: 'Cédula', key: 'cedula', width: 15 },
+      { header: 'Tipo', key: 'tipo', width: 14 },
+      { header: 'Placa', key: 'placa', width: 14 },
+      { header: 'Urbanización', key: 'ubicacion', width: 28 },
+      { header: 'Casa', key: 'casa', width: 16 },
+      { header: 'Titular', key: 'titular', width: 28 },
+      { header: 'Creador', key: 'creador', width: 28 },
+      { header: 'Estado', key: 'estado', width: 14 },
+      { header: 'Observaciones', key: 'observaciones', width: 40 },
+    ],
+    filename: 'reporte_visitas.xlsx',
+    res,
+  });
+
 const exportVisitas = async (req, res) => {
   try {
     const filters = normalizeVisitFilters(req.query);
@@ -391,49 +437,7 @@ const exportVisitas = async (req, res) => {
       userId,
       pagination: EXPORT_PAGE,
     });
-    await addRowsAndSend({
-      rows: items.map((item) => ({
-        entrada: item.entrada_at,
-        salida: item.salida_at,
-        visitante: visitorsFromVisit(item)
-          .map((visitor) => visitor.nombre)
-          .join('\n'),
-        cedula: visitorsFromVisit(item)
-          .map((visitor) => visitor.cedula)
-          .join('\n'),
-        tipo: item.tipo_visita_nombre,
-        placa: item.placa || '',
-        ubicacion: item.ubicacion_nombre,
-        casa: `${item.manzana_nombre} - ${item.villa_identificador}`,
-        titular: item.residente_principal_nombre,
-        creador: item.registrado_por_colaborador_nombre || item.registrado_por_usuario,
-        estado: item.estado,
-        observaciones: [
-          item.motivo_no_autorizacion,
-          item.observacion_ingreso && `Ingreso: ${item.observacion_ingreso}`,
-          item.observacion_salida && `Salida: ${item.observacion_salida}`,
-        ]
-          .filter(Boolean)
-          .join(' | '),
-      })),
-      sheetName: 'Visitas',
-      columns: [
-        { header: 'Ingreso', key: 'entrada', width: 22 },
-        { header: 'Salida', key: 'salida', width: 22 },
-        { header: 'Visitante', key: 'visitante', width: 28 },
-        { header: 'Cédula', key: 'cedula', width: 15 },
-        { header: 'Tipo', key: 'tipo', width: 14 },
-        { header: 'Placa', key: 'placa', width: 14 },
-        { header: 'Urbanización', key: 'ubicacion', width: 28 },
-        { header: 'Casa', key: 'casa', width: 16 },
-        { header: 'Titular', key: 'titular', width: 28 },
-        { header: 'Creador', key: 'creador', width: 28 },
-        { header: 'Estado', key: 'estado', width: 14 },
-        { header: 'Observaciones', key: 'observaciones', width: 40 },
-      ],
-      filename: 'reporte_visitas.xlsx',
-      res,
-    });
+    await sendVisitasExcel(res, items);
   } catch (error) {
     return handleControllerError(res, error, 'Error al exportar Visitas');
   }
@@ -1095,6 +1099,8 @@ module.exports = {
   deleteArchivedVisitForm,
   exportRegistros,
   exportVisitas,
+  sendVisitasExcel,
+  EXPORT_PAGE,
   exportVisitForms,
   getActiveVisitForm,
   getVisitFormDetail,

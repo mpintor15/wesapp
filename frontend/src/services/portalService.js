@@ -3,8 +3,10 @@
  *
  *  - getUbicaciones() : GET /portal/ubicaciones  Urbanizaciones del cliente autenticado.
  *  - getVisitas(params): GET /portal/visitas     Visitas de esas urbanizaciones.
+ *  - exportVisitas(params): GET /portal/visitas/excel  Reporte Excel de esas visitas.
  */
 import api from './api';
+import bitacorasService from './bitacorasService';
 import { buildServiceFailure } from './serviceUtils';
 
 const VISIT_PARAM_KEYS = [
@@ -46,6 +48,14 @@ const portalService = {
     } catch (error) {
       return buildServiceFailure(error, 'Error al obtener visitas');
     }
+  },
+
+  async exportVisitas(params = {}) {
+    return bitacorasService.exportExcel(
+      '/portal/visitas/excel',
+      pickDefined(params, VISIT_PARAM_KEYS),
+      'reporte_visitas.xlsx'
+    );
   },
 };
 

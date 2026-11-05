@@ -47,6 +47,7 @@ const ReportFiltersModal = ({
   filters,
   ubicaciones,
   activeView,
+  hideUbicacion = false,
 }) => {
   if (!isOpen) return null;
 
@@ -115,14 +116,16 @@ const ReportFiltersModal = ({
 
           {activeView === 'visitas' ? (
             <>
-              <div className="form-group">
-                <label>Ubicación</label>
-                <UbicacionSelect
-                  value={filters.ubicacion_id}
-                  onChange={setField}
-                  ubicaciones={ubicaciones}
-                />
-              </div>
+              {hideUbicacion ? null : (
+                <div className="form-group">
+                  <label>Ubicación</label>
+                  <UbicacionSelect
+                    value={filters.ubicacion_id}
+                    onChange={setField}
+                    ubicaciones={ubicaciones}
+                  />
+                </div>
+              )}
               <div className="form-group">
                 <label>Desde</label>
                 <FilterDateInput
