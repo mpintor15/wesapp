@@ -14,6 +14,7 @@ import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import ClientesCatalog from './ClientesCatalog';
 import AccesoPortalButton from './components/AccesoPortalButton';
 import AccesoPortalModal from './components/AccesoPortalModal';
+import ConfiguracionReportModal from './components/ConfiguracionReportModal';
 import UrbanizacionMastersModal from './components/UrbanizacionMastersModal';
 import { getConfiguracionPermissions } from './utils/configuracionPermissions';
 import './Configuracion.css';
@@ -23,6 +24,11 @@ const MAX_NOMBRE_LENGTH = 100;
 const COLLAPSED_UBICACIONES_LIMIT = 5;
 const UBICACIONES_PAGE_SIZE = 25;
 const HISTORICAL_UNASSIGNED_CLIENT_VALUE = '__historical_unassigned_cliente__';
+const EMPTY_REPORT_FILTERS = {
+  clientes: { search: '', estado: '', estadoUbicaciones: '' },
+  ubicaciones: { search: '', cliente_id: '' },
+};
+
 const CATALOG_TABS = [
   { id: 'clientes', label: 'Directorio' },
   { id: 'ubicaciones', label: 'Ubicaciones' },
@@ -388,6 +394,9 @@ const Configuracion = () => {
   const [ubicacionGroups, setUbicacionGroups] = useState([]);
   const [expandedUbicacionGroups, setExpandedUbicacionGroups] = useState(() => new Set());
   const [accesoPortalCliente, setAccesoPortalCliente] = useState(null);
+  const [reportFilters, setReportFilters] = useState(EMPTY_REPORT_FILTERS);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [ubicacionesMeta, setUbicacionesMeta] = useState({
     page: 1,
     pageSize: 25,
@@ -475,6 +484,27 @@ const Configuracion = () => {
 
   const ubicacionesTotal = ubicacionesMeta.totalLocations || allUbicaciones.length;
   const canManageAnyUbicacion = canCreate || canEdit || canDelete || canManageUrbanizacion;
+  const activeReportType = isClientesActive ? 'clientes' : 'ubicaciones';
+  const isReportButtonVisible = isClientesActive
+    ? permissions.canViewClientes
+    : permissions.canViewUbicaciones && isUbicacionesActive;
+
+  const exportReport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    const filters = reportFilters[activeReportType];
+    const result =
+      activeReportType === 'clientes'
+        ? await clientesService.exportClientes(filters)
+        : await inventarioService.exportUbicaciones(filters);
+    setIsExporting(false);
+    if (result.success) {
+      showToast('Reporte exportado exitosamente.', 'success');
+      setIsReportOpen(false);
+    } else if (!result.cancelled) {
+      showToast(result.message || 'No se pudo exportar el reporte.', 'error');
+    }
+  };
   // Solo los clientes con alguna ubicación tipo urbanización pueden tener acceso al portal.
   const canShowAccesoPortal = (group) =>
     (permissions.canCreateAccesoPortal || permissions.canManageAccesoPortal) &&
@@ -873,6 +903,18 @@ const Configuracion = () => {
                 type="button"
               >
                 Crear cliente
+              </button>
+            )}
+            {isReportButtonVisible && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setIsReportOpen(true)}
+                disabled={isExporting}
+                type="button"
+              >
+                {isClientesActive
+                  ? 'Generar reporte de Clientes'
+                  : 'Generar reporte de Ubicaciones'}
               </button>
             )}
             {isUbicacionesActive && canCreate && (
@@ -1623,6 +1665,28 @@ const Configuracion = () => {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+      {isReportOpen && (
+        <ConfiguracionReportModal
+          type={activeReportType}
+          filters={reportFilters[activeReportType]}
+          clientes={clientes}
+          isSubmitting={isExporting}
+          onFilterChange={(field, value) =>
+            setReportFilters((current) => ({
+              ...current,
+              [activeReportType]: { ...current[activeReportType], [field]: value },
+            }))
+          }
+          onClear={() =>
+            setReportFilters((current) => ({
+              ...current,
+              [activeReportType]: EMPTY_REPORT_FILTERS[activeReportType],
+            }))
+          }
+          onExport={exportReport}
+          onClose={() => setIsReportOpen(false)}
+        />
+      )}
       {accesoPortalCliente && (
         <AccesoPortalModal
           cliente={accesoPortalCliente}

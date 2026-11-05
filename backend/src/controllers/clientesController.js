@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const clientesReadRepository = require('../repositories/clientesReadRepository');
 const logger = require('../config/logger');
+const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const {
@@ -216,6 +217,54 @@ const getClientes = async (req, res) => {
   }
 };
 
+const EXPORT_PAGE = { page: 1, pageSize: 100000, offset: 0 };
+
+const exportClientes = async (req, res) => {
+  try {
+    const search = normalizeText(req.query.search);
+    const estado = normalizeText(req.query.estado)?.toLowerCase() || null;
+    const estadoUbicaciones = normalizeText(req.query.estadoUbicaciones)?.toLowerCase() || null;
+    if (estado && !VALID_ESTADOS.has(estado)) {
+      return sendError(res, 400, 'El estado del cliente es inválido');
+    }
+    if (estadoUbicaciones && !ESTADO_UBICACIONES_VALUES.has(estadoUbicaciones)) {
+      return sendError(res, 400, 'El filtro de ubicaciones es inválido');
+    }
+
+    const result = await clientesReadRepository.findClientes({
+      filters: { search, estado, estadoUbicaciones, ubicacionId: null },
+      pagination: EXPORT_PAGE,
+    });
+    const { workbook, worksheet } = createWorkbook('Clientes', [
+      { header: 'Cliente', key: 'nombre', width: 34 },
+      { header: 'Tipo ID', key: 'tipo_identificacion', width: 12 },
+      { header: 'Identificación', key: 'identificacion', width: 18 },
+      { header: 'Teléfono', key: 'telefono', width: 16 },
+      { header: 'Correo', key: 'correo', width: 30 },
+      { header: 'Dirección', key: 'direccion', width: 34 },
+      { header: 'Ciudad', key: 'ciudad', width: 18 },
+      { header: 'Estado', key: 'estado', width: 12 },
+      { header: 'Ubicaciones', key: 'ubicaciones_totales', width: 14 },
+    ]);
+    result.rows.forEach((row) =>
+      worksheet.addRow({
+        ...row,
+        tipo_identificacion: row.tipo_identificacion || '',
+        identificacion: row.identificacion || '',
+        telefono: row.telefono || '',
+        correo: row.correo || '',
+        direccion: row.direccion || '',
+        ciudad: row.ciudad || '',
+        estado: row.estado === 'inactivo' ? 'Inactivo' : 'Activo',
+      })
+    );
+    styleDataRows(worksheet);
+    await sendExcel(workbook, res, 'reporte_clientes.xlsx');
+  } catch (error) {
+    return handleClienteError(res, error, 'Error al exportar clientes');
+  }
+};
+
 const getClientesOpcionesUbicaciones = async (req, res) => {
   try {
     const result = await clientesReadRepository.findClientesOpciones();
@@ -405,6 +454,7 @@ const deleteCliente = async (req, res) => {
 module.exports = {
   createCliente,
   deleteCliente,
+  exportClientes,
   getClienteById,
   getClientes,
   getClientesOpcionesUbicaciones,

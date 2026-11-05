@@ -121,6 +121,47 @@ beforeEach(() => {
 });
 
 describe('clientes routes', () => {
+  test('exporta el reporte de clientes a Excel con los filtros indicados', async () => {
+    db.query.mockImplementation(async (sql, params = []) => {
+      const query = String(sql);
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [gerenteUser], rowCount: 1 };
+      }
+      if (query.includes('FROM clientes')) {
+        return {
+          rows: [
+            {
+              id: 1,
+              nombre: 'Banco Pichincha',
+              identificacion: '1790012348001',
+              tipo_identificacion: 'RUC',
+              estado: 'activo',
+              ubicaciones_totales: 2,
+              total_filtrado: 1,
+            },
+          ],
+          rowCount: 1,
+          params,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/clientes/excel?estado=activo');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('spreadsheetml');
+    expect(res.headers['content-disposition']).toContain('reporte_clientes.xlsx');
+  });
+
+  test('el reporte de clientes rechaza filtros inválidos y roles sin permiso', async () => {
+    const invalid = await requestWithAuth('get', '/api/clientes/excel?estado=otro');
+    expect(invalid.status).toBe(400);
+
+    const denied = await requestWithAuth('get', '/api/clientes/excel', sinPermisosToken);
+    expect(denied.status).toBe(403);
+  });
+
   test('lista opciones mínimas para ubicaciones con permiso de crear ubicaciones', async () => {
     db.query.mockImplementation(async (sql, params = []) => {
       const query = String(sql);

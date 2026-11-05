@@ -26,6 +26,12 @@ router.get(
 
 router.get('/', requirePermission(PERMISSIONS.CLIENTES_VER), clientesController.getClientes);
 
+router.get(
+  '/excel',
+  requirePermission(PERMISSIONS.CLIENTES_VER),
+  clientesController.exportClientes
+);
+
 router.get('/:id', requirePermission(PERMISSIONS.CLIENTES_VER), clientesController.getClienteById);
 
 router.post('/', requirePermission(PERMISSIONS.CLIENTES_CREAR), clientesController.createCliente);

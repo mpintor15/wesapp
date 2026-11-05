@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
+const { createWorkbook, styleDataRows, sendExcel } = require('../utils/excel');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const { parseStrictPositiveInteger } = require('../utils/inputValidation');
 const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
@@ -184,6 +185,61 @@ const getUbicaciones = async (req, res) => {
     return res.json({ success: true, data: result.rows });
   } catch (error) {
     return sendError(res, error, 'Error al obtener ubicaciones');
+  }
+};
+
+const exportUbicaciones = async (req, res) => {
+  try {
+    const params = [];
+    const conditions = [];
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    if (search.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'El filtro de búsqueda no puede exceder 100 caracteres',
+      });
+    }
+    if (req.query.cliente_id) {
+      const clienteId = parseClienteId(req.query.cliente_id);
+      if (!clienteId) {
+        return res.status(400).json({ success: false, message: 'El cliente es inválido' });
+      }
+      params.push(clienteId);
+      conditions.push(`u.cliente_id = $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(u.nombre ILIKE $${params.length} OR c.nombre ILIKE $${params.length})`);
+    }
+
+    const result = await findUbicacionesConFiltro({ conditions, params });
+    const { workbook, worksheet } = createWorkbook('Ubicaciones', [
+      { header: 'Cliente', key: 'cliente', width: 34 },
+      { header: 'Estado cliente', key: 'cliente_estado', width: 16 },
+      { header: 'Ubicación', key: 'nombre', width: 34 },
+      { header: 'Tipo', key: 'tipo', width: 16 },
+      { header: 'Artículos activos', key: 'articulos_activos', width: 18 },
+      { header: 'Artículos totales', key: 'articulos_totales', width: 18 },
+    ]);
+    const clienteEstadoLabel = (row) => {
+      if (!row.cliente_nombre) {
+        return '';
+      }
+      return row.cliente_estado === 'inactivo' ? 'Inactivo' : 'Activo';
+    };
+    result.rows.forEach((row) =>
+      worksheet.addRow({
+        ...row,
+        cliente: row.cliente_nombre || 'Sin cliente',
+        cliente_estado: clienteEstadoLabel(row),
+        tipo: row.tipo_punto === 'URBANIZACION' ? 'Urbanización' : 'General',
+      })
+    );
+    styleDataRows(worksheet);
+    await sendExcel(workbook, res, 'reporte_ubicaciones.xlsx');
+  } catch (error) {
+    logger.error('Error al exportar ubicaciones:', sanitizeError(error));
+    return res.status(500).json({ success: false, message: 'Error en el servidor' });
   }
 };
 
@@ -493,6 +549,7 @@ const deleteUbicacion = async (req, res) => {
 module.exports = {
   getUbicaciones,
   getUbicacionesAgrupadas,
+  exportUbicaciones,
   createUbicacion,
   updateUbicacion,
   deleteUbicacion,

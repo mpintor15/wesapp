@@ -1,8 +1,19 @@
 import api from './api';
+import { downloadExcel } from './excelDownload';
 import { buildServiceFailure } from './serviceUtils';
 import { normalizePagination } from '../utils/pagination';
 
+const REPORT_PARAM_KEYS = ['search', 'estado', 'estadoUbicaciones'];
+
 const clientesService = {
+  async exportClientes(params = {}) {
+    const query = {};
+    REPORT_PARAM_KEYS.forEach((key) => {
+      if (params[key]) query[key] = params[key];
+    });
+    return downloadExcel('/clientes/excel', query, 'reporte_clientes.xlsx');
+  },
+
   async listClientes(params = {}) {
     try {
       const response = await api.get('/clientes', { params });

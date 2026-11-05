@@ -29,6 +29,7 @@
  *  - exportMovimientosExcel(params)     : GET /inventario/movimientos/excel → descarga .xlsx
  */
 import api from './api';
+import { downloadExcel } from './excelDownload';
 import {
   extractError,
   getFilenameFromDisposition,
@@ -107,6 +108,14 @@ const inventarioService = {
     } catch (error) {
       return failure(error, 'Error al obtener ubicaciones');
     }
+  },
+
+  exportUbicaciones: async (params = {}) => {
+    const query = {};
+    ['search', 'cliente_id'].forEach((key) => {
+      if (params[key]) query[key] = params[key];
+    });
+    return downloadExcel('/inventario/ubicaciones/excel', query, 'reporte_ubicaciones.xlsx');
   },
 
   getUbicacionesAgrupadas: async (params = {}) => {
