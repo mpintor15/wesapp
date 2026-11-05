@@ -4,6 +4,7 @@ import ConfirmDialog from '../../../components/ConfirmDialog';
 import { useToast } from '../../../context/ToastContext';
 import clientesService from '../../../services/clientesService';
 import { getVisibleErrorMessage } from '../../../services/serviceUtils';
+import { suggestClienteUsuario } from '../utils/clienteUsuario';
 
 const MIN_USUARIO_LENGTH = 3;
 const MAX_USUARIO_LENGTH = 50;
@@ -33,7 +34,7 @@ const AccesoPortalModal = ({ cliente, canCreate = false, canManage = false, onCl
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [usuarioInput, setUsuarioInput] = useState('');
+  const [usuarioInput, setUsuarioInput] = useState(() => suggestClienteUsuario(cliente.nombre));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [credentials, setCredentials] = useState(null);
   const [copied, setCopied] = useState(false);
