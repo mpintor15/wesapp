@@ -36,6 +36,19 @@ const extractToken = (req) => {
   return cookieToken ? { token: cookieToken, fromCookie: true } : null;
 };
 
+// Un token deja de valer si se cerró esa sesión (jti revocado) o si se emitió antes
+// del último cambio/restablecimiento de contraseña (sesiones_validas_desde).
+const isSessionRevoked = (user, decoded) => {
+  if (user.sesion_revocada) {
+    return true;
+  }
+  if (!user.sesiones_validas_desde) {
+    return false;
+  }
+  const validFromSeconds = Math.floor(new Date(user.sesiones_validas_desde).getTime() / 1000);
+  return !Number.isFinite(decoded.iat) || decoded.iat < validFromSeconds;
+};
+
 const verifyToken = async (req, res, next) => {
   const extracted = extractToken(req);
 
@@ -67,10 +80,12 @@ const verifyToken = async (req, res, next) => {
 
   try {
     const result = await db.query(
-      `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo, cliente_id
+      `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo, cliente_id,
+              sesiones_validas_desde,
+              EXISTS (SELECT 1 FROM sesiones_revocadas sr WHERE sr.jti = $2::text) AS sesion_revocada
        FROM usuarios
        WHERE id = $1`,
-      [userId]
+      [userId, decoded.jti || null]
     );
 
     if (result.rowCount === 0) {
@@ -78,6 +93,9 @@ const verifyToken = async (req, res, next) => {
     }
 
     const user = result.rows[0];
+    if (isSessionRevoked(user, decoded)) {
+      return sendAuthenticationRequired(res);
+    }
     if (!user.activo) {
       return sendUserDisabled(res);
     }

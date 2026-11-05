@@ -40,7 +40,11 @@ const authService = {
       return { success: false, message: response.data.message };
     } catch (error) {
       if (error?.response?.status === 401) {
-        return { success: false, message: 'Usuario o contraseña incorrectos' };
+        return {
+          success: false,
+          message:
+            'Usuario o contraseña incorrectos. Tras varios intentos fallidos la cuenta se bloquea unos minutos.',
+        };
       }
 
       if (!error?.response) {

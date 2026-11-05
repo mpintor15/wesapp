@@ -64,15 +64,28 @@ const findPasswordHashByUserId = async (userId) => {
   return result.rows[0]?.password_hash || null;
 };
 
-const updatePasswordAndClearFirstLogin = async (userId, passwordHash) => {
+// sessionsValidFrom invalida todos los tokens emitidos antes de ese instante.
+const updatePasswordAndClearFirstLogin = async (userId, passwordHash, sessionsValidFrom) => {
   const result = await db.query(
     `UPDATE usuarios
-     SET password_hash = $1, primer_login = FALSE, intentos_fallidos = 0, bloqueado_hasta = NULL
+     SET password_hash = $1, primer_login = FALSE, intentos_fallidos = 0, bloqueado_hasta = NULL,
+         sesiones_validas_desde = $3
      WHERE id = $2
      RETURNING id`,
-    [passwordHash, userId]
+    [passwordHash, userId, sessionsValidFrom]
   );
   return result.rowCount > 0;
+};
+
+// Revoca un token individual (cierre de sesión) y purga los ya vencidos.
+const revokeSession = async ({ jti, userId, expiresAt }) => {
+  await db.query('DELETE FROM sesiones_revocadas WHERE expira_at < NOW()');
+  await db.query(
+    `INSERT INTO sesiones_revocadas (jti, usuario_id, expira_at)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (jti) DO NOTHING`,
+    [jti, userId, expiresAt]
+  );
 };
 
 // Incrementa de forma atómica el contador y, al alcanzar el máximo, fija el bloqueo.
@@ -100,6 +113,7 @@ const resetFailedLogins = async (userId) => {
 };
 
 module.exports = {
+  revokeSession,
   registerFailedLogin,
   resetFailedLogins,
   findPasswordHashByUserId,

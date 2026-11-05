@@ -155,7 +155,8 @@ const resetAcceso = async (req, res) => {
       }
       const result = await client.query(
         `UPDATE usuarios
-         SET password_hash = $1, primer_login = TRUE, intentos_fallidos = 0, bloqueado_hasta = NULL
+         SET password_hash = $1, primer_login = TRUE, intentos_fallidos = 0, bloqueado_hasta = NULL,
+             sesiones_validas_desde = NOW()
          WHERE id = $2
          RETURNING ${USUARIO_COLUMNS}`,
         [passwordHash, current.id]
