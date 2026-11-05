@@ -8,6 +8,9 @@ import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import HistorialVisitas from '../Bitacoras/components/HistorialVisitas';
 import '../Bitacoras/Bitacoras.css';
 
+// Cada cuánto se actualiza la tabla sola para ver las visitas casi en tiempo real.
+const AUTO_REFRESH_MS = 20000;
+
 // Vista de solo lectura de las visitas de las urbanizaciones del cliente autenticado.
 const PortalVisitas = () => {
   useScrollToTopOnMount();
@@ -64,6 +67,7 @@ const PortalVisitas = () => {
             refreshKey={refreshKey}
             showToast={showToast}
             readOnly
+            autoRefreshMs={AUTO_REFRESH_MS}
             fetchVisitas={portalService.getVisitas}
           />
         )}

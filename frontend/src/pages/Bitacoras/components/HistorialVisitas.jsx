@@ -256,6 +256,9 @@ const HistorialVisitas = ({
   // Modo portal de clientes: misma tabla, sin acciones de escritura y con otra fuente de datos.
   readOnly = false,
   fetchVisitas = fetchBitacorasVisitas,
+  // Si es > 0, la tabla se actualiza sola cada ese número de ms (en silencio,
+  // sin parpadeo) mientras la pestaña está visible.
+  autoRefreshMs = 0,
 }) => {
   const urbanizaciones = ubicaciones.filter((ubicacion) => ubicacion.tipo_punto === 'URBANIZACION');
   const [draftFilters, setDraftFilters] = useState({ ...EMPTY_FILTERS });
@@ -307,28 +310,37 @@ const HistorialVisitas = ({
   // un refresco manual, para no alterar esas interacciones explícitas.
   const pinnedVisitRef = useRef(null);
 
-  const loadVisits = useCallback(async () => {
-    const requestId = requestSequenceRef.current + 1;
-    requestSequenceRef.current = requestId;
-    setLoading(true);
-    setError('');
-    const result = await fetchVisitas(buildParams(page, appliedFilters, sort));
-    if (requestId !== requestSequenceRef.current) return;
-    if (!result.success) {
-      setError(getVisibleErrorMessage(result, 'No se pudo cargar el historial de visitas.'));
+  // silent: actualización automática; no muestra "cargando" y, si falla, deja
+  // la tabla como estaba en lugar de reemplazarla por un error.
+  const loadVisits = useCallback(
+    async ({ silent = false } = {}) => {
+      const requestId = requestSequenceRef.current + 1;
+      requestSequenceRef.current = requestId;
+      if (!silent) {
+        setLoading(true);
+        setError('');
+      }
+      const result = await fetchVisitas(buildParams(page, appliedFilters, sort));
+      if (requestId !== requestSequenceRef.current) return;
+      if (!result.success) {
+        if (!silent) {
+          setError(getVisibleErrorMessage(result, 'No se pudo cargar el historial de visitas.'));
+          setLoading(false);
+        }
+        return;
+      }
+      let data = Array.isArray(result.data) ? result.data : [];
+      const pinned = pinnedVisitRef.current;
+      if (pinned && !data.some((visit) => visit.id === pinned.id)) {
+        data = [pinned, ...data];
+      }
+      setVisits(data);
+      setMeta({ ...EMPTY_META, ...result.meta });
+      setCreators(Array.isArray(result.filters?.creators) ? result.filters.creators : []);
       setLoading(false);
-      return;
-    }
-    let data = Array.isArray(result.data) ? result.data : [];
-    const pinned = pinnedVisitRef.current;
-    if (pinned && !data.some((visit) => visit.id === pinned.id)) {
-      data = [pinned, ...data];
-    }
-    setVisits(data);
-    setMeta({ ...EMPTY_META, ...result.meta });
-    setCreators(Array.isArray(result.filters?.creators) ? result.filters.creators : []);
-    setLoading(false);
-  }, [appliedFilters, fetchVisitas, page, sort]);
+    },
+    [appliedFilters, fetchVisitas, page, sort]
+  );
 
   const handleSort = (field) => {
     pinnedVisitRef.current = null;
@@ -350,6 +362,20 @@ const HistorialVisitas = ({
       requestSequenceRef.current += 1;
     };
   }, [loadVisits, refreshKey]);
+
+  useEffect(() => {
+    if (!autoRefreshMs) return undefined;
+    const refreshIfVisible = () => {
+      if (!document.hidden) void loadVisits({ silent: true });
+    };
+    const timer = setInterval(refreshIfVisible, autoRefreshMs);
+    // Al volver a la pestaña se actualiza de inmediato en vez de esperar el siguiente ciclo.
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [autoRefreshMs, loadVisits]);
 
   useEffect(() => {
     onFiltersChange?.(buildParams(undefined, appliedFilters, sort));
