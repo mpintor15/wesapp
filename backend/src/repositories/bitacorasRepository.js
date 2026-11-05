@@ -972,6 +972,14 @@ const findLockedVisit = async ({ client, visitId }) => {
        bv.villa_id, COALESCE(bv.villa_texto, v.identificador) AS villa_identificador, bv.estado,
        bv.visitante_nombre, bv.tipo_visita_id, tv.nombre AS tipo_visita_nombre,
        tv.requiere_salida, bv.placa,
+       (
+         SELECT string_agg(NULLIF(BTRIM(elem->>'value'), ''), ', ' ORDER BY gr.entry_index)
+         FROM bitacora_visita_grupo_registros gr
+         CROSS JOIN LATERAL jsonb_array_elements(gr.respuestas) elem
+         WHERE gr.visita_id = bv.id
+           AND gr.group_key_snapshot = 'visitantes'
+           AND elem->>'field_key' = 'nombre'
+       ) AS visitantes_nombres,
        bv.registrado_por_usuario_id,
        bv.registrado_por_colaborador_id, bv.entrada_at
      FROM bitacora_visitas bv

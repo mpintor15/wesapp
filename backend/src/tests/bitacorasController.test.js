@@ -1024,6 +1024,52 @@ describe('bitacorasController visitas urbanas', () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
+  test('la Bitácora automática nombra a todos los visitantes del grupo', async () => {
+    transactionForCreate({ locationType: 'URBANIZACION' });
+    repository.findActiveVisitFormForLocation.mockResolvedValue({
+      id: 51,
+      tipos: [
+        { id: 900, form_version_id: 51, nombre: 'Peatón', requiere_salida: true, sort_order: 1 },
+      ],
+      fields: [],
+      groups: [
+        {
+          id: 60,
+          group_key: 'visitantes',
+          label: 'Visitantes',
+          min_count: 0,
+          aplica_a: 'TODOS',
+          fields: [
+            { field_key: 'nombre', label: 'Nombre', type: 'text', required: true },
+            { field_key: 'cedula', label: 'Cédula', type: 'cedula', required: false },
+          ],
+        },
+      ],
+    });
+    const res = makeResponse();
+
+    await controller.createVisita(
+      makeRequest({
+        body: {
+          ubicacion_id: 3,
+          manzana: 'A',
+          villa: 'V1',
+          tipo_visita_id: 900,
+          respuestas: {},
+          grupos: { visitantes: [{ nombre: 'Ana Mora' }, { nombre: 'Luis Paz' }] },
+        },
+      }),
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(repository.insertBitacoraRegistro).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: 'Ingreso visita: Ana Mora, Luis Paz · Peatón · Casa A - V1',
+      })
+    );
+  });
+
   test('regresión: visita "No autorizada" persiste estado y motivo, sin abrir ni cerrar salida', async () => {
     transactionForCreate({ locationType: 'URBANIZACION' });
     repository.createVisit.mockResolvedValueOnce({

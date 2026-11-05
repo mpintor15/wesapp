@@ -393,6 +393,34 @@ const validateVisitGroupResponses = (groups, groupResponses = {}, tipoVisitaId) 
   return normalized;
 };
 
+// Nombres de las personas del grupo "Visitantes" (varias por visita), unidos
+// para el detalle de la bitácora. Cae al nombre legacy de bitacora_visitas.
+const visitorNamesLabel = ({ groupEntries, legacyName } = {}) => {
+  const names = (Array.isArray(groupEntries) ? groupEntries : [])
+    .map((entry) => String(entry?.nombre || '').trim())
+    .filter(Boolean);
+  return names.length > 0 ? names.join(', ') : legacyName || '';
+};
+
+// Visitantes como { nombre, cedula } desde la respuesta de la API: prioriza los
+// registros del grupo "Visitantes" y cae a los campos legacy de la visita.
+const visitorsFromVisit = (visit) => {
+  const groups = Array.isArray(visit?.visitantes) ? visit.visitantes : [];
+  const fromGroups = groups.map((entry) => {
+    const find = (key, type) =>
+      (Array.isArray(entry) ? entry : []).find((item) => item.field_key === key)?.value ||
+      (Array.isArray(entry) ? entry : []).find((item) => item.type === type)?.value ||
+      '';
+    return { nombre: find('nombre', 'text'), cedula: find('cedula', 'cedula') };
+  });
+  if (fromGroups.length > 0) {
+    return fromGroups;
+  }
+  return visit?.visitante_nombre
+    ? [{ nombre: visit.visitante_nombre, cedula: visit.visitante_documento || '' }]
+    : [];
+};
+
 const visitDetail = ({ action, visitorName, tipoVisitaNombre, plate, house }) => {
   const access = plate ? `${tipoVisitaNombre} · Placa ${plate}` : tipoVisitaNombre;
   return `${action} visita: ${visitorName || 'Visitante'} · ${access} · Casa ${house}`;
@@ -408,6 +436,8 @@ module.exports = {
   VISIT_FORM_QUERY_FIELDS,
   HISTORY_SORTS,
   VISIT_SORTS,
+  visitorNamesLabel,
+  visitorsFromVisit,
   VISIT_FORM_SORTS,
   hasGlobalLocationScope,
   domainError,
