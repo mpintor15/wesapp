@@ -47,14 +47,21 @@ const styleDataRows = (worksheet) => {
     if (rowNumber === 1) {
       return;
     }
-    row.height = 18;
+    let lines = 1;
+    for (let c = 1; c <= colCount; c++) {
+      const value = row.getCell(c).value;
+      if (typeof value === 'string') {
+        lines = Math.max(lines, value.split('\n').length);
+      }
+    }
+    row.height = 18 * lines;
     for (let c = 1; c <= colCount; c++) {
       const cell = row.getCell(c);
       if (rowNumber % 2 === 0) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ROW_ALT_FILL } };
       }
       cell.border = thinBorder();
-      cell.alignment = { ...cell.alignment, vertical: 'middle' };
+      cell.alignment = { ...cell.alignment, vertical: 'middle', wrapText: lines > 1 };
     }
   });
 };

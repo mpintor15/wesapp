@@ -485,7 +485,7 @@ const VisitaForm = ({ isOpen, ubicaciones, onClose, onSuccess, showToast }) => {
                       onClick={() => addGroupEntry(group.group_key)}
                       disabled={isSubmitting}
                     >
-                      + Agregar {group.label}
+                      Agregar {group.label}
                     </button>
                   </div>
                 );

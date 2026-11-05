@@ -57,11 +57,15 @@ const casaLabel = (visit) =>
 const visitantesEntries = (visit) => {
   const entries = Array.isArray(visit.visitantes) ? visit.visitantes : [];
   if (entries.length > 0) {
-    const findValue = (entry, key) =>
-      Array.isArray(entry) ? entry.find((item) => item.field_key === key)?.value : undefined;
+    // Por clave y, si el formulario usa otra, por tipo de campo (text/cedula).
+    const findValue = (entry, key, type) =>
+      Array.isArray(entry)
+        ? (entry.find((item) => item.field_key === key) || entry.find((item) => item.type === type))
+            ?.value
+        : undefined;
     return entries.map((entry) => ({
-      nombre: findValue(entry, 'nombre') || '',
-      cedula: findValue(entry, 'cedula') || '',
+      nombre: findValue(entry, 'nombre', 'text') || '',
+      cedula: findValue(entry, 'cedula', 'cedula') || '',
     }));
   }
   if (visit.visitante_nombre) {

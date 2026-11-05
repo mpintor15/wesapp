@@ -45,6 +45,8 @@ const {
   validateVisitResponses,
   validateVisitGroupResponses,
   visitDetail,
+  visitorNamesLabel,
+  visitorsFromVisit,
 } = require('../modules/bitacoras/bitacoras.domain');
 
 const EXPORT_PAGE = { page: 1, pageSize: 100000, offset: 0 };
@@ -393,8 +395,12 @@ const exportVisitas = async (req, res) => {
       rows: items.map((item) => ({
         entrada: item.entrada_at,
         salida: item.salida_at,
-        visitante: item.visitante_nombre,
-        cedula: item.visitante_documento,
+        visitante: visitorsFromVisit(item)
+          .map((visitor) => visitor.nombre)
+          .join('\n'),
+        cedula: visitorsFromVisit(item)
+          .map((visitor) => visitor.cedula)
+          .join('\n'),
         tipo: item.tipo_visita_nombre,
         placa: item.placa || '',
         ubicacion: item.ubicacion_nombre,
@@ -794,9 +800,13 @@ const createVisita = async (req, res) => {
           ? `${req.body.manzana} - ${req.body.villa}`
           : null;
       const autorizada = req.body.autorizada !== false;
+      const visitorName = visitorNamesLabel({
+        groupEntries: groupResponses.visitantes,
+        legacyName: req.body.visitante_nombre,
+      });
       const detail = visitDetail({
         action: autorizada ? 'Ingreso' : 'No autorizada',
-        visitorName: req.body.visitante_nombre,
+        visitorName,
         tipoVisitaNombre: tipoVisita.nombre,
         plate: req.body.placa,
         house,
@@ -861,7 +871,7 @@ const createVisita = async (req, res) => {
       if (autorizada && !tipoVisita.requiere_salida) {
         const exitDetail = visitDetail({
           action: 'Salida',
-          visitorName: req.body.visitante_nombre,
+          visitorName,
           tipoVisitaNombre: tipoVisita.nombre,
           plate: req.body.placa,
           house,
@@ -964,7 +974,7 @@ const closeVisita = async (req, res) => {
       }
       const detail = visitDetail({
         action: 'Salida',
-        visitorName: visita.visitante_nombre,
+        visitorName: visita.visitantes_nombres || visita.visitante_nombre,
         tipoVisitaNombre: visita.tipo_visita_nombre,
         plate: visita.placa,
         house: `${visita.manzana_nombre} - ${visita.villa_identificador}`,
@@ -1031,7 +1041,7 @@ const cancelVisita = async (req, res) => {
       }
       const detail = visitDetail({
         action: 'Anulación',
-        visitorName: visita.visitante_nombre,
+        visitorName: visita.visitantes_nombres || visita.visitante_nombre,
         tipoVisitaNombre: visita.tipo_visita_nombre,
         plate: visita.placa,
         house: `${visita.manzana_nombre} - ${visita.villa_identificador}`,
