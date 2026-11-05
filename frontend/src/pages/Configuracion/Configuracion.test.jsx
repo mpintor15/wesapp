@@ -329,10 +329,17 @@ const renderPage = async () => {
   return {
     container,
     buttons: () => Array.from(container.querySelectorAll('button')),
-    button: (text) =>
-      Array.from(container.querySelectorAll('button')).find((button) =>
-        button.textContent.includes(text)
-      ),
+    button: (text) => {
+      const buttons = Array.from(container.querySelectorAll('button'));
+      return (
+        buttons.find((button) => button.textContent.trim() === text) ||
+        buttons.find(
+          (button) =>
+            button.textContent.includes(text) &&
+            (text.startsWith('Generar') || !button.textContent.startsWith('Generar'))
+        )
+      );
+    },
     input: () => container.querySelector('#ubicacion-nombre'),
     field: (selector) => container.querySelector(selector),
     text: () => container.textContent,
@@ -386,6 +393,30 @@ describe('Configuracion ubicaciones', () => {
     clientesService.listOpcionesUbicaciones.mockResolvedValue(
       success(clientes.filter((cliente) => cliente.estado === 'activo'))
     );
+  });
+
+  test('Directorio y Ubicaciones ofrecen su reporte con los filtros del modal', async () => {
+    clientesService.exportClientes = jest.fn().mockResolvedValue({ success: true });
+    inventarioService.exportUbicaciones = jest.fn().mockResolvedValue({ success: true });
+    const page = await renderPage();
+
+    expect(page.button('Generar reporte de Clientes')).toBeTruthy();
+    expect(page.button('Generar reporte de Ubicaciones')).toBeFalsy();
+    await page.click(page.button('Generar reporte de Clientes'));
+    expect(document.body.textContent).toContain('Generar reporte de Clientes');
+    await page.click(
+      Array.from(document.querySelectorAll('.configuracion-report-actions .btn')).find(
+        (button) => button.textContent === 'Generar reporte'
+      )
+    );
+    expect(clientesService.exportClientes).toHaveBeenCalledWith(
+      expect.objectContaining({ estado: '', search: '' })
+    );
+
+    await page.click(page.button('Ubicaciones'));
+    expect(page.button('Generar reporte de Ubicaciones')).toBeTruthy();
+    expect(page.button('Generar reporte de Clientes')).toBeFalsy();
+    page.unmount();
   });
 
   test('muestra Directorio antes que Ubicaciones y Directorio es la pestaña por defecto', async () => {
@@ -1241,7 +1272,7 @@ describe('Configuracion ubicaciones', () => {
     const page = await renderPage();
 
     await page.click(page.button('2 ubicaciones'));
-    await page.click(page.container.querySelector('.page-header-actions .btn:not(.btn-icon-only)'));
+    await page.click(page.button('Crear ubicación'));
     page.changeField('#ubicacion-cliente', '3');
     page.changeInput('Patio Beta');
     await page.submitForm();
@@ -2047,7 +2078,7 @@ describe('Configuracion ubicaciones', () => {
     expect(page.field('#ubicacion-cliente').disabled).toBe(true);
 
     await page.click(page.button('Cancelar'));
-    await page.click(page.container.querySelector('.page-header-actions .btn:not(.btn-icon-only)'));
+    await page.click(page.button('Crear ubicación'));
 
     expect(page.field('#ubicacion-cliente').value).toBe('');
     expect(page.field('#ubicacion-cliente').disabled).toBe(false);

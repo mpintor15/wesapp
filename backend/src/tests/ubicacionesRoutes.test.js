@@ -66,6 +66,43 @@ beforeEach(() => {
 });
 
 describe('ubicaciones routes', () => {
+  test('exporta el reporte de ubicaciones a Excel', async () => {
+    db.query.mockImplementation(async (sql) => {
+      const query = String(sql);
+      if (query.includes('FROM usuarios') && query.includes('WHERE id = $1')) {
+        return { rows: [currentUser], rowCount: 1 };
+      }
+      if (query.includes('FROM ubicaciones u')) {
+        return {
+          rows: [
+            {
+              id: 1,
+              nombre: 'Urbanización de prueba',
+              tipo_punto: 'URBANIZACION',
+              cliente_id: 1,
+              cliente_nombre: 'Banco Pichincha',
+              cliente_estado: 'activo',
+              articulos_activos: 0,
+              articulos_totales: 0,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const res = await requestWithAuth('get', '/api/inventario/ubicaciones/excel?cliente_id=1');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-disposition']).toContain('reporte_ubicaciones.xlsx');
+  });
+
+  test('el reporte de ubicaciones valida el cliente', async () => {
+    const res = await requestWithAuth('get', '/api/inventario/ubicaciones/excel?cliente_id=abc');
+    expect(res.status).toBe(400);
+  });
+
   test('protege maestros de Urbanización con el permiso dedicado', async () => {
     currentUser.tipo_usuario = 'secretario';
     const res = await requestWithAuth('get', '/api/inventario/ubicaciones/1/manzanas');

@@ -65,6 +65,12 @@ router.put(
 );
 
 router.get(
+  '/excel',
+  requirePermission(PERMISSIONS.INVENTARIO_UBICACIONES_VER),
+  ubicacionesController.exportUbicaciones
+);
+
+router.get(
   '/agrupadas',
   requireAnyPermission(
     PERMISSIONS.INVENTARIO_UBICACIONES_VER,
