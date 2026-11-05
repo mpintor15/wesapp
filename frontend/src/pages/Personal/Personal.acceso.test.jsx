@@ -187,8 +187,8 @@ describe('Personal — gestión de acceso e integración con Usuarios', () => {
 
     expect(container.querySelector('[aria-label="Gestionar acceso de Ana Torres"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="Gestionar acceso de Beto Ruiz"]')).toBeNull();
-    // Tampoco puede crear colaboradores.
-    expect(container.textContent).not.toContain('Crear nuevo colaborador');
+    // Puede crear colaboradores, pero el formulario no pide datos de nómina.
+    expect(container.textContent).toContain('Crear nuevo colaborador');
   });
 
   test('un rol sin acceso a datos sensibles no ve columnas de Banco/Cuenta ni Sueldo', async () => {

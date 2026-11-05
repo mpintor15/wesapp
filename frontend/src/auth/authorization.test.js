@@ -108,7 +108,9 @@ describe('authorization', () => {
 
   test('personal, usuarios y acceso de clientes según el rol', () => {
     expect(can(user('secretario'), PERMISSIONS.PERSONAL_CREAR)).toBe(true);
-    expect(can(user('supervisor'), PERMISSIONS.PERSONAL_CREAR)).toBe(false);
+    expect(can(user('supervisor'), PERMISSIONS.PERSONAL_CREAR)).toBe(true);
+    expect(can(user('supervisor'), PERMISSIONS.PERSONAL_EDITAR)).toBe(false);
+    expect(can(user('supervisor'), PERMISSIONS.PERSONAL_ELIMINAR)).toBe(false);
 
     for (const role of ['gerente', 'secretario', 'supervisor']) {
       expect(can(user(role), PERMISSIONS.USUARIOS_CREAR)).toBe(true);

@@ -154,10 +154,12 @@ describe('permission matrix', () => {
 });
 
 describe('Personal, usuarios y acceso de clientes por rol', () => {
-  test('solo gerente y secretario crean colaboradores', () => {
+  test('gerente, secretario y supervisor crean colaboradores; el supervisor no edita ni elimina', () => {
     expect(hasPermission('gerente', PERMISSIONS.PERSONAL_CREAR)).toBe(true);
     expect(hasPermission('secretario', PERMISSIONS.PERSONAL_CREAR)).toBe(true);
-    expect(hasPermission('supervisor', PERMISSIONS.PERSONAL_CREAR)).toBe(false);
+    expect(hasPermission('supervisor', PERMISSIONS.PERSONAL_CREAR)).toBe(true);
+    expect(hasPermission('supervisor', PERMISSIONS.PERSONAL_EDITAR)).toBe(false);
+    expect(hasPermission('supervisor', PERMISSIONS.PERSONAL_ELIMINAR)).toBe(false);
     expect(hasPermission('contador', PERMISSIONS.PERSONAL_CREAR)).toBe(false);
   });
 
