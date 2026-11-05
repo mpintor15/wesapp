@@ -26,10 +26,12 @@ const PageHeader = ({
 }) => (
   <header className="brand-header page-header page-header--light">
     <div className="page-header-left">
-      <button className="btn-back" onClick={onBack} title={backTitle} type="button">
-        <BackIcon />
-        {backLabel}
-      </button>
+      {onBack ? (
+        <button className="btn-back" onClick={onBack} title={backTitle} type="button">
+          <BackIcon />
+          {backLabel}
+        </button>
+      ) : null}
       <h1>{title}</h1>
     </div>
 

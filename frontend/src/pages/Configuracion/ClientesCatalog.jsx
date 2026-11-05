@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import AppModal from '../../components/AppModal';
 import CollapsibleFilters from '../../components/CollapsibleFilters';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import AccesoPortalButton from './components/AccesoPortalButton';
 import AccesoPortalModal from './components/AccesoPortalModal';
 import LoadingState from '../../components/LoadingState';
 import PaginationControls from '../../components/PaginationControls';
@@ -797,30 +798,10 @@ const ClientesCatalog = ({
                           <td className="app-col-actions app-col-actions--double">
                             <div className="action-buttons app-table-actions">
                               {canShowAccesoPortal(cliente) && (
-                                <button
-                                  className="action-btn action-btn-edit"
-                                  type="button"
+                                <AccesoPortalButton
+                                  clienteNombre={cliente.nombre}
                                   onClick={() => setAccesoPortalCliente(cliente)}
-                                  title="Acceso al portal de visitas"
-                                  aria-label={`Acceso al portal de ${cliente.nombre}`}
-                                >
-                                  <svg
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    width="14"
-                                    height="14"
-                                    aria-hidden="true"
-                                  >
-                                    <circle cx="7.5" cy="15.5" r="3.5" />
-                                    <path d="M10 13l9-9" />
-                                    <path d="M16 7l3 3" />
-                                    <path d="M14 9l2 2" />
-                                  </svg>
-                                </button>
+                                />
                               )}
                               {canEditCliente && (
                                 <button
@@ -920,30 +901,10 @@ const ClientesCatalog = ({
                     {hasActionsColumn && (
                       <div className="record-card-actions configuracion-cliente-card-actions">
                         {canShowAccesoPortal(cliente) && (
-                          <button
-                            className="action-btn action-btn-edit"
-                            type="button"
+                          <AccesoPortalButton
+                            clienteNombre={cliente.nombre}
                             onClick={() => setAccesoPortalCliente(cliente)}
-                            title="Acceso al portal de visitas"
-                            aria-label={`Acceso al portal de ${cliente.nombre}`}
-                          >
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              width="14"
-                              height="14"
-                              aria-hidden="true"
-                            >
-                              <circle cx="7.5" cy="15.5" r="3.5" />
-                              <path d="M10 13l9-9" />
-                              <path d="M16 7l3 3" />
-                              <path d="M14 9l2 2" />
-                            </svg>
-                          </button>
+                          />
                         )}
                         {canEditCliente && (
                           <button

@@ -47,6 +47,7 @@ const ReportFiltersModal = ({
   filters,
   ubicaciones,
   activeView,
+  hideUbicacion = false,
 }) => {
   if (!isOpen) return null;
 
@@ -58,13 +59,13 @@ const ReportFiltersModal = ({
       isOpen={isOpen}
       onClose={onClose}
       title={TITLES[activeView] || 'Generar reporte'}
-      size="sm"
+      className="bitacoras-report-modal"
       closeOnBackdrop
       closeButtonDisabled={isSubmitting}
     >
       <AppModal.Header />
-      <AppModal.Body>
-        <div className="bitacoras-registro-grid">
+      <AppModal.Body className="bitacoras-report-body">
+        <div className="bitacoras-report-card bitacoras-report-grid">
           {activeView === 'historial' ? (
             <>
               <div className="form-group">
@@ -115,14 +116,16 @@ const ReportFiltersModal = ({
 
           {activeView === 'visitas' ? (
             <>
-              <div className="form-group">
-                <label>Ubicación</label>
-                <UbicacionSelect
-                  value={filters.ubicacion_id}
-                  onChange={setField}
-                  ubicaciones={ubicaciones}
-                />
-              </div>
+              {hideUbicacion ? null : (
+                <div className="form-group">
+                  <label>Ubicación</label>
+                  <UbicacionSelect
+                    value={filters.ubicacion_id}
+                    onChange={setField}
+                    ubicaciones={ubicaciones}
+                  />
+                </div>
+              )}
               <div className="form-group">
                 <label>Desde</label>
                 <FilterDateInput
@@ -212,15 +215,7 @@ const ReportFiltersModal = ({
           ) : null}
         </div>
       </AppModal.Body>
-      <AppModal.Footer className="modal-buttons">
-        <button
-          className="btn btn-primary"
-          type="button"
-          onClick={onExport}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? 'Generando…' : 'Generar reporte'}
-        </button>
+      <AppModal.Footer className="bitacoras-report-actions">
         <button
           className="btn btn-modal-clear"
           type="button"
@@ -236,6 +231,14 @@ const ReportFiltersModal = ({
           disabled={isSubmitting}
         >
           Cancelar
+        </button>
+        <button
+          className="btn btn-primary"
+          type="button"
+          onClick={onExport}
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Generando…' : 'Generar reporte'}
         </button>
       </AppModal.Footer>
     </AppModal>

@@ -14,6 +14,7 @@ const {
   findVisibleLocations,
 } = require('../repositories/bitacorasRepository');
 const { VISIT_SORTS, normalizeVisitFilters } = require('../modules/bitacoras/bitacoras.domain');
+const { sendVisitasExcel, EXPORT_PAGE } = require('./bitacorasController');
 
 const assertClienteActivo = async (user) => {
   const clienteId = Number(user?.cliente_id);
@@ -65,4 +66,22 @@ const getVisitas = async (req, res) => {
   }
 };
 
-module.exports = { getUbicaciones, getVisitas };
+// Reporte Excel con las mismas columnas que el de Bitácoras, limitado a las visitas del cliente.
+const exportVisitas = async (req, res) => {
+  try {
+    const clienteId = await assertClienteActivo(req.user);
+    const filters = normalizeVisitFilters(req.query);
+    const { items } = await findVisits({
+      filters,
+      pagination: EXPORT_PAGE,
+      hasGlobalScope: false,
+      userId: req.user.id,
+      clienteId,
+    });
+    return await sendVisitasExcel(res, items);
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al exportar visitas del portal');
+  }
+};
+
+module.exports = { getUbicaciones, getVisitas, exportVisitas };

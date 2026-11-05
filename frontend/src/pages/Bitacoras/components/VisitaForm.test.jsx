@@ -406,7 +406,7 @@ describe('VisitaForm', () => {
 
     await act(async () => {
       Array.from(view.container.querySelectorAll('button'))
-        .find((button) => button.textContent === '+ Agregar Visitantes')
+        .find((button) => button.textContent === 'Agregar Visitantes')
         .click();
       await flush();
     });
@@ -414,7 +414,7 @@ describe('VisitaForm', () => {
 
     await act(async () => {
       Array.from(view.container.querySelectorAll('button'))
-        .find((button) => button.textContent === '+ Agregar Visitantes')
+        .find((button) => button.textContent === 'Agregar Visitantes')
         .click();
       await flush();
     });
@@ -498,7 +498,7 @@ describe('VisitaForm', () => {
     // Both sections must render simultaneously: the presence of the
     // Visitantes group must not suppress the normal dynamic questions.
     const visitantesButton = Array.from(view.container.querySelectorAll('button')).find(
-      (button) => button.textContent === '+ Agregar Visitantes'
+      (button) => button.textContent === 'Agregar Visitantes'
     );
     expect(visitantesButton).not.toBeUndefined();
     expect(view.container.querySelector('[aria-label="Pregunta del campo"]')).toBeNull();

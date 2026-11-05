@@ -329,6 +329,147 @@ describe('HistorialVisitas', () => {
     container.remove();
   });
 
+  test('en modo solo lectura oculta el filtro de urbanización si solo hay una', async () => {
+    const fetchVisitas = jest.fn().mockResolvedValue({
+      success: true,
+      data: [visitRow()],
+      meta: { page: 1, pageSize: 25, totalItems: 1, totalPages: 1 },
+    });
+    const renderWith = async (ubicaciones) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      act(() =>
+        root.render(
+          <HistorialVisitas
+            ubicaciones={ubicaciones}
+            refreshKey={0}
+            showToast={jest.fn()}
+            readOnly
+            fetchVisitas={fetchVisitas}
+          />
+        )
+      );
+      await act(async () => flush());
+      return { container, root };
+    };
+    const urb = (id) => ({ id, nombre: `Urb ${id}`, tipo_punto: 'URBANIZACION' });
+
+    const single = await renderWith([urb(1)]);
+    expect(single.container.querySelector('#visitas-filter-ubicacion')).toBeNull();
+    expect(fetchVisitas).toHaveBeenLastCalledWith(expect.objectContaining({ ubicacion_id: 1 }));
+    act(() => single.root.unmount());
+    single.container.remove();
+
+    const several = await renderWith([urb(1), urb(2)]);
+    expect(several.container.querySelector('#visitas-filter-ubicacion')).not.toBeNull();
+    act(() => several.root.unmount());
+    several.container.remove();
+  });
+
+  describe('actualización automática', () => {
+    const renderAuto = async (fetchVisitas, props = {}) => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const root = createRoot(container);
+      act(() =>
+        root.render(
+          <HistorialVisitas
+            refreshKey={0}
+            showToast={jest.fn()}
+            readOnly
+            fetchVisitas={fetchVisitas}
+            {...props}
+          />
+        )
+      );
+      await act(async () => flush());
+      return { container, root };
+    };
+    const page = (rows) => ({
+      success: true,
+      data: rows,
+      meta: { page: 1, pageSize: 25, totalItems: rows.length, totalPages: 1 },
+    });
+
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    test('agrega las visitas nuevas sin parpadeo de carga', async () => {
+      const fetchVisitas = jest
+        .fn()
+        .mockResolvedValueOnce(page([visitRow({ id: 1, visitante_nombre: 'Carlos Ruiz' })]))
+        .mockResolvedValue(
+          page([
+            visitRow({ id: 2, visitante_nombre: 'Nueva Persona' }),
+            visitRow({ id: 1, visitante_nombre: 'Carlos Ruiz' }),
+          ])
+        );
+      const { container, root } = await renderAuto(fetchVisitas, { autoRefreshMs: 20000 });
+      expect(container.textContent).not.toContain('Nueva Persona');
+
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+        await flush();
+      });
+
+      expect(fetchVisitas).toHaveBeenCalledTimes(2);
+      expect(container.textContent).toContain('Nueva Persona');
+      expect(container.textContent).not.toContain('Actualizando visitas');
+      act(() => root.unmount());
+      container.remove();
+    });
+
+    test('si la actualización automática falla conserva la tabla y no muestra error', async () => {
+      const fetchVisitas = jest
+        .fn()
+        .mockResolvedValueOnce(page([visitRow({ id: 1, visitante_nombre: 'Carlos Ruiz' })]))
+        .mockResolvedValue({ success: false, message: 'sin red' });
+      const { container, root } = await renderAuto(fetchVisitas, { autoRefreshMs: 20000 });
+
+      await act(async () => {
+        jest.advanceTimersByTime(20000);
+        await flush();
+      });
+
+      expect(fetchVisitas).toHaveBeenCalledTimes(2);
+      expect(container.textContent).toContain('Carlos Ruiz');
+      expect(container.textContent).not.toContain('sin red');
+      act(() => root.unmount());
+      container.remove();
+    });
+
+    test('sin autoRefreshMs no consulta periódicamente', async () => {
+      const fetchVisitas = jest.fn().mockResolvedValue(page([visitRow()]));
+      const { root, container } = await renderAuto(fetchVisitas);
+
+      await act(async () => {
+        jest.advanceTimersByTime(120000);
+        await flush();
+      });
+
+      expect(fetchVisitas).toHaveBeenCalledTimes(1);
+      act(() => root.unmount());
+      container.remove();
+    });
+
+    test('no consulta mientras la pestaña está oculta', async () => {
+      const fetchVisitas = jest.fn().mockResolvedValue(page([visitRow()]));
+      const { root, container } = await renderAuto(fetchVisitas, { autoRefreshMs: 20000 });
+      const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+
+      await act(async () => {
+        jest.advanceTimersByTime(60000);
+        await flush();
+      });
+
+      expect(fetchVisitas).toHaveBeenCalledTimes(1);
+      hidden.mockRestore();
+      act(() => root.unmount());
+      container.remove();
+    });
+  });
+
   test('respuestas obsoletas no sobrescriben el historial más reciente', async () => {
     let resolveStale;
     const staleResponse = new Promise((resolve) => {

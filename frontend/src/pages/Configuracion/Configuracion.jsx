@@ -12,6 +12,8 @@ import clientesService from '../../services/clientesService';
 import inventarioService from '../../services/inventarioService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import ClientesCatalog from './ClientesCatalog';
+import AccesoPortalButton from './components/AccesoPortalButton';
+import AccesoPortalModal from './components/AccesoPortalModal';
 import UrbanizacionMastersModal from './components/UrbanizacionMastersModal';
 import { getConfiguracionPermissions } from './utils/configuracionPermissions';
 import './Configuracion.css';
@@ -385,6 +387,7 @@ const Configuracion = () => {
   const [activeCatalog, setActiveCatalog] = useState('clientes');
   const [ubicacionGroups, setUbicacionGroups] = useState([]);
   const [expandedUbicacionGroups, setExpandedUbicacionGroups] = useState(() => new Set());
+  const [accesoPortalCliente, setAccesoPortalCliente] = useState(null);
   const [ubicacionesMeta, setUbicacionesMeta] = useState({
     page: 1,
     pageSize: 25,
@@ -472,6 +475,12 @@ const Configuracion = () => {
 
   const ubicacionesTotal = ubicacionesMeta.totalLocations || allUbicaciones.length;
   const canManageAnyUbicacion = canCreate || canEdit || canDelete || canManageUrbanizacion;
+  // Solo los clientes con alguna ubicación tipo urbanización pueden tener acceso al portal.
+  const canShowAccesoPortal = (group) =>
+    (permissions.canCreateAccesoPortal || permissions.canManageAccesoPortal) &&
+    group.tipo !== 'sin_cliente' &&
+    Boolean(group.cliente_id) &&
+    group.ubicaciones.some((ubicacion) => ubicacion.tipo_punto === 'URBANIZACION');
 
   const loadUbicacionesCatalogo = useCallback(async () => {
     if (!permissions.canViewUbicaciones) return false;
@@ -1096,6 +1105,17 @@ const Configuracion = () => {
                                                       {groupSummary}
                                                     </small>
                                                   </div>
+                                                  {canShowAccesoPortal(group) && (
+                                                    <AccesoPortalButton
+                                                      clienteNombre={groupDisplayName}
+                                                      onClick={() =>
+                                                        setAccesoPortalCliente({
+                                                          id: group.cliente_id,
+                                                          nombre: groupDisplayName,
+                                                        })
+                                                      }
+                                                    />
+                                                  )}
                                                   {canCreate && !isHistoricalGroup && (
                                                     <button
                                                       className="action-btn action-btn-add"
@@ -1340,6 +1360,17 @@ const Configuracion = () => {
                                         <h3 id={cardTitleId}>{groupDisplayName}</h3>
                                         <span>{getGroupSummaryText(group)}</span>
                                       </div>
+                                      {canShowAccesoPortal(group) && (
+                                        <AccesoPortalButton
+                                          clienteNombre={groupDisplayName}
+                                          onClick={() =>
+                                            setAccesoPortalCliente({
+                                              id: group.cliente_id,
+                                              nombre: groupDisplayName,
+                                            })
+                                          }
+                                        />
+                                      )}
                                       {canCreate && !isHistoricalGroup && (
                                         <button
                                           className="action-btn action-btn-add"
@@ -1592,6 +1623,14 @@ const Configuracion = () => {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+      {accesoPortalCliente && (
+        <AccesoPortalModal
+          cliente={accesoPortalCliente}
+          canCreate={permissions.canCreateAccesoPortal}
+          canManage={permissions.canManageAccesoPortal}
+          onClose={() => setAccesoPortalCliente(null)}
+        />
+      )}
       {urbanizacionTarget && (
         <UrbanizacionMastersModal
           ubicacion={urbanizacionTarget}
