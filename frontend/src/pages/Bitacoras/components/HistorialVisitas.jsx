@@ -146,12 +146,19 @@ const dynamicCell = (visit, column, onPreviewPhoto) => {
 // Estado visible: ABIERTA siempre implica requiere_salida (si no lo
 // requiere, createVisita la auto-cierra en la misma transacción), así que
 // ABIERTA -> ADENTRO sin ambigüedad. CERRADA se separa en SALIÓ (requería
-// salida y ya se registró) vs REGISTRADO (nunca la requirió). ANULADA no
+// salida y ya se registró) vs REGISTRADO (nunca la requirió). Una CERRADA que
+// requería salida y no tiene quien la cerró la cerró el sistema por falta de
+// salida (cierre automático). ANULADA no
 // forma parte de este pase de trabajo y se conserva tal cual.
 const visitEstadoLabel = (visit) => {
   if (visit.estado === 'ABIERTA') return 'AUTORIZADO';
   if (visit.estado === 'NO_AUTORIZADA') return 'NO AUTORIZADO';
-  if (visit.estado === 'CERRADA') return visit.requiere_salida ? 'SALIÓ' : 'AUTORIZADO';
+  if (visit.estado === 'CERRADA') {
+    if (!visit.requiere_salida) return 'AUTORIZADO';
+    // La API siempre manda cerrado_por_usuario_id (null si cerró el sistema);
+    // undefined significa dato parcial y se trata como cierre normal.
+    return visit.cerrado_por_usuario_id === null ? 'CIERRE AUTOMÁTICO' : 'SALIÓ';
+  }
   return visit.estado;
 };
 

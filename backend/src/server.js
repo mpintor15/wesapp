@@ -15,8 +15,13 @@ const { runMigrations } = require('./config/migrations');
 const movementPdfStorage = require('./utils/movementPdfStorage');
 const { sanitizeError } = require('./utils/logSanitizer');
 
+const {
+  startScheduler: startVisitAutoCloseScheduler,
+} = require('./services/visitasCierreAutomaticoService');
+
 const PORT = config.port;
 let server;
+let stopVisitAutoClose;
 
 // Verificar conexión a la base de datos antes de iniciar el servidor
 const startServer = async () => {
@@ -38,6 +43,7 @@ const startServer = async () => {
       logger.info(`URL: http://localhost:${PORT}`);
       logger.info(`Health check: http://localhost:${PORT}/health`);
     });
+    stopVisitAutoClose = startVisitAutoCloseScheduler();
   } catch (error) {
     logger.error('❌ Error al iniciar servidor:', sanitizeError(error));
     process.exit(1);
@@ -47,6 +53,9 @@ const startServer = async () => {
 const shutdown = async (signal) => {
   logger.warn(`${signal} recibido, cerrando servidor...`);
   try {
+    if (stopVisitAutoClose) {
+      stopVisitAutoClose();
+    }
     if (server) {
       await new Promise((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

@@ -714,6 +714,42 @@ describe('HistorialVisitas', () => {
     container.remove();
   });
 
+  test('marca como CIERRE AUTOMÁTICO la visita cerrada por el sistema sin quien la cerró', async () => {
+    bitacorasService.getVisitas.mockResolvedValue({
+      success: true,
+      data: [
+        visitRow({
+          id: 1,
+          estado: 'CERRADA',
+          salida_at: null,
+          cerrado_por_usuario_id: null,
+          observacion_salida: 'Cierre automático: no se registró la salida en 7 días',
+        }),
+        visitRow({
+          id: 2,
+          estado: 'CERRADA',
+          salida_at: '2026-08-20T15:00:00Z',
+          cerrado_por_usuario_id: 5,
+        }),
+      ],
+      meta: { page: 1, pageSize: 25, totalItems: 2, totalPages: 1 },
+    });
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () =>
+      root.render(<HistorialVisitas refreshKey={0} onChanged={jest.fn()} showToast={jest.fn()} />)
+    );
+    await act(async () => flush());
+
+    const rows = Array.from(document.querySelectorAll('.bitacoras-visits-table tbody tr'));
+    const estados = rows.map((row) => row.querySelector('td.bitacoras-visit-state').textContent);
+    expect(estados).toEqual(['CIERRE AUTOMÁTICO', 'SALIÓ']);
+    expect(container.textContent).toContain('Salida: Cierre automático');
+    act(() => root.unmount());
+    container.remove();
+  });
+
   test('regresión: Estado muestra AUTORIZADO/SALIÓ/NO AUTORIZADO y NO_AUTORIZADA no ofrece acciones', async () => {
     bitacorasService.getVisitas.mockResolvedValue({
       success: true,
