@@ -649,7 +649,7 @@ describe('personal permissions', () => {
     expect(create.status).toBe(403);
   });
 
-  test('supervisor solo puede ver colaboradores: no crea, edita ni elimina', async () => {
+  test('supervisor puede ver y crear colaboradores: no edita ni elimina', async () => {
     mockCurrentUser(userFromDb('supervisor'));
 
     const list = await request(app)
@@ -668,7 +668,7 @@ describe('personal permissions', () => {
       .set('Authorization', `Bearer ${tokenFor('supervisor')}`);
 
     expectAllowedPastAuthorization(list);
-    expect(create.status).toBe(403);
+    expectAllowedPastAuthorization(create);
     expect(update.status).toBe(403);
     expect(remove.status).toBe(403);
   });
