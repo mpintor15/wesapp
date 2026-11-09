@@ -20,6 +20,7 @@ const ALLOWED_TYPES = new Set([
 const ROLE_GERENTE = 'gerente';
 const ROLE_SECRETARIO = 'secretario';
 const ROLE_SUPERVISOR = 'supervisor';
+const ROLE_MONITORISTA = 'monitorista';
 // Roles que cada tipo de usuario puede asignar (al crear) o gestionar (al editar).
 const MANAGEABLE_ROLES = {
   [ROLE_GERENTE]: ALLOWED_TYPES,
@@ -76,7 +77,13 @@ const getActiveGerentesCount = () => usuariosRepository.countActiveGerentes(ROLE
 
 const getUsuarios = async (req, res) => {
   try {
-    const { search, tipo_usuario, activo, colaborador_id: colaboradorIdRaw } = req.query;
+    const {
+      search,
+      tipo_usuario,
+      activo,
+      colaborador_id: colaboradorIdRaw,
+      cuenta_compartida: cuentaCompartidaRaw,
+    } = req.query;
     const pagination = normalizePaginationQuery(req.query);
 
     let tipoUsuario;
@@ -95,12 +102,20 @@ const getUsuarios = async (req, res) => {
       );
     }
 
+    let cuentaCompartida;
+    if (cuentaCompartidaRaw !== undefined) {
+      if (!['true', 'false'].includes(cuentaCompartidaRaw)) {
+        throw createHttpError(400, 'Filtro cuenta_compartida inválido. Usa true o false');
+      }
+      cuentaCompartida = cuentaCompartidaRaw === 'true';
+    }
+
     if (!['pendiente', 'pending', 'true', 'false', undefined].includes(activo)) {
       throw createHttpError(400, 'Filtro activo inválido. Usa true, false o pendiente');
     }
 
     const result = await usuariosRepository.findUsuarios({
-      filters: { search, tipoUsuario, colaboradorId, activo },
+      filters: { search, tipoUsuario, colaboradorId, activo, cuentaCompartida },
       pagination,
     });
     const totalItems = Number(result.rows[0]?.total_count || 0);
@@ -250,6 +265,111 @@ const createUsuario = async (req, res) => {
   }
 };
 
+// Cuentas de módulo (p. ej. "Módulo 1 Monitoreo"): usuarios monitorista sin colaborador.
+const createCuentaModulo = async (req, res) => {
+  try {
+    const { usuario, nombre, apellido } = req.body;
+
+    const tempPassword = generateTempPassword();
+    const password_hash = await bcrypt.hash(tempPassword, 10);
+
+    let created;
+    await db.transaction(async (client) => {
+      const result = await client.query(
+        `INSERT INTO usuarios
+           (usuario, password_hash, nombre, apellido, tipo_usuario, es_cuenta_compartida, primer_login, activo)
+         VALUES ($1, $2, $3, $4, $5, TRUE, TRUE, TRUE)
+         RETURNING id, usuario, nombre, apellido, tipo_usuario, es_cuenta_compartida, colaborador_id, primer_login, activo`,
+        [usuario, password_hash, nombre, apellido, ROLE_MONITORISTA]
+      );
+      created = result.rows[0];
+      await logAudit(client, {
+        tabla: 'usuarios',
+        operacion: 'INSERT',
+        registro_id: String(created.id),
+        datos_nuevos: created,
+        ...auditFromReq(req),
+      });
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Cuenta de módulo creada exitosamente',
+      data: { ...created, temp_password: tempPassword },
+    });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ success: false, message: 'El nombre de usuario ya existe' });
+    }
+    return handleControllerError(res, error, 'Error al crear cuenta de módulo:');
+  }
+};
+
+const getCuentaModulo = async (executor, id) => {
+  const cuenta = await usuariosRepository.findUsuarioSummaryById(id, executor);
+  if (!cuenta?.es_cuenta_compartida) {
+    throw createHttpError(404, 'Cuenta de módulo no encontrada');
+  }
+  return cuenta;
+};
+
+const getCuentasModulo = async (req, res) => {
+  try {
+    const result = await usuariosRepository.findUsuarios({
+      filters: { cuentaCompartida: true },
+      pagination: { page: 1, pageSize: 100, offset: 0 },
+    });
+    const data = result.rows.map(({ total_count: _totalCount, ...cuenta }) => cuenta);
+    res.json({ success: true, data });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al obtener cuentas de módulo:');
+  }
+};
+
+const updateCuentaModulo = async (req, res) => {
+  try {
+    const id = parsePositiveInteger(req.params.id, 'El id de cuenta es inválido');
+    const { activo } = req.body;
+    if (Number(req.user?.id) === id && !activo) {
+      throw createHttpError(400, 'No puedes desactivar tu propio usuario');
+    }
+
+    let updated;
+    await db.transaction(async (client) => {
+      const current = await getCuentaModulo(client, id);
+      const result = await client.query(
+        `UPDATE usuarios SET activo = $1 WHERE id = $2
+         RETURNING id, usuario, nombre, apellido, tipo_usuario, es_cuenta_compartida, primer_login, activo`,
+        [activo, id]
+      );
+      updated = result.rows[0];
+      await logAudit(client, {
+        tabla: 'usuarios',
+        operacion: 'UPDATE',
+        registro_id: String(id),
+        datos_anteriores: current,
+        datos_nuevos: updated,
+        ...auditFromReq(req),
+      });
+    });
+
+    clearActiveCache(id);
+    res.json({ success: true, message: 'Cuenta de módulo actualizada', data: updated });
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al actualizar cuenta de módulo:');
+  }
+};
+
+const reenviarInvitacionCuentaModulo = async (req, res) => {
+  try {
+    const id = parsePositiveInteger(req.params.id, 'El id de cuenta es inválido');
+    await getCuentaModulo(db, id);
+    return reenviarInvitacion(req, res);
+  } catch (error) {
+    return handleControllerError(res, error, 'Error al reenviar invitación:');
+  }
+};
+
 const buildUpdateFields = (body, currentUserId, targetId) => {
   const updates = [];
   const values = [];
@@ -323,6 +443,12 @@ const updateUsuario = async (req, res) => {
 
     const { updates, values, tipoUsuario, activo, colaboradorId, hasColaboradorId } =
       buildUpdateFields(req.body, req.user?.id, id);
+    if (currentUser.es_cuenta_compartida && (hasColaboradorId || tipoUsuario)) {
+      throw createHttpError(
+        400,
+        'Una cuenta de módulo no puede cambiar de rol ni vincularse a un colaborador'
+      );
+    }
     assertCanManageRole(req, currentUser.tipo_usuario);
     if (tipoUsuario) {
       assertCanManageRole(req, tipoUsuario);
@@ -337,7 +463,11 @@ const updateUsuario = async (req, res) => {
       return res.status(400).json({ success: false, message: 'No hay campos para actualizar' });
     }
 
-    if (currentUser.colaborador_id === null && !hasColaboradorId) {
+    if (
+      currentUser.colaborador_id === null &&
+      !hasColaboradorId &&
+      !currentUser.es_cuenta_compartida
+    ) {
       throw createHttpError(400, 'El colaborador es requerido para editar este usuario');
     }
 
@@ -407,9 +537,13 @@ const reenviarInvitacion = async (req, res) => {
     if (!user) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
-    assertCanManageRole(req, user.tipo_usuario);
-    if (!user.primer_login) {
-      throw createHttpError(400, 'Este usuario ya completó su primer acceso');
+    // Las cuentas de módulo no tienen una persona que recupere su acceso: se permite
+    // restablecer su contraseña aunque ya hayan completado el primer acceso.
+    if (!user.es_cuenta_compartida) {
+      assertCanManageRole(req, user.tipo_usuario);
+      if (!user.primer_login) {
+        throw createHttpError(400, 'Este usuario ya completó su primer acceso');
+      }
     }
 
     const tempPassword = generateTempPassword();
@@ -506,6 +640,10 @@ module.exports = {
   getColaboradoresElegibles,
   getUbicacionesAsignables,
   createUsuario,
+  createCuentaModulo,
+  getCuentasModulo,
+  updateCuentaModulo,
+  reenviarInvitacionCuentaModulo,
   updateUsuario,
   reenviarInvitacion,
   deleteUsuario,

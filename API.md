@@ -159,6 +159,30 @@ Authorization: Bearer <token>
 ### Eliminar Usuario
 **DELETE** `/usuarios/:id`
 
+### Cuentas de módulo (usuarios sin colaborador)
+
+Cuentas compartidas, por ejemplo "Módulo 1 Monitoreo". Tienen rol `monitorista`
+(se muestra como "Jefe de monitoreo"), no se vinculan a un colaborador y no pueden
+cambiar de rol. Se identifican con `es_cuenta_compartida: true`.
+
+**Access:** `gerente`, `secretario`, `supervisor` y `monitorista`
+(permisos `usuarios.cuentas_modulo.ver` y `usuarios.cuentas_modulo.gestionar`).
+
+| Método | Ruta | Permiso | Descripción |
+|--------|------|---------|-------------|
+| GET | `/usuarios/cuentas-modulo` | ver | Lista las cuentas de módulo |
+| POST | `/usuarios/cuentas-modulo` | gestionar | Crea una cuenta; devuelve `temp_password` una sola vez |
+| PUT | `/usuarios/cuentas-modulo/:id` | gestionar | Activa o desactiva la cuenta (`{ "activo": false }`) |
+| POST | `/usuarios/cuentas-modulo/:id/invitacion` | gestionar | Genera una nueva contraseña temporal, incluso si ya hizo su primer acceso; revoca sus sesiones |
+
+**POST `/usuarios/cuentas-modulo`**
+```json
+{ "usuario": "modulo1.monitoreo", "nombre": "Módulo 1", "apellido": "Monitoreo" }
+```
+
+**Errores:** `409` si el usuario ya existe, `404` si el id no es una cuenta de módulo,
+`400` al intentar desactivar la propia cuenta.
+
 ---
 
 ## 📊 Cuentas (Accounts & Invoicing)

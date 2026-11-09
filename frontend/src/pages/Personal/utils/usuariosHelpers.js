@@ -4,7 +4,7 @@ export const TIPOS_USUARIO = [
   { value: 'supervisor', label: 'Supervisor' },
   { value: 'contador', label: 'Contador' },
   { value: 'guardia', label: 'Guardia' },
-  { value: 'monitorista', label: 'Monitorista' },
+  { value: 'monitorista', label: 'Jefe de monitoreo' },
 ];
 
 // Roles que cada tipo de usuario puede asignar o gestionar (el backend aplica la misma regla).

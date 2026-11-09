@@ -457,6 +457,28 @@ const usuarioCreateSchema = z.object({
   ubicacion_ids: z.array(positiveInt('Ubicación ID')).optional(),
 });
 
+const cuentaModuloCreateSchema = z.object({
+  usuario: z
+    .string({ required_error: 'Usuario es requerido' })
+    .trim()
+    .min(3, 'Usuario debe tener al menos 3 caracteres')
+    .max(50, 'Usuario no puede exceder 50 caracteres'),
+  nombre: z
+    .string({ required_error: 'Nombre es requerido' })
+    .trim()
+    .min(1, 'Nombre no puede estar vacío')
+    .max(100, 'Nombre no puede exceder 100 caracteres'),
+  apellido: z
+    .string({ required_error: 'Apellido es requerido' })
+    .trim()
+    .min(1, 'Apellido no puede estar vacío')
+    .max(100, 'Apellido no puede exceder 100 caracteres'),
+});
+
+const cuentaModuloUpdateSchema = z.object({
+  activo: z.boolean({ required_error: 'Activo es requerido' }),
+});
+
 const clientePortalAccessCreateSchema = z.object({
   usuario: z
     .string({ required_error: 'Usuario es requerido' })
@@ -641,6 +663,8 @@ module.exports = {
   // Usuarios
   usuarioCreateSchema,
   usuarioUpdateSchema,
+  cuentaModuloCreateSchema,
+  cuentaModuloUpdateSchema,
   clientePortalAccessCreateSchema,
   clientePortalAccessUpdateSchema,
 

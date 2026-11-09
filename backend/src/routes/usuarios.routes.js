@@ -5,7 +5,12 @@ const { verifyToken } = require('../middleware/auth');
 const { requirePermission } = require('../middleware/permissions');
 const { PERMISSIONS } = require('../config/permissions');
 const { validateRequest } = require('../middleware/validation');
-const { usuarioCreateSchema, usuarioUpdateSchema } = require('../utils/validationSchemas');
+const {
+  usuarioCreateSchema,
+  usuarioUpdateSchema,
+  cuentaModuloCreateSchema,
+  cuentaModuloUpdateSchema,
+} = require('../utils/validationSchemas');
 
 router.use(verifyToken);
 
@@ -28,6 +33,30 @@ router.post(
   requirePermission(PERMISSIONS.USUARIOS_CREAR),
   validateRequest(usuarioCreateSchema),
   usuariosController.createUsuario
+);
+
+// Cuentas de módulo (monitorista sin colaborador)
+router.get(
+  '/cuentas-modulo',
+  requirePermission(PERMISSIONS.USUARIOS_CUENTAS_MODULO_VER),
+  usuariosController.getCuentasModulo
+);
+router.post(
+  '/cuentas-modulo',
+  requirePermission(PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR),
+  validateRequest(cuentaModuloCreateSchema),
+  usuariosController.createCuentaModulo
+);
+router.put(
+  '/cuentas-modulo/:id',
+  requirePermission(PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR),
+  validateRequest(cuentaModuloUpdateSchema),
+  usuariosController.updateCuentaModulo
+);
+router.post(
+  '/cuentas-modulo/:id/invitacion',
+  requirePermission(PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR),
+  usuariosController.reenviarInvitacionCuentaModulo
 );
 
 // Actualizar usuario (tipo/activo)

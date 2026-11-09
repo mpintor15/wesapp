@@ -15,6 +15,7 @@ import { can } from '../../auth/authorization';
 import { PERMISSIONS } from '../../auth/permissions';
 import { ROLES } from '../../auth/rolePermissions';
 import { useAuth } from '../../context/AuthContext';
+import CuentasModulo from './components/CuentasModulo';
 import PersonalExportModal from './components/PersonalExportModal';
 import PersonalFilters from './components/PersonalFilters';
 import PersonalFormModal from './components/PersonalFormModal';
@@ -74,6 +75,10 @@ const Personal = () => {
   const [formErrors, setFormErrors] = useState({});
   const [formData, setFormData] = useState(EMPTY_COLABORADOR_FORM);
   const [salidaModal, setSalidaModal] = useState(null);
+  // Un Jefe de monitoreo no ve colaboradores: solo el tab de cuentas de módulo.
+  const canViewColaboradores = can(user, PERMISSIONS.PERSONAL_VER);
+  const canViewCuentasModulo = can(user, PERMISSIONS.USUARIOS_CUENTAS_MODULO_VER);
+  const [activeTab, setActiveTab] = useState(canViewColaboradores ? 'colaboradores' : 'cuentas');
 
   const [filtersDraft, setFiltersDraft] = useState(EMPTY_PERSONAL_FILTERS);
   const [tableSort, setTableSort] = useState({ field: 'nombres_completos', direction: 'asc' });
@@ -128,10 +133,14 @@ const Personal = () => {
   }, []);
 
   useEffect(() => {
-    loadCargos();
-  }, [loadCargos]);
+    if (canViewColaboradores) loadCargos();
+  }, [loadCargos, canViewColaboradores]);
 
   useEffect(() => {
+    if (!canViewColaboradores) {
+      setLoading(false);
+      return undefined;
+    }
     const handler = setTimeout(() => {
       loadColaboradores(
         withPaginationParams({
@@ -142,9 +151,10 @@ const Personal = () => {
       );
     }, 300);
     return () => clearTimeout(handler);
-  }, [filters, currentPage, loadColaboradores]);
+  }, [filters, currentPage, loadColaboradores, canViewColaboradores]);
 
   const refreshColaboradores = useCallback(() => {
+    if (!canViewColaboradores) return;
     loadColaboradores(
       withPaginationParams({
         page: currentPage,
@@ -152,7 +162,7 @@ const Personal = () => {
         filters: buildPersonalFilterParams(filters),
       })
     );
-  }, [filters, currentPage, loadColaboradores]);
+  }, [filters, currentPage, loadColaboradores, canViewColaboradores]);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -203,6 +213,9 @@ const Personal = () => {
     }),
     [user]
   );
+  // Las cuentas de módulo son usuarios Jefe de monitoreo (rol monitorista) sin colaborador.
+  const showCuentasTab = canViewCuentasModulo;
+  const isCuentasTab = showCuentasTab && (activeTab === 'cuentas' || !canViewColaboradores);
   const canManageAcceso = permissions.canCreateAcceso || permissions.canEditAcceso;
   // Crear un acceso y editar uno existente son permisos distintos (el supervisor solo crea).
   const canManageAccesoOf = useCallback(
@@ -478,87 +491,118 @@ const Personal = () => {
   return (
     <div className="page-container tabular-page">
       <PersonalPageHeader
-        canCreate={permissions.canCreate}
-        canExport={permissions.canExport}
+        canCreate={permissions.canCreate && !isCuentasTab && canViewColaboradores}
+        canExport={permissions.canExport && !isCuentasTab}
         onBack={() => navigate('/')}
         onCreate={openCreate}
         onExport={openExportModal}
         onRefresh={refreshColaboradores}
       />
 
-      <TabularWorkspace
-        dataCard
-        controls={
-          <PersonalFilters
-            cargos={cargos}
-            filtersDraft={filtersDraft}
-            onApply={applyFilters}
-            onChange={handleFilterChange}
-            onClear={handleClearFilters}
-          />
-        }
-        summary={
-          !(loading && sortedColaboradores.length === 0) ? (
-            <div className="table-result-count">
-              Mostrando {sortedColaboradores.length} de {pagination.totalItems} colaborador(es)
+      {showCuentasTab && canViewColaboradores ? (
+        <div className="personal-tabs" role="tablist" aria-label="Personal">
+          {[
+            { id: 'colaboradores', label: 'Colaboradores', panel: 'personal-panel-colaboradores' },
+            { id: 'cuentas', label: 'Cuentas de módulo', panel: 'personal-panel-cuentas' },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              id={`personal-tab-${tab.id}`}
+              className={`tab ${activeTab === tab.id ? 'active' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={tab.panel}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {isCuentasTab ? (
+        <CuentasModulo
+          canCreate={can(user, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR)}
+          canEdit={can(user, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR)}
+        />
+      ) : null}
+
+      {!isCuentasTab && canViewColaboradores ? (
+        <TabularWorkspace
+          dataCard
+          controls={
+            <PersonalFilters
+              cargos={cargos}
+              filtersDraft={filtersDraft}
+              onApply={applyFilters}
+              onChange={handleFilterChange}
+              onClear={handleClearFilters}
+            />
+          }
+          summary={
+            !(loading && sortedColaboradores.length === 0) ? (
+              <div className="table-result-count">
+                Mostrando {sortedColaboradores.length} de {pagination.totalItems} colaborador(es)
+              </div>
+            ) : null
+          }
+          pagination={
+            !(loading && sortedColaboradores.length === 0) ? (
+              <PaginationControls
+                page={currentPage}
+                totalPages={pagination.totalPages}
+                onPageChange={setCurrentPage}
+              />
+            ) : null
+          }
+        >
+          {loading && sortedColaboradores.length === 0 ? (
+            <div className="loading-spinner-wrap">
+              <span className="spinner" />
+              <span>Cargando colaboradores…</span>
             </div>
-          ) : null
-        }
-        pagination={
-          !(loading && sortedColaboradores.length === 0) ? (
-            <PaginationControls
-              page={currentPage}
-              totalPages={pagination.totalPages}
-              onPageChange={setCurrentPage}
-            />
-          ) : null
-        }
-      >
-        {loading && sortedColaboradores.length === 0 ? (
-          <div className="loading-spinner-wrap">
-            <span className="spinner" />
-            <span>Cargando colaboradores…</span>
-          </div>
-        ) : (
-          <>
-            <LoadingState
-              loading={loading}
-              hasRows={sortedColaboradores.length > 0}
-              refreshMessage="Actualizando colaboradores…"
-            />
-            <PersonalTable
-              canDelete={permissions.canDelete}
-              canEdit={permissions.canEdit}
-              canManageAcceso={canManageAcceso}
-              canManageAccesoOf={canManageAccesoOf}
-              canViewSensitive={permissions.canViewSensitive}
-              colaboradores={sortedColaboradores}
-              emptyMessage={emptyMessage}
-              onDelete={setConfirmTarget}
-              onEdit={openEdit}
-              onManageAcceso={openManageAcceso}
-              onViewSalida={(colaborador) => setSalidaModal({ editable: false, colaborador })}
-              onSort={handleTableSort}
-              paginatedColaboradores={sortedColaboradores}
-              tableSort={tableSort}
-            />
-            {sortedColaboradores.length > 0 && (
-              <PersonalMobileCards
+          ) : (
+            <>
+              <LoadingState
+                loading={loading}
+                hasRows={sortedColaboradores.length > 0}
+                refreshMessage="Actualizando colaboradores…"
+              />
+              <PersonalTable
                 canDelete={permissions.canDelete}
                 canEdit={permissions.canEdit}
                 canManageAcceso={canManageAcceso}
                 canManageAccesoOf={canManageAccesoOf}
                 canViewSensitive={permissions.canViewSensitive}
                 colaboradores={sortedColaboradores}
+                emptyMessage={emptyMessage}
                 onDelete={setConfirmTarget}
                 onEdit={openEdit}
                 onManageAcceso={openManageAcceso}
                 onViewSalida={(colaborador) => setSalidaModal({ editable: false, colaborador })}
+                onSort={handleTableSort}
+                paginatedColaboradores={sortedColaboradores}
+                tableSort={tableSort}
               />
-            )}
-          </>
-        )}
-      </TabularWorkspace>
+              {sortedColaboradores.length > 0 && (
+                <PersonalMobileCards
+                  canDelete={permissions.canDelete}
+                  canEdit={permissions.canEdit}
+                  canManageAcceso={canManageAcceso}
+                  canManageAccesoOf={canManageAccesoOf}
+                  canViewSensitive={permissions.canViewSensitive}
+                  colaboradores={sortedColaboradores}
+                  onDelete={setConfirmTarget}
+                  onEdit={openEdit}
+                  onManageAcceso={openManageAcceso}
+                  onViewSalida={(colaborador) => setSalidaModal({ editable: false, colaborador })}
+                />
+              )}
+            </>
+          )}
+        </TabularWorkspace>
+      ) : null}
 
       {/* Create / Edit modal */}
       {showModal && (

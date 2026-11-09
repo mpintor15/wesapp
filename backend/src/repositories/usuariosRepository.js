@@ -2,7 +2,7 @@ const db = require('../config/database');
 
 const findUsuarioSummaryById = async (id, executor = db) => {
   const result = await executor.query(
-    'SELECT id, tipo_usuario, activo, colaborador_id FROM usuarios WHERE id = $1 LIMIT 1',
+    'SELECT id, tipo_usuario, activo, colaborador_id, es_cuenta_compartida FROM usuarios WHERE id = $1 LIMIT 1',
     [id]
   );
   return result.rows[0] || null;
@@ -16,7 +16,7 @@ const countActiveGerentes = async (roleGerente, executor = db) => {
   return Number(result.rows[0]?.total || 0);
 };
 
-const buildUsuariosFilters = ({ search, tipoUsuario, colaboradorId, activo }) => {
+const buildUsuariosFilters = ({ search, tipoUsuario, colaboradorId, activo, cuentaCompartida }) => {
   const params = [];
   // Los usuarios de portal se administran desde Clientes, no desde Personal.
   // eslint-disable-next-line quotes -- prettier prefers double quotes here to avoid escaping
@@ -39,6 +39,12 @@ const buildUsuariosFilters = ({ search, tipoUsuario, colaboradorId, activo }) =>
     conditions.push(`u.colaborador_id = $${params.length}`);
   }
 
+  if (cuentaCompartida !== undefined) {
+    conditions.push(
+      cuentaCompartida ? 'u.es_cuenta_compartida = TRUE' : 'u.es_cuenta_compartida = FALSE'
+    );
+  }
+
   if (activo === 'pendiente' || activo === 'pending') {
     conditions.push('u.primer_login = TRUE');
   } else if (activo === 'true') {
@@ -56,7 +62,7 @@ const findUsuarios = ({ filters, pagination }, executor = db) => {
   const { params, conditions } = buildUsuariosFilters(filters);
   let query = `
       SELECT u.id, u.usuario, u.nombre, u.apellido, u.tipo_usuario, u.primer_login, u.activo,
-             u.created_at, u.colaborador_id, c.nombres_completos AS colaborador_nombre,
+             u.created_at, u.es_cuenta_compartida, u.colaborador_id, c.nombres_completos AS colaborador_nombre,
              c.estado AS colaborador_estado,
              COALESCE(ARRAY_AGG(uu.ubicacion_id) FILTER (WHERE uu.ubicacion_id IS NOT NULL), '{}') AS ubicacion_ids
       FROM usuarios u
@@ -98,7 +104,7 @@ const findColaboradoresElegibles = (usuarioId, executor = db) =>
 
 const findUsuarioParaReenvio = async (id, executor = db) => {
   const result = await executor.query(
-    `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo
+    `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo, es_cuenta_compartida
      FROM usuarios
      WHERE id = $1
      LIMIT 1`,
