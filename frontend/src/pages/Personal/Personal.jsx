@@ -78,6 +78,8 @@ const Personal = () => {
   // Un Jefe de monitoreo no ve colaboradores: solo el tab de cuentas de módulo.
   const canViewColaboradores = can(user, PERMISSIONS.PERSONAL_VER);
   const canViewCuentasModulo = can(user, PERMISSIONS.USUARIOS_CUENTAS_MODULO_VER);
+  const [showCuentaCreate, setShowCuentaCreate] = useState(false);
+  const [cuentasRefreshKey, setCuentasRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState(canViewColaboradores ? 'colaboradores' : 'cuentas');
 
   const [filtersDraft, setFiltersDraft] = useState(EMPTY_PERSONAL_FILTERS);
@@ -214,6 +216,7 @@ const Personal = () => {
     [user]
   );
   // Las cuentas de módulo son usuarios Jefe de monitoreo (rol monitorista) sin colaborador.
+  const canManageCuentas = can(user, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR);
   const showCuentasTab = canViewCuentasModulo;
   const isCuentasTab = showCuentasTab && (activeTab === 'cuentas' || !canViewColaboradores);
   const canManageAcceso = permissions.canCreateAcceso || permissions.canEditAcceso;
@@ -494,9 +497,13 @@ const Personal = () => {
         canCreate={permissions.canCreate && !isCuentasTab && canViewColaboradores}
         canExport={permissions.canExport && !isCuentasTab}
         onBack={() => navigate('/')}
+        canCreateCuenta={isCuentasTab && canManageCuentas}
         onCreate={openCreate}
+        onCreateCuenta={() => setShowCuentaCreate(true)}
         onExport={openExportModal}
-        onRefresh={refreshColaboradores}
+        onRefresh={
+          isCuentasTab ? () => setCuentasRefreshKey((key) => key + 1) : refreshColaboradores
+        }
       />
 
       {showCuentasTab && canViewColaboradores ? (
@@ -523,8 +530,10 @@ const Personal = () => {
 
       {isCuentasTab ? (
         <CuentasModulo
-          canCreate={can(user, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR)}
-          canEdit={can(user, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR)}
+          canEdit={canManageCuentas}
+          refreshKey={cuentasRefreshKey}
+          showCreate={showCuentaCreate}
+          onCloseCreate={() => setShowCuentaCreate(false)}
         />
       ) : null}
 

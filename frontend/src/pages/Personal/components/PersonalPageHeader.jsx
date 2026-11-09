@@ -1,6 +1,15 @@
 import PageHeader from '../../../components/PageHeader';
 
-const PersonalPageHeader = ({ canCreate, canExport, onBack, onCreate, onExport, onRefresh }) => (
+const PersonalPageHeader = ({
+  canCreate,
+  canCreateCuenta,
+  canExport,
+  onBack,
+  onCreate,
+  onCreateCuenta,
+  onExport,
+  onRefresh,
+}) => (
   <PageHeader
     title="Personal"
     onBack={onBack}
@@ -10,6 +19,11 @@ const PersonalPageHeader = ({ canCreate, canExport, onBack, onCreate, onExport, 
         {canCreate ? (
           <button className="btn btn-ghost btn-sm" onClick={onCreate} type="button">
             Crear nuevo colaborador
+          </button>
+        ) : null}
+        {canCreateCuenta ? (
+          <button className="btn btn-ghost btn-sm" onClick={onCreateCuenta} type="button">
+            Crear cuenta de módulo
           </button>
         ) : null}
         {canExport ? (

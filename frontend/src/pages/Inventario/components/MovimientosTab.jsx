@@ -28,6 +28,7 @@ const MovimientosTab = ({
   permissions,
   regeneratingPdfId,
   sortedMovimientos,
+  movimientosTotalItems,
   ubicaciones,
 }) => (
   <div className="tab-content tabular-workspace">
@@ -124,7 +125,7 @@ const MovimientosTab = ({
         </CollapsibleFilters>
 
         <div className="table-result-count">
-          Mostrando {paginatedMovimientos.length} de {sortedMovimientos.length} movimiento(s)
+          Mostrando {paginatedMovimientos.length} de {movimientosTotalItems} movimiento(s)
         </div>
 
         <div className="table-responsive app-table-shell movimientos-table-shell">

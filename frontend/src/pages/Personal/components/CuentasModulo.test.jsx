@@ -67,7 +67,7 @@ describe('CuentasModulo', () => {
         temp_password: 'Temp-1234',
       },
     });
-    await act(async () => root.render(<CuentasModulo canCreate canEdit />));
+    await act(async () => root.render(<CuentasModulo canEdit onCloseCreate={jest.fn()} />));
     await flush();
 
     expect(usuariosService.getCuentasModulo).toHaveBeenCalled();
@@ -92,15 +92,13 @@ describe('CuentasModulo', () => {
       success: true,
       data: { usuario: 'm2', nombre: 'Módulo 2', apellido: 'Monitoreo', temp_password: 'Abc-999' },
     });
-    await act(async () => root.render(<CuentasModulo canCreate canEdit={false} />));
+    const onCloseCreate = jest.fn();
+    await act(async () =>
+      root.render(<CuentasModulo canEdit={false} showCreate onCloseCreate={onCloseCreate} />)
+    );
     await flush();
     expect(container.textContent).not.toContain('Acciones');
 
-    await act(async () =>
-      [...container.querySelectorAll('button')]
-        .find((b) => b.textContent === 'Crear cuenta de módulo')
-        .click()
-    );
     const setValue = (id, value) => {
       const input = document.getElementById(id);
       const setter = Object.getOwnPropertyDescriptor(
@@ -128,5 +126,6 @@ describe('CuentasModulo', () => {
       usuario: 'm2',
     });
     expect(document.body.textContent).toContain('Abc-999');
+    expect(onCloseCreate).toHaveBeenCalled();
   });
 });

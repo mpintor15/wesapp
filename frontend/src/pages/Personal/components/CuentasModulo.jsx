@@ -16,11 +16,10 @@ const getEstado = (cuenta) => {
 
 // Cuentas de módulo: usuarios monitorista que no pertenecen a un colaborador
 // (p. ej. "Módulo 1 Monitoreo"). El backend valida permisos y reglas.
-const CuentasModulo = ({ canCreate, canEdit, refreshKey }) => {
+const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
   const { showToast } = useToast();
   const [cuentas, setCuentas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [invitation, setInvitation] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -53,7 +52,7 @@ const CuentasModulo = ({ canCreate, canEdit, refreshKey }) => {
       showToast(res.message, 'error');
       return;
     }
-    setShowCreate(false);
+    onCloseCreate();
     setForm(EMPTY_FORM);
     setInvitation(res.data);
     load();
@@ -115,15 +114,6 @@ const CuentasModulo = ({ canCreate, canEdit, refreshKey }) => {
           Usuarios que no pertenecen a una persona, como las estaciones de monitoreo. Entran con rol
           Jefe de monitoreo y no están vinculados a un colaborador.
         </p>
-        {canCreate ? (
-          <button
-            className="btn btn-primary btn-sm"
-            type="button"
-            onClick={() => setShowCreate(true)}
-          >
-            Crear cuenta de módulo
-          </button>
-        ) : null}
       </div>
 
       {loading ? (
@@ -189,7 +179,7 @@ const CuentasModulo = ({ canCreate, canEdit, refreshKey }) => {
       {showCreate && (
         <AppModal
           isOpen
-          onClose={() => setShowCreate(false)}
+          onClose={() => onCloseCreate()}
           title="Crear cuenta de módulo"
           size="md"
           className="usuarios-modal"
@@ -245,7 +235,7 @@ const CuentasModulo = ({ canCreate, canEdit, refreshKey }) => {
               <button
                 className="btn btn-modal-clear"
                 type="button"
-                onClick={() => setShowCreate(false)}
+                onClick={() => onCloseCreate()}
                 disabled={isCreating}
               >
                 Cancelar

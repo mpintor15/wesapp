@@ -301,4 +301,26 @@ describe('Inventario ubicación inline en formulario de artículos', () => {
 
     page.unmount();
   });
+
+  test('el badge del tab y "Mostrando" usan el total, no solo la página cargada', async () => {
+    const articulos = Array.from({ length: 25 }, (_, index) => ({
+      id: index + 1,
+      nombre: `Articulo ${index + 1}`,
+      tipo: 'otro',
+      estado: 'activo',
+      cantidad: 1,
+    }));
+    inventarioService.getArticulos.mockResolvedValue({
+      success: true,
+      data: articulos,
+      pagination: { page: 1, pageSize: 25, totalItems: 40, totalPages: 2 },
+    });
+
+    const page = await renderPage();
+
+    expect(page.query('.inventario-tabs .tab-badge').textContent).toBe('40');
+    expect(page.text()).toContain('Mostrando 25 de 40 artículo(s)');
+
+    page.unmount();
+  });
 });
