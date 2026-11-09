@@ -60,6 +60,8 @@ export const PERMISSIONS = {
   USUARIOS_CREAR: 'usuarios.crear',
   USUARIOS_EDITAR: 'usuarios.editar',
   USUARIOS_ELIMINAR: 'usuarios.eliminar',
+  USUARIOS_CUENTAS_MODULO_VER: 'usuarios.cuentas_modulo.ver',
+  USUARIOS_CUENTAS_MODULO_GESTIONAR: 'usuarios.cuentas_modulo.gestionar',
 
   BITACORAS_REGISTRO_CREAR: 'bitacoras.registro.crear',
   BITACORAS_HISTORIAL_VER: 'bitacoras.historial.ver',

@@ -13,10 +13,19 @@ jest.mock('../utils/audit', () => ({
 }));
 
 const db = require('../config/database');
+const { hasPermission, PERMISSIONS } = require('../config/permissions');
 const { logAudit } = require('../utils/audit');
-const { usuarioCreateSchema, usuarioUpdateSchema } = require('../utils/validationSchemas');
+const {
+  usuarioCreateSchema,
+  usuarioUpdateSchema,
+  cuentaModuloCreateSchema,
+} = require('../utils/validationSchemas');
 const {
   createUsuario,
+  createCuentaModulo,
+  getCuentasModulo,
+  updateCuentaModulo,
+  reenviarInvitacionCuentaModulo,
   getUsuarios,
   getColaboradoresElegibles,
   getUbicacionesAsignables,
@@ -1262,5 +1271,193 @@ describe('usuariosController.deleteUsuario', () => {
           /FOR UPDATE/i.test(sql)
       )
     ).toBe(true);
+  });
+});
+
+describe('cuentas de módulo (usuarios sin colaborador)', () => {
+  const body = { usuario: 'modulo1', nombre: 'Módulo 1', apellido: 'Monitoreo' };
+
+  test('el esquema exige usuario, nombre y apellido', () => {
+    expect(cuentaModuloCreateSchema.parse(body)).toEqual(body);
+    expect(() => cuentaModuloCreateSchema.parse({ ...body, apellido: '' })).toThrow();
+    expect(() => cuentaModuloCreateSchema.parse({ usuario: 'modulo1' })).toThrow();
+  });
+
+  test('crea una monitorista compartida sin colaborador', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 9, ...body, tipo_usuario: 'monitorista', es_cuenta_compartida: true }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+
+    await createCuentaModulo(mockReq({ body }), res);
+
+    const payload = expectStatus(res, 201);
+    expect(payload.data.temp_password).toEqual(expect.any(String));
+    expect(db.query.mock.calls[0][0]).toContain('es_cuenta_compartida');
+    expect(db.query.mock.calls[0][1]).toEqual([
+      'modulo1',
+      'hashed-temp-password',
+      'Módulo 1',
+      'Monitoreo',
+      'monitorista',
+    ]);
+    expect(logAudit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ operacion: 'INSERT' })
+    );
+  });
+
+  test.each(['gerente', 'secretario', 'supervisor', 'monitorista'])(
+    '%s puede ver y gestionar cuentas de módulo',
+    (rol) => {
+      expect(hasPermission(rol, PERMISSIONS.USUARIOS_CUENTAS_MODULO_VER)).toBe(true);
+      expect(hasPermission(rol, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR)).toBe(true);
+    }
+  );
+
+  test.each(['guardia', 'contador', 'cliente'])('%s no tiene acceso a cuentas de módulo', (rol) => {
+    expect(hasPermission(rol, PERMISSIONS.USUARIOS_CUENTAS_MODULO_VER)).toBe(false);
+    expect(hasPermission(rol, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR)).toBe(false);
+  });
+
+  test('monitorista y supervisor no ven sueldos ni administran otros usuarios', () => {
+    expect(hasPermission('monitorista', PERMISSIONS.PERSONAL_VER)).toBe(false);
+    expect(hasPermission('monitorista', PERMISSIONS.USUARIOS_CREAR)).toBe(false);
+    expect(hasPermission('supervisor', PERMISSIONS.USUARIOS_EDITAR)).toBe(false);
+  });
+
+  test('desactivar una cuenta de módulo la actualiza y audita', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 9, tipo_usuario: 'monitorista', es_cuenta_compartida: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 9, activo: false }], rowCount: 1 });
+    const res = mockRes();
+    await updateCuentaModulo(
+      mockReq({
+        params: { id: '9' },
+        body: { activo: false },
+        user: { id: 3, tipo_usuario: 'monitorista' },
+      }),
+      res
+    );
+    expect(res.json.mock.calls[0][0].success).toBe(true);
+    expect(logAudit).toHaveBeenCalled();
+  });
+
+  test('no se puede usar el endpoint con un usuario que no es cuenta de módulo', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 2, tipo_usuario: 'guardia', es_cuenta_compartida: false }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+    await updateCuentaModulo(mockReq({ params: { id: '2' }, body: { activo: false } }), res);
+    expectStatus(res, 404);
+  });
+
+  test('no puedes desactivar tu propia cuenta', async () => {
+    const res = mockRes();
+    await updateCuentaModulo(
+      mockReq({
+        params: { id: '9' },
+        body: { activo: false },
+        user: { id: 9, tipo_usuario: 'monitorista' },
+      }),
+      res
+    );
+    expectStatus(res, 400);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  test('lista solo cuentas de módulo', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id: 9, total_count: 1 }], rowCount: 1 });
+    const res = mockRes();
+    await getCuentasModulo(mockReq(), res);
+    expect(db.query.mock.calls[0][0]).toContain('u.es_cuenta_compartida = TRUE');
+    expect(res.json.mock.calls[0][0].data).toEqual([{ id: 9 }]);
+  });
+
+  test('restablece la contraseña de una cuenta de módulo que ya hizo su primer acceso', async () => {
+    db.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 9, tipo_usuario: 'monitorista', es_cuenta_compartida: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            id: 9,
+            tipo_usuario: 'monitorista',
+            primer_login: false,
+            activo: true,
+            es_cuenta_compartida: true,
+          },
+        ],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({ rows: [{ id: 9, primer_login: true }], rowCount: 1 });
+    const res = mockRes();
+    await reenviarInvitacionCuentaModulo(
+      mockReq({ params: { id: '9' }, user: { id: 3, tipo_usuario: 'monitorista' } }),
+      res
+    );
+    expect(res.json.mock.calls[0][0].data.temp_password).toEqual(expect.any(String));
+  });
+
+  test('un usuario normal ya activo sigue sin poder reenviar invitación', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 2, tipo_usuario: 'guardia', primer_login: false, es_cuenta_compartida: false }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+    await reenviarInvitacion(mockReq({ params: { id: '2' } }), res);
+    expectStatus(res, 400);
+  });
+
+  test('reenviar invitación exige que sea cuenta de módulo', async () => {
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 2, tipo_usuario: 'guardia', es_cuenta_compartida: false }],
+      rowCount: 1,
+    });
+    const res = mockRes();
+    await reenviarInvitacionCuentaModulo(mockReq({ params: { id: '2' } }), res);
+    expectStatus(res, 404);
+  });
+
+  test('reporta usuario duplicado', async () => {
+    db.query.mockRejectedValueOnce(Object.assign(new Error('dup'), { code: '23505' }));
+    const res = mockRes();
+    await createCuentaModulo(mockReq({ body }), res);
+    expectStatus(res, 409);
+  });
+
+  test('se puede desactivar sin colaborador, pero no cambiar rol ni vincular colaborador', async () => {
+    const summary = {
+      id: 9,
+      tipo_usuario: 'monitorista',
+      activo: true,
+      colaborador_id: null,
+      es_cuenta_compartida: true,
+    };
+    db.query
+      .mockResolvedValueOnce({ rows: [summary], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 9, activo: false }], rowCount: 1 });
+    const ok = mockRes();
+    await updateUsuario(mockReq({ params: { id: '9' }, body: { activo: false } }), ok);
+    expect(ok.json.mock.calls[0][0].success).toBe(true);
+
+    db.query.mockResolvedValueOnce({ rows: [summary], rowCount: 1 });
+    const bad = mockRes();
+    await updateUsuario(mockReq({ params: { id: '9' }, body: { colaborador_id: 4 } }), bad);
+    expectStatus(bad, 400);
+  });
+
+  test('getUsuarios filtra por cuenta_compartida', async () => {
+    db.query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    const res = mockRes();
+    await getUsuarios(mockReq({ query: { cuenta_compartida: 'true' } }), res);
+    expect(db.query.mock.calls[0][0]).toContain('u.es_cuenta_compartida = TRUE');
   });
 });

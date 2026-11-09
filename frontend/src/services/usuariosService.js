@@ -9,6 +9,8 @@
  *                                 Filtros: search, tipo_usuario, activo.
  *  - createUsuario(data)        : POST /usuarios
  *                                 Crea usuario con rol y contraseña inicial.
+ *  - createCuentaModulo(data)   : POST /usuarios/cuentas-modulo
+ *                                 Crea una cuenta monitorista sin colaborador (p. ej. "Módulo 1").
  *  - updateUsuario(id, data)    : PUT  /usuarios/:id
  *                                 Permite cambiar tipo_usuario y/o estado activo.
  *  - reenviarInvitacion(id)     : POST /usuarios/:id/invitacion
@@ -73,6 +75,54 @@ const usuariosService = {
       };
     } catch (error) {
       return buildServiceFailure(error, 'Error al crear usuario');
+    }
+  },
+
+  getCuentasModulo: async () => {
+    try {
+      const response = await api.get('/usuarios/cuentas-modulo');
+      return { success: response.data.success, data: response.data.data || [] };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener cuentas de módulo');
+    }
+  },
+
+  updateCuentaModulo: async (id, data) => {
+    try {
+      const response = await api.put(`/usuarios/cuentas-modulo/${id}`, data);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al actualizar cuenta de módulo');
+    }
+  },
+
+  reenviarInvitacionCuentaModulo: async (id) => {
+    try {
+      const response = await api.post(`/usuarios/cuentas-modulo/${id}/invitacion`);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al reenviar invitación');
+    }
+  },
+
+  createCuentaModulo: async (data) => {
+    try {
+      const response = await api.post('/usuarios/cuentas-modulo', data);
+      return {
+        success: response.data.success,
+        message: response.data.message,
+        data: response.data.data,
+      };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al crear cuenta de módulo');
     }
   },
 

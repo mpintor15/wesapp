@@ -1987,4 +1987,40 @@ describe('database migrations', () => {
       ).rejects.toMatchObject({ code: '23514' });
     });
   });
+  test('migration 108 permite cuentas de módulo monitorista sin colaborador y nada más', async () => {
+    await withTempDatabase('wesapp_cuenta_compartida_108', async (pool) => {
+      await pool.query(await fs.readFile(schemaPath, 'utf8'));
+      for (const file of [
+        '106_usuarios_cliente_portal.sql',
+        '108_usuarios_cuenta_compartida.sql',
+      ]) {
+        await pool.query(await fs.readFile(path.join(migrationsDir, file), 'utf8'));
+      }
+      const insert = (usuario, tipo, compartida) =>
+        pool.query(
+          `INSERT INTO usuarios (usuario, password_hash, tipo_usuario, es_cuenta_compartida)
+           VALUES ($1, 'hash', $2, $3)`,
+          [usuario, tipo, compartida]
+        );
+
+      await expect(insert('modulo1', 'monitorista', true)).resolves.toMatchObject({ rowCount: 1 });
+      // Solo el rol monitorista puede ser cuenta de módulo.
+      await expect(insert('guardia-x', 'guardia', true)).rejects.toMatchObject({ code: '23514' });
+      // Un usuario normal sigue necesitando colaborador.
+      await expect(insert('monitor-x', 'monitorista', false)).rejects.toMatchObject({
+        code: '23514',
+      });
+      // Una cuenta de módulo no puede vincularse a un colaborador.
+      const colaborador = await pool.query(
+        `INSERT INTO colaboradores (nombres_completos, cedula, cargo, fecha_nacimiento)
+         VALUES ('Persona', '0000000001', 'Guardia', '1990-01-01') RETURNING id`
+      );
+      await expect(
+        pool.query('UPDATE usuarios SET colaborador_id = $1 WHERE usuario = $2', [
+          colaborador.rows[0].id,
+          'modulo1',
+        ])
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
 });
