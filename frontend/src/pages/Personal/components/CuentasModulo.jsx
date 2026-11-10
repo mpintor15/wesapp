@@ -4,6 +4,7 @@ import TabularWorkspace from '../../../components/TabularWorkspace';
 import { useToast } from '../../../context/ToastContext';
 import useSubmitState from '../../../hooks/useSubmitState';
 import usuariosService from '../../../services/usuariosService';
+import CuentaAccesosMatrix, { summarizeAccesos } from './CuentaAccesosMatrix';
 import UsuarioInvitationModal from './UsuarioInvitationModal';
 import { buildInvitationMessage, suggestCuentaUsuario } from '../utils/usuariosHelpers';
 
@@ -32,6 +33,11 @@ const CuentasModulo = ({
   const [invitation, setInvitation] = useState(null);
   const [copied, setCopied] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [catalogo, setCatalogo] = useState([]);
+  const [accesos, setAccesos] = useState({});
+  // Cuenta cuyos accesos se están editando (null = modal cerrado).
+  const [editando, setEditando] = useState(null);
+  const [editAccesos, setEditAccesos] = useState({});
   // Mientras el usuario no edite el usuario a mano, se sugiere a partir del nombre.
   const [usuarioEditado, setUsuarioEditado] = useState(false);
   const { isSubmitting: isCreating, withSubmit } = useSubmitState();
@@ -52,11 +58,26 @@ const CuentasModulo = ({
     load();
   }, [load, refreshKey]);
 
+  // El catálogo de módulos solo se pide cuando se va a crear o editar una cuenta.
+  const needsCatalogo = showCreate || editando !== null;
+  useEffect(() => {
+    if (!needsCatalogo || catalogo.length > 0) return;
+    usuariosService.getCatalogoCuentasModulo().then((res) => {
+      if (res.success) setCatalogo(res.data);
+      else showToast(res.message, 'error');
+    });
+  }, [needsCatalogo, catalogo.length, showToast]);
+
   const handleCreate = withSubmit(async (event) => {
     event.preventDefault();
+    if (Object.keys(accesos).length === 0) {
+      showToast('Selecciona al menos un acceso para la cuenta', 'error');
+      return;
+    }
     const res = await usuariosService.createCuentaModulo({
       nombre: form.nombre.trim(),
       usuario: form.usuario.trim(),
+      accesos,
     });
     if (!res.success) {
       showToast(res.message, 'error');
@@ -64,6 +85,7 @@ const CuentasModulo = ({
     }
     onCloseCreate();
     setForm(EMPTY_FORM);
+    setAccesos({});
     setUsuarioEditado(false);
     setInvitation(res.data);
     load();
@@ -113,9 +135,33 @@ const CuentasModulo = ({
   useEffect(() => {
     if (!showCreate) {
       setForm(EMPTY_FORM);
+      setAccesos({});
       setUsuarioEditado(false);
     }
   }, [showCreate]);
+
+  const openEditAccesos = (cuenta) => {
+    setEditAccesos(cuenta.accesos_cuenta || {});
+    setEditando(cuenta);
+  };
+
+  const handleSaveAccesos = async (event) => {
+    event.preventDefault();
+    if (Object.keys(editAccesos).length === 0) {
+      showToast('Selecciona al menos un acceso para la cuenta', 'error');
+      return;
+    }
+    setBusyId(editando.id);
+    const res = await usuariosService.updateCuentaModulo(editando.id, { accesos: editAccesos });
+    setBusyId(null);
+    if (!res.success) {
+      showToast(res.message, 'error');
+      return;
+    }
+    showToast('Accesos actualizados. Aplican en su próximo inicio de sesión.', 'success');
+    setEditando(null);
+    load();
+  };
 
   const handleNombreChange = (event) => {
     const nombre = event.target.value;
@@ -161,9 +207,10 @@ const CuentasModulo = ({
                 <tr>
                   <th>Nombre</th>
                   <th>Usuario</th>
+                  <th>Accesos</th>
                   <th className="center">Estado</th>
                   {canEdit ? (
-                    <th className="center col-actions app-col-actions app-col-actions--double"></th>
+                    <th className="center col-actions app-col-actions app-col-actions--triple"></th>
                   ) : null}
                 </tr>
               </thead>
@@ -172,25 +219,36 @@ const CuentasModulo = ({
                   cuentas.map((cuenta) => {
                     const estado = getEstado(cuenta);
                     const nombre = [cuenta.nombre, cuenta.apellido].filter(Boolean).join(' ');
-                    const resetLabel = cuenta.primer_login
-                      ? 'Reenviar invitación'
-                      : 'Restablecer contraseña';
                     return (
                       <tr key={cuenta.id}>
                         <td className="cell-person-name">{nombre}</td>
                         <td className="cell-nowrap">@{cuenta.usuario}</td>
+                        <td>{summarizeAccesos(cuenta.accesos_cuenta)}</td>
                         <td className="cell-status center">
                           <span className={`badge ${estado.className}`}>{estado.label}</span>
                         </td>
                         {canEdit ? (
-                          <td className="center col-actions app-col-actions app-col-actions--double">
+                          <td className="center col-actions app-col-actions app-col-actions--triple">
                             <div className="action-buttons app-table-actions">
-                              {cuenta.activo ? (
+                              <button
+                                className="action-btn action-btn-neutral"
+                                type="button"
+                                title="Editar accesos"
+                                aria-label={`Editar accesos de ${nombre}`}
+                                disabled={busyId === cuenta.id}
+                                onClick={() => openEditAccesos(cuenta)}
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                  <path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6l8-3z" />
+                                  <path d="M9 12l2 2 4-4" />
+                                </svg>
+                              </button>
+                              {cuenta.activo && cuenta.primer_login ? (
                                 <button
                                   className="action-btn action-btn-neutral"
                                   type="button"
-                                  title={resetLabel}
-                                  aria-label={`${resetLabel} de ${nombre}`}
+                                  title="Reenviar invitación"
+                                  aria-label={`Reenviar invitación de ${nombre}`}
                                   disabled={busyId === cuenta.id}
                                   onClick={() => handleReenviar(cuenta)}
                                 >
@@ -223,7 +281,7 @@ const CuentasModulo = ({
                   })
                 ) : (
                   <tr className="empty-row">
-                    <td colSpan={canEdit ? 4 : 3}>No hay cuentas de módulo registradas.</td>
+                    <td colSpan={canEdit ? 5 : 4}>No hay cuentas de módulo registradas.</td>
                   </tr>
                 )}
               </tbody>
@@ -269,6 +327,12 @@ const CuentasModulo = ({
                 />
                 <span className="field-hint">Sugerido a partir del nombre; puedes cambiarlo.</span>
               </div>
+              <div className="form-group usuarios-form-grid__full">
+                <span className="cuenta-accesos__title">
+                  Accesos <span className="required">*</span>
+                </span>
+                <CuentaAccesosMatrix catalogo={catalogo} value={accesos} onChange={setAccesos} />
+              </div>
             </AppModal.Body>
             <AppModal.Footer className="usuarios-modal-actions">
               <button className="btn btn-primary" type="submit" disabled={isCreating}>
@@ -279,6 +343,41 @@ const CuentasModulo = ({
                 type="button"
                 onClick={() => onCloseCreate()}
                 disabled={isCreating}
+              >
+                Cancelar
+              </button>
+            </AppModal.Footer>
+          </form>
+        </AppModal>
+      )}
+
+      {editando && (
+        <AppModal
+          isOpen
+          onClose={() => setEditando(null)}
+          title={`Accesos de ${[editando.nombre, editando.apellido].filter(Boolean).join(' ')}`}
+          size="md"
+          className="usuarios-modal"
+        >
+          <AppModal.Header />
+          <form onSubmit={handleSaveAccesos}>
+            <AppModal.Body className="usuarios-form-grid">
+              <div className="form-group usuarios-form-grid__full">
+                <CuentaAccesosMatrix
+                  catalogo={catalogo}
+                  value={editAccesos}
+                  onChange={setEditAccesos}
+                />
+              </div>
+            </AppModal.Body>
+            <AppModal.Footer className="usuarios-modal-actions">
+              <button className="btn btn-primary" type="submit" disabled={busyId === editando.id}>
+                Guardar accesos
+              </button>
+              <button
+                className="btn btn-modal-clear"
+                type="button"
+                onClick={() => setEditando(null)}
               >
                 Cancelar
               </button>

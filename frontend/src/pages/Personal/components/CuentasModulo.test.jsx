@@ -12,6 +12,7 @@ jest.mock('../../../services/usuariosService', () => ({
   __esModule: true,
   default: {
     getCuentasModulo: jest.fn(),
+    getCatalogoCuentasModulo: jest.fn(),
     createCuentaModulo: jest.fn(),
     updateCuentaModulo: jest.fn(),
     reenviarInvitacionCuentaModulo: jest.fn(),
@@ -36,6 +37,24 @@ describe('CuentasModulo', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
+    usuariosService.getCatalogoCuentasModulo.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: 'inventario',
+          label: 'Inventario',
+          tabs: [
+            { id: 'inventario.articulos', label: 'Artículos', puedeEditar: true },
+            { id: 'inventario.bajas', label: 'Bajas', puedeEditar: true },
+          ],
+        },
+        {
+          id: 'bitacoras',
+          label: 'Bitácoras',
+          tabs: [{ id: 'bitacoras.historial', label: 'Registro y visitas', puedeEditar: false }],
+        },
+      ],
+    });
     usuariosService.getCuentasModulo.mockResolvedValue({
       success: true,
       data: [
@@ -46,6 +65,7 @@ describe('CuentasModulo', () => {
           apellido: null,
           activo: true,
           primer_login: true,
+          accesos_cuenta: { 'inventario.articulos': 'ver' },
         },
       ],
     });
@@ -73,6 +93,7 @@ describe('CuentasModulo', () => {
     expect(container.textContent).toContain('Módulo 1 Monitoreo');
     expect(container.textContent).toContain('@modulo1');
     expect(container.textContent).toContain('Pendiente');
+    expect(container.textContent).toContain('1 tab · solo lectura');
 
     const button = (label) => container.querySelector(`button[title="${label}"]`);
 
@@ -116,18 +137,73 @@ describe('CuentasModulo', () => {
     // El usuario se sugiere solo a partir del nombre.
     expect(document.getElementById('cm-usuario').value).toBe('modulo2.monitoreo');
     expect(document.getElementById('cm-apellido')).toBeNull();
-    await act(async () => {
+    const submit = () =>
       [...document.querySelectorAll('button[type="submit"]')]
         .find((b) => b.textContent === 'Crear cuenta')
         .click();
-    });
+
+    // Sin accesos elegidos no se crea la cuenta.
+    await act(async () => submit());
+    await flush();
+    expect(usuariosService.createCuentaModulo).not.toHaveBeenCalled();
+
+    // Bitácoras solo admite consulta: no ofrece "Edición".
+    const radios = (tabId) => [...document.querySelectorAll(`input[name="acceso-${tabId}"]`)];
+    expect(radios('bitacoras.historial')).toHaveLength(2);
+    expect(radios('inventario.articulos')).toHaveLength(3);
+    await act(async () => radios('inventario.articulos')[2].click());
+    await act(async () => radios('bitacoras.historial')[1].click());
+    await act(async () => submit());
     await flush();
 
     expect(usuariosService.createCuentaModulo).toHaveBeenCalledWith({
       nombre: 'Módulo 2 Monitoreo',
       usuario: 'modulo2.monitoreo',
+      accesos: { 'inventario.articulos': 'editar', 'bitacoras.historial': 'ver' },
     });
     expect(document.body.textContent).toContain('Abc-999');
     expect(onCloseCreate).toHaveBeenCalled();
+  });
+  test('edita los accesos de una cuenta existente', async () => {
+    usuariosService.updateCuentaModulo.mockResolvedValue({ success: true });
+    await act(async () => root.render(<CuentasModulo canEdit onCloseCreate={jest.fn()} />));
+    await flush();
+
+    await act(async () => container.querySelector('button[title="Editar accesos"]').click());
+    await flush();
+    const radios = [...document.querySelectorAll('input[name="acceso-inventario.bajas"]')];
+    await act(async () => radios[1].click());
+    await act(async () => {
+      [...document.querySelectorAll('button[type="submit"]')]
+        .find((b) => b.textContent === 'Guardar accesos')
+        .click();
+    });
+    await flush();
+
+    expect(usuariosService.updateCuentaModulo).toHaveBeenCalledWith(9, {
+      accesos: { 'inventario.articulos': 'ver', 'inventario.bajas': 'ver' },
+    });
+  });
+  test('no ofrece reenviar la invitación de una cuenta que ya inició sesión', async () => {
+    usuariosService.getCuentasModulo.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: 9,
+          usuario: 'modulo1',
+          nombre: 'Módulo 1 Monitoreo',
+          apellido: null,
+          activo: true,
+          primer_login: false,
+          accesos_cuenta: null,
+        },
+      ],
+    });
+    await act(async () => root.render(<CuentasModulo canEdit onCloseCreate={jest.fn()} />));
+    await flush();
+
+    expect(container.textContent).toContain('Activa');
+    expect(container.querySelector('button[title="Reenviar invitación"]')).toBeNull();
+    expect(container.querySelector('button[title="Desactivar"]')).not.toBeNull();
   });
 });

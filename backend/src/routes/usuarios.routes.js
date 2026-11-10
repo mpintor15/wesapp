@@ -41,6 +41,11 @@ router.get(
   requirePermission(PERMISSIONS.USUARIOS_CUENTAS_MODULO_VER),
   usuariosController.getCuentasModulo
 );
+router.get(
+  '/cuentas-modulo/catalogo',
+  requirePermission(PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR),
+  usuariosController.getCatalogoCuentasModulo
+);
 router.post(
   '/cuentas-modulo',
   requirePermission(PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR),

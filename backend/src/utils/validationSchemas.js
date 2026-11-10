@@ -457,6 +457,16 @@ const usuarioCreateSchema = z.object({
   ubicacion_ids: z.array(positiveInt('Ubicación ID')).optional(),
 });
 
+// { '<tab>': 'ver' | 'editar' }; el catálogo de tabs se valida en el controlador.
+const cuentaModuloAccesosSchema = z
+  .record(
+    z.string(),
+    z.enum(['ver', 'editar'], { errorMap: () => ({ message: 'Nivel inválido' }) })
+  )
+  .refine((accesos) => Object.keys(accesos).length > 0, {
+    message: 'Selecciona al menos un acceso',
+  });
+
 const cuentaModuloCreateSchema = z.object({
   usuario: z
     .string({ required_error: 'Usuario es requerido' })
@@ -468,11 +478,17 @@ const cuentaModuloCreateSchema = z.object({
     .trim()
     .min(1, 'Nombre no puede estar vacío')
     .max(100, 'Nombre no puede exceder 100 caracteres'),
+  accesos: cuentaModuloAccesosSchema,
 });
 
-const cuentaModuloUpdateSchema = z.object({
-  activo: z.boolean({ required_error: 'Activo es requerido' }),
-});
+const cuentaModuloUpdateSchema = z
+  .object({
+    activo: z.boolean().optional(),
+    accesos: cuentaModuloAccesosSchema.optional(),
+  })
+  .refine((body) => body.activo !== undefined || body.accesos !== undefined, {
+    message: 'Indica activo o accesos',
+  });
 
 const clientePortalAccessCreateSchema = z.object({
   usuario: z

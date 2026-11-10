@@ -52,7 +52,7 @@ const evaluateAnyPermission = (user, permissions) => {
     };
   }
 
-  if (requestedPermissions.some((permission) => hasPermission(user.tipo_usuario, permission))) {
+  if (requestedPermissions.some((permission) => hasPermission(user, permission))) {
     return { allowed: true };
   }
 

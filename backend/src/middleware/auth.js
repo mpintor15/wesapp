@@ -10,6 +10,7 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config/config');
 const db = require('../config/database');
+const { permisosDeUsuario } = require('../config/cuentaModuloAccess');
 const { hasCsrfHeader, isSafeMethod, readSessionToken } = require('../utils/sessionCookie');
 const {
   sendAuthenticationRequired,
@@ -81,7 +82,7 @@ const verifyToken = async (req, res, next) => {
   try {
     const result = await db.query(
       `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo, cliente_id,
-              sesiones_validas_desde,
+              sesiones_validas_desde, es_cuenta_compartida, accesos_cuenta,
               EXISTS (SELECT 1 FROM sesiones_revocadas sr WHERE sr.jti = $2::text) AS sesion_revocada
        FROM usuarios
        WHERE id = $1`,
@@ -109,6 +110,7 @@ const verifyToken = async (req, res, next) => {
       primer_login: user.primer_login,
       activo: user.activo,
       cliente_id: user.cliente_id,
+      permisos: permisosDeUsuario(user),
     };
     if (user.primer_login && !PASSWORD_CHANGE_ALLOWED_PATHS.has(req.originalUrl.split('?')[0])) {
       return sendPasswordChangeRequired(res);

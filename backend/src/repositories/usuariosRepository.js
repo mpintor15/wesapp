@@ -62,7 +62,7 @@ const findUsuarios = ({ filters, pagination }, executor = db) => {
   const { params, conditions } = buildUsuariosFilters(filters);
   let query = `
       SELECT u.id, u.usuario, u.nombre, u.apellido, u.tipo_usuario, u.primer_login, u.activo,
-             u.created_at, u.es_cuenta_compartida, u.colaborador_id, c.nombres_completos AS colaborador_nombre,
+             u.created_at, u.es_cuenta_compartida, u.accesos_cuenta, u.colaborador_id, c.nombres_completos AS colaborador_nombre,
              c.estado AS colaborador_estado,
              COALESCE(ARRAY_AGG(uu.ubicacion_id) FILTER (WHERE uu.ubicacion_id IS NOT NULL), '{}') AS ubicacion_ids
       FROM usuarios u
@@ -104,7 +104,7 @@ const findColaboradoresElegibles = (usuarioId, executor = db) =>
 
 const findUsuarioParaReenvio = async (id, executor = db) => {
   const result = await executor.query(
-    `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo, es_cuenta_compartida
+    `SELECT id, usuario, nombre, apellido, tipo_usuario, primer_login, activo, es_cuenta_compartida, accesos_cuenta
      FROM usuarios
      WHERE id = $1
      LIMIT 1`,

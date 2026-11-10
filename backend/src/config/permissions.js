@@ -193,10 +193,20 @@ const rolePermissions = {
 
 const knownPermissions = new Set(Object.values(PERMISSIONS));
 
-const hasPermission = (role, permission) => {
+// `subject` es un rol (string) o un usuario. Una cuenta de módulo trae `permisos`
+// explícitos (elegidos al crearla) que reemplazan a los de su rol.
+const hasPermission = (subject, permission) => {
   if (!knownPermissions.has(permission)) {
     return false;
   }
+
+  if (subject && typeof subject === 'object') {
+    if (Array.isArray(subject.permisos)) {
+      return subject.permisos.includes(permission);
+    }
+    return hasPermission(subject.tipo_usuario, permission);
+  }
+  const role = subject;
 
   if (role === ROLES.GERENTE) {
     return true;

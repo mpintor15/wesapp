@@ -170,15 +170,28 @@ cambiar de rol. Se identifican con `es_cuenta_compartida: true`.
 
 | Método | Ruta | Permiso | Descripción |
 |--------|------|---------|-------------|
-| GET | `/usuarios/cuentas-modulo` | ver | Lista las cuentas de módulo |
-| POST | `/usuarios/cuentas-modulo` | gestionar | Crea una cuenta; devuelve `temp_password` una sola vez |
-| PUT | `/usuarios/cuentas-modulo/:id` | gestionar | Activa o desactiva la cuenta (`{ "activo": false }`) |
+| GET | `/usuarios/cuentas-modulo` | ver | Lista las cuentas de módulo (con `accesos_cuenta`) |
+| GET | `/usuarios/cuentas-modulo/catalogo` | gestionar | Módulos y tabs que se pueden conceder (`puedeEditar` indica si el tab admite edición) |
+| POST | `/usuarios/cuentas-modulo` | gestionar | Crea una cuenta con sus accesos; devuelve `temp_password` una sola vez |
+| PUT | `/usuarios/cuentas-modulo/:id` | gestionar | Activa/desactiva (`{ "activo": false }`) y/o cambia los accesos (`{ "accesos": {...} }`) |
 | POST | `/usuarios/cuentas-modulo/:id/invitacion` | gestionar | Genera una nueva contraseña temporal, incluso si ya hizo su primer acceso; revoca sus sesiones |
 
 **POST `/usuarios/cuentas-modulo`**
 ```json
-{ "usuario": "modulo1.monitoreo", "nombre": "Módulo 1", "apellido": "Monitoreo" }
+{
+  "usuario": "modulo1.monitoreo",
+  "nombre": "Módulo 1 Monitoreo",
+  "accesos": { "clientes.directorio": "ver", "clientes.ubicaciones": "editar" }
+}
 ```
+
+**Accesos por cuenta.** `accesos` asigna a cada tab (`<módulo>.<tab>`) el nivel `ver`
+(solo lectura) o `editar` (lectura + acciones que modifican datos). Los módulos
+disponibles son Clientes, Inventario, Bitácoras (solo consulta) y Cuentas; Personal y
+Usuarios nunca se ofrecen. Los permisos de una cuenta con accesos son exactamente los
+que estos expanden (reemplazan a los de su rol) y viajan en `user.permisos` en login y
+verify. Quien crea o edita solo puede conceder lo que él mismo tiene (`403` si no).
+Los cambios aplican en el próximo inicio de sesión de la cuenta.
 
 **Errores:** `409` si el usuario ya existe, `404` si el id no es una cuenta de módulo,
 `400` al intentar desactivar la propia cuenta.

@@ -70,8 +70,8 @@ const VISIT_FORM_SORTS = {
   published_at: 'bfv.published_at',
 };
 
-const hasGlobalLocationScope = (tipoUsuario) =>
-  hasPermission(tipoUsuario, PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS);
+const hasGlobalLocationScope = (subject) =>
+  hasPermission(subject, PERMISSIONS.BITACORAS_PUNTOS_VER_TODOS);
 
 const domainError = (status, code, message) => {
   const error = createHttpError(status, message);

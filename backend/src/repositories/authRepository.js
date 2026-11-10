@@ -37,7 +37,7 @@ const findUserForLogin = async (usuario) => {
   const identitySelect = await getUserIdentitySelect();
   const result = await db.query(
     `SELECT id, usuario, ${identitySelect.nombre}, ${identitySelect.apellido}, tipo_usuario,
-            primer_login, activo, password_hash, bloqueado_hasta,
+            primer_login, activo, password_hash, bloqueado_hasta, es_cuenta_compartida, accesos_cuenta,
             (SELECT c.id FROM colaboradores c WHERE c.id = usuarios.colaborador_id) AS colaborador_id
      FROM usuarios
      WHERE usuario = $1`,
@@ -50,7 +50,7 @@ const findUserForSession = async (userId) => {
   const identitySelect = await getUserIdentitySelect();
   const result = await db.query(
     `SELECT id, usuario, ${identitySelect.nombre}, ${identitySelect.apellido}, tipo_usuario,
-            primer_login, activo,
+            primer_login, activo, es_cuenta_compartida, accesos_cuenta,
             (SELECT c.id FROM colaboradores c WHERE c.id = usuarios.colaborador_id) AS colaborador_id
      FROM usuarios
      WHERE id = $1`,

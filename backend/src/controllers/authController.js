@@ -19,12 +19,19 @@ const { createHttpError, handleControllerError } = require('../utils/http');
 const { sendAuthenticationRequired, sendUserDisabled } = require('../utils/authErrorCodes');
 const authRepository = require('../repositories/authRepository');
 const logger = require('../config/logger');
+const { permisosDeUsuario } = require('../config/cuentaModuloAccess');
 const { sanitizeError } = require('../utils/logSanitizer');
 const {
   clearSessionCookie,
   readSessionToken,
   setSessionCookie,
 } = require('../utils/sessionCookie');
+
+// Solo las cuentas de módulo llevan permisos explícitos; el resto se resuelve por rol.
+const permisosPayload = (user) => {
+  const permisos = permisosDeUsuario(user);
+  return permisos ? { permisos } : {};
+};
 
 const BCRYPT_ROUNDS = 10;
 // Hash falso para gastar el mismo tiempo de bcrypt cuando el usuario no existe o está
@@ -116,6 +123,7 @@ const login = async (req, res) => {
           tipo_usuario: user.tipo_usuario,
           primer_login: user.primer_login,
           colaborador_id: user.colaborador_id,
+          ...permisosPayload(user),
         },
       },
     });
@@ -266,6 +274,7 @@ const verifyToken = async (req, res) => {
           tipo_usuario: user.tipo_usuario,
           primer_login: user.primer_login,
           colaborador_id: user.colaborador_id,
+          ...permisosPayload(user),
         },
       },
     });
