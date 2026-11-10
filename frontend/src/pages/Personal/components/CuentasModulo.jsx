@@ -4,9 +4,9 @@ import { useToast } from '../../../context/ToastContext';
 import useSubmitState from '../../../hooks/useSubmitState';
 import usuariosService from '../../../services/usuariosService';
 import UsuarioInvitationModal from './UsuarioInvitationModal';
-import { buildInvitationMessage } from '../utils/usuariosHelpers';
+import { buildInvitationMessage, suggestCuentaUsuario } from '../utils/usuariosHelpers';
 
-const EMPTY_FORM = { nombre: '', apellido: '', usuario: '' };
+const EMPTY_FORM = { nombre: '', usuario: '' };
 
 const getEstado = (cuenta) => {
   if (!cuenta.activo) return { className: 'badge-inactive', label: 'Inactiva' };
@@ -16,7 +16,14 @@ const getEstado = (cuenta) => {
 
 // Cuentas de módulo: usuarios monitorista que no pertenecen a un colaborador
 // (p. ej. "Módulo 1 Monitoreo"). El backend valida permisos y reglas.
-const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
+const CuentasModulo = ({
+  active = true,
+  canEdit,
+  refreshKey,
+  showCreate,
+  onCloseCreate,
+  onCountChange,
+}) => {
   const { showToast } = useToast();
   const [cuentas, setCuentas] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +31,8 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
   const [invitation, setInvitation] = useState(null);
   const [copied, setCopied] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  // Mientras el usuario no edite el usuario a mano, se sugiere a partir del nombre.
+  const [usuarioEditado, setUsuarioEditado] = useState(false);
   const { isSubmitting: isCreating, withSubmit } = useSubmitState();
 
   const load = useCallback(async () => {
@@ -31,11 +40,12 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
     const res = await usuariosService.getCuentasModulo();
     if (res.success) {
       setCuentas(res.data);
+      onCountChange?.(res.data.length);
     } else {
       showToast(res.message, 'error');
     }
     setLoading(false);
-  }, [showToast]);
+  }, [showToast, onCountChange]);
 
   useEffect(() => {
     load();
@@ -45,7 +55,6 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
     event.preventDefault();
     const res = await usuariosService.createCuentaModulo({
       nombre: form.nombre.trim(),
-      apellido: form.apellido.trim(),
       usuario: form.usuario.trim(),
     });
     if (!res.success) {
@@ -54,6 +63,7 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
     }
     onCloseCreate();
     setForm(EMPTY_FORM);
+    setUsuarioEditado(false);
     setInvitation(res.data);
     load();
   });
@@ -99,8 +109,26 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
     }
   };
 
-  const setField = (field) => (event) =>
-    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+  useEffect(() => {
+    if (!showCreate) {
+      setForm(EMPTY_FORM);
+      setUsuarioEditado(false);
+    }
+  }, [showCreate]);
+
+  const handleNombreChange = (event) => {
+    const nombre = event.target.value;
+    setForm((prev) => ({
+      ...prev,
+      nombre,
+      usuario: usuarioEditado ? prev.usuario : suggestCuentaUsuario(nombre),
+    }));
+  };
+
+  const handleUsuarioChange = (event) => {
+    setUsuarioEditado(true);
+    setForm((prev) => ({ ...prev, usuario: event.target.value }));
+  };
 
   return (
     <section
@@ -108,6 +136,7 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
       role="tabpanel"
       aria-labelledby="personal-tab-cuentas"
       className="cuentas-modulo"
+      hidden={!active}
     >
       <div className="cuentas-modulo__header">
         <p className="cuentas-modulo__hint">
@@ -139,9 +168,7 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
                 const estado = getEstado(cuenta);
                 return (
                   <tr key={cuenta.id}>
-                    <td>
-                      {cuenta.nombre} {cuenta.apellido}
-                    </td>
+                    <td>{[cuenta.nombre, cuenta.apellido].filter(Boolean).join(' ')}</td>
                     <td>@{cuenta.usuario}</td>
                     <td>
                       <span className={`badge ${estado.className}`}>{estado.label}</span>
@@ -187,28 +214,14 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
           <AppModal.Header />
           <form onSubmit={handleCreate}>
             <AppModal.Body className="usuarios-form-grid">
-              <div className="form-group">
+              <div className="form-group usuarios-form-grid__full">
                 <label htmlFor="cm-nombre">
                   Nombre <span className="required">*</span>
                 </label>
                 <input
                   id="cm-nombre"
                   value={form.nombre}
-                  onChange={setField('nombre')}
-                  placeholder="Módulo 1"
-                  autoComplete="off"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="cm-apellido">
-                  Apellido <span className="required">*</span>
-                </label>
-                <input
-                  id="cm-apellido"
-                  value={form.apellido}
-                  onChange={setField('apellido')}
-                  placeholder="Monitoreo"
+                  onChange={handleNombreChange}
                   autoComplete="off"
                   required
                 />
@@ -220,12 +233,12 @@ const CuentasModulo = ({ canEdit, refreshKey, showCreate, onCloseCreate }) => {
                 <input
                   id="cm-usuario"
                   value={form.usuario}
-                  onChange={setField('usuario')}
-                  placeholder="modulo1.monitoreo"
+                  onChange={handleUsuarioChange}
                   autoComplete="off"
                   minLength={3}
                   required
                 />
+                <span className="field-hint">Sugerido a partir del nombre; puedes cambiarlo.</span>
               </div>
             </AppModal.Body>
             <AppModal.Footer className="usuarios-modal-actions">

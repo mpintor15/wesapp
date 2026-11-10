@@ -468,11 +468,6 @@ const cuentaModuloCreateSchema = z.object({
     .trim()
     .min(1, 'Nombre no puede estar vacío')
     .max(100, 'Nombre no puede exceder 100 caracteres'),
-  apellido: z
-    .string({ required_error: 'Apellido es requerido' })
-    .trim()
-    .min(1, 'Apellido no puede estar vacío')
-    .max(100, 'Apellido no puede exceder 100 caracteres'),
 });
 
 const cuentaModuloUpdateSchema = z.object({

@@ -42,8 +42,8 @@ describe('CuentasModulo', () => {
         {
           id: 9,
           usuario: 'modulo1',
-          nombre: 'Módulo 1',
-          apellido: 'Monitoreo',
+          nombre: 'Módulo 1 Monitoreo',
+          apellido: null,
           activo: true,
           primer_login: true,
         },
@@ -62,8 +62,7 @@ describe('CuentasModulo', () => {
       success: true,
       data: {
         usuario: 'modulo1',
-        nombre: 'Módulo 1',
-        apellido: 'Monitoreo',
+        nombre: 'Módulo 1 Monitoreo',
         temp_password: 'Temp-1234',
       },
     });
@@ -90,7 +89,11 @@ describe('CuentasModulo', () => {
   test('crea una cuenta con nombre, apellido y usuario y muestra la invitación', async () => {
     usuariosService.createCuentaModulo.mockResolvedValue({
       success: true,
-      data: { usuario: 'm2', nombre: 'Módulo 2', apellido: 'Monitoreo', temp_password: 'Abc-999' },
+      data: {
+        usuario: 'modulo2.monitoreo',
+        nombre: 'Módulo 2 Monitoreo',
+        temp_password: 'Abc-999',
+      },
     });
     const onCloseCreate = jest.fn();
     await act(async () =>
@@ -109,10 +112,11 @@ describe('CuentasModulo', () => {
       input.dispatchEvent(new globalThis.Event('input', { bubbles: true }));
     };
     await act(async () => {
-      setValue('cm-nombre', 'Módulo 2');
-      setValue('cm-apellido', 'Monitoreo');
-      setValue('cm-usuario', 'm2');
+      setValue('cm-nombre', 'Módulo 2 Monitoreo');
     });
+    // El usuario se sugiere solo a partir del nombre.
+    expect(document.getElementById('cm-usuario').value).toBe('modulo2.monitoreo');
+    expect(document.getElementById('cm-apellido')).toBeNull();
     await act(async () => {
       [...document.querySelectorAll('button[type="submit"]')]
         .find((b) => b.textContent === 'Crear cuenta')
@@ -121,9 +125,8 @@ describe('CuentasModulo', () => {
     await flush();
 
     expect(usuariosService.createCuentaModulo).toHaveBeenCalledWith({
-      nombre: 'Módulo 2',
-      apellido: 'Monitoreo',
-      usuario: 'm2',
+      nombre: 'Módulo 2 Monitoreo',
+      usuario: 'modulo2.monitoreo',
     });
     expect(document.body.textContent).toContain('Abc-999');
     expect(onCloseCreate).toHaveBeenCalled();

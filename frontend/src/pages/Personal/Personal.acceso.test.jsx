@@ -35,6 +35,7 @@ jest.mock('../../services/usuariosService', () => ({
     getColaboradoresElegibles: jest.fn(),
     getUbicacionesAsignables: jest.fn(),
     getUsuarioByColaborador: jest.fn(),
+    getCuentasModulo: jest.fn(),
     createUsuario: jest.fn(),
     updateUsuario: jest.fn(),
     reenviarInvitacion: jest.fn(),
@@ -112,6 +113,7 @@ describe('Personal — gestión de acceso e integración con Usuarios', () => {
     jest.useFakeTimers();
     useToast.mockReturnValue({ showToast: jest.fn() });
     usuariosService.getColaboradoresElegibles.mockResolvedValue({ success: true, data: [] });
+    usuariosService.getCuentasModulo.mockResolvedValue({ success: true, data: [] });
     usuariosService.getUbicacionesAsignables.mockResolvedValue({ success: true, data: [] });
   });
 

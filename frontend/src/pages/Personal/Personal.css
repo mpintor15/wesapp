@@ -324,6 +324,7 @@
 /* ── Tabs de Personal (mismo estilo que Inventario) ───────── */
 .personal-tabs {
   display: flex;
+  flex-shrink: 0;
   gap: 0;
   margin-bottom: 12px;
   background-color: var(--color-surface);
@@ -360,6 +361,31 @@
   border-bottom-color: var(--color-primary);
   background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-muted) 100%);
   box-shadow: inset 0 -1px 0 rgba(232, 32, 26, 0.22);
+}
+
+/* Burbuja con el total, igual que en Inventario */
+.personal-tabs .tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 7px;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-700);
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.personal-tabs .tab.active .tab-badge {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
 }
 
 @media (max-width: 640px) {

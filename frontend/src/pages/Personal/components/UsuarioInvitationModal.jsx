@@ -14,7 +14,7 @@ const UsuarioInvitationModal = ({ copied, invitationData, onClose, onCopy }) => 
       <p className="invitation-intro">
         Copia este mensaje y envíaselo a{' '}
         <strong>
-          {invitationData.nombre} {invitationData.apellido}
+          {[invitationData.nombre, invitationData.apellido].filter(Boolean).join(' ')}
         </strong>{' '}
         por el canal que prefieras.
       </p>
