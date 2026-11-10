@@ -406,20 +406,6 @@
   gap: 12px;
 }
 
-.cuentas-modulo__header {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: space-between;
-}
-
-.cuentas-modulo__hint {
-  color: var(--color-text-muted);
-  flex: 1 1 320px;
-  margin: 0;
-}
-
 .cuentas-modulo__table {
   width: 100%;
   table-layout: fixed;
@@ -433,4 +419,9 @@
 .cuentas-modulo__table th:nth-child(2),
 .cuentas-modulo__table td:nth-child(2) {
   width: 30%;
+}
+
+.cuentas-modulo__table th.center,
+.cuentas-modulo__table td.cell-status {
+  text-align: center !important;
 }

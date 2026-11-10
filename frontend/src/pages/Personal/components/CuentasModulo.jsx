@@ -139,13 +139,6 @@ const CuentasModulo = ({
       className="cuentas-modulo"
       hidden={!active}
     >
-      <div className="cuentas-modulo__header">
-        <p className="cuentas-modulo__hint">
-          Usuarios que no pertenecen a una persona, como las estaciones de monitoreo. Entran con rol
-          Jefe de monitoreo y no están vinculados a un colaborador.
-        </p>
-      </div>
-
       <TabularWorkspace
         dataCard
         summary={
@@ -168,7 +161,7 @@ const CuentasModulo = ({
                 <tr>
                   <th>Nombre</th>
                   <th>Usuario</th>
-                  <th>Estado</th>
+                  <th className="center">Estado</th>
                   {canEdit ? (
                     <th className="center col-actions app-col-actions app-col-actions--double"></th>
                   ) : null}
@@ -186,7 +179,7 @@ const CuentasModulo = ({
                       <tr key={cuenta.id}>
                         <td className="cell-person-name">{nombre}</td>
                         <td className="cell-nowrap">@{cuenta.usuario}</td>
-                        <td className="cell-status">
+                        <td className="cell-status center">
                           <span className={`badge ${estado.className}`}>{estado.label}</span>
                         </td>
                         {canEdit ? (
