@@ -7,6 +7,7 @@ import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import './Dashboard.css';
 import logo from '../../assets/branding/logo_horizontal_header.png';
 import { MODULE_ACCESS_PERMISSIONS } from '../../auth/modulePermissions';
+import { PERMISSIONS } from '../../auth/permissions';
 
 const MODULE_META = {
   bitacoras: { description: 'Registro y consulta de novedades operativas' },
@@ -152,6 +153,10 @@ const Dashboard = () => {
         <div className="modules-grid">
           {modules.map((module) => {
             const meta = MODULE_META[module.key] ?? {};
+            const description =
+              module.key === 'personal' && !hasPermission([PERMISSIONS.PERSONAL_VER])
+                ? 'Cuentas de módulo para las estaciones de monitoreo'
+                : meta.description;
             const ModuleIcon = module.Icon;
             return (
               <button
@@ -170,7 +175,7 @@ const Dashboard = () => {
                 </div>
                 <div className="module-card-body">
                   <h3>{module.label}</h3>
-                  {meta.description && <p>{meta.description}</p>}
+                  {description && <p>{description}</p>}
                 </div>
                 <span className="module-card-arrow">
                   <svg
