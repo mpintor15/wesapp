@@ -74,8 +74,7 @@ describe('CuentasModulo', () => {
     expect(container.textContent).toContain('@modulo1');
     expect(container.textContent).toContain('Pendiente');
 
-    const button = (label) =>
-      [...container.querySelectorAll('button')].find((b) => b.textContent === label);
+    const button = (label) => container.querySelector(`button[title="${label}"]`);
 
     await act(async () => button('Desactivar').click());
     expect(usuariosService.updateCuentaModulo).toHaveBeenCalledWith(9, { activo: false });

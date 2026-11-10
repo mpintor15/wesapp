@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import AppModal from '../../../components/AppModal';
+import TabularWorkspace from '../../../components/TabularWorkspace';
 import { useToast } from '../../../context/ToastContext';
 import useSubmitState from '../../../hooks/useSubmitState';
 import usuariosService from '../../../services/usuariosService';
@@ -145,63 +146,98 @@ const CuentasModulo = ({
         </p>
       </div>
 
-      {loading ? (
-        <div className="loading-spinner-wrap">
-          <span className="spinner" />
-          <span>Cargando cuentas de módulo…</span>
-        </div>
-      ) : cuentas.length === 0 ? (
-        <div className="empty-state">No hay cuentas de módulo registradas.</div>
-      ) : (
-        <div className="table-wrapper">
-          <table className="table cuentas-modulo__table">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Usuario</th>
-                <th>Estado</th>
-                {canEdit ? <th>Acciones</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {cuentas.map((cuenta) => {
-                const estado = getEstado(cuenta);
-                return (
-                  <tr key={cuenta.id}>
-                    <td>{[cuenta.nombre, cuenta.apellido].filter(Boolean).join(' ')}</td>
-                    <td>@{cuenta.usuario}</td>
-                    <td>
-                      <span className={`badge ${estado.className}`}>{estado.label}</span>
-                    </td>
-                    {canEdit ? (
-                      <td className="cuentas-modulo__actions">
-                        {cuenta.activo ? (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            type="button"
-                            disabled={busyId === cuenta.id}
-                            onClick={() => handleReenviar(cuenta)}
-                          >
-                            {cuenta.primer_login ? 'Reenviar invitación' : 'Restablecer contraseña'}
-                          </button>
+      <TabularWorkspace
+        dataCard
+        summary={
+          !loading ? (
+            <div className="table-result-count">
+              Mostrando {cuentas.length} de {cuentas.length} cuenta(s) de módulo
+            </div>
+          ) : null
+        }
+      >
+        {loading ? (
+          <div className="loading-spinner-wrap">
+            <span className="spinner" />
+            <span>Cargando cuentas de módulo…</span>
+          </div>
+        ) : (
+          <div className="table-responsive app-table-shell cuentas-modulo__shell">
+            <table className="app-table cuentas-modulo__table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Usuario</th>
+                  <th>Estado</th>
+                  {canEdit ? (
+                    <th className="center col-actions app-col-actions app-col-actions--double"></th>
+                  ) : null}
+                </tr>
+              </thead>
+              <tbody>
+                {cuentas.length > 0 ? (
+                  cuentas.map((cuenta) => {
+                    const estado = getEstado(cuenta);
+                    const nombre = [cuenta.nombre, cuenta.apellido].filter(Boolean).join(' ');
+                    const resetLabel = cuenta.primer_login
+                      ? 'Reenviar invitación'
+                      : 'Restablecer contraseña';
+                    return (
+                      <tr key={cuenta.id}>
+                        <td className="cell-person-name">{nombre}</td>
+                        <td className="cell-nowrap">@{cuenta.usuario}</td>
+                        <td className="cell-status">
+                          <span className={`badge ${estado.className}`}>{estado.label}</span>
+                        </td>
+                        {canEdit ? (
+                          <td className="center col-actions app-col-actions app-col-actions--double">
+                            <div className="action-buttons app-table-actions">
+                              {cuenta.activo ? (
+                                <button
+                                  className="action-btn action-btn-neutral"
+                                  type="button"
+                                  title={resetLabel}
+                                  aria-label={`${resetLabel} de ${nombre}`}
+                                  disabled={busyId === cuenta.id}
+                                  onClick={() => handleReenviar(cuenta)}
+                                >
+                                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle cx="8" cy="15" r="4" />
+                                    <path d="M10.8 12.2L20 3M16 7l3 3M14 9l2 2" />
+                                  </svg>
+                                </button>
+                              ) : null}
+                              <button
+                                className={`action-btn ${
+                                  cuenta.activo ? 'action-btn-destructive' : 'action-btn-neutral'
+                                }`}
+                                type="button"
+                                title={cuenta.activo ? 'Desactivar' : 'Activar'}
+                                aria-label={`${cuenta.activo ? 'Desactivar' : 'Activar'} ${nombre}`}
+                                disabled={busyId === cuenta.id}
+                                onClick={() => handleToggleActivo(cuenta)}
+                              >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                  <path d="M12 3v9" />
+                                  <path d="M6.3 6.3a8 8 0 1 0 11.4 0" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
                         ) : null}
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          type="button"
-                          disabled={busyId === cuenta.id}
-                          onClick={() => handleToggleActivo(cuenta)}
-                        >
-                          {cuenta.activo ? 'Desactivar' : 'Activar'}
-                        </button>
-                      </td>
-                    ) : null}
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr className="empty-row">
+                    <td colSpan={canEdit ? 4 : 3}>No hay cuentas de módulo registradas.</td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </TabularWorkspace>
 
       {showCreate && (
         <AppModal

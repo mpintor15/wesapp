@@ -420,8 +420,17 @@
   margin: 0;
 }
 
-.cuentas-modulo__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.cuentas-modulo__table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.cuentas-modulo__table th:nth-child(1),
+.cuentas-modulo__table td:nth-child(1) {
+  width: 40%;
+}
+
+.cuentas-modulo__table th:nth-child(2),
+.cuentas-modulo__table td:nth-child(2) {
+  width: 30%;
 }
