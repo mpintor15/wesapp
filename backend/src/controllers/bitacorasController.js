@@ -1,5 +1,6 @@
 const db = require('../config/database');
 const { hasPermission, PERMISSIONS } = require('../config/permissions');
+const { permisosDeUsuario } = require('../config/cuentaModuloAccess');
 const { logAuditStrict, auditFromReq } = require('../utils/audit');
 const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
@@ -53,7 +54,7 @@ const EXPORT_PAGE = { page: 1, pageSize: 100000, offset: 0 };
 
 const getCurrentUserScope = async (userId, executor = db) => {
   const result = await executor.query(
-    `SELECT id, tipo_usuario, activo
+    `SELECT id, tipo_usuario, activo, es_cuenta_compartida, accesos_cuenta
      FROM usuarios
      WHERE id = $1`,
     [userId]
@@ -63,7 +64,10 @@ const getCurrentUserScope = async (userId, executor = db) => {
   }
   return {
     userId: result.rows[0].id,
-    hasGlobalScope: hasGlobalLocationScope(result.rows[0].tipo_usuario),
+    hasGlobalScope: hasGlobalLocationScope({
+      tipo_usuario: result.rows[0].tipo_usuario,
+      permisos: permisosDeUsuario(result.rows[0]),
+    }),
   };
 };
 
@@ -220,12 +224,9 @@ const createRegistro = async (req, res) => {
 
 const getResumen = async (req, res) => {
   try {
-    const includeHistorial = hasPermission(
-      req.user.tipo_usuario,
-      PERMISSIONS.BITACORAS_HISTORIAL_VER
-    );
+    const includeHistorial = hasPermission(req.user, PERMISSIONS.BITACORAS_HISTORIAL_VER);
     const includeFormularios = hasPermission(
-      req.user.tipo_usuario,
+      req.user,
       PERMISSIONS.BITACORAS_FORMULARIOS_ADMINISTRAR
     );
     const { userId, hasGlobalScope } = await getCurrentUserScope(req.user.id);

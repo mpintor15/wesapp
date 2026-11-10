@@ -16,9 +16,15 @@ const db = require('../config/database');
 const { hasPermission, PERMISSIONS } = require('../config/permissions');
 const { logAudit } = require('../utils/audit');
 const {
+  expandAccesos,
+  permisosDeUsuario,
+  validateAccesos,
+} = require('../config/cuentaModuloAccess');
+const {
   usuarioCreateSchema,
   usuarioUpdateSchema,
   cuentaModuloCreateSchema,
+  cuentaModuloUpdateSchema,
 } = require('../utils/validationSchemas');
 const {
   createUsuario,
@@ -1275,12 +1281,99 @@ describe('usuariosController.deleteUsuario', () => {
 });
 
 describe('cuentas de módulo (usuarios sin colaborador)', () => {
-  const body = { usuario: 'modulo1', nombre: 'Módulo 1 Monitoreo' };
+  const accesos = { 'clientes.directorio': 'ver', 'inventario.articulos': 'editar' };
+  const body = { usuario: 'modulo1', nombre: 'Módulo 1 Monitoreo', accesos };
 
-  test('el esquema exige usuario, nombre y apellido', () => {
+  test('el esquema exige usuario, nombre y al menos un acceso', () => {
     expect(cuentaModuloCreateSchema.parse(body)).toEqual(body);
     expect(() => cuentaModuloCreateSchema.parse({ ...body, nombre: '' })).toThrow();
     expect(() => cuentaModuloCreateSchema.parse({ usuario: 'modulo1' })).toThrow();
+    expect(() => cuentaModuloCreateSchema.parse({ ...body, accesos: {} })).toThrow();
+    expect(() => cuentaModuloCreateSchema.parse({ ...body, accesos: { x: 'borrar' } })).toThrow();
+  });
+
+  test('el esquema de actualización acepta activo y/o accesos, pero no vacío', () => {
+    expect(cuentaModuloUpdateSchema.parse({ activo: false })).toEqual({ activo: false });
+    expect(cuentaModuloUpdateSchema.parse({ accesos })).toEqual({ accesos });
+    expect(() => cuentaModuloUpdateSchema.parse({})).toThrow();
+  });
+
+  test('expandAccesos: ver solo consulta y editar suma las acciones', () => {
+    const permisos = expandAccesos(accesos);
+    expect(permisos).toContain(PERMISSIONS.CLIENTES_VER);
+    expect(permisos).not.toContain(PERMISSIONS.CLIENTES_CREAR);
+    expect(permisos).toEqual(
+      expect.arrayContaining([
+        PERMISSIONS.INVENTARIO_ARTICULOS_VER,
+        PERMISSIONS.INVENTARIO_ARTICULOS_CREAR,
+        PERMISSIONS.INVENTARIO_ARTICULOS_EDITAR,
+      ])
+    );
+  });
+
+  test('una cuenta con permisos explícitos ignora los de su rol', () => {
+    const cuenta = { tipo_usuario: 'monitorista', permisos: expandAccesos(accesos) };
+    expect(hasPermission(cuenta, PERMISSIONS.INVENTARIO_ARTICULOS_CREAR)).toBe(true);
+    expect(hasPermission(cuenta, PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(false);
+    expect(hasPermission(cuenta, PERMISSIONS.BITACORAS_HISTORIAL_VER)).toBe(false);
+    expect(
+      hasPermission({ tipo_usuario: 'monitorista' }, PERMISSIONS.BITACORAS_HISTORIAL_VER)
+    ).toBe(true);
+  });
+
+  test('permisosDeUsuario solo aplica a cuentas compartidas con accesos', () => {
+    expect(
+      permisosDeUsuario({ es_cuenta_compartida: false, accesos_cuenta: accesos })
+    ).toBeUndefined();
+    expect(permisosDeUsuario({ es_cuenta_compartida: true, accesos_cuenta: null })).toBeUndefined();
+    expect(permisosDeUsuario({ es_cuenta_compartida: true, accesos_cuenta: accesos })).toEqual(
+      expandAccesos(accesos)
+    );
+  });
+
+  test('validateAccesos rechaza tabs desconocidos, editar en solo consulta y exceso de permisos', () => {
+    const todo = () => true;
+    expect(validateAccesos(accesos, todo)).toBeNull();
+    expect(validateAccesos({ 'personal.sueldos': 'ver' }, todo)).toMatch(/desconocido/);
+    expect(validateAccesos({ 'bitacoras.visitas': 'editar' }, todo)).toBeNull();
+    expect(validateAccesos(accesos, () => false)).toMatch(/No puedes conceder/);
+  });
+
+  test('crear rechaza conceder permisos que el creador no tiene', async () => {
+    const res = mockRes();
+    const req = mockReq({
+      body,
+      user: { id: 5, tipo_usuario: 'monitorista', activo: true },
+    });
+
+    await createCuentaModulo(req, res);
+
+    expectStatus(res, 403);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  test('actualizar cambia los accesos de la cuenta', async () => {
+    const client = { query: jest.fn() };
+    client.query
+      .mockResolvedValueOnce({
+        rows: [{ id: 9, tipo_usuario: 'monitorista', es_cuenta_compartida: true, activo: true }],
+        rowCount: 1,
+      })
+      .mockResolvedValueOnce({
+        rows: [{ id: 9, es_cuenta_compartida: true, accesos_cuenta: accesos }],
+        rowCount: 1,
+      });
+    db.transaction.mockImplementationOnce(async (callback) => callback(client));
+    const res = mockRes();
+
+    await updateCuentaModulo(
+      mockReq({ params: { id: '9' }, body: { accesos }, user: { id: 1, tipo_usuario: 'gerente' } }),
+      res
+    );
+
+    expect(res.status).not.toHaveBeenCalledWith(403);
+    const updateCall = client.query.mock.calls.find(([sql]) => /UPDATE usuarios/.test(sql));
+    expect(updateCall[1]).toEqual([null, JSON.stringify(accesos), 9]);
   });
 
   test('crea una monitorista compartida sin colaborador', async () => {
@@ -1302,6 +1395,7 @@ describe('cuentas de módulo (usuarios sin colaborador)', () => {
       'hashed-temp-password',
       'Módulo 1 Monitoreo',
       'monitorista',
+      JSON.stringify(accesos),
     ]);
     expect(logAudit).toHaveBeenCalledWith(
       expect.anything(),
@@ -1398,7 +1492,7 @@ describe('cuentas de módulo (usuarios sin colaborador)', () => {
     expect(res.json.mock.calls[0][0].data).toEqual([{ id: 9 }]);
   });
 
-  test('restablece la contraseña de una cuenta de módulo que ya hizo su primer acceso', async () => {
+  test('no reenvía la invitación de una cuenta de módulo que ya inició sesión', async () => {
     db.query
       .mockResolvedValueOnce({
         rows: [{ id: 9, tipo_usuario: 'monitorista', es_cuenta_compartida: true }],
@@ -1415,14 +1509,13 @@ describe('cuentas de módulo (usuarios sin colaborador)', () => {
           },
         ],
         rowCount: 1,
-      })
-      .mockResolvedValueOnce({ rows: [{ id: 9, primer_login: true }], rowCount: 1 });
+      });
     const res = mockRes();
     await reenviarInvitacionCuentaModulo(
       mockReq({ params: { id: '9' }, user: { id: 3, tipo_usuario: 'monitorista' } }),
       res
     );
-    expect(res.json.mock.calls[0][0].data.temp_password).toEqual(expect.any(String));
+    expectStatus(res, 400);
   });
 
   test('un usuario normal ya activo sigue sin poder reenviar invitación', async () => {

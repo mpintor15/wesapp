@@ -2023,4 +2023,35 @@ describe('database migrations', () => {
       ).rejects.toMatchObject({ code: '23514' });
     });
   });
+  test('migration 109 guarda accesos solo en cuentas de módulo', async () => {
+    await withTempDatabase('wesapp_cuenta_accesos_109', async (pool) => {
+      await pool.query(await fs.readFile(schemaPath, 'utf8'));
+      for (const file of [
+        '106_usuarios_cliente_portal.sql',
+        '108_usuarios_cuenta_compartida.sql',
+        '109_cuentas_modulo_accesos.sql',
+      ]) {
+        await pool.query(await fs.readFile(path.join(migrationsDir, file), 'utf8'));
+      }
+
+      await expect(
+        pool.query(
+          `INSERT INTO usuarios (usuario, password_hash, tipo_usuario, es_cuenta_compartida, accesos_cuenta)
+           VALUES ('modulo1', 'hash', 'monitorista', TRUE, '{"clientes.directorio":"ver"}'::jsonb)`
+        )
+      ).resolves.toMatchObject({ rowCount: 1 });
+      // Un usuario normal no puede llevar accesos de cuenta de módulo.
+      const colaborador = await pool.query(
+        `INSERT INTO colaboradores (nombres_completos, cedula, cargo, fecha_nacimiento)
+         VALUES ('Persona', '0000000002', 'Guardia', '1990-01-01') RETURNING id`
+      );
+      await expect(
+        pool.query(
+          `INSERT INTO usuarios (usuario, password_hash, tipo_usuario, colaborador_id, accesos_cuenta)
+           VALUES ('normal', 'hash', 'guardia', $1, '{"a":"ver"}'::jsonb)`,
+          [colaborador.rows[0].id]
+        )
+      ).rejects.toMatchObject({ code: '23514' });
+    });
+  });
 });

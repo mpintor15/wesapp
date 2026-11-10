@@ -78,6 +78,15 @@ const usuariosService = {
     }
   },
 
+  getCatalogoCuentasModulo: async () => {
+    try {
+      const response = await api.get('/usuarios/cuentas-modulo/catalogo');
+      return { success: response.data.success, data: response.data.data?.modulos || [] };
+    } catch (error) {
+      return buildServiceFailure(error, 'Error al obtener los módulos disponibles');
+    }
+  },
+
   getCuentasModulo: async () => {
     try {
       const response = await api.get('/usuarios/cuentas-modulo');

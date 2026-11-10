@@ -408,7 +408,7 @@ const updateUbicacion = async (req, res) => {
       // hacerlo, aunque el rol ya tenga INVENTARIO_UBICACIONES_EDITAR.
       if (
         clienteChanged &&
-        !hasPermission(req.user.tipo_usuario, PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)
+        !hasPermission(req.user, PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE)
       ) {
         throw createAppError(
           403,

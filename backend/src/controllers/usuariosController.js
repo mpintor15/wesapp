@@ -3,6 +3,7 @@ const db = require('../config/database');
 const { createHttpError, handleControllerError, parsePositiveInteger } = require('../utils/http');
 const { clearActiveCache } = require('../middleware/permissions');
 const { hasPermission, PERMISSIONS } = require('../config/permissions');
+const { MODULOS_CUENTA, validateAccesos } = require('../config/cuentaModuloAccess');
 const { logAudit, auditFromReq } = require('../utils/audit');
 const { assertUsuarioWithoutActivity } = require('../services/usuariosDeletionService');
 const { buildPaginationMetadata, normalizePaginationQuery } = require('../utils/pagination');
@@ -39,7 +40,7 @@ const assertCanManageRole = (req, tipoUsuario) => {
 const normalizeUbicacionIds = (value) => [...new Set((value || []).map(Number))];
 
 const assertCanManageAssignments = (req) => {
-  if (!hasPermission(req.user?.tipo_usuario, PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)) {
+  if (!hasPermission(req.user, PERMISSIONS.BITACORAS_ASIGNACIONES_ADMINISTRAR)) {
     throw createHttpError(403, 'No tienes permiso para administrar asignaciones');
   }
 };
@@ -266,9 +267,31 @@ const createUsuario = async (req, res) => {
 };
 
 // Cuentas de módulo (p. ej. "Módulo 1 Monitoreo"): usuarios monitorista sin colaborador.
+// Quien concede accesos solo puede dar lo que él mismo tiene.
+const assertAccesosPermitidos = (req, accesos) => {
+  const error = validateAccesos(accesos, (permiso) => hasPermission(req.user, permiso));
+  if (error) {
+    throw createHttpError(403, error);
+  }
+};
+
+const getCatalogoCuentasModulo = (req, res) => {
+  const modulos = MODULOS_CUENTA.map((modulo) => ({
+    id: modulo.id,
+    label: modulo.label,
+    tabs: modulo.tabs.map((tab) => ({
+      id: tab.id,
+      label: tab.label,
+      puedeEditar: tab.editar.length > 0,
+    })),
+  }));
+  res.json({ success: true, data: { modulos } });
+};
+
 const createCuentaModulo = async (req, res) => {
   try {
-    const { usuario, nombre } = req.body;
+    const { usuario, nombre, accesos } = req.body;
+    assertAccesosPermitidos(req, accesos);
 
     const tempPassword = generateTempPassword();
     const password_hash = await bcrypt.hash(tempPassword, 10);
@@ -277,10 +300,10 @@ const createCuentaModulo = async (req, res) => {
     await db.transaction(async (client) => {
       const result = await client.query(
         `INSERT INTO usuarios
-           (usuario, password_hash, nombre, apellido, tipo_usuario, es_cuenta_compartida, primer_login, activo)
-         VALUES ($1, $2, $3, NULL, $4, TRUE, TRUE, TRUE)
-         RETURNING id, usuario, nombre, apellido, tipo_usuario, es_cuenta_compartida, colaborador_id, primer_login, activo`,
-        [usuario, password_hash, nombre, ROLE_MONITORISTA]
+           (usuario, password_hash, nombre, apellido, tipo_usuario, es_cuenta_compartida, accesos_cuenta, primer_login, activo)
+         VALUES ($1, $2, $3, NULL, $4, TRUE, $5::jsonb, TRUE, TRUE)
+         RETURNING id, usuario, nombre, apellido, tipo_usuario, es_cuenta_compartida, accesos_cuenta, colaborador_id, primer_login, activo`,
+        [usuario, password_hash, nombre, ROLE_MONITORISTA, JSON.stringify(accesos)]
       );
       created = result.rows[0];
       await logAudit(client, {
@@ -329,8 +352,11 @@ const getCuentasModulo = async (req, res) => {
 const updateCuentaModulo = async (req, res) => {
   try {
     const id = parsePositiveInteger(req.params.id, 'El id de cuenta es inválido');
-    const { activo } = req.body;
-    if (Number(req.user?.id) === id && !activo) {
+    const { activo, accesos } = req.body;
+    if (accesos) {
+      assertAccesosPermitidos(req, accesos);
+    }
+    if (Number(req.user?.id) === id && activo === false) {
       throw createHttpError(400, 'No puedes desactivar tu propio usuario');
     }
 
@@ -338,9 +364,12 @@ const updateCuentaModulo = async (req, res) => {
     await db.transaction(async (client) => {
       const current = await getCuentaModulo(client, id);
       const result = await client.query(
-        `UPDATE usuarios SET activo = $1 WHERE id = $2
-         RETURNING id, usuario, nombre, apellido, tipo_usuario, es_cuenta_compartida, primer_login, activo`,
-        [activo, id]
+        `UPDATE usuarios
+         SET activo = COALESCE($1, activo),
+             accesos_cuenta = COALESCE($2::jsonb, accesos_cuenta)
+         WHERE id = $3
+         RETURNING id, usuario, nombre, apellido, tipo_usuario, es_cuenta_compartida, accesos_cuenta, primer_login, activo`,
+        [activo ?? null, accesos ? JSON.stringify(accesos) : null, id]
       );
       updated = result.rows[0];
       await logAudit(client, {
@@ -537,13 +566,12 @@ const reenviarInvitacion = async (req, res) => {
     if (!user) {
       throw createHttpError(404, 'Usuario no encontrado');
     }
-    // Las cuentas de módulo no tienen una persona que recupere su acceso: se permite
-    // restablecer su contraseña aunque ya hayan completado el primer acceso.
+    // Las cuentas de módulo ya se validaron como tales y no dependen de un rol gestionable.
     if (!user.es_cuenta_compartida) {
       assertCanManageRole(req, user.tipo_usuario);
-      if (!user.primer_login) {
-        throw createHttpError(400, 'Este usuario ya completó su primer acceso');
-      }
+    }
+    if (!user.primer_login) {
+      throw createHttpError(400, 'Este usuario ya completó su primer acceso');
     }
 
     const tempPassword = generateTempPassword();
@@ -640,6 +668,7 @@ module.exports = {
   getColaboradoresElegibles,
   getUbicacionesAsignables,
   createUsuario,
+  getCatalogoCuentasModulo,
   createCuentaModulo,
   getCuentasModulo,
   updateCuentaModulo,
