@@ -42,8 +42,8 @@ describe('CuentasModulo', () => {
         {
           id: 9,
           usuario: 'modulo1',
-          nombre: 'Módulo 1',
-          apellido: 'Monitoreo',
+          nombre: 'Módulo 1 Monitoreo',
+          apellido: null,
           activo: true,
           primer_login: true,
         },
@@ -62,12 +62,11 @@ describe('CuentasModulo', () => {
       success: true,
       data: {
         usuario: 'modulo1',
-        nombre: 'Módulo 1',
-        apellido: 'Monitoreo',
+        nombre: 'Módulo 1 Monitoreo',
         temp_password: 'Temp-1234',
       },
     });
-    await act(async () => root.render(<CuentasModulo canCreate canEdit />));
+    await act(async () => root.render(<CuentasModulo canEdit onCloseCreate={jest.fn()} />));
     await flush();
 
     expect(usuariosService.getCuentasModulo).toHaveBeenCalled();
@@ -75,8 +74,7 @@ describe('CuentasModulo', () => {
     expect(container.textContent).toContain('@modulo1');
     expect(container.textContent).toContain('Pendiente');
 
-    const button = (label) =>
-      [...container.querySelectorAll('button')].find((b) => b.textContent === label);
+    const button = (label) => container.querySelector(`button[title="${label}"]`);
 
     await act(async () => button('Desactivar').click());
     expect(usuariosService.updateCuentaModulo).toHaveBeenCalledWith(9, { activo: false });
@@ -90,17 +88,19 @@ describe('CuentasModulo', () => {
   test('crea una cuenta con nombre, apellido y usuario y muestra la invitación', async () => {
     usuariosService.createCuentaModulo.mockResolvedValue({
       success: true,
-      data: { usuario: 'm2', nombre: 'Módulo 2', apellido: 'Monitoreo', temp_password: 'Abc-999' },
+      data: {
+        usuario: 'modulo2.monitoreo',
+        nombre: 'Módulo 2 Monitoreo',
+        temp_password: 'Abc-999',
+      },
     });
-    await act(async () => root.render(<CuentasModulo canCreate canEdit={false} />));
+    const onCloseCreate = jest.fn();
+    await act(async () =>
+      root.render(<CuentasModulo canEdit={false} showCreate onCloseCreate={onCloseCreate} />)
+    );
     await flush();
     expect(container.textContent).not.toContain('Acciones');
 
-    await act(async () =>
-      [...container.querySelectorAll('button')]
-        .find((b) => b.textContent === 'Crear cuenta de módulo')
-        .click()
-    );
     const setValue = (id, value) => {
       const input = document.getElementById(id);
       const setter = Object.getOwnPropertyDescriptor(
@@ -111,10 +111,11 @@ describe('CuentasModulo', () => {
       input.dispatchEvent(new globalThis.Event('input', { bubbles: true }));
     };
     await act(async () => {
-      setValue('cm-nombre', 'Módulo 2');
-      setValue('cm-apellido', 'Monitoreo');
-      setValue('cm-usuario', 'm2');
+      setValue('cm-nombre', 'Módulo 2 Monitoreo');
     });
+    // El usuario se sugiere solo a partir del nombre.
+    expect(document.getElementById('cm-usuario').value).toBe('modulo2.monitoreo');
+    expect(document.getElementById('cm-apellido')).toBeNull();
     await act(async () => {
       [...document.querySelectorAll('button[type="submit"]')]
         .find((b) => b.textContent === 'Crear cuenta')
@@ -123,10 +124,10 @@ describe('CuentasModulo', () => {
     await flush();
 
     expect(usuariosService.createCuentaModulo).toHaveBeenCalledWith({
-      nombre: 'Módulo 2',
-      apellido: 'Monitoreo',
-      usuario: 'm2',
+      nombre: 'Módulo 2 Monitoreo',
+      usuario: 'modulo2.monitoreo',
     });
     expect(document.body.textContent).toContain('Abc-999');
+    expect(onCloseCreate).toHaveBeenCalled();
   });
 });

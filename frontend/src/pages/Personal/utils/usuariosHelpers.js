@@ -71,6 +71,19 @@ export const suggestUsuario = (nombresCompletos) => {
   return `${nombre[0].toUpperCase()}${apellido[0].toUpperCase()}${apellido.slice(1).toLowerCase()}`;
 };
 
+// "Módulo 1 Monitoreo" -> "modulo1.monitoreo". Para cuentas que no son una persona.
+export const suggestCuentaUsuario = (nombre) =>
+  String(nombre || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .join('.')
+    .replace(/\.(\d+)/g, '$1');
+
 export const sortByField = (rows, field, direction) => {
   const dir = direction === 'desc' ? -1 : 1;
   return [...rows].sort(
@@ -130,7 +143,7 @@ export const getTipoUsuarioLabel = (tipoUsuario) =>
 
 export const buildInvitationMessage = (nombre, apellido, usuario, tempPassword) => {
   const url = globalThis.location.origin;
-  return `Hola ${nombre} ${apellido}, te damos la bienvenida al sistema WES Security.
+  return `Hola ${[nombre, apellido].filter(Boolean).join(' ')}, te damos la bienvenida al sistema WES Security.
 
 A continuación tus datos de acceso:
 

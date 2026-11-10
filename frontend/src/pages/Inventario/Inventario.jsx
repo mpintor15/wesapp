@@ -757,9 +757,9 @@ const Inventario = () => {
 
       <InventarioTabs
         activeTab={activeTab}
-        articulosCount={articulos.length}
-        bajasCount={bajas.length}
-        movimientosCount={movimientos.length}
+        articulosCount={articulosMeta.totalItems}
+        bajasCount={bajasMeta.totalItems}
+        movimientosCount={movimientosMeta.totalItems}
         onTabChange={handleTabChange}
       />
 
@@ -768,6 +768,7 @@ const Inventario = () => {
           articuloActionsClass={articuloActionsClass}
           articulosPage={articulosPage}
           articulosSort={articulosSort}
+          articulosTotalItems={articulosMeta.totalItems}
           articulosTotalPages={articulosTotalPages}
           canDarBajaArticulo={canDarBajaArticulo}
           canDeleteArticulo={canDeleteArticulo}
@@ -811,6 +812,7 @@ const Inventario = () => {
           movimientosLoading={movimientosLoading}
           movimientosPage={movimientosPage}
           movimientosSort={movimientosSort}
+          movimientosTotalItems={movimientosMeta.totalItems}
           movimientosTotalPages={movimientosTotalPages}
           onApplyFilters={handleApplyMovimientosFilters}
           onClearFilters={handleClearMovimientosFilters}

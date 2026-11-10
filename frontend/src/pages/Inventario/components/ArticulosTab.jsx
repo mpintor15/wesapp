@@ -24,6 +24,7 @@ const ArticulosTab = ({
   paginatedArticulos,
   showArticuloActions,
   sortedArticulos,
+  articulosTotalItems,
   ubicaciones,
 }) => (
   <div className="tab-content tabular-workspace">
@@ -48,7 +49,7 @@ const ArticulosTab = ({
           refreshMessage="Actualizando artículos…"
         />
         <div className="table-result-count">
-          Mostrando {paginatedArticulos.length} de {sortedArticulos.length} artículo(s)
+          Mostrando {paginatedArticulos.length} de {articulosTotalItems} artículo(s)
         </div>
 
         <ArticulosTable

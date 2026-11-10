@@ -108,6 +108,22 @@ describe('Dashboard', () => {
     page.unmount();
   });
 
+  test('el jefe de monitoreo ve la tarjeta Personal descrita como cuentas de módulo', async () => {
+    useAuth.mockReturnValue({
+      user: { usuario: 'jefe', tipo_usuario: 'monitorista' },
+      logout: jest.fn(),
+      hasPermission: jest.fn((permissions) =>
+        permissions.includes(PERMISSIONS.USUARIOS_CUENTAS_MODULO_VER)
+      ),
+    });
+    const page = await renderDashboard();
+
+    expect(page.container.textContent).toContain('Cuentas de módulo para las estaciones');
+    expect(page.container.textContent).not.toContain('nómina');
+
+    page.unmount();
+  });
+
   test('muestra Clientes por permiso de configuración aunque inventario sea falso', async () => {
     useAuth.mockReturnValue({
       user: { usuario: 'contador', tipo_usuario: 'contador' },

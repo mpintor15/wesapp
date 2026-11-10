@@ -1275,17 +1275,19 @@ describe('usuariosController.deleteUsuario', () => {
 });
 
 describe('cuentas de módulo (usuarios sin colaborador)', () => {
-  const body = { usuario: 'modulo1', nombre: 'Módulo 1', apellido: 'Monitoreo' };
+  const body = { usuario: 'modulo1', nombre: 'Módulo 1 Monitoreo' };
 
   test('el esquema exige usuario, nombre y apellido', () => {
     expect(cuentaModuloCreateSchema.parse(body)).toEqual(body);
-    expect(() => cuentaModuloCreateSchema.parse({ ...body, apellido: '' })).toThrow();
+    expect(() => cuentaModuloCreateSchema.parse({ ...body, nombre: '' })).toThrow();
     expect(() => cuentaModuloCreateSchema.parse({ usuario: 'modulo1' })).toThrow();
   });
 
   test('crea una monitorista compartida sin colaborador', async () => {
     db.query.mockResolvedValueOnce({
-      rows: [{ id: 9, ...body, tipo_usuario: 'monitorista', es_cuenta_compartida: true }],
+      rows: [
+        { id: 9, ...body, apellido: null, tipo_usuario: 'monitorista', es_cuenta_compartida: true },
+      ],
       rowCount: 1,
     });
     const res = mockRes();
@@ -1298,8 +1300,7 @@ describe('cuentas de módulo (usuarios sin colaborador)', () => {
     expect(db.query.mock.calls[0][1]).toEqual([
       'modulo1',
       'hashed-temp-password',
-      'Módulo 1',
-      'Monitoreo',
+      'Módulo 1 Monitoreo',
       'monitorista',
     ]);
     expect(logAudit).toHaveBeenCalledWith(
@@ -1319,6 +1320,24 @@ describe('cuentas de módulo (usuarios sin colaborador)', () => {
   test.each(['guardia', 'contador', 'cliente'])('%s no tiene acceso a cuentas de módulo', (rol) => {
     expect(hasPermission(rol, PERMISSIONS.USUARIOS_CUENTAS_MODULO_VER)).toBe(false);
     expect(hasPermission(rol, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR)).toBe(false);
+  });
+
+  test('el jefe de monitoreo consulta Clientes y solo crea ubicaciones y accesos de portal', () => {
+    const can = (permission) => hasPermission('monitorista', permission);
+    expect(can(PERMISSIONS.CLIENTES_VER)).toBe(true);
+    expect(can(PERMISSIONS.INVENTARIO_UBICACIONES_VER)).toBe(true);
+    expect(can(PERMISSIONS.INVENTARIO_UBICACIONES_CREAR)).toBe(true);
+    expect(can(PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(true);
+    // No crea, edita ni elimina clientes; no edita, reasigna ni elimina ubicaciones.
+    [
+      PERMISSIONS.CLIENTES_CREAR,
+      PERMISSIONS.CLIENTES_EDITAR,
+      PERMISSIONS.CLIENTES_ELIMINAR,
+      PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR,
+      PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE,
+      PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR,
+      PERMISSIONS.CLIENTES_ACCESO_PORTAL_ADMINISTRAR,
+    ].forEach((permission) => expect(can(permission)).toBe(false));
   });
 
   test('monitorista y supervisor no ven sueldos ni administran otros usuarios', () => {

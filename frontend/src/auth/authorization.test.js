@@ -122,4 +122,22 @@ describe('authorization', () => {
     expect(can(user('supervisor'), PERMISSIONS.CLIENTES_ACCESO_PORTAL_ADMINISTRAR)).toBe(false);
     expect(can(user('contador'), PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(false);
   });
+
+  test('jefe de monitoreo consulta Clientes y solo crea ubicaciones y accesos de portal', () => {
+    const jefe = user('monitorista');
+    expect(can(jefe, PERMISSIONS.CLIENTES_VER)).toBe(true);
+    expect(can(jefe, PERMISSIONS.INVENTARIO_UBICACIONES_VER)).toBe(true);
+    expect(can(jefe, PERMISSIONS.INVENTARIO_UBICACIONES_CREAR)).toBe(true);
+    expect(can(jefe, PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(true);
+    [
+      PERMISSIONS.CLIENTES_CREAR,
+      PERMISSIONS.CLIENTES_EDITAR,
+      PERMISSIONS.CLIENTES_ELIMINAR,
+      PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR,
+      PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE,
+      PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR,
+      PERMISSIONS.CLIENTES_ACCESO_PORTAL_ADMINISTRAR,
+      PERMISSIONS.PERSONAL_VER,
+    ].forEach((permission) => expect(can(jefe, permission)).toBe(false));
+  });
 });

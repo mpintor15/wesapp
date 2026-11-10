@@ -268,7 +268,7 @@ const createUsuario = async (req, res) => {
 // Cuentas de módulo (p. ej. "Módulo 1 Monitoreo"): usuarios monitorista sin colaborador.
 const createCuentaModulo = async (req, res) => {
   try {
-    const { usuario, nombre, apellido } = req.body;
+    const { usuario, nombre } = req.body;
 
     const tempPassword = generateTempPassword();
     const password_hash = await bcrypt.hash(tempPassword, 10);
@@ -278,9 +278,9 @@ const createCuentaModulo = async (req, res) => {
       const result = await client.query(
         `INSERT INTO usuarios
            (usuario, password_hash, nombre, apellido, tipo_usuario, es_cuenta_compartida, primer_login, activo)
-         VALUES ($1, $2, $3, $4, $5, TRUE, TRUE, TRUE)
+         VALUES ($1, $2, $3, NULL, $4, TRUE, TRUE, TRUE)
          RETURNING id, usuario, nombre, apellido, tipo_usuario, es_cuenta_compartida, colaborador_id, primer_login, activo`,
-        [usuario, password_hash, nombre, apellido, ROLE_MONITORISTA]
+        [usuario, password_hash, nombre, ROLE_MONITORISTA]
       );
       created = result.rows[0];
       await logAudit(client, {

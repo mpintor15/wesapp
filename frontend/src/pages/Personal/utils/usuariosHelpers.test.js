@@ -1,4 +1,4 @@
-import { getAssignableTipos } from './usuariosHelpers';
+import { suggestCuentaUsuario, getAssignableTipos } from './usuariosHelpers';
 
 describe('getAssignableTipos', () => {
   const values = (role) => getAssignableTipos(role).map((tipo) => tipo.value);
@@ -28,5 +28,17 @@ describe('getAssignableTipos', () => {
     expect(values('supervisor')).toEqual(['guardia']);
     expect(values('contador')).toEqual([]);
     expect(values('cliente')).toEqual([]);
+  });
+});
+
+describe('suggestCuentaUsuario', () => {
+  test.each([
+    ['Módulo 1 Monitoreo', 'modulo1.monitoreo'],
+    ['Módulo 2 Monitoreo', 'modulo2.monitoreo'],
+    ['  Estación  Norte ', 'estacion.norte'],
+    ['Garita', 'garita'],
+    ['', ''],
+  ])('%s -> %s', (nombre, esperado) => {
+    expect(suggestCuentaUsuario(nombre)).toBe(esperado);
   });
 });

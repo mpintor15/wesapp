@@ -321,15 +321,83 @@
   }
 }
 
-/* ── Tabs de Personal ─────────────────────────────────────── */
+/* ── Tabs de Personal (mismo estilo que Inventario) ───────── */
 .personal-tabs {
   display: flex;
-  gap: 4px;
-  margin-bottom: 10px;
+  flex-shrink: 0;
+  gap: 0;
+  margin-bottom: 12px;
   background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.personal-tabs .tab {
+  padding: 14px 24px;
+  border: none;
+  background: none;
+  font-size: 0.95em;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  transition: all 0.2s ease;
+  border-bottom: 3px solid transparent;
+  position: relative;
+}
+
+.personal-tabs .tab:hover {
+  color: var(--color-primary);
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-muted) 100%);
+}
+
+.personal-tabs .tab:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: -2px;
+}
+
+.personal-tabs .tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  background: linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface-muted) 100%);
+  box-shadow: inset 0 -1px 0 rgba(232, 32, 26, 0.22);
+}
+
+/* Burbuja con el total, igual que en Inventario */
+.personal-tabs .tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 7px;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.72em;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-700);
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.personal-tabs .tab.active .tab-badge {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+@media (max-width: 640px) {
+  .personal-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .personal-tabs .tab {
+    padding: 10px 6px;
+    font-size: 0.8em;
+  }
 }
 
 .cuentas-modulo {
@@ -338,22 +406,22 @@
   gap: 12px;
 }
 
-.cuentas-modulo__header {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: space-between;
+.cuentas-modulo__table {
+  width: 100%;
+  table-layout: fixed;
 }
 
-.cuentas-modulo__hint {
-  color: var(--color-text-muted);
-  flex: 1 1 320px;
-  margin: 0;
+.cuentas-modulo__table th:nth-child(1),
+.cuentas-modulo__table td:nth-child(1) {
+  width: 40%;
 }
 
-.cuentas-modulo__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.cuentas-modulo__table th:nth-child(2),
+.cuentas-modulo__table td:nth-child(2) {
+  width: 30%;
+}
+
+.cuentas-modulo__table th.center,
+.cuentas-modulo__table td.cell-status {
+  text-align: center !important;
 }
