@@ -1322,11 +1322,22 @@ describe('cuentas de módulo (usuarios sin colaborador)', () => {
     expect(hasPermission(rol, PERMISSIONS.USUARIOS_CUENTAS_MODULO_GESTIONAR)).toBe(false);
   });
 
-  test('el jefe de monitoreo accede a Clientes solo para consulta', () => {
-    expect(hasPermission('monitorista', PERMISSIONS.CLIENTES_VER)).toBe(true);
-    expect(hasPermission('monitorista', PERMISSIONS.CLIENTES_CREAR)).toBe(false);
-    expect(hasPermission('monitorista', PERMISSIONS.CLIENTES_EDITAR)).toBe(false);
-    expect(hasPermission('monitorista', PERMISSIONS.CLIENTES_ELIMINAR)).toBe(false);
+  test('el jefe de monitoreo consulta Clientes y solo crea ubicaciones y accesos de portal', () => {
+    const can = (permission) => hasPermission('monitorista', permission);
+    expect(can(PERMISSIONS.CLIENTES_VER)).toBe(true);
+    expect(can(PERMISSIONS.INVENTARIO_UBICACIONES_VER)).toBe(true);
+    expect(can(PERMISSIONS.INVENTARIO_UBICACIONES_CREAR)).toBe(true);
+    expect(can(PERMISSIONS.CLIENTES_ACCESO_PORTAL_CREAR)).toBe(true);
+    // No crea, edita ni elimina clientes; no edita, reasigna ni elimina ubicaciones.
+    [
+      PERMISSIONS.CLIENTES_CREAR,
+      PERMISSIONS.CLIENTES_EDITAR,
+      PERMISSIONS.CLIENTES_ELIMINAR,
+      PERMISSIONS.INVENTARIO_UBICACIONES_EDITAR,
+      PERMISSIONS.INVENTARIO_UBICACIONES_REASIGNAR_CLIENTE,
+      PERMISSIONS.INVENTARIO_UBICACIONES_ELIMINAR,
+      PERMISSIONS.CLIENTES_ACCESO_PORTAL_ADMINISTRAR,
+    ].forEach((permission) => expect(can(permission)).toBe(false));
   });
 
   test('monitorista y supervisor no ven sueldos ni administran otros usuarios', () => {
