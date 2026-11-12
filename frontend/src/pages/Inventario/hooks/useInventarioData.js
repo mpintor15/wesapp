@@ -74,13 +74,13 @@ const useInventarioData = ({ showMessage }) => {
         if (res.success) {
           setArticulos(res.data);
           setArticulosPagination(res.pagination);
-        } else {
+        } else if (!options.silent) {
           showMessage('error', res.message);
         }
         if (catalogRes) {
           if (catalogRes.success) {
             setCatalogArticulos(catalogRes.data);
-          } else {
+          } else if (!options.silent) {
             showMessage('error', catalogRes.message);
           }
         }
@@ -92,33 +92,33 @@ const useInventarioData = ({ showMessage }) => {
   );
 
   const loadMovimientos = useCallback(
-    async (params = {}) => {
-      setMovimientosLoading(true);
+    async (params = {}, { silent = false } = {}) => {
+      if (!silent) setMovimientosLoading(true);
       const res = await inventarioService.getMovimientos(params);
       if (res.success) {
         setMovimientos(res.data);
         setMovimientosPagination(res.pagination);
         setMovimientosLoaded(true);
-      } else {
+      } else if (!silent) {
         showMessage('error', res.message);
       }
-      setMovimientosLoading(false);
+      if (!silent) setMovimientosLoading(false);
     },
     [showMessage]
   );
 
   const loadBajas = useCallback(
-    async (params = {}) => {
-      setBajasLoading(true);
+    async (params = {}, { silent = false } = {}) => {
+      if (!silent) setBajasLoading(true);
       const res = await inventarioService.getBajasArticulos(params);
       if (res.success) {
         setBajas(res.data);
         setBajasPagination(res.pagination);
         setBajasLoaded(true);
-      } else {
+      } else if (!silent) {
         showMessage('error', res.message);
       }
-      setBajasLoading(false);
+      if (!silent) setBajasLoading(false);
     },
     [showMessage]
   );

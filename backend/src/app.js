@@ -69,25 +69,37 @@ app.use(helmet());
 // CORS
 app.use(cors(config.cors));
 
-// Rate limiting (limitar peticiones por IP)
-// Production : 300 req/15 min per IP
-// Development: 2000 req/15 min per IP
-// E2E local : 50000 req/15 min per IP (requires E2E_MODE=true; ignored in production)
-const limiter = rateLimit({
-  windowMs: config.rateLimits.global.windowMs,
-  max: config.rateLimits.global.max,
-  standardHeaders: true, // Return rate limit info in RateLimit-* headers
-  legacyHeaders: false,
-  // Always return JSON so the frontend can read the message correctly
-  handler: (req, res) => {
-    res.status(429).json({
-      success: false,
-      message: 'Demasiadas peticiones. Espera unos minutos e intenta de nuevo.',
-    });
-  },
-});
+// Rate limiting (limitar peticiones por IP), en dos cubetas independientes:
+// - Escrituras (POST/PUT/PATCH/DELETE) — rateLimits.global
+//   Production : 300 req/15 min per IP
+//   Development: 2000 req/15 min per IP
+//   E2E local  : 50000 req/15 min per IP (requires E2E_MODE=true; ignored in production)
+// - Lecturas (GET/HEAD) — rateLimits.read: más holgada porque el frontend
+//   refresca las tablas automáticamente cada 10 s.
+//   Production : 6000 req/15 min per IP
+const isReadRequest = (req) => req.method === 'GET' || req.method === 'HEAD';
 
-app.use('/api/', limiter);
+const buildLimiter = ({ windowMs, max }, skip) =>
+  rateLimit({
+    windowMs,
+    max,
+    skip,
+    standardHeaders: true, // Return rate limit info in RateLimit-* headers
+    legacyHeaders: false,
+    // Always return JSON so the frontend can read the message correctly
+    handler: (req, res) => {
+      res.status(429).json({
+        success: false,
+        message: 'Demasiadas peticiones. Espera unos minutos e intenta de nuevo.',
+      });
+    },
+  });
+
+app.use(
+  '/api/',
+  buildLimiter(config.rateLimits.read, (req) => !isReadRequest(req))
+);
+app.use('/api/', buildLimiter(config.rateLimits.global, isReadRequest));
 
 // Las respuestas del API (contraseñas temporales, datos personales) no deben
 // quedar en cachés del navegador ni de proxies intermedios.

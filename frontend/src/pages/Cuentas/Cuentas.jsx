@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import { useToast } from '../../context/ToastContext';
@@ -95,6 +96,14 @@ const Cuentas = () => {
   useEffect(() => {
     loadReporte(facturasTable.params);
   }, [facturasTable.params, loadReporte]);
+
+  useAutoRefresh(() => {
+    if (activeTab === 'pagos' && pagosLoaded) {
+      loadPagos(pagosTable.params, { silent: true });
+    } else {
+      loadReporte(facturasTable.params, { silent: true });
+    }
+  });
 
   const pagosParamsRef = useRef(pagosTable.params);
   useEffect(() => {

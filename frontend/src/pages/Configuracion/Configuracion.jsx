@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader';
 import PaginationControls from '../../components/PaginationControls';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import clientesService from '../../services/clientesService';
 import inventarioService from '../../services/inventarioService';
@@ -525,41 +526,46 @@ const Configuracion = () => {
     return result.success;
   }, [permissions.canViewUbicaciones]);
 
-  const loadUbicaciones = useCallback(async () => {
-    if (!permissions.canViewUbicaciones) return false;
-    setUbicacionesLoading(true);
-    setUbicacionesLoadError('');
-    const params = getUbicacionesAgrupadasParams({
-      filters: ubicacionFilters,
-      page: ubicacionesPage,
-      pageSize: ubicacionesPageSize,
-      activeClienteFilter,
-    });
-    const result = await inventarioService.getUbicacionesAgrupadas(params);
-    if (result.success) {
-      setUbicacionGroups((result.data || []).map(normalizeUbicacionGroup));
-      setUbicacionesMeta({
-        page: normalizeCount(result.meta?.page) || ubicacionesPage,
-        pageSize: normalizeCount(result.meta?.pageSize) || ubicacionesPageSize,
-        totalGroups: normalizeCount(result.meta?.totalGroups),
-        filteredGroups: normalizeCount(result.meta?.filteredGroups),
-        totalLocations: normalizeCount(result.meta?.totalLocations),
-        filteredLocations: normalizeCount(result.meta?.filteredLocations),
-        totalPages: normalizeCount(result.meta?.totalPages),
+  const loadUbicaciones = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!permissions.canViewUbicaciones) return false;
+      if (!silent) {
+        setUbicacionesLoading(true);
+        setUbicacionesLoadError('');
+      }
+      const params = getUbicacionesAgrupadasParams({
+        filters: ubicacionFilters,
+        page: ubicacionesPage,
+        pageSize: ubicacionesPageSize,
+        activeClienteFilter,
       });
-      setHasLoadedUbicaciones(true);
-    } else {
-      setUbicacionesLoadError(result.message || 'Error al cargar ubicaciones');
-    }
-    setUbicacionesLoading(false);
-    return result.success;
-  }, [
-    activeClienteFilter,
-    permissions.canViewUbicaciones,
-    ubicacionFilters,
-    ubicacionesPage,
-    ubicacionesPageSize,
-  ]);
+      const result = await inventarioService.getUbicacionesAgrupadas(params);
+      if (result.success) {
+        setUbicacionGroups((result.data || []).map(normalizeUbicacionGroup));
+        setUbicacionesMeta({
+          page: normalizeCount(result.meta?.page) || ubicacionesPage,
+          pageSize: normalizeCount(result.meta?.pageSize) || ubicacionesPageSize,
+          totalGroups: normalizeCount(result.meta?.totalGroups),
+          filteredGroups: normalizeCount(result.meta?.filteredGroups),
+          totalLocations: normalizeCount(result.meta?.totalLocations),
+          filteredLocations: normalizeCount(result.meta?.filteredLocations),
+          totalPages: normalizeCount(result.meta?.totalPages),
+        });
+        setHasLoadedUbicaciones(true);
+      } else if (!silent) {
+        setUbicacionesLoadError(result.message || 'Error al cargar ubicaciones');
+      }
+      if (!silent) setUbicacionesLoading(false);
+      return result.success;
+    },
+    [
+      activeClienteFilter,
+      permissions.canViewUbicaciones,
+      ubicacionFilters,
+      ubicacionesPage,
+      ubicacionesPageSize,
+    ]
+  );
 
   const loadClientesActivos = useCallback(async () => {
     if (!permissions.canViewUbicaciones) return false;
@@ -630,6 +636,10 @@ const Configuracion = () => {
     loadClientesActivos,
     permissions.canViewUbicaciones,
   ]);
+
+  useAutoRefresh(() => loadUbicaciones({ silent: true }), {
+    enabled: !authLoading && isUbicacionesActive && hasLoadedUbicaciones,
+  });
 
   const resetModal = () => {
     setModalMode(null);

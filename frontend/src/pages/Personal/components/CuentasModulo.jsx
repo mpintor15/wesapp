@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import AppModal from '../../../components/AppModal';
 import TabularWorkspace from '../../../components/TabularWorkspace';
 import { useToast } from '../../../context/ToastContext';
+import useAutoRefresh from '../../../hooks/useAutoRefresh';
 import useSubmitState from '../../../hooks/useSubmitState';
 import usuariosService from '../../../services/usuariosService';
 import CuentaAccesosMatrix, { summarizeAccesos } from './CuentaAccesosMatrix';
@@ -42,21 +43,26 @@ const CuentasModulo = ({
   const [usuarioEditado, setUsuarioEditado] = useState(false);
   const { isSubmitting: isCreating, withSubmit } = useSubmitState();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const res = await usuariosService.getCuentasModulo();
-    if (res.success) {
-      setCuentas(res.data);
-      onCountChange?.(res.data.length);
-    } else {
-      showToast(res.message, 'error');
-    }
-    setLoading(false);
-  }, [showToast, onCountChange]);
+  const load = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) setLoading(true);
+      const res = await usuariosService.getCuentasModulo();
+      if (res.success) {
+        setCuentas(res.data);
+        onCountChange?.(res.data.length);
+      } else if (!silent) {
+        showToast(res.message, 'error');
+      }
+      if (!silent) setLoading(false);
+    },
+    [showToast, onCountChange]
+  );
 
   useEffect(() => {
     load();
   }, [load, refreshKey]);
+
+  useAutoRefresh(() => load({ silent: true }));
 
   // El catálogo de módulos solo se pide cuando se va a crear o editar una cuenta.
   const needsCatalogo = showCreate || editando !== null;
