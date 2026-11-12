@@ -1048,7 +1048,13 @@
 .bitacoras-cell-salida {
   text-align: center;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.bitacoras-exit-visita-modal .modal-context > *,
+.bitacoras-cancel-visita-modal .modal-context > * {
+  min-width: 0;
 }
 
 .bitacoras-visit-filters {
@@ -1061,7 +1067,7 @@
   max-width: none;
 }
 
-@media (max-width: 920px) {
+@media (max-width: 1100px) {
   .bitacoras-form-field-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     grid-template-areas:
@@ -1232,7 +1238,7 @@
   text-align: right;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1024px) and (min-height: 640px) {
   .bitacoras-container.tabular-page {
     height: 100dvh;
     min-height: 0;

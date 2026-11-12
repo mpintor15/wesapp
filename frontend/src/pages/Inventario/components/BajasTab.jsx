@@ -107,7 +107,7 @@ const BajasTab = ({
         </div>
 
         <div className="table-responsive app-table-shell bajas-table-shell">
-          <table className="app-table bajas-table">
+          <table className="app-table app-table--stack bajas-table">
             <thead>
               <tr>
                 <th>Fecha</th>
@@ -126,16 +126,30 @@ const BajasTab = ({
               {bajas.map((baja, idx) => {
                 return (
                   <tr key={baja.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
-                    <td className="app-cell-date">{formatDate(baja.fecha_baja)}</td>
-                    <td className="cell-compact">{getTipoLabel(baja.tipo_articulo)}</td>
-                    <td className="cell-articulo">{baja.nombre_articulo || '-'}</td>
-                    <td className="cell-serie">{getSerieDisplay(baja)}</td>
-                    <td className="app-cell-qty">{baja.cantidad ?? '-'}</td>
-                    <td className="cell-compact">{baja.marca || '-'}</td>
-                    <td className="cell-compact">{baja.modelo || '-'}</td>
-                    <td>{baja.ubicacion_nombre || '-'}</td>
-                    <td>{baja.usuario || '-'}</td>
-                    <td className="cell-motivo">
+                    <td data-label="Fecha" className="app-cell-date">
+                      {formatDate(baja.fecha_baja)}
+                    </td>
+                    <td data-label="Tipo" className="cell-compact">
+                      {getTipoLabel(baja.tipo_articulo)}
+                    </td>
+                    <td data-label="Artículo" className="cell-articulo">
+                      {baja.nombre_articulo || '-'}
+                    </td>
+                    <td data-label="Serie" className="cell-serie">
+                      {getSerieDisplay(baja)}
+                    </td>
+                    <td data-label="Cantidad" className="app-cell-qty">
+                      {baja.cantidad ?? '-'}
+                    </td>
+                    <td data-label="Marca" className="cell-compact">
+                      {baja.marca || '-'}
+                    </td>
+                    <td data-label="Modelo" className="cell-compact">
+                      {baja.modelo || '-'}
+                    </td>
+                    <td data-label="Ubicación">{baja.ubicacion_nombre || '-'}</td>
+                    <td data-label="Usuario">{baja.usuario || '-'}</td>
+                    <td data-label="Motivo" className="cell-motivo">
                       <span className="cell-motivo-text" title={baja.motivo || '-'}>
                         {baja.motivo || '-'}
                       </span>

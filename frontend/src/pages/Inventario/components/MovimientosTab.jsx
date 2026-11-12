@@ -129,7 +129,7 @@ const MovimientosTab = ({
         </div>
 
         <div className="table-responsive app-table-shell movimientos-table-shell">
-          <table className="app-table movimientos-table">
+          <table className="app-table app-table--stack movimientos-table">
             <thead>
               <tr>
                 <SortHeader
@@ -173,13 +173,17 @@ const MovimientosTab = ({
                   const actions = getMovimientoActionState(mov, permissions);
                   return (
                     <tr key={mov.id} className={idx % 2 === 0 ? 'row-even' : 'row-odd'}>
-                      <td className="app-cell-date">{formatDate(mov.fecha_movimiento)}</td>
-                      <td className="app-cell-qty">{mov.items}</td>
-                      <td>{mov.articulos_movidos || '-'}</td>
-                      <td>{mov.ubicacion_origen || '-'}</td>
-                      <td>{mov.ubicacion_destino || '-'}</td>
-                      <td>{mov.usuario || '-'}</td>
-                      <td>
+                      <td data-label="Fecha" className="app-cell-date">
+                        {formatDate(mov.fecha_movimiento)}
+                      </td>
+                      <td data-label="Cantidad" className="app-cell-qty">
+                        {mov.items}
+                      </td>
+                      <td data-label="Artículos">{mov.articulos_movidos || '-'}</td>
+                      <td data-label="Origen">{mov.ubicacion_origen || '-'}</td>
+                      <td data-label="Destino">{mov.ubicacion_destino || '-'}</td>
+                      <td data-label="Usuario">{mov.usuario || '-'}</td>
+                      <td data-label="Estado">
                         <span
                           className={`status-badge ${getEstadoOperativoClass(mov.estado)}`}
                           aria-label={`Estado: ${getEstadoOperativoLabel(mov.estado)}`}

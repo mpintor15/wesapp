@@ -1,6 +1,7 @@
 const { test } = require('@playwright/test');
 const { responsiveViewports } = require('./helpers/viewportMatrix');
 const {
+  assertNoElementsOverflowViewport,
   assertNoGlobalHorizontalOverflow,
   assertPageLooksLoaded,
   disableAnimations,
@@ -29,6 +30,7 @@ for (const viewport of responsiveViewports) {
         await gotoProtectedRoute(page, route.path);
         await assertPageLooksLoaded(page);
         await assertNoGlobalHorizontalOverflow(page);
+        await assertNoElementsOverflowViewport(page);
       });
     }
   });

@@ -716,6 +716,16 @@
   color: var(--color-text-muted);
 }
 
+@media (max-width: 768px) {
+  .urbanizacion-villa-form > .urbanizacion-villa-create-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .urbanizacion-villa-form > .urbanizacion-villa-create-grid > .btn {
+    grid-column: 1 / -1;
+  }
+}
+
 @media (max-width: 640px) {
   .urbanizacion-inline-form > div,
   .urbanizacion-card-actions {
@@ -1220,8 +1230,13 @@ td.configuracion-operational-cell {
     padding: 16px;
   }
 
-  .configuracion-clientes-filter-card .ff-controls {
+  .configuracion-clientes-filter-card .ff-controls,
+  .configuracion-ubicaciones-filter-card .ff-controls {
     flex-wrap: wrap;
+  }
+
+  .configuracion-ubicaciones-search-field {
+    flex-basis: 100%;
   }
 
   .configuracion-clientes-search-field {

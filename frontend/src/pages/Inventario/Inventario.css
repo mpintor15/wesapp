@@ -1381,7 +1381,7 @@
 /* ============================================
    RESPONSIVE
    ============================================ */
-@media (max-width: 1200px) {
+@media (max-width: 1280px) {
   .inventario-articulos-filter-row,
   .inventario-movimientos-filter-row,
   .inventario-bajas-filter-row {
@@ -1413,7 +1413,7 @@
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1280px) {
   .inventario-articulos-filter-card .ff-controls,
   .inventario-movimientos-filter-card .ff-controls,
   .inventario-bajas-filter-card .ff-controls {

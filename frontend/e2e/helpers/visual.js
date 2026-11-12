@@ -178,6 +178,38 @@ const assertNoGlobalHorizontalOverflow = async (page) => {
   expect(metrics.bodyOverflow, JSON.stringify(metrics)).toBeFalsy();
 };
 
+// html/body tienen overflow-x:hidden, así que el scrollWidth del documento nunca
+// delata un desborde. Aquí se buscan elementos visibles cuyo borde derecho excede
+// el viewport y que no están dentro de un contenedor con scroll horizontal propio.
+const assertNoElementsOverflowViewport = async (page) => {
+  const offenders = await page.evaluate(() => {
+    const vw = window.innerWidth;
+    const scrollers = (el) => {
+      for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+        const ox = getComputedStyle(p).overflowX;
+        if (ox === 'auto' || ox === 'scroll' || ox === 'hidden' || ox === 'clip') {
+          if (p.getBoundingClientRect().right <= vw + 1) return true;
+        }
+      }
+      return false;
+    };
+    const out = [];
+    for (const el of document.querySelectorAll('body *')) {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (getComputedStyle(el).position === 'fixed') continue;
+      if (r.right > vw + 1 && !scrollers(el)) {
+        out.push(
+          `${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]} right=${Math.round(r.right)}`
+        );
+      }
+      if (out.length >= 10) break;
+    }
+    return out;
+  });
+  expect(offenders, `Elementos fuera del viewport: ${offenders.join(' | ')}`).toEqual([]);
+};
+
 const assertPageLooksLoaded = async (page) => {
   await expect(page.locator('body')).toBeVisible();
   await expect(page.getByText(/error boundary|something went wrong/i)).toHaveCount(0);
@@ -280,6 +312,7 @@ module.exports = {
   assertMobileDatePlaceholders,
   assertModalInputsFit,
   assertModalInViewport,
+  assertNoElementsOverflowViewport,
   assertNoGlobalHorizontalOverflow,
   assertPageLooksLoaded,
   captureVisual,

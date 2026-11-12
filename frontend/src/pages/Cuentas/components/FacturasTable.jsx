@@ -16,7 +16,7 @@ const FacturasTable = ({
   onCancel,
 }) => (
   <div className="table-responsive app-table-shell app-table-scroll facturas-table-shell">
-    <table className="app-table cuentas-table facturas-table">
+    <table className="app-table app-table--stack cuentas-table facturas-table">
       <thead>
         <tr>
           <SortHeader field="num_factura" label="N° Fact" sort={sort} onSort={onSort} />
@@ -49,28 +49,43 @@ const FacturasTable = ({
               key={row.num_factura}
               className={`${index % 2 === 0 ? 'row-even' : 'row-odd'} ${row.cancelada ? 'row-canceled' : ''}`}
             >
-              <td className="cell-factura">
+              <td data-label="N° Factura" className="cell-factura">
                 <span className="cell-factura-num">{row.num_factura}</span>
               </td>
-              <td className="app-cell-date">{formatDate(row.fecha_factura)}</td>
-              <td className="cell-cliente" title={row.cliente}>
+              <td data-label="Fecha" className="app-cell-date">
+                {formatDate(row.fecha_factura)}
+              </td>
+              <td data-label="Cliente" className="cell-cliente" title={row.cliente}>
                 {row.cliente}
               </td>
-              <td className="col-money">{formatMoney(row.subtotal)}</td>
-              <td className="col-money">{formatMoney(row.iva)}</td>
-              <td className="col-money">
+              <td data-label="Subtotal" className="col-money">
+                {formatMoney(row.subtotal)}
+              </td>
+              <td data-label="IVA" className="col-money">
+                {formatMoney(row.iva)}
+              </td>
+              <td data-label="Total" className="col-money">
                 {formatMoney(parseFloat(row.subtotal || 0) + parseFloat(row.iva || 0))}
               </td>
-              <td className="col-money">{formatMoney(row.retencion_fuente)}</td>
-              <td className="col-money">{formatMoney(row.retencion_iva)}</td>
-              <td className="col-money">{formatMoney(row.por_cobrar)}</td>
-              <td className="col-money">{formatMoney(row.total_abonos)}</td>
+              <td data-label="Ret. fuente" className="col-money">
+                {formatMoney(row.retencion_fuente)}
+              </td>
+              <td data-label="Ret. IVA" className="col-money">
+                {formatMoney(row.retencion_iva)}
+              </td>
+              <td data-label="Por cobrar" className="col-money">
+                {formatMoney(row.por_cobrar)}
+              </td>
+              <td data-label="Abonos" className="col-money">
+                {formatMoney(row.total_abonos)}
+              </td>
               <td
+                data-label="Saldo"
                 className={`col-money ${parseFloat(row.saldo_pendiente) > 0 ? 'text-danger' : 'text-success'}`}
               >
                 {formatMoney(row.saldo_pendiente)}
               </td>
-              <td>
+              <td data-label="Estado">
                 <span className={`badge ${row.cancelada ? 'badge-inactive' : 'badge-active'}`}>
                   {row.cancelada ? 'Anulada' : 'Activa'}
                 </span>
@@ -186,14 +201,29 @@ const FacturasTable = ({
             <td colSpan="3" className="totals-label">
               TOTALES
             </td>
-            <td className="col-money">{formatMoney(totals.subtotal)}</td>
-            <td className="col-money">{formatMoney(totals.iva)}</td>
-            <td className="col-money">{formatMoney(totals.total)}</td>
-            <td className="col-money">{formatMoney(totals.retencion_fuente)}</td>
-            <td className="col-money">{formatMoney(totals.retencion_iva)}</td>
-            <td className="col-money">{formatMoney(totals.por_cobrar)}</td>
-            <td className="col-money">{formatMoney(totals.total_abonos)}</td>
+            <td data-label="Subtotal" className="col-money">
+              {formatMoney(totals.subtotal)}
+            </td>
+            <td data-label="IVA" className="col-money">
+              {formatMoney(totals.iva)}
+            </td>
+            <td data-label="Total" className="col-money">
+              {formatMoney(totals.total)}
+            </td>
+            <td data-label="Ret. fuente" className="col-money">
+              {formatMoney(totals.retencion_fuente)}
+            </td>
+            <td data-label="Ret. IVA" className="col-money">
+              {formatMoney(totals.retencion_iva)}
+            </td>
+            <td data-label="Por cobrar" className="col-money">
+              {formatMoney(totals.por_cobrar)}
+            </td>
+            <td data-label="Abonos" className="col-money">
+              {formatMoney(totals.total_abonos)}
+            </td>
             <td
+              data-label="Saldo"
               className={`col-money ${totals.saldo_pendiente > 0 ? 'text-danger' : 'text-success'}`}
             >
               {formatMoney(totals.saldo_pendiente)}
