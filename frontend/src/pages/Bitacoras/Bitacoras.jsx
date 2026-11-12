@@ -4,6 +4,7 @@ import { PERMISSIONS } from '../../auth/permissions';
 import PageHeader from '../../components/PageHeader';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { AUTO_REFRESH_MS } from '../../hooks/useAutoRefresh';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import bitacorasService from '../../services/bitacorasService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
@@ -322,6 +323,7 @@ const Bitacoras = () => {
               onChanged={() => setHistoryRefreshKey((current) => current + 1)}
               showToast={showToast}
               canCancelVisita={canManageVisitForms}
+              autoRefreshMs={AUTO_REFRESH_MS}
               onTotalChange={handleVisitasTotalChange}
             />
           ) : activeView === 'formularios' && canManageVisitForms ? (

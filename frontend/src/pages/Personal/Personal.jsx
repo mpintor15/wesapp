@@ -4,6 +4,7 @@ import personalService from '../../services/personalService';
 import usuariosService from '../../services/usuariosService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { useToast } from '../../context/ToastContext';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import useRequestGuard from '../../hooks/useRequestGuard';
@@ -108,18 +109,18 @@ const Personal = () => {
 
   const colaboradoresGuard = useRequestGuard();
   const loadColaboradores = useCallback(
-    async (params = {}) => {
+    async (params = {}, { silent = false } = {}) => {
       const token = colaboradoresGuard.start();
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await personalService.getColaboradores(params);
       if (!colaboradoresGuard.isCurrent(token)) return;
       if (res.success) {
         setColaboradores(res.data);
         setPagination(res.pagination);
-      } else {
+      } else if (!silent) {
         showToast(res.message, 'error');
       }
-      setLoading(false);
+      if (!silent) setLoading(false);
     },
     [colaboradoresGuard, showToast]
   );
@@ -166,6 +167,19 @@ const Personal = () => {
       })
     );
   }, [filters, currentPage, loadColaboradores, canViewColaboradores]);
+
+  useAutoRefresh(
+    () =>
+      loadColaboradores(
+        withPaginationParams({
+          page: currentPage,
+          pageSize: DEFAULT_PAGINATION.pageSize,
+          filters: buildPersonalFilterParams(filters),
+        }),
+        { silent: true }
+      ),
+    { enabled: canViewColaboradores }
+  );
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;

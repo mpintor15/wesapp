@@ -4,6 +4,7 @@ import FilterDateInput from '../../../components/FilterDateInput';
 import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import TabularWorkspace from '../../../components/TabularWorkspace';
+import useAutoRefresh from '../../../hooks/useAutoRefresh';
 import bitacorasService from '../../../services/bitacorasService';
 import { getVisibleErrorMessage } from '../../../services/serviceUtils';
 import SortHeader from '../../Cuentas/components/SortHeader';
@@ -113,35 +114,42 @@ const HistorialBitacoras = ({
     return Array.from(groups.entries());
   }, [ubicaciones]);
 
-  const loadHistory = useCallback(async () => {
-    const requestId = requestSequenceRef.current + 1;
-    requestSequenceRef.current = requestId;
-    setLoading(true);
-    setError('');
+  const loadHistory = useCallback(
+    async ({ silent = false } = {}) => {
+      const requestId = requestSequenceRef.current + 1;
+      requestSequenceRef.current = requestId;
+      if (!silent) {
+        setLoading(true);
+        setError('');
+      }
 
-    const result = await bitacorasService.getRegistros(
-      buildHistoryParams(page, appliedFilters, sort)
-    );
-    if (requestId !== requestSequenceRef.current) return;
+      const result = await bitacorasService.getRegistros(
+        buildHistoryParams(page, appliedFilters, sort)
+      );
+      if (requestId !== requestSequenceRef.current) return;
 
-    if (!result.success) {
-      setError(getVisibleErrorMessage(result, 'No se pudo cargar el historial de Bitácoras.'));
+      if (!result.success) {
+        if (!silent) {
+          setError(getVisibleErrorMessage(result, 'No se pudo cargar el historial de Bitácoras.'));
+          setLoading(false);
+        }
+        return;
+      }
+
+      const nextMeta = { ...EMPTY_META, ...result.meta };
+      const lastValidPage = Math.max(1, Number(nextMeta.totalPages) || 0);
+      if (page > lastValidPage) {
+        setPage(lastValidPage);
+        return;
+      }
+
+      setRecords(Array.isArray(result.data) ? result.data : []);
+      setMeta(nextMeta);
+      setAutores(Array.isArray(result.filters?.autores) ? result.filters.autores : []);
       setLoading(false);
-      return;
-    }
-
-    const nextMeta = { ...EMPTY_META, ...result.meta };
-    const lastValidPage = Math.max(1, Number(nextMeta.totalPages) || 0);
-    if (page > lastValidPage) {
-      setPage(lastValidPage);
-      return;
-    }
-
-    setRecords(Array.isArray(result.data) ? result.data : []);
-    setMeta(nextMeta);
-    setAutores(Array.isArray(result.filters?.autores) ? result.filters.autores : []);
-    setLoading(false);
-  }, [appliedFilters, page, sort]);
+    },
+    [appliedFilters, page, sort]
+  );
 
   const handleSort = (field) => {
     setSort((current) => ({
@@ -157,6 +165,8 @@ const HistorialBitacoras = ({
       requestSequenceRef.current += 1;
     };
   }, [loadHistory, refreshKey]);
+
+  useAutoRefresh(() => loadHistory({ silent: true }));
 
   useEffect(() => {
     onTotalChange?.(meta.totalItems);

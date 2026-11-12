@@ -25,9 +25,9 @@ const useCuentasData = ({ showToast }) => {
   const reporteGuard = useRequestGuard();
 
   const loadPagos = useCallback(
-    async (params = {}) => {
+    async (params = {}, { silent = false } = {}) => {
       const token = pagosGuard.start();
-      setPagosLoading(true);
+      if (!silent) setPagosLoading(true);
       const pagosRes = await cuentasService.getPagos(params);
       if (!pagosGuard.isCurrent(token)) return pagosRes.success;
 
@@ -35,12 +35,12 @@ const useCuentasData = ({ showToast }) => {
         setPagos(pagosRes.data);
         setPagosPagination(pagosRes.pagination);
         setPagosLoaded(true);
-      } else {
+      } else if (!silent) {
         const message = pagosRes.message || 'Error al cargar pagos';
         setLoadError(message);
         showToast(message, 'error');
       }
-      setPagosLoading(false);
+      if (!silent) setPagosLoading(false);
       return pagosRes.success;
     },
     [pagosGuard, showToast]
@@ -76,10 +76,12 @@ const useCuentasData = ({ showToast }) => {
   }, [showToast]);
 
   const loadReporte = useCallback(
-    async (params = {}) => {
+    async (params = {}, { silent = false } = {}) => {
       const token = reporteGuard.start();
-      setLoading(true);
-      setLoadError('');
+      if (!silent) {
+        setLoading(true);
+        setLoadError('');
+      }
       const reporteRes = await cuentasService.getReporte(params);
       if (!reporteGuard.isCurrent(token)) return reporteRes.success;
 
@@ -87,12 +89,12 @@ const useCuentasData = ({ showToast }) => {
         setReporte(reporteRes.data);
         setReportePagination(reporteRes.pagination);
       }
-      if (!reporteRes.success) {
+      if (!reporteRes.success && !silent) {
         const message = reporteRes.message || 'Error al cargar facturas';
         setLoadError(message);
         showToast(message, 'error');
       }
-      setLoading(false);
+      if (!silent) setLoading(false);
       return reporteRes.success;
     },
     [reporteGuard, showToast]

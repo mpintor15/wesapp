@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import inventarioService from '../../services/inventarioService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { useToast } from '../../context/ToastContext';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import useSubmitState from '../../hooks/useSubmitState';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import ArticuloModal from './components/ArticuloModal';
@@ -724,6 +725,19 @@ const Inventario = () => {
       loadBajas(getActiveBajasFilterParams());
     }
   };
+
+  useAutoRefresh(() => {
+    if (activeTab === 'articulos') {
+      return fetchArticulos(getArticulosListParams(), false, { silent: true });
+    }
+    if (activeTab === 'movimientos' && movimientosLoaded) {
+      return loadMovimientos(getMovimientosListParams(), { silent: true });
+    }
+    if (activeTab === 'bajas' && bajasLoaded) {
+      return loadBajas(getActiveBajasFilterParams(), { silent: true });
+    }
+    return undefined;
+  });
 
   // ── Render ───────────────────────────────────────
   if (!inventoryPermissions.canAccessInventory) {

@@ -4,6 +4,7 @@ import CollapsibleFilters from '../../../components/CollapsibleFilters';
 import LoadingState from '../../../components/LoadingState';
 import PaginationControls from '../../../components/PaginationControls';
 import TabularWorkspace from '../../../components/TabularWorkspace';
+import useAutoRefresh from '../../../hooks/useAutoRefresh';
 import bitacorasService from '../../../services/bitacorasService';
 import { getVisibleErrorMessage } from '../../../services/serviceUtils';
 import SortHeader from '../../Cuentas/components/SortHeader';
@@ -222,27 +223,34 @@ const FormularioVisitasAdmin = ({
   const [isReactivating, setIsReactivating] = useState(false);
   const requestSequenceRef = useRef(0);
 
-  const loadForms = useCallback(async () => {
-    const requestId = requestSequenceRef.current + 1;
-    requestSequenceRef.current = requestId;
-    setListLoading(true);
-    setListError('');
-    const result = await bitacorasService.getFormulariosVisitas({
-      page,
-      pageSize: PAGE_SIZE,
-      sortBy: sort.field,
-      sortOrder: sort.direction,
-      ...filters,
-    });
-    if (requestId !== requestSequenceRef.current) return;
-    if (result.success) {
-      setForms(Array.isArray(result.data) ? result.data : []);
-      setTotalItems(result.meta?.totalItems || 0);
-      setTotalPages(Math.max(1, result.meta?.totalPages || 1));
-      setCreators(Array.isArray(result.filters?.creators) ? result.filters.creators : []);
-    } else setListError(getVisibleErrorMessage(result, 'No se pudieron cargar los formularios.'));
-    setListLoading(false);
-  }, [filters, page, sort]);
+  const loadForms = useCallback(
+    async ({ silent = false } = {}) => {
+      const requestId = requestSequenceRef.current + 1;
+      requestSequenceRef.current = requestId;
+      if (!silent) {
+        setListLoading(true);
+        setListError('');
+      }
+      const result = await bitacorasService.getFormulariosVisitas({
+        page,
+        pageSize: PAGE_SIZE,
+        sortBy: sort.field,
+        sortOrder: sort.direction,
+        ...filters,
+      });
+      if (requestId !== requestSequenceRef.current) return;
+      if (result.success) {
+        setForms(Array.isArray(result.data) ? result.data : []);
+        setTotalItems(result.meta?.totalItems || 0);
+        setTotalPages(Math.max(1, result.meta?.totalPages || 1));
+        setCreators(Array.isArray(result.filters?.creators) ? result.filters.creators : []);
+      } else if (!silent) {
+        setListError(getVisibleErrorMessage(result, 'No se pudieron cargar los formularios.'));
+      }
+      setListLoading(false);
+    },
+    [filters, page, sort]
+  );
 
   const handleSort = (field) => {
     setSort((current) => ({
@@ -258,6 +266,8 @@ const FormularioVisitasAdmin = ({
       requestSequenceRef.current += 1;
     };
   }, [loadForms]);
+
+  useAutoRefresh(() => loadForms({ silent: true }));
 
   useEffect(() => {
     onTotalChange?.(totalItems);

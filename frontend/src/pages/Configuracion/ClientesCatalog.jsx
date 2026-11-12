@@ -7,6 +7,7 @@ import AccesoPortalModal from './components/AccesoPortalModal';
 import LoadingState from '../../components/LoadingState';
 import PaginationControls from '../../components/PaginationControls';
 import { useToast } from '../../context/ToastContext';
+import useAutoRefresh from '../../hooks/useAutoRefresh';
 import clientesService from '../../services/clientesService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import { DEFAULT_PAGINATION } from '../../utils/pagination';
@@ -410,28 +411,34 @@ const ClientesCatalog = ({
     }
   }, [filtersDraft.ubicacionId, sortedUbicaciones]);
 
-  const loadClientes = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
-    const params = {
-      page: currentPage,
-      pageSize: DEFAULT_PAGINATION.pageSize,
-    };
-    if (filters.search.trim()) params.search = filters.search.trim();
-    if (filters.ubicacionId) params.ubicacionId = filters.ubicacionId;
-    if (filters.estadoUbicaciones !== 'todas') params.estadoUbicaciones = filters.estadoUbicaciones;
+  const loadClientes = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) {
+        setLoading(true);
+        setLoadError('');
+      }
+      const params = {
+        page: currentPage,
+        pageSize: DEFAULT_PAGINATION.pageSize,
+      };
+      if (filters.search.trim()) params.search = filters.search.trim();
+      if (filters.ubicacionId) params.ubicacionId = filters.ubicacionId;
+      if (filters.estadoUbicaciones !== 'todas')
+        params.estadoUbicaciones = filters.estadoUbicaciones;
 
-    const result = await clientesService.listClientes(params);
-    if (result.success) {
-      const nextClientes = result.data || [];
-      setClientes(nextClientes);
-      setPagination(result.pagination);
-      onClientesLoaded?.(nextClientes, result.pagination.totalItems);
-    } else {
-      setLoadError(result.message || 'Error al cargar clientes');
-    }
-    setLoading(false);
-  }, [currentPage, filters, onClientesLoaded]);
+      const result = await clientesService.listClientes(params);
+      if (result.success) {
+        const nextClientes = result.data || [];
+        setClientes(nextClientes);
+        setPagination(result.pagination);
+        onClientesLoaded?.(nextClientes, result.pagination.totalItems);
+      } else if (!silent) {
+        setLoadError(result.message || 'Error al cargar clientes');
+      }
+      if (!silent) setLoading(false);
+    },
+    [currentPage, filters, onClientesLoaded]
+  );
 
   const fetchedLoaderRef = useRef(null);
   useEffect(() => {
@@ -445,6 +452,8 @@ const ClientesCatalog = ({
       void loadClientes();
     }
   }, [loadClientes, refreshToken]);
+
+  useAutoRefresh(() => loadClientes({ silent: true }), { enabled: active });
 
   const resetModal = () => {
     setModalMode(null);

@@ -4,15 +4,13 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import PageHeader from '../../components/PageHeader';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { AUTO_REFRESH_MS } from '../../hooks/useAutoRefresh';
 import useScrollToTopOnMount from '../../hooks/useScrollToTopOnMount';
 import portalService from '../../services/portalService';
 import { getVisibleErrorMessage } from '../../services/serviceUtils';
 import HistorialVisitas from '../Bitacoras/components/HistorialVisitas';
 import ReportFiltersModal from '../Bitacoras/components/ReportFiltersModal';
 import '../Bitacoras/Bitacoras.css';
-
-// Cada cuánto se actualiza la tabla sola para ver las visitas casi en tiempo real.
-const AUTO_REFRESH_MS = 20000;
 
 const EMPTY_REPORT_FILTERS = {
   ubicacion_id: '',
