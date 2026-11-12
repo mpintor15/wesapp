@@ -511,3 +511,23 @@
 .cuentas-modulo__table td.cell-status {
   text-align: center !important;
 }
+
+/* Cuentas de módulo: sin tarjetas móviles, así que la tabla debe seguir
+   visible (index.css oculta .table-responsive a <=768px) y desplazarse
+   dentro de su contenedor en vez de aplastar las columnas. */
+.cuentas-modulo__shell {
+  overflow-x: auto;
+}
+
+@media (max-width: 1024px) {
+  .cuentas-modulo__table:not(:has(.empty-row)) {
+    min-width: 640px;
+  }
+}
+
+@media (max-width: 768px) {
+  .cuentas-modulo__shell {
+    display: block;
+    -webkit-overflow-scrolling: touch;
+  }
+}

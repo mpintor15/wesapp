@@ -1,5 +1,6 @@
 const { test } = require('@playwright/test');
 const {
+  assertNoElementsOverflowViewport,
   assertNoGlobalHorizontalOverflow,
   assertPageLooksLoaded,
   disableAnimations,
@@ -36,6 +37,7 @@ for (const viewport of webkitViewports) {
         await gotoProtectedRoute(page, route.path);
         await assertPageLooksLoaded(page);
         await assertNoGlobalHorizontalOverflow(page);
+        await assertNoElementsOverflowViewport(page);
       });
     }
   });

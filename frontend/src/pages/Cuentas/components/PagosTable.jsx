@@ -8,7 +8,7 @@ const getFacturasLabel = (pago) => {
 
 const PagosTable = ({ rows, loading, filters, sort, selectedPagoId, onSort, onSelectPago }) => (
   <div className="table-responsive app-table-shell app-table-scroll pagos-table-shell">
-    <table className="app-table pagos-table">
+    <table className="app-table app-table--stack pagos-table">
       <thead>
         <tr>
           <SortHeader field="fecha" label="Fecha" sort={sort} onSort={onSort} />
@@ -46,13 +46,17 @@ const PagosTable = ({ rows, loading, filters, sort, selectedPagoId, onSort, onSe
                 }
               }}
             >
-              <td className="app-cell-date">{formatDate(pago.fecha)}</td>
-              <td className="cell-cliente" title={pago.cliente}>
+              <td data-label="Fecha" className="app-cell-date">
+                {formatDate(pago.fecha)}
+              </td>
+              <td data-label="Cliente" className="cell-cliente" title={pago.cliente}>
                 {pago.cliente}
               </td>
-              <td>{formatMetodoPago(pago.metodo_pago)}</td>
-              <td className="col-money">{formatMoney(pago.total)}</td>
-              <td>
+              <td data-label="Método de pago">{formatMetodoPago(pago.metodo_pago)}</td>
+              <td data-label="Valor" className="col-money">
+                {formatMoney(pago.total)}
+              </td>
+              <td data-label="Facturas">
                 <button
                   className="payment-invoices-chip"
                   type="button"
