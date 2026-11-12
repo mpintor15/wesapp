@@ -105,6 +105,12 @@ module.exports = {
       windowMs: 15 * 60 * 1000,
       max: e2eMode ? 50_000 : nodeEnv === 'production' ? 300 : 2000,
     },
+    // Lecturas (GET/HEAD): la app refresca las tablas cada 10 s (~90 peticiones
+    // por pestaña y tabla en 15 min) y varios usuarios pueden compartir IP.
+    read: {
+      windowMs: 15 * 60 * 1000,
+      max: e2eMode ? 500_000 : nodeEnv === 'production' ? 6000 : 20_000,
+    },
     login: {
       windowMs: 15 * 60 * 1000,
       max: e2eMode ? 2_000 : nodeEnv === 'production' ? 10 : 30,
